@@ -2,6 +2,8 @@
 
 Internal CRM platform for **Morgan White Group** — built to manage leads, contacts, and customer relationships with enterprise SSO and email tracking.
 
+**Live Site**: [mwg-crm.vercel.app](https://mwg-crm.vercel.app/)
+
 ## Status
 
 Early scaffold. The app currently renders a blank shell while infrastructure, authentication, and the data model are wired up.
