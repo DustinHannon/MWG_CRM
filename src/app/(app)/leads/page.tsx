@@ -1,21 +1,38 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import {
+  AVAILABLE_COLUMNS,
+  type ColumnKey,
+  COLUMN_KEYS,
+  DEFAULT_COLUMNS,
+  findBuiltinView,
+  getPreferences,
+  getSavedView,
+  listSavedViewsForUser,
+  type LeadRow,
+  runView,
+  type ViewDefinition,
+  visibleBuiltins,
+} from "@/lib/views";
 import {
   LEAD_RATINGS,
   LEAD_SOURCES,
   LEAD_STATUSES,
-  listLeads,
-} from "@/lib/leads";
+} from "@/lib/lead-constants";
+import { ViewToolbar, type ViewSummary } from "./view-toolbar";
 
 export const dynamic = "force-dynamic";
 
 interface SearchParams {
+  view?: string;
   q?: string;
   status?: string;
   rating?: string;
   source?: string;
   tag?: string;
   page?: string;
+  cols?: string;
   sort?: string;
   dir?: string;
 }
@@ -28,17 +45,118 @@ export default async function LeadsPage({
   const user = await requireSession();
   const sp = await searchParams;
   const perms = await getPermissions(user.id);
+  const canViewAll = user.isAdmin || perms.canViewAllLeads;
 
-  const result = await listLeads(user, sp, perms.canViewAllLeads);
+  // ---- Resolve active view -----------------------------------------------
+  // 1. ?view= explicit. 2. last_used_view_id from prefs. 3. fallback to my-open.
+  const prefs = await getPreferences(user.id);
+  let activeViewParam = sp.view;
+  if (!activeViewParam && prefs.lastUsedViewId) {
+    activeViewParam = `saved:${prefs.lastUsedViewId}`;
+  }
+  if (!activeViewParam) activeViewParam = "builtin:my-open";
+
+  const savedViews = await listSavedViewsForUser(user.id);
+
+  let activeView: ViewDefinition | null = null;
+  if (activeViewParam.startsWith("saved:")) {
+    const id = activeViewParam.slice("saved:".length);
+    activeView = await getSavedView(user.id, id);
+    if (!activeView) {
+      // Stored last-used pointed at a deleted view — bail to default.
+      redirect("/leads?view=builtin:my-open");
+    }
+  } else {
+    activeView = findBuiltinView(activeViewParam);
+    if (activeView?.requiresAllLeads && !canViewAll) {
+      // Stripped quietly — not our place to leak that it exists.
+      activeView = findBuiltinView("builtin:my-open");
+    }
+    if (!activeView) activeView = findBuiltinView("builtin:my-open");
+  }
+  if (!activeView) {
+    redirect("/leads?view=builtin:my-open");
+  }
+
+  // ---- Build the URL filter overlay --------------------------------------
+  // The visible filter form (q/status/rating/source/tag) overlays the view
+  // base — empty values fall through.
+  const extraFilters = {
+    search: sp.q || undefined,
+    status: sp.status ? [sp.status] : undefined,
+    rating: sp.rating ? [sp.rating] : undefined,
+    source: sp.source ? [sp.source] : undefined,
+    tags: sp.tag ? [sp.tag] : undefined,
+  };
+
+  // ---- Resolve column list -----------------------------------------------
+  // URL ?cols= wins, then prefs.adhoc_columns (only on builtin views), else
+  // the view's stored column list.
+  const baseColumns = activeView.columns;
+  const urlCols = sp.cols
+    ? (sp.cols.split(",").filter((c): c is ColumnKey => COLUMN_KEYS.includes(c as ColumnKey)) as ColumnKey[])
+    : null;
+  let activeColumns: ColumnKey[];
+  if (urlCols && urlCols.length > 0) {
+    activeColumns = urlCols;
+  } else if (activeView.source === "builtin" && prefs.adhocColumns?.length) {
+    activeColumns = prefs.adhocColumns;
+  } else {
+    activeColumns = baseColumns;
+  }
+
+  // Page / sort handling. ?sort + ?dir override view defaults.
+  const page = Math.max(1, Number(sp.page ?? 1) || 1);
+  const pageSize = 50;
+  const sort = sp.sort
+    ? {
+        field: (sp.sort as never) ?? "lastActivityAt",
+        direction: (sp.dir === "asc" ? "asc" : "desc") as "asc" | "desc",
+      }
+    : undefined;
+
+  // ---- Run the query -----------------------------------------------------
+  const result = await runView({
+    view: activeView,
+    user,
+    canViewAll,
+    page,
+    pageSize,
+    columns: activeColumns,
+    sort,
+    extraFilters,
+  });
+
+  // ---- Toolbar payload ---------------------------------------------------
+  const allViews: ViewSummary[] = [
+    ...visibleBuiltins(canViewAll).map((v) => ({
+      id: v.id,
+      name: v.name,
+      source: v.source,
+      scope: v.scope,
+    })),
+    ...savedViews.map((v) => ({
+      id: v.id,
+      name: v.name,
+      source: v.source,
+      scope: v.scope,
+    })),
+  ];
+
+  const columnsModified =
+    activeColumns.length !== baseColumns.length ||
+    activeColumns.some((c, i) => baseColumns[i] !== c);
+
+  const savedDirtyId = activeView.source === "saved" ? activeView.id : null;
 
   return (
     <div className="px-10 py-10">
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Leads</h1>
           <p className="mt-2 text-sm text-white/60">
             {result.total} {result.total === 1 ? "lead" : "leads"}
-            {sp.q ? ` matching "${sp.q}"` : ""}.
+            {sp.q ? ` matching "${sp.q}"` : ""} · view {activeView.name}
           </p>
         </div>
         <div className="flex gap-2">
@@ -52,9 +170,7 @@ export default async function LeadsPage({
           ) : null}
           {perms.canExport || user.isAdmin ? (
             <a
-              href={`/api/leads/export?${new URLSearchParams(
-                Object.entries(sp).filter(([, v]) => Boolean(v)) as [string, string][],
-              ).toString()}`}
+              href={buildExportHref(sp)}
               className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/80 transition hover:bg-white/10"
             >
               Export
@@ -71,16 +187,28 @@ export default async function LeadsPage({
         </div>
       </div>
 
+      <div className="mt-5">
+        <ViewToolbar
+          views={allViews}
+          activeViewId={activeViewParam}
+          activeColumns={activeColumns}
+          baseColumns={baseColumns}
+          savedDirtyId={savedDirtyId}
+          columnsModified={columnsModified}
+        />
+      </div>
+
       <form
         action="/leads"
         method="get"
-        className="mt-6 flex flex-wrap gap-3"
+        className="mt-5 flex flex-wrap items-end gap-3"
       >
+        <input type="hidden" name="view" value={activeViewParam} />
         <input
           name="q"
           defaultValue={sp.q ?? ""}
           placeholder="Search name / email / company / phone…"
-          className="min-w-[280px] flex-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+          className="min-w-[240px] flex-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
         />
         <FilterSelect
           name="status"
@@ -106,9 +234,9 @@ export default async function LeadsPage({
         >
           Apply
         </button>
-        {(sp.q || sp.status || sp.rating || sp.source || sp.tag) ? (
+        {sp.q || sp.status || sp.rating || sp.source || sp.tag ? (
           <Link
-            href="/leads"
+            href={`/leads?view=${encodeURIComponent(activeViewParam)}`}
             className="rounded-md px-3 py-2 text-sm text-white/50 hover:text-white/80"
           >
             Clear
@@ -116,67 +244,202 @@ export default async function LeadsPage({
         ) : null}
       </form>
 
-      <div className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
         <table className="min-w-full divide-y divide-white/5 text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-white/50">
-              <th className="px-5 py-3 font-medium">Name</th>
-              <th className="px-5 py-3 font-medium">Company</th>
-              <th className="px-5 py-3 font-medium">Status</th>
-              <th className="px-5 py-3 font-medium">Rating</th>
-              <th className="px-5 py-3 font-medium">Owner</th>
-              <th className="px-5 py-3 font-medium">Last activity</th>
+              {activeColumns.map((c) => (
+                <th key={c} className="px-5 py-3 font-medium whitespace-nowrap">
+                  {AVAILABLE_COLUMNS.find((col) => col.key === c)?.label ?? c}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {result.rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-white/50">
-                  No leads yet. Add your first one to get started.
+                <td
+                  colSpan={activeColumns.length}
+                  className="px-5 py-12 text-center text-white/50"
+                >
+                  No leads match this view.
                 </td>
               </tr>
             ) : null}
             {result.rows.map((l) => (
               <tr key={l.id} className="transition hover:bg-white/5">
-                <td className="px-5 py-3">
-                  <Link
-                    href={`/leads/${l.id}`}
-                    className="font-medium text-white hover:underline"
-                  >
-                    {l.firstName} {l.lastName}
-                  </Link>
-                  <div className="text-xs text-white/40">{l.email ?? "—"}</div>
-                </td>
-                <td className="px-5 py-3 text-white/70">{l.companyName ?? "—"}</td>
-                <td className="px-5 py-3">
-                  <StatusPill value={l.status} />
-                </td>
-                <td className="px-5 py-3">
-                  <RatingPill value={l.rating} />
-                </td>
-                <td className="px-5 py-3 text-white/60">
-                  {l.ownerDisplayName ?? "Unassigned"}
-                </td>
-                <td className="px-5 py-3 text-white/50">
-                  {l.lastActivityAt
-                    ? new Date(l.lastActivityAt).toLocaleString()
-                    : "—"}
-                </td>
+                {activeColumns.map((c) => (
+                  <td key={c} className="px-5 py-3 align-top">
+                    {renderCell(l, c)}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {result.total > result.pageSize ? (
+      {result.total > pageSize ? (
         <Pagination
-          page={result.page}
-          pageSize={result.pageSize}
+          page={page}
+          pageSize={pageSize}
           total={result.total}
           searchParams={sp}
         />
       ) : null}
     </div>
+  );
+}
+
+function buildExportHref(sp: SearchParams): string {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string" && v.length > 0) params.set(k, v);
+  }
+  return `/api/leads/export?${params.toString()}`;
+}
+
+function renderCell(lead: LeadRow, col: ColumnKey) {
+  switch (col) {
+    case "firstName":
+      return (
+        <Link
+          href={`/leads/${lead.id}`}
+          className="font-medium text-white hover:underline"
+        >
+          {lead.firstName}
+        </Link>
+      );
+    case "lastName":
+      return (
+        <Link
+          href={`/leads/${lead.id}`}
+          className="font-medium text-white hover:underline"
+        >
+          {lead.lastName}
+        </Link>
+      );
+    case "companyName":
+      return <span className="text-white/70">{lead.companyName ?? "—"}</span>;
+    case "email":
+      return <span className="text-white/60">{lead.email ?? "—"}</span>;
+    case "phone":
+      return <span className="text-white/60">{lead.phone ?? "—"}</span>;
+    case "mobilePhone":
+      return <span className="text-white/60">{lead.mobilePhone ?? "—"}</span>;
+    case "jobTitle":
+      return <span className="text-white/60">{lead.jobTitle ?? "—"}</span>;
+    case "status":
+      return <Pill kind="status" value={lead.status} />;
+    case "rating":
+      return <Pill kind="rating" value={lead.rating} />;
+    case "source":
+      return <Pill kind="source" value={lead.source} />;
+    case "owner":
+      return (
+        <span className="text-white/60">
+          {lead.ownerDisplayName ?? "Unassigned"}
+        </span>
+      );
+    case "tags":
+      return (
+        <span className="text-xs text-white/60">
+          {lead.tags?.length ? lead.tags.join(", ") : "—"}
+        </span>
+      );
+    case "city":
+      return <span className="text-white/60">{lead.city ?? "—"}</span>;
+    case "state":
+      return <span className="text-white/60">{lead.state ?? "—"}</span>;
+    case "estimatedValue":
+      return (
+        <span className="tabular-nums text-white/60">
+          {lead.estimatedValue ? `$${Number(lead.estimatedValue).toLocaleString()}` : "—"}
+        </span>
+      );
+    case "estimatedCloseDate":
+      return (
+        <span className="text-white/60">
+          {lead.estimatedCloseDate ?? "—"}
+        </span>
+      );
+    case "createdBy":
+      return (
+        <span className="text-white/60">
+          {lead.createdByDisplayName ?? "—"}
+        </span>
+      );
+    case "createdVia":
+      return <Pill kind="provenance" value={lead.createdVia} />;
+    case "createdAt":
+      return (
+        <span className="text-white/50">
+          {new Date(lead.createdAt).toLocaleDateString()}
+        </span>
+      );
+    case "lastActivityAt":
+      return (
+        <span className="text-white/50">
+          {lead.lastActivityAt
+            ? new Date(lead.lastActivityAt).toLocaleString()
+            : "—"}
+        </span>
+      );
+    case "updatedAt":
+      return (
+        <span className="text-white/50">
+          {new Date(lead.updatedAt).toLocaleString()}
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
+function Pill({
+  kind,
+  value,
+}: {
+  kind: "status" | "rating" | "source" | "provenance";
+  value: string;
+}) {
+  const palette: Record<string, Record<string, string>> = {
+    status: {
+      new: "border-blue-300/30 bg-blue-500/10 text-blue-100",
+      contacted: "border-cyan-300/30 bg-cyan-500/10 text-cyan-100",
+      qualified: "border-emerald-300/30 bg-emerald-500/10 text-emerald-100",
+      unqualified: "border-rose-300/30 bg-rose-500/10 text-rose-100",
+      converted: "border-violet-300/30 bg-violet-500/10 text-violet-100",
+      lost: "border-white/15 bg-white/5 text-white/40",
+    },
+    rating: {
+      hot: "border-rose-300/30 bg-rose-500/10 text-rose-100",
+      warm: "border-amber-300/30 bg-amber-500/10 text-amber-100",
+      cold: "border-sky-300/30 bg-sky-500/10 text-sky-100",
+    },
+    source: {
+      web: "border-emerald-300/30 bg-emerald-500/10 text-emerald-100",
+      referral: "border-violet-300/30 bg-violet-500/10 text-violet-100",
+      event: "border-amber-300/30 bg-amber-500/10 text-amber-100",
+      cold_call: "border-rose-300/30 bg-rose-500/10 text-rose-100",
+      partner: "border-cyan-300/30 bg-cyan-500/10 text-cyan-100",
+      marketing: "border-blue-300/30 bg-blue-500/10 text-blue-100",
+      import: "border-white/15 bg-white/5 text-white/60",
+      other: "border-white/15 bg-white/5 text-white/60",
+    },
+    provenance: {
+      manual: "border-white/15 bg-white/5 text-white/60",
+      imported: "border-amber-300/30 bg-amber-500/10 text-amber-100",
+      api: "border-cyan-300/30 bg-cyan-500/10 text-cyan-100",
+    },
+  };
+  const cls = palette[kind]?.[value] ?? "border-white/15 bg-white/5 text-white/40";
+  return (
+    <span
+      className={`inline-block rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${cls}`}
+    >
+      {value.replaceAll("_", " ")}
+    </span>
   );
 }
 
@@ -207,41 +470,6 @@ function FilterSelect({
   );
 }
 
-function StatusPill({ value }: { value: string }) {
-  const palette: Record<string, string> = {
-    new: "border-blue-300/30 bg-blue-500/10 text-blue-100",
-    contacted: "border-cyan-300/30 bg-cyan-500/10 text-cyan-100",
-    qualified: "border-emerald-300/30 bg-emerald-500/10 text-emerald-100",
-    unqualified: "border-rose-300/30 bg-rose-500/10 text-rose-100",
-    converted: "border-violet-300/30 bg-violet-500/10 text-violet-100",
-    lost: "border-white/15 bg-white/5 text-white/40",
-  };
-  const cls = palette[value] ?? palette.lost;
-  return (
-    <span
-      className={`inline-block rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${cls}`}
-    >
-      {value}
-    </span>
-  );
-}
-
-function RatingPill({ value }: { value: string }) {
-  const palette: Record<string, string> = {
-    hot: "border-rose-300/30 bg-rose-500/10 text-rose-100",
-    warm: "border-amber-300/30 bg-amber-500/10 text-amber-100",
-    cold: "border-sky-300/30 bg-sky-500/10 text-sky-100",
-  };
-  const cls = palette[value] ?? palette.warm;
-  return (
-    <span
-      className={`inline-block rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${cls}`}
-    >
-      {value}
-    </span>
-  );
-}
-
 function Pagination({
   page,
   pageSize,
@@ -257,12 +485,11 @@ function Pagination({
   const buildHref = (p: number) => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(searchParams)) {
-      if (v && k !== "page") params.set(k, v);
+      if (typeof v === "string" && v.length > 0 && k !== "page") params.set(k, v);
     }
     params.set("page", String(p));
     return `/leads?${params.toString()}`;
   };
-
   return (
     <nav className="mt-6 flex items-center justify-between text-sm text-white/60">
       <span>
@@ -289,3 +516,7 @@ function Pagination({
     </nav>
   );
 }
+
+// noop import marker to keep DEFAULT_COLUMNS reachable for any
+// future server-side default-column resolver.
+void DEFAULT_COLUMNS;
