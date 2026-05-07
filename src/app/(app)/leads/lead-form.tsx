@@ -4,11 +4,14 @@ import { useActionState, useState } from "react";
 import { createLeadAction, updateLeadAction } from "./actions";
 import type { ActionResult } from "@/lib/server-action";
 import { DuplicateWarning } from "@/components/leads/duplicate-warning";
+import { TagInput } from "@/components/tags/tag-input";
 import {
   LEAD_RATINGS,
   LEAD_SOURCES,
   LEAD_STATUSES,
 } from "@/lib/lead-constants";
+
+type SelectedTag = { id: string; name: string; color: string };
 
 type LeadFormValues = {
   id?: string;
@@ -31,6 +34,9 @@ type LeadFormValues = {
   postalCode?: string | null;
   country?: string | null;
   description?: string | null;
+  // Phase 8D Wave 6 (FIX-015) — `subject` is the legacy "Topic:" line.
+  // The column shipped in Phase 6A; Wave 6 finally exposes it on the form.
+  subject?: string | null;
   status: (typeof LEAD_STATUSES)[number];
   rating: (typeof LEAD_RATINGS)[number];
   source: (typeof LEAD_SOURCES)[number];
@@ -39,7 +45,9 @@ type LeadFormValues = {
   doNotContact: boolean;
   doNotEmail: boolean;
   doNotCall: boolean;
-  tags?: string;
+  // Phase 8D Wave 6 (FIX-016) — tags are now hydrated id+name+color so
+  // the TagInput combobox can render chips and round-trip selections.
+  tags?: SelectedTag[];
 };
 
 const empty: LeadFormValues = {
@@ -68,6 +76,11 @@ export function LeadForm({
   >(async (_prev, fd) => action(fd), initial);
 
   const v = lead ?? empty;
+  // Phase 8D Wave 6 (FIX-016) — TagInput is controlled; selectedTags
+  // round-trips into a hidden `tagIds` input the server action reads.
+  const [selectedTags, setSelectedTags] = useState<SelectedTag[]>(
+    v.tags ?? [],
+  );
 
   return (
     <form action={formAction} className="mt-8 grid gap-6 lg:grid-cols-2">
@@ -121,7 +134,16 @@ export function LeadForm({
             defaultValue={v.estimatedCloseDate ?? ""}
           />
         </Row>
-        <Input name="tags" label="Tags (comma-separated)" defaultValue={v.tags ?? ""} />
+        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
+          Tags
+          <div className="mt-1">
+            <TagInput
+              value={selectedTags}
+              onChange={setSelectedTags}
+              hiddenInputName="tagIds"
+            />
+          </div>
+        </label>
         <ContactPreferences
           initialDoNotContact={v.doNotContact}
           initialDoNotEmail={v.doNotEmail}
@@ -143,6 +165,17 @@ export function LeadForm({
       </Section>
 
       <Section title="Notes" wide>
+        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
+          Subject
+          <textarea
+            name="subject"
+            defaultValue={v.subject ?? ""}
+            rows={2}
+            maxLength={1000}
+            placeholder="Brief one-line summary"
+            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          />
+        </label>
         <label className="block text-xs uppercase tracking-wide text-muted-foreground">
           Description
           <textarea

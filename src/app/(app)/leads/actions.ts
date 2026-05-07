@@ -20,6 +20,7 @@ import {
   leadPartialSchema,
   updateLead,
 } from "@/lib/leads";
+import { setLeadTags } from "@/lib/tags";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
@@ -31,6 +32,10 @@ function formToObject(formData: FormData): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
   for (const [k, v] of formData.entries()) {
     if (k === "id") continue;
+    // Phase 8D Wave 6 (FIX-016) — `tagIds` (combobox) and the legacy
+    // `tags` key are extracted separately by parseTagIds; skip them
+    // here so they don't reach the leadCreate / leadPartial schema.
+    if (k === "tagIds" || k === "tags") continue;
     if (v === "") continue;
     if (k === "doNotContact" || k === "doNotEmail" || k === "doNotCall") {
       obj[k] = v === "on" || v === "true";
@@ -39,6 +44,25 @@ function formToObject(formData: FormData): Record<string, unknown> {
     obj[k] = v;
   }
   return obj;
+}
+
+/**
+ * Phase 8D Wave 6 (FIX-016) — TagInput emits a single hidden input
+ * `tagIds` whose value is a comma-separated list of tag UUIDs (the
+ * tags themselves were either already-selected or just created via
+ * getOrCreateTagAction with tagName validation from Wave 7). Parse
+ * defensively: drop blanks, trim, validate UUID shape, and dedupe.
+ */
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+function parseTagIds(formData: FormData): string[] {
+  const raw = formData.get("tagIds");
+  if (typeof raw !== "string" || raw.trim().length === 0) return [];
+  const ids = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && uuidPattern.test(s));
+  return Array.from(new Set(ids));
 }
 
 export async function createLeadAction(
@@ -64,6 +88,13 @@ export async function createLeadAction(
       }
 
       const { id } = await createLead(user, parsed.data);
+      // Phase 8D Wave 6 (FIX-016) — persist tag selections from the
+      // combobox into the relational lead_tags table. setLeadTags is
+      // idempotent (full-replace inside a tx); empty list is a no-op.
+      const tagIds = parseTagIds(formData);
+      if (tagIds.length > 0) {
+        await setLeadTags(id, tagIds, user.id);
+      }
       await writeAudit({
         actorId: user.id,
         action: "lead.create",
@@ -121,6 +152,14 @@ export async function updateLeadAction(
         .limit(1);
 
       await updateLead(user, id, version, parsed.data);
+
+      // Phase 8D Wave 6 (FIX-016) — sync tag selections from the
+      // combobox. setLeadTags is full-replace, so removing all chips
+      // and submitting clears the lead's tags. The hidden tagIds input
+      // is always present in the form (even when empty) so we can
+      // distinguish "no tags" from "field not on form".
+      const tagIds = parseTagIds(formData);
+      await setLeadTags(id, tagIds, user.id);
 
       await writeAudit({
         actorId: user.id,

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
+import { getTagsForLead } from "@/lib/tags";
 import { formatPersonName } from "@/lib/format/person-name";
 import { LeadForm } from "../../lead-form";
 
@@ -19,6 +20,11 @@ export default async function EditLeadPage({
   const { id } = await params;
   const lead = await getLeadById(user, id, perms.canViewAllRecords);
   if (!lead) notFound();
+
+  // Phase 8D Wave 6 (FIX-016) — fetch tag rows (id+name+color) to seed
+  // the TagInput combobox. getLeadById hydrates `lead.tags` as a string
+  // array of names only, which the combobox can't render as chips.
+  const tagRows = await getTagsForLead(lead.id);
 
   return (
     <div className="px-10 py-10">
@@ -48,6 +54,7 @@ export default async function EditLeadPage({
           postalCode: lead.postalCode,
           country: lead.country,
           description: lead.description,
+          subject: lead.subject,
           status: lead.status,
           rating: lead.rating,
           source: lead.source,
@@ -56,7 +63,11 @@ export default async function EditLeadPage({
           doNotContact: lead.doNotContact,
           doNotEmail: lead.doNotEmail,
           doNotCall: lead.doNotCall,
-          tags: lead.tags ? lead.tags.join(", ") : "",
+          tags: tagRows.map((t) => ({
+            id: t.id,
+            name: t.name,
+            color: t.color,
+          })),
         }}
       />
     </div>
