@@ -282,20 +282,50 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return token;
       }
 
-      // Case 3: subsequent request — revalidate
+      // Case 3: subsequent request — revalidate.
+      //
+      // A transient DB blip here would otherwise sign the user out (the
+      // jwt callback returning null clears the session). We retry once
+      // on error, and if the retry also fails we KEEP the existing token
+      // — better to let the user keep working with slightly-stale session
+      // facts than to log them out on a hiccup. Inactive / version-mismatch
+      // checks remain hard-failing because those represent a deliberate
+      // admin decision.
       if (token.userId) {
-        const fresh = await db
-          .select({
-            isActive: users.isActive,
-            isAdmin: users.isAdmin,
-            sessionVersion: users.sessionVersion,
-            displayName: users.displayName,
-            email: users.email,
-          })
-          .from(users)
-          .where(eq(users.id, token.userId as string))
-          .limit(1);
-        const row = fresh[0];
+        let row: {
+          isActive: boolean;
+          isAdmin: boolean;
+          sessionVersion: number;
+          displayName: string;
+          email: string;
+        } | null = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const fresh = await db
+              .select({
+                isActive: users.isActive,
+                isAdmin: users.isAdmin,
+                sessionVersion: users.sessionVersion,
+                displayName: users.displayName,
+                email: users.email,
+              })
+              .from(users)
+              .where(eq(users.id, token.userId as string))
+              .limit(1);
+            row = fresh[0] ?? null;
+            break;
+          } catch (err) {
+            console.warn(
+              `[auth] jwt revalidate query failed (attempt ${attempt + 1}/2):`,
+              err instanceof Error ? err.message : err,
+            );
+            if (attempt === 1) {
+              // Both attempts failed — return the existing token as-is.
+              return token;
+            }
+            await new Promise((r) => setTimeout(r, 50));
+          }
+        }
         if (!row) return null;
         if (!row.isActive) return null;
         if (
