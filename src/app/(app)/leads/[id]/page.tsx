@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { env } from "@/lib/env";
 import { getLeadById } from "@/lib/leads";
 import { deleteLeadAction } from "../actions";
 import { ActivityComposer } from "./activities/activity-composer";
 import { ActivityFeed } from "./activities/activity-feed";
+import { GraphActionPanel } from "./graph/graph-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +117,17 @@ export default async function LeadDetailPage({
             {lead.description ?? <span className="text-white/40">No notes yet.</span>}
           </p>
         </Card>
+
+        {(perms.canSendEmail || user.isAdmin) && !lead.doNotEmail ? (
+          <div className="lg:col-span-3">
+            <GraphActionPanel
+              leadId={lead.id}
+              defaultEmail={lead.email}
+              defaultName={`${lead.firstName} ${lead.lastName}`.trim()}
+              defaultTimeZone={env.DEFAULT_TIMEZONE}
+            />
+          </div>
+        ) : null}
 
         <div className="lg:col-span-3">
           <ActivityComposer leadId={lead.id} />
