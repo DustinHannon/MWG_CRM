@@ -246,9 +246,9 @@ export function ScoringRulesTable({ rows }: { rows: RuleRow[] }) {
                       <span
                         className={
                           r.points > 0
-                            ? "text-emerald-300"
+                            ? "text-emerald-700 dark:text-emerald-300"
                             : r.points < 0
-                              ? "text-rose-300"
+                              ? "text-rose-700 dark:text-rose-300"
                               : "text-muted-foreground"
                         }
                       >

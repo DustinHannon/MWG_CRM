@@ -26,9 +26,9 @@ export function ScoreBadge({
   className?: string;
 }) {
   const styles: Record<string, string> = {
-    hot: "bg-red-500/15 text-red-300 border-red-400/30",
-    warm: "bg-amber-500/15 text-amber-200 border-amber-400/30",
-    cool: "bg-sky-500/15 text-sky-200 border-sky-400/30",
+    hot: "bg-red-500/20 dark:bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30 dark:border-red-400/30",
+    warm: "bg-amber-500/20 dark:bg-amber-500/15 text-amber-700 dark:text-amber-200 border-amber-500/30 dark:border-amber-400/30",
+    cool: "bg-sky-500/20 dark:bg-sky-500/15 text-sky-700 dark:text-sky-200 border-sky-500/30 dark:border-sky-400/30",
     cold: "bg-slate-500/15 text-muted-foreground border-slate-400/30",
   };
   const icons: Record<string, string> = {

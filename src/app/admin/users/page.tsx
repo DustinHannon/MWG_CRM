@@ -106,10 +106,10 @@ function Pill({
   children: React.ReactNode;
 }) {
   const palette = {
-    ok: "border-emerald-300/30 bg-emerald-500/10 text-emerald-100",
-    off: "border-rose-300/30 bg-rose-500/10 text-rose-100",
-    admin: "border-blue-300/30 bg-blue-500/10 text-blue-100",
-    warn: "border-amber-300/30 bg-amber-500/10 text-amber-100",
+    ok: "border-emerald-500/30 dark:border-emerald-300/30 bg-emerald-500/20 dark:bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-100",
+    off: "border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 text-rose-700 dark:text-rose-100",
+    admin: "border-blue-500/30 dark:border-blue-300/30 bg-blue-500/20 dark:bg-blue-500/15 dark:bg-blue-500/10 text-blue-700 dark:text-blue-100",
+    warn: "border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 text-amber-700 dark:text-amber-100",
     muted: "border-border bg-muted/40 text-muted-foreground",
   }[tone];
   return (

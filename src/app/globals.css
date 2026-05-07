@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Tailwind v4 dark-mode variant — uses the `.dark` class on <html> that
+ * next-themes toggles. Required for the `dark:foo` modifier syntax. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* -----------------------------------------------------------------------------
  * Tailwind v4 token model (shadcn-compatible) + Phase 3 glass system.
  *

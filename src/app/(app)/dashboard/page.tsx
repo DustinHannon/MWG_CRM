@@ -154,8 +154,8 @@ export default async function DashboardPage() {
           Welcome back
         </p>
         <h1 className="mt-1 text-2xl font-semibold">{user.displayName}</h1>
-        <section className="mt-10 rounded-2xl border border-rose-300/30 bg-rose-500/5 p-10 text-center">
-          <h2 className="text-lg font-semibold text-rose-100">
+        <section className="mt-10 rounded-2xl border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/5 p-10 text-center">
+          <h2 className="text-lg font-semibold text-rose-700 dark:text-rose-100">
             Dashboard temporarily unavailable
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">

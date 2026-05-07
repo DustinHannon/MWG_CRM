@@ -150,7 +150,7 @@ function UploadForm({
       </button>
 
       {uploadError ? (
-        <p className="text-sm text-rose-200">{uploadError}</p>
+        <p className="text-sm text-rose-700 dark:text-rose-200">{uploadError}</p>
       ) : null}
     </form>
   );
@@ -182,7 +182,7 @@ function PreviewView({
           <span className="text-muted-foreground">({preview.totalRows} rows)</span>
         </h2>
         {smartDetect ? (
-          <p className="mt-2 text-xs text-amber-100/80">
+          <p className="mt-2 text-xs text-amber-700 dark:text-amber-100/80">
             ☑ Legacy D365 Description column detection is enabled.
           </p>
         ) : null}
@@ -270,9 +270,9 @@ function ResultView({
 }) {
   if (!state.ok) {
     return (
-      <div className="mt-8 rounded-2xl border border-rose-300/30 bg-rose-500/10 p-6 backdrop-blur-xl">
-        <h2 className="text-sm font-medium text-rose-100">Import failed</h2>
-        <p className="mt-2 text-sm text-rose-100/80">{state.error}</p>
+      <div className="mt-8 rounded-2xl border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 p-6 backdrop-blur-xl">
+        <h2 className="text-sm font-medium text-rose-700 dark:text-rose-100">Import failed</h2>
+        <p className="mt-2 text-sm text-rose-700 dark:text-rose-100/80">{state.error}</p>
       </div>
     );
   }
@@ -300,7 +300,7 @@ function ResultView({
 
       {r.failedRows.length > 0 ? (
         <div className="mt-6">
-          <h3 className="text-xs uppercase tracking-wide text-rose-200">
+          <h3 className="text-xs uppercase tracking-wide text-rose-700 dark:text-rose-200">
             Failed rows
           </h3>
           <ul className="mt-2 divide-y divide-border/60 text-xs">
@@ -349,11 +349,11 @@ function Stat({
 }) {
   const ring =
     tone === "danger"
-      ? "border-rose-300/30 bg-rose-500/10 text-rose-100"
+      ? "border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 text-rose-700 dark:text-rose-100"
       : tone === "warn"
-        ? "border-amber-300/30 bg-amber-500/10 text-amber-100"
+        ? "border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 text-amber-700 dark:text-amber-100"
         : tone === "ok"
-          ? "border-emerald-300/30 bg-emerald-500/10 text-emerald-100"
+          ? "border-emerald-500/30 dark:border-emerald-300/30 bg-emerald-500/20 dark:bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-100"
           : "border-border bg-muted/40 text-foreground/90";
   return (
     <div className={`rounded-xl border px-4 py-3 ${ring}`}>
@@ -374,8 +374,8 @@ function CollapsibleList({
 }) {
   const ring =
     tone === "danger"
-      ? "border-rose-300/30 bg-rose-500/10 text-rose-100"
-      : "border-amber-300/30 bg-amber-500/10 text-amber-100";
+      ? "border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 text-rose-700 dark:text-rose-100"
+      : "border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 text-amber-700 dark:text-amber-100";
   return (
     <details className={`rounded-2xl border ${ring} p-4 backdrop-blur-xl`}>
       <summary className="cursor-pointer text-sm font-medium">{title}</summary>

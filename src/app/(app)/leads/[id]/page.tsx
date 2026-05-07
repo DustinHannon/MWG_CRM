@@ -98,23 +98,23 @@ export default async function LeadDetailPage({
               />
             ) : null}
             {lead.createdVia === "api" ? (
-              <span className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-cyan-100">
+              <span className="rounded-full border border-cyan-500/30 dark:border-cyan-300/30 bg-cyan-500/20 dark:bg-cyan-500/15 dark:bg-cyan-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-cyan-700 dark:text-cyan-100">
                 API
               </span>
             ) : null}
           </p>
           <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-wide">
-            <span className="rounded-full border border-blue-300/30 bg-blue-500/10 px-2 py-0.5 text-blue-100">
+            <span className="rounded-full border border-blue-500/30 dark:border-blue-300/30 bg-blue-500/20 dark:bg-blue-500/15 dark:bg-blue-500/10 px-2 py-0.5 text-blue-700 dark:text-blue-100">
               {lead.status}
             </span>
-            <span className="rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-amber-100">
+            <span className="rounded-full border border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 text-amber-700 dark:text-amber-100">
               {lead.rating}
             </span>
             <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">
               {lead.source.replaceAll("_", " ")}
             </span>
             {lead.doNotContact ? (
-              <span className="rounded-full border border-rose-300/30 bg-rose-500/10 px-2 py-0.5 text-rose-100">
+              <span className="rounded-full border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-2 py-0.5 text-rose-700 dark:text-rose-100">
                 Do not contact
               </span>
             ) : null}
@@ -161,7 +161,7 @@ export default async function LeadDetailPage({
               <input type="hidden" name="id" value={lead.id} />
               <button
                 type="submit"
-                className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-sm text-rose-100 transition hover:bg-destructive/20"
+                className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-1.5 text-sm text-rose-700 dark:text-rose-100 transition hover:bg-destructive/20"
               >
                 Archive
               </button>
@@ -263,7 +263,7 @@ function ImportedBadge({
       }`
     : "Imported from a spreadsheet";
   const className =
-    "rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-100";
+    "rounded-full border border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-100";
   if (isAdmin && jobId) {
     return (
       <Link

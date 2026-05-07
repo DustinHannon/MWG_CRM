@@ -56,7 +56,7 @@ export function DeleteUserButton({
         onClick={handleOpen}
         disabled={disabled}
         title={disabled ? disabledReason : undefined}
-        className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-sm text-rose-100 transition hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-1.5 text-sm text-rose-700 dark:text-rose-100 transition hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-50"
       >
         Delete user
       </button>
@@ -68,7 +68,7 @@ export function DeleteUserButton({
           ) : !preflight.ok ? (
             <div>
               <h2 className="text-lg font-semibold">Cannot delete</h2>
-              <p className="mt-2 text-sm text-rose-100">
+              <p className="mt-2 text-sm text-rose-700 dark:text-rose-100">
                 {preflight.error ?? "Unknown error."}
               </p>
               <div className="mt-4 flex justify-end">
@@ -218,10 +218,10 @@ function DeleteForm({
               className="mt-1 h-4 w-4 border-border bg-muted/40 text-rose-500 focus:ring-rose-500"
             />
             <span className="flex-1 text-sm">
-              <strong className="text-rose-100">
+              <strong className="text-rose-700 dark:text-rose-100">
                 Delete all of their leads
               </strong>
-              <p className="mt-1 text-xs text-rose-100/80">
+              <p className="mt-1 text-xs text-rose-700 dark:text-rose-100/80">
                 {u.leadCount} lead{u.leadCount === 1 ? "" : "s"} and their
                 activities + attachments will be permanently deleted. This
                 cannot be undone.
@@ -248,7 +248,7 @@ function DeleteForm({
       </label>
 
       {error ? (
-        <p className="mt-3 rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+        <p className="mt-3 rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-100">
           {error}
         </p>
       ) : null}

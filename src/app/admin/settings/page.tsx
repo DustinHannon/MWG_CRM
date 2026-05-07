@@ -106,9 +106,9 @@ function Row({
       <span
         className={`text-sm ${mono ? "font-mono text-xs" : ""} ${
           tone === "ok"
-            ? "text-emerald-200"
+            ? "text-emerald-700 dark:text-emerald-200"
             : tone === "warn"
-              ? "text-amber-200"
+              ? "text-amber-700 dark:text-amber-200"
               : "text-foreground/90"
         }`}
       >

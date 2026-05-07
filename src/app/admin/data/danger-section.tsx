@@ -38,14 +38,14 @@ export function DangerSection({
   >(async (_p, fd) => handler(fd), initial);
 
   return (
-    <section className="rounded-2xl border border-rose-300/30 bg-rose-500/5 p-6 backdrop-blur-xl">
+    <section className="rounded-2xl border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/5 p-6 backdrop-blur-xl">
       <h2 className="text-base font-semibold text-rose-50">{title}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{description}</p>
 
       <form action={action} className="mt-4 flex flex-wrap items-end gap-3">
         <label className="text-xs uppercase tracking-wide text-muted-foreground">
           Type{" "}
-          <code className="rounded bg-black/30 px-1 py-0.5 text-rose-100">
+          <code className="rounded bg-black/30 px-1 py-0.5 text-rose-700 dark:text-rose-100">
             {phrase}
           </code>{" "}
           to confirm
@@ -65,9 +65,9 @@ export function DangerSection({
       </form>
 
       {!state.ok ? (
-        <p className="mt-3 text-sm text-rose-200">{state.error}</p>
+        <p className="mt-3 text-sm text-rose-700 dark:text-rose-200">{state.error}</p>
       ) : state.data.affected >= 0 ? (
-        <p className="mt-3 text-sm text-emerald-200">
+        <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-200">
           Deleted {state.data.affected} row
           {state.data.affected === 1 ? "" : "s"}.
         </p>

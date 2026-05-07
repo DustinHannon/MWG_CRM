@@ -55,7 +55,7 @@ export default async function UserDetailPage({
       <p className="mt-1 text-sm text-muted-foreground">
         {u.email} · {u.username}
         {u.isBreakglass ? (
-          <span className="ml-3 inline-block rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-100">
+          <span className="ml-3 inline-block rounded-full border border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-100">
             Breakglass
           </span>
         ) : null}
@@ -76,8 +76,8 @@ export default async function UserDetailPage({
       />
 
       {/* Danger zone — phase 2F.4 */}
-      <section className="mt-10 rounded-2xl border border-rose-300/30 bg-rose-500/5 p-6">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-rose-100">
+      <section className="mt-10 rounded-2xl border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/5 p-6">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-rose-700 dark:text-rose-100">
           Danger zone
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">

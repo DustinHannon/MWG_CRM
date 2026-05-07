@@ -79,22 +79,22 @@ export function DuplicateWarning({ email, phone }: DuplicateWarningProps) {
   if (matches.length === 0) return null;
 
   return (
-    <div className="mt-3 rounded-md border border-amber-300/40 bg-amber-500/10 p-3 text-sm">
+    <div className="mt-3 rounded-md border border-amber-300/40 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 p-3 text-sm">
       <div className="flex items-start gap-2">
         <AlertTriangle
           size={16}
           aria-hidden
-          className="mt-0.5 shrink-0 text-amber-300"
+          className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-300"
         />
         <div className="flex-1">
-          <p className="font-medium text-amber-100">
+          <p className="font-medium text-amber-700 dark:text-amber-100">
             {matches.length} existing lead{matches.length === 1 ? "" : "s"}{" "}
             match this email or phone.
           </p>
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="mt-1 text-xs text-amber-200 underline-offset-2 hover:underline"
+            className="mt-1 text-xs text-amber-700 dark:text-amber-200 underline-offset-2 hover:underline"
           >
             {expanded ? "Hide matches" : "View matches"}
           </button>
@@ -115,12 +115,12 @@ export function DuplicateWarning({ email, phone }: DuplicateWarningProps) {
                     {m.name}
                   </Link>
                   {m.companyName ? (
-                    <span className="text-amber-200/80">
+                    <span className="text-amber-700 dark:text-amber-200/80">
                       {" "}
                       · {m.companyName}
                     </span>
                   ) : null}
-                  <p className="mt-0.5 text-[10px] text-amber-200/70">
+                  <p className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-200/70">
                     {m.email ? `${m.email} · ` : ""}
                     {m.status} · owner {m.ownerName ?? "Unassigned"}
                   </p>
@@ -129,7 +129,7 @@ export function DuplicateWarning({ email, phone }: DuplicateWarningProps) {
             </ul>
           ) : null}
 
-          <p className="mt-2 text-[11px] text-amber-200/80">
+          <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-200/80">
             You can use one of these existing leads, or continue to create a
             new one.
           </p>

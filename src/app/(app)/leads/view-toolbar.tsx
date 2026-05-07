@@ -118,7 +118,7 @@ export function ViewToolbar({
 
       {/* Modified badge + actions */}
       {columnsModified ? (
-        <span className="rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-100">
+        <span className="rounded-full border border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-100">
           Modified
         </span>
       ) : null}
@@ -215,7 +215,7 @@ export function ViewToolbar({
               router.push("/leads?view=builtin:my-open");
             });
           }}
-          className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-100 transition hover:bg-destructive/20"
+          className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-100 transition hover:bg-destructive/20"
         >
           Delete view
         </button>
@@ -462,7 +462,7 @@ function SaveViewDialog({
             <span>Pin to top of list</span>
           </label>
           {error ? (
-            <p className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+            <p className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-100">
               {error}
             </p>
           ) : null}
