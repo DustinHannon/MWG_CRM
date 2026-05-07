@@ -21,6 +21,7 @@ import {
   LEAD_SOURCES,
   LEAD_STATUSES,
 } from "@/lib/lead-constants";
+import { nameField, urlField } from "@/lib/validation/primitives";
 
 export { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES };
 
@@ -63,25 +64,19 @@ export type LeadFilters = z.infer<typeof leadFiltersSchema>;
  */
 const leadCreateSchemaBase = z.object({
   salutation: z.string().max(20).optional().nullable(),
-  firstName: z.string().trim().min(1, "First name required").max(120),
+  firstName: nameField,
   // Phase 6A — last_name is now nullable. Manual create form still
   // marks the field required via HTML/UI, but the schema accepts empty
   // so the import path can carry NULL through.
-  lastName: z
-    .string()
-    .trim()
-    .max(120)
-    .or(z.literal(""))
-    .optional()
-    .nullable(),
+  lastName: nameField.or(z.literal("")).optional().nullable(),
   jobTitle: z.string().max(200).optional().nullable(),
   companyName: z.string().max(200).optional().nullable(),
   industry: z.string().max(100).optional().nullable(),
   email: z.string().email().or(z.literal("")).optional().nullable(),
   phone: z.string().max(40).optional().nullable(),
   mobilePhone: z.string().max(40).optional().nullable(),
-  website: z.string().url().or(z.literal("")).optional().nullable(),
-  linkedinUrl: z.string().url().or(z.literal("")).optional().nullable(),
+  website: urlField.or(z.literal("")).optional().nullable(),
+  linkedinUrl: urlField.or(z.literal("")).optional().nullable(),
   street1: z.string().max(200).optional().nullable(),
   street2: z.string().max(200).optional().nullable(),
   city: z.string().max(100).optional().nullable(),

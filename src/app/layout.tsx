@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 
@@ -28,11 +29,15 @@ export const metadata: Metadata = {
     "Internal CRM platform for Morgan White Group — lead and relationship management with Microsoft Entra SSO and Outlook integration.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Phase 8 (FIX-005) — pass the per-request CSP nonce minted by
+  // src/proxy.ts to next-themes so its inline FOUC-prevention <script>
+  // is allowed by the strict script-src directive.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -40,7 +45,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="antialiased font-sans">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider nonce={nonce}>{children}</ThemeProvider>
       </body>
     </html>
   );

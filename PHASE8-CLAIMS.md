@@ -42,9 +42,9 @@ Every "feature X ships" claim from Phases 1–7 (PLAN, PLAN-PHASE2..7, PHASE4-AU
 - [Phase 6] Activities (notes, calls, tasks) ship
 - [Phase 3D] @-mentions in notes parsed via `src/lib/mention-parser.ts`; create notifications for mentioned users
 - [Phase 3G] `activities.lead_id` becomes nullable; CHECK constraint `activities_one_parent` enforces exactly-one-parent across {lead, account, contact, opportunity}
-- [Phase 5B] `last_activity_at` denormalized column on leads, partial index `WHERE is_deleted = false`, kept consistent (only counting kinds; only when newer)
-- [Phase 5B] Activity-insert server action updates `last_activity_at` only for counting kinds with newer `created_at`
-- [Phase 5B] Counting vs non-counting activity kind catalog enforced; imports + non-counting do not touch `last_activity_at`
+- [Phase 5B] `last_activity_at` denormalized column on leads, partial index `WHERE is_deleted = false`, kept consistent for the 5 `activity_kind` enum values (`email`, `call`, `meeting`, `note`, `task`)
+- [Phase 5B] Activity-insert server action updates `last_activity_at` for every counting kind (all 5 enum values: `email`, `call`, `meeting`, `note`, `task`)
+- [Phase 5B] Counting vs non-counting activity kind catalog enforced; the counting set equals the full `activity_kind` enum (`email`, `call`, `meeting`, `note`, `task`); imports do not touch `last_activity_at` unless the imported activity has a newer timestamp
 - [Phase 6A] `activities.imported_by_name` snapshot column for unresolved By-name references
 - [Phase 6A] `activities.import_dedup_key` column + partial index `activities_import_dedup_idx` for idempotent re-imports
 - [Phase 7] Microsoft Graph `/me/sendMail` integration sends from user's mailbox, walks Sent Items to fetch back, persists as `kind=email activities` row with `graph_message_id`/`graph_internet_message_id`
@@ -209,7 +209,7 @@ Every "feature X ships" claim from Phases 1–7 (PLAN, PLAN-PHASE2..7, PHASE4-AU
 - [Phase 6A] `last_name` nullable on leads + contacts; CHECK constraints permit NULL or 1–100 chars
 - [Phase 6A] `subject` column on leads with CHECK constraint (NULL or 1–1000 chars); `leads_subject_trgm_idx` GIN trigram partial index
 - [Phase 6A] `external_id` partial unique index for re-import idempotency (`WHERE external_id IS NOT NULL AND is_deleted = false`)
-- [Phase 5B] `last_activity_at` denormalized column on leads (kept consistent via activity-insert hook for counting kinds with newer timestamps)
+- [Phase 5B] `last_activity_at` denormalized column on leads (kept consistent via activity-insert hook for all 5 `activity_kind` values — `email`, `call`, `meeting`, `note`, `task` — with newer timestamps)
 - [Phase 4H] `pg_trgm` + `unaccent` extensions enabled
 - [Phase 4H] Functional GIN FTS + trigram indexes on `leads`, `crm_accounts`, `contacts`, `opportunities` (typo-tolerant)
 - [Phase 6A.6] `leads_fts_idx` rebuilt to include `subject` (alongside first_name/last_name/company_name/email/phone), `WHERE is_deleted = false`

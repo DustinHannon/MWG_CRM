@@ -13,6 +13,7 @@ import {
   type LeadSource,
   type LeadStatus,
 } from "@/lib/lead-constants";
+import { nameField, urlField } from "@/lib/validation/primitives";
 
 interface RawRow {
   rowNumber: number;
@@ -76,16 +77,16 @@ function parseBool(s: string | undefined): boolean {
 }
 
 const importRowSchema = z.object({
-  firstName: z.string().trim().min(1, "First name required").max(120),
-  lastName: z.string().trim().min(1, "Last name required").max(120),
+  firstName: nameField,
+  lastName: nameField,
   email: z.string().trim().email().or(z.literal("")).optional(),
   phone: z.string().trim().max(40).optional(),
   mobilePhone: z.string().trim().max(40).optional(),
   jobTitle: z.string().trim().max(200).optional(),
   companyName: z.string().trim().max(200).optional(),
   industry: z.string().trim().max(100).optional(),
-  website: z.string().trim().url().or(z.literal("")).optional(),
-  linkedinUrl: z.string().trim().url().or(z.literal("")).optional(),
+  website: urlField.or(z.literal("")).optional(),
+  linkedinUrl: urlField.or(z.literal("")).optional(),
   street1: z.string().trim().max(200).optional(),
   street2: z.string().trim().max(200).optional(),
   city: z.string().trim().max(100).optional(),

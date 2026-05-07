@@ -33,8 +33,7 @@ export async function ActivityFeed({
   if (rows.length === 0) {
     return (
       <p className="text-sm text-white/40">
-        No activity yet. Use the composer above to log a note, call, or
-        task. Email and meeting activities arrive in Phase 7.
+        No activities yet. Add a note, call, email, or meeting above.
       </p>
     );
   }

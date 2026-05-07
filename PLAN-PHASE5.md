@@ -95,7 +95,8 @@
 
 ### 5B.1 — Activity kind audit
 - [ ] Walk every `INSERT INTO activities` in code; classify against the catalog (counting vs non-counting).
-- [ ] Add missing enum values via migration if needed: `import`, `bulk_update`, `auto_scored`, `convert`, `archive`, `restore`.
+- [ ] The current `activity_kind` enum is `{email, call, meeting, note, task}` — all 5 values are counting kinds for the `last_activity_at` denorm. Earlier drafts of this plan referenced `sms` and `task_completed`; those values were never added to the enum and are not produced anywhere in the codebase (Phase 8 finding F-011). Drop them from any future "catalog" references.
+- [ ] Add missing enum values via migration if needed (none required for Phase 5B; consider deferring `import`, `bulk_update`, `auto_scored`, `convert`, `archive`, `restore` to a later phase via the audit log instead).
 - [ ] Patch any non-human side-effect that uses a counting kind.
 
 ### 5B.2 — `last_activity_at` column

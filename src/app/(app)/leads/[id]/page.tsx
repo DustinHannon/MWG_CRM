@@ -158,7 +158,7 @@ export default async function LeadDetailPage({
                 type="submit"
                 className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-sm text-rose-100 transition hover:bg-rose-500/20"
               >
-                Delete
+                Archive
               </button>
             </form>
           ) : null}

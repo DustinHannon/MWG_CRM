@@ -20,6 +20,11 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PATH_PREFIXES = [
   "/auth/",
   "/api/auth/",
+  // Phase 8 (FIX-021) — cron endpoints authenticate via Bearer token
+  // (CRON_SECRET) inside the route handler; bypass the session-cookie
+  // redirect so a missing/bad bearer returns a clean 401 instead of a
+  // 307 redirect to /auth/signin.
+  "/api/cron/",
   "/_next/",
   "/favicon",
   "/robots.txt",

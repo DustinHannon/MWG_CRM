@@ -9,18 +9,15 @@ import {
   LEAD_SOURCES,
   LEAD_STATUSES,
 } from "@/lib/lead-constants";
+import { nameField, urlField } from "@/lib/validation/primitives";
 
 export const importRowSchema = z.object({
   // Required.
-  firstName: z
-    .string()
-    .trim()
-    .min(1, "First name required")
-    .max(100, "First name max 100 chars"),
+  firstName: nameField,
 
   // Optional plain string fields (already trimmed). The schema lets
   // empty strings through and the per-row parser turns them into NULL.
-  lastName: z.string().trim().max(100).optional().nullable(),
+  lastName: nameField.or(z.literal("")).optional().nullable(),
   email: z
     .string()
     .trim()
@@ -34,20 +31,8 @@ export const importRowSchema = z.object({
   jobTitle: z.string().trim().max(200).optional().nullable(),
   companyName: z.string().trim().max(200).optional().nullable(),
   industry: z.string().trim().max(100).optional().nullable(),
-  website: z
-    .string()
-    .trim()
-    .url()
-    .or(z.literal(""))
-    .optional()
-    .nullable(),
-  linkedinUrl: z
-    .string()
-    .trim()
-    .url()
-    .or(z.literal(""))
-    .optional()
-    .nullable(),
+  website: urlField.or(z.literal("")).optional().nullable(),
+  linkedinUrl: urlField.or(z.literal("")).optional().nullable(),
   street1: z.string().trim().max(200).optional().nullable(),
   street2: z.string().trim().max(200).optional().nullable(),
   city: z.string().trim().max(100).optional().nullable(),

@@ -13,6 +13,7 @@ import { formatUserTime } from "@/lib/format-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
 import { formatPersonName } from "@/lib/format/person-name";
+import { AutoPrint } from "./auto-print";
 import "./print.css";
 
 export const dynamic = "force-dynamic";
@@ -202,14 +203,7 @@ export default async function LeadPrintPage({
         <UserTime value={new Date()} />
       </div>
 
-      <script
-        // Auto-open the print dialog on load. The user can cancel and
-        // re-trigger via the browser shortcut.
-        dangerouslySetInnerHTML={{
-          __html:
-            "window.addEventListener('load',function(){setTimeout(function(){window.print()},250)});",
-        }}
-      />
+      <AutoPrint />
     </div>
   );
 }
