@@ -20,7 +20,10 @@ const PUBLIC_PATH_PREFIXES = [
   "/sitemap.xml",
 ];
 
-const SESSION_COOKIES = [
+// Auth.js may CHUNK the session cookie when the JWT exceeds ~4KB. The chunked
+// names look like `authjs.session-token.0`, `authjs.session-token.1`, etc. We
+// match the prefix so chunked sessions are recognised here.
+const SESSION_COOKIE_PREFIXES = [
   "authjs.session-token",
   "__Secure-authjs.session-token",
   "next-auth.session-token",
@@ -34,9 +37,13 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const hasSessionCookie = SESSION_COOKIES.some((name) =>
-    Boolean(req.cookies.get(name)?.value),
-  );
+  const hasSessionCookie = req.cookies
+    .getAll()
+    .some((c) =>
+      SESSION_COOKIE_PREFIXES.some(
+        (prefix) => c.name === prefix || c.name.startsWith(`${prefix}.`),
+      ) && Boolean(c.value),
+    );
 
   if (!hasSessionCookie) {
     const url = req.nextUrl.clone();
