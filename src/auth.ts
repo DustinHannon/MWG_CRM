@@ -1,83 +1,194 @@
 import NextAuth from "next-auth";
+import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
+import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { ensureBreakglass } from "@/lib/breakglass";
+import {
+  EntraDomainNotAllowedError,
+  provisionEntraUser,
+  upsertAccount,
+} from "@/lib/entra-provisioning";
+import { entraConfigured, env } from "@/lib/env";
 import { verifyPassword } from "@/lib/password";
 
 /**
- * Auth.js v5 surface. Phase 2 wires only the Credentials provider for the
- * breakglass account. Phase 3 will add MicrosoftEntraID alongside it.
+ * Auth.js v5 surface. The MicrosoftEntraID provider is registered only when
+ * AUTH_MICROSOFT_ENTRA_ID_ID + SECRET are set (i.e. after the App
+ * Registration is created and the Vercel env vars are filled in). Until
+ * then, only the breakglass Credentials provider is mounted, which keeps
+ * the build green.
  *
- * Sessions are JWT-based (stateless cookie). We do NOT mount @auth/drizzle-
- * adapter because its expected user table shape (`name`, `emailVerified`,
- * `image`) doesn't match our schema (we use first_name / last_name /
- * display_name with custom Graph-driven provisioning per §7.3 of the brief).
- * In Phase 3 we'll write the Entra account row manually in the jwt callback
- * so we keep the refresh_token without the adapter's create-user pathway.
+ * Sessions are JWT-based. We don't mount @auth/drizzle-adapter — its
+ * expected user table shape conflicts with our schema. Phase 3 writes the
+ * `accounts` row manually via upsertAccount() so we keep the Microsoft
+ * refresh_token across sessions.
  */
 const credentialsSchema = z.object({
   username: z.string().trim().min(1).max(120),
   password: z.string().min(1).max(512),
 });
 
+const providers: Provider[] = [
+  Credentials({
+    id: "breakglass",
+    name: "Breakglass",
+    credentials: {
+      username: { label: "Username", type: "text" },
+      password: { label: "Password", type: "password" },
+    },
+    async authorize(rawCreds) {
+      const parsed = credentialsSchema.safeParse(rawCreds);
+      if (!parsed.success) return null;
+      const { username, password } = parsed.data;
+
+      await ensureBreakglass();
+
+      const candidate = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, username.toLowerCase()))
+        .limit(1);
+      const user = candidate[0];
+
+      if (!user || !user.isBreakglass || !user.isActive || !user.passwordHash) {
+        return null;
+      }
+
+      const ok = await verifyPassword(password, user.passwordHash);
+      if (!ok) return null;
+
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.displayName,
+      };
+    },
+  }),
+];
+
+if (entraConfigured) {
+  providers.push(
+    MicrosoftEntraID({
+      clientId: env.AUTH_MICROSOFT_ENTRA_ID_ID!,
+      clientSecret: env.AUTH_MICROSOFT_ENTRA_ID_SECRET!,
+      issuer: env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
+      authorization: {
+        params: {
+          scope: [
+            "openid",
+            "profile",
+            "email",
+            "offline_access",
+            "User.Read",
+            "Mail.Read",
+            "Mail.Send",
+            "Mail.ReadWrite",
+            "Calendars.Read",
+            "Calendars.ReadWrite",
+          ].join(" "),
+        },
+      },
+    }),
+  );
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   trustHost: true,
-  providers: [
-    Credentials({
-      id: "breakglass",
-      name: "Breakglass",
-      credentials: {
-        username: { label: "Username", type: "text" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(rawCreds) {
-        const parsed = credentialsSchema.safeParse(rawCreds);
-        if (!parsed.success) return null;
-        const { username, password } = parsed.data;
+  providers,
+  callbacks: {
+    /**
+     * For Entra OIDC sign-ins: provision the local user row + write the
+     * account row + reject if domain is not allowed. We do this in `signIn`
+     * (not `jwt`) because the user object passed to jwt() is shaped by the
+     * provider — we want our own ProvisionedUser shape on the token.
+     *
+     * Returning false halts auth; throwing surfaces a user-readable error
+     * via Auth.js.
+     */
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== "microsoft-entra-id") {
+        return true; // breakglass already validated by authorize()
+      }
+      if (!account.access_token) {
+        console.error(
+          "[auth] Entra sign-in missing access_token — likely scope/consent issue",
+        );
+        return "/auth/signin?error=missing_token";
+      }
 
-        // Bootstrap on first attempted sign-in. Idempotent.
-        await ensureBreakglass();
+      const oidClaim =
+        (profile as { oid?: string; sub?: string } | undefined)?.oid ??
+        (profile as { oid?: string; sub?: string } | undefined)?.sub ??
+        account.providerAccountId;
 
-        const candidate = await db
-          .select()
-          .from(users)
-          .where(eq(users.username, username.toLowerCase()))
-          .limit(1);
-        const user = candidate[0];
+      const upn =
+        (profile as { preferred_username?: string; upn?: string } | undefined)
+          ?.preferred_username ??
+        (profile as { preferred_username?: string; upn?: string } | undefined)
+          ?.upn ??
+        user.email ??
+        "";
+      const email = (user.email ?? upn).toLowerCase();
 
-        // The Credentials provider is breakglass-only — regular Entra users
-        // can never sign in via password even if they exist.
-        if (!user || !user.isBreakglass || !user.isActive || !user.passwordHash) {
-          return null;
+      try {
+        const provisioned = await provisionEntraUser({
+          entraOid: oidClaim,
+          upn,
+          email,
+          accessToken: account.access_token,
+        });
+
+        if (!provisioned.isActive) {
+          return "/auth/disabled";
         }
 
-        const ok = await verifyPassword(password, user.passwordHash);
-        if (!ok) return null;
+        await upsertAccount({
+          userId: provisioned.id,
+          providerAccountId: account.providerAccountId,
+          refreshToken: account.refresh_token,
+          accessToken: account.access_token,
+          expiresAt: account.expires_at ?? null,
+          tokenType: account.token_type,
+          scope: account.scope,
+          idToken: account.id_token,
+        });
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.displayName,
-        };
-      },
-    }),
-  ],
-  callbacks: {
-    async jwt({ token, user, trigger }) {
-      // On initial sign-in (Credentials returns the user object), copy id onto
-      // the token so server-side code can read session.user.id.
+        // Stash the resolved local user id on `user` so jwt() picks it up.
+        user.id = provisioned.id;
+        user.email = provisioned.email;
+        user.name = provisioned.displayName;
+        return true;
+      } catch (err) {
+        if (err instanceof EntraDomainNotAllowedError) {
+          return `/auth/signin?error=domain_not_allowed`;
+        }
+        console.error("[auth] Entra signIn error", err);
+        return "/auth/signin?error=signin_failed";
+      }
+    },
+
+    async jwt({ token, user, account, trigger }) {
+      // Initial mint: copy id from authorize() / signIn() result.
       if (user?.id) {
         token.userId = user.id;
       }
 
-      // Refresh user-derived flags from DB on every JWT roundtrip when we have
-      // a userId. This lets admins toggle is_active / is_admin / session_version
-      // without users having to sign out and back in. Cheap query (PK lookup,
-      // returns 5 columns).
+      // Persist Microsoft tokens onto the JWT for Phase 7 Graph calls.
+      // The accounts table also has them — JWT is fine for fast access,
+      // accounts table is the durable store (rotated on each refresh).
+      if (account?.provider === "microsoft-entra-id") {
+        token.msAccessToken = account.access_token;
+        token.msRefreshToken = account.refresh_token;
+        token.msExpiresAt = account.expires_at;
+      }
+
+      // On every roundtrip (except the very first sign-in), revalidate
+      // active/admin/session_version against DB. Cheap PK lookup.
       if (token.userId && trigger !== "signIn") {
         const fresh = await db
           .select({
@@ -92,18 +203,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .limit(1);
 
         const row = fresh[0];
-        if (!row) {
-          // User was deleted while session active. Force re-auth.
-          return null;
-        }
-        if (!row.isActive) {
-          return null;
-        }
+        if (!row) return null;
+        if (!row.isActive) return null;
         if (
           typeof token.sessionVersion === "number" &&
           token.sessionVersion !== row.sessionVersion
         ) {
-          // Admin bumped session_version → invalidate.
           return null;
         }
         token.isAdmin = row.isAdmin;
@@ -111,7 +216,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.displayName = row.displayName;
         token.email = row.email;
       } else if (token.userId && trigger === "signIn") {
-        // First-mint: pull these once.
         const fresh = await db
           .select({
             isAdmin: users.isAdmin,
@@ -131,6 +235,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       return token;
     },
+
     async session({ session, token }) {
       if (token?.userId) {
         session.user.id = token.userId as string;

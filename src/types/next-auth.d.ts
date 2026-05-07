@@ -30,5 +30,8 @@ declare module "next-auth/jwt" {
     sessionVersion?: number;
     displayName?: string;
     email?: string;
+    msAccessToken?: string | null;
+    msRefreshToken?: string | null;
+    msExpiresAt?: number | null;
   }
 }

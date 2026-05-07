@@ -5,10 +5,19 @@ import {
   signInBreakglassAction,
   type SignInResult,
 } from "./actions";
+import { MicrosoftSignInButton } from "./microsoft-button";
 
 const initialState: SignInResult = { ok: true };
 
-export function SigninForm({ callbackUrl }: { callbackUrl?: string }) {
+export function SigninForm({
+  callbackUrl,
+  entraEnabled,
+  topError,
+}: {
+  callbackUrl?: string;
+  entraEnabled: boolean;
+  topError?: string | null;
+}) {
   const [showBreakglass, setShowBreakglass] = useState(false);
   const [state, formAction, pending] = useActionState(
     async (
@@ -20,14 +29,27 @@ export function SigninForm({ callbackUrl }: { callbackUrl?: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <button
-        type="button"
-        disabled
-        className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white/40 backdrop-blur-md transition cursor-not-allowed"
-        title="Available after the Entra App Registration is configured (Phase 3)."
-      >
-        Sign in with Microsoft <span className="ml-2 text-xs">(Phase 3)</span>
-      </button>
+      {topError ? (
+        <div
+          role="alert"
+          className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+        >
+          {topError}
+        </div>
+      ) : null}
+
+      {entraEnabled ? (
+        <MicrosoftSignInButton callbackUrl={callbackUrl} />
+      ) : (
+        <button
+          type="button"
+          disabled
+          className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white/40 backdrop-blur-md transition cursor-not-allowed"
+          title="Available after the Entra App Registration is configured."
+        >
+          Sign in with Microsoft <span className="ml-2 text-xs">(pending Entra config)</span>
+        </button>
+      )}
 
       <div className="flex items-center gap-3 text-xs text-white/40">
         <div className="h-px flex-1 bg-white/10" />

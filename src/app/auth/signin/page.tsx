@@ -1,18 +1,33 @@
 import { ensureBreakglass } from "@/lib/breakglass";
+import { entraConfigured } from "@/lib/env";
 import { SigninForm } from "./signin-form";
 
 export const dynamic = "force-dynamic";
+
+const ERROR_MESSAGES: Record<string, string> = {
+  domain_not_allowed:
+    "Your email domain isn't allowed to sign in. Contact IT.",
+  signin_failed:
+    "Sign-in failed. Please try again, or use the breakglass account.",
+  missing_token:
+    "Microsoft didn't grant the required permissions. Re-try and consent to all scopes.",
+  // Auth.js standard error codes:
+  Configuration:
+    "Auth is not fully configured yet — try the breakglass account.",
+  AccessDenied: "Access denied.",
+  Verification: "Verification link expired. Try signing in again.",
+};
 
 export default async function SigninPage({
   searchParams,
 }: {
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }) {
-  // Guarantees the breakglass account is seeded the very first time anyone
-  // hits the deployed app. Idempotent under concurrent cold starts.
   await ensureBreakglass();
 
-  const { callbackUrl } = await searchParams;
+  const { callbackUrl, error } = await searchParams;
+  const topError =
+    error && error in ERROR_MESSAGES ? ERROR_MESSAGES[error] : null;
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-slate-950 px-4">
@@ -30,7 +45,11 @@ export default async function SigninPage({
             Sign in to continue
           </p>
         </div>
-        <SigninForm callbackUrl={callbackUrl} />
+        <SigninForm
+          callbackUrl={callbackUrl}
+          entraEnabled={entraConfigured}
+          topError={topError}
+        />
       </div>
     </div>
   );
