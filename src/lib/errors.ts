@@ -1,0 +1,71 @@
+/**
+ * Known-error hierarchy. Server actions and route handlers throw these for
+ * expected failures; the central `withErrorBoundary` translates them into
+ * safe public messages with stable error codes. Anything that isn't a
+ * `KnownError` is treated as an internal error and the public response gets
+ * a generic message + request id (no stack, no DB detail).
+ */
+
+export type ErrorCode =
+  | "VALIDATION"
+  | "NOT_FOUND"
+  | "FORBIDDEN"
+  | "CONFLICT"
+  | "RATE_LIMIT"
+  | "INTERNAL";
+
+export class KnownError extends Error {
+  readonly code: ErrorCode;
+  /** Safe to display to users. Never include internal IDs or DB strings. */
+  readonly publicMessage: string;
+  /** Optional structured payload — Zod issues, conflict version, etc. */
+  readonly meta?: Record<string, unknown>;
+
+  constructor(
+    code: ErrorCode,
+    publicMessage: string,
+    internalMessage?: string,
+    meta?: Record<string, unknown>,
+  ) {
+    super(internalMessage ?? publicMessage);
+    this.code = code;
+    this.publicMessage = publicMessage;
+    this.meta = meta;
+    this.name = "KnownError";
+  }
+}
+
+export class ValidationError extends KnownError {
+  constructor(publicMessage: string, meta?: Record<string, unknown>) {
+    super("VALIDATION", publicMessage, publicMessage, meta);
+    this.name = "ValidationError";
+  }
+}
+
+export class NotFoundError extends KnownError {
+  constructor(entityType = "record") {
+    super("NOT_FOUND", `That ${entityType} was not found.`, `not_found:${entityType}`);
+    this.name = "NotFoundError";
+  }
+}
+
+export class ForbiddenError extends KnownError {
+  constructor(publicMessage = "You don't have access to that.") {
+    super("FORBIDDEN", publicMessage, "forbidden");
+    this.name = "ForbiddenError";
+  }
+}
+
+export class ConflictError extends KnownError {
+  constructor(publicMessage: string, meta?: Record<string, unknown>) {
+    super("CONFLICT", publicMessage, "conflict", meta);
+    this.name = "ConflictError";
+  }
+}
+
+export class RateLimitError extends KnownError {
+  constructor(publicMessage = "Too many attempts. Please try again later.") {
+    super("RATE_LIMIT", publicMessage, "rate_limited");
+    this.name = "RateLimitError";
+  }
+}

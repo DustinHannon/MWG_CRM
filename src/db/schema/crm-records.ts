@@ -51,6 +51,7 @@ export const crmAccounts = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    version: integer("version").notNull().default(1),
   },
   (t) => [
     index("crm_accounts_owner_idx").on(t.ownerId),
@@ -90,6 +91,7 @@ export const contacts = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    version: integer("version").notNull().default(1),
   },
   (t) => [
     index("contacts_account_idx").on(t.accountId),
@@ -139,6 +141,7 @@ export const opportunities = pgTable(
       .notNull()
       .default(sql`now()`),
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    version: integer("version").notNull().default(1),
   },
   (t) => [
     index("opportunities_account_idx").on(t.accountId),

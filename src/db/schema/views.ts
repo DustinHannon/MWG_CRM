@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -45,6 +46,7 @@ export const savedViews = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    version: integer("version").notNull().default(1),
   },
   (t) => [
     index("saved_views_user_idx").on(t.userId),
@@ -94,4 +96,5 @@ export const userPreferences = pgTable("user_preferences", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),
+  version: integer("version").notNull().default(1),
 });

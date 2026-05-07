@@ -21,6 +21,10 @@ export const auditLog = pgTable(
     actorId: uuid("actor_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // Snapshot of actor's email at the time of the action. Preserved even
+    // after the user is deleted (FK is SET NULL) so audit history stays
+    // attributable for compliance/forensics.
+    actorEmailSnapshot: text("actor_email_snapshot"),
     action: text("action").notNull(),
     targetType: text("target_type"),
     targetId: text("target_id"),

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -65,6 +66,7 @@ export const tasks = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    version: integer("version").notNull().default(1),
   },
   (t) => [
     index("tasks_assigned_due_idx").on(t.assignedToId, t.dueAt),

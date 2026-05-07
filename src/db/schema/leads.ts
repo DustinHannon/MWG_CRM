@@ -3,6 +3,7 @@ import {
   boolean,
   date,
   index,
+  integer,
   numeric,
   pgTable,
   text,
@@ -78,6 +79,9 @@ export const leads = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    // Optimistic concurrency stamp. Bumped by every UPDATE through
+    // concurrentUpdate(); a stale `version` causes ConflictError.
+    version: integer("version").notNull().default(1),
   },
   (t) => [
     index("leads_owner_idx").on(t.ownerId),
