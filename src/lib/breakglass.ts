@@ -42,32 +42,35 @@ export async function ensureBreakglass(): Promise<void> {
   const plaintext = generatePassword();
   const passwordHash = await hashPassword(plaintext);
 
-  // Use a transaction so the user + permissions row are atomic.
-  let inserted = false;
+  // We can't use Drizzle's `.onConflictDoNothing({ target: users.isBreakglass })`
+  // because that translates to ON CONFLICT (is_breakglass) which requires a
+  // FULL (non-partial) unique index on is_breakglass — and we only have the
+  // partial index `users_one_breakglass` (is_breakglass=true). Instead, the
+  // INSERT … SELECT … WHERE NOT EXISTS pattern is race-safe under serializable
+  // and reads the partial index correctly.
+  let insertedId: string | null = null;
   await db.transaction(async (tx) => {
-    const result = await tx
-      .insert(users)
-      .values({
-        username: BREAKGLASS_USERNAME,
-        email: BREAKGLASS_EMAIL,
-        firstName: "Break",
-        lastName: "Glass",
-        displayName: "Breakglass Admin",
-        isBreakglass: true,
-        isAdmin: true,
-        isActive: true,
-        passwordHash,
-      })
-      .onConflictDoNothing({ target: users.isBreakglass })
-      .returning({ id: users.id });
+    const inserted = await tx.execute<{ id: string }>(sql`
+      INSERT INTO users (
+        username, email, first_name, last_name, display_name,
+        is_breakglass, is_admin, is_active, password_hash
+      )
+      SELECT ${BREAKGLASS_USERNAME}, ${BREAKGLASS_EMAIL}, 'Break', 'Glass',
+             'Breakglass Admin', true, true, true, ${passwordHash}
+      WHERE NOT EXISTS (
+        SELECT 1 FROM users WHERE is_breakglass = true
+      )
+      RETURNING id
+    `);
 
-    if (result.length === 0) {
-      // Lost race — another Lambda inserted first. That's fine.
+    const id = inserted[0]?.id;
+    if (!id) {
+      // Lost the race — another Lambda just inserted. No-op.
       return;
     }
 
     await tx.insert(permissions).values({
-      userId: result[0].id,
+      userId: id,
       canViewAllLeads: true,
       canCreateLeads: true,
       canEditLeads: true,
@@ -78,8 +81,10 @@ export async function ensureBreakglass(): Promise<void> {
       canViewReports: true,
     });
 
-    inserted = true;
+    insertedId = id;
   });
+
+  const inserted = insertedId !== null;
 
   if (inserted) {
     // ONE-TIME LOG. After this Lambda restarts and finds the row, no further log.
