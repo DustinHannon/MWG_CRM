@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
@@ -21,6 +21,8 @@ const STAGES = [
 interface CardRow {
   id: string;
   stage: string;
+  // Phase 8D Wave 4 (FIX-004) — OCC version stamp threaded through DnD.
+  version: number;
   name: string;
   accountName: string | null;
   amount: string | null;
@@ -32,12 +34,21 @@ export default async function OppPipelinePage() {
   const perms = await getPermissions(session.id);
   const canViewAll = session.isAdmin || perms.canViewAllRecords;
 
-  const where = canViewAll ? undefined : eq(opportunities.ownerId, session.id);
+  const ownerWhere = canViewAll
+    ? undefined
+    : eq(opportunities.ownerId, session.id);
+  const archivedWhere = eq(opportunities.isDeleted, false);
+  const where = ownerWhere
+    ? and(ownerWhere, archivedWhere)
+    : archivedWhere;
 
   const rows: CardRow[] = await db
     .select({
       id: opportunities.id,
       stage: sql<string>`${opportunities.stage}::text`,
+      // Phase 8D Wave 4 (FIX-004) — version on every card; the DnD
+      // handler posts it back so the action can refuse stale moves.
+      version: opportunities.version,
       name: opportunities.name,
       accountName: crmAccounts.name,
       amount: opportunities.amount,

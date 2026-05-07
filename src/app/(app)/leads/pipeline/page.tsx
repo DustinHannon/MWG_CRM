@@ -20,6 +20,7 @@ const PIPELINE_STATUSES = [
 interface CardRow {
   id: string;
   status: string;
+  version: number;
   firstName: string;
   lastName: string | null;
   companyName: string | null;
@@ -44,6 +45,9 @@ export default async function PipelinePage() {
     .select({
       id: leads.id,
       status: sql<string>`${leads.status}::text`,
+      // Phase 8D Wave 4 (FIX-003) — carry version into the board so DnD
+      // can post it back; OCC enforces compare-and-set on commit.
+      version: leads.version,
       firstName: leads.firstName,
       lastName: leads.lastName,
       companyName: leads.companyName,
@@ -56,8 +60,15 @@ export default async function PipelinePage() {
     .leftJoin(users, eq(users.id, leads.ownerId))
     .where(
       ownerFilter
-        ? and(ownerFilter, sql`${leads.status} != 'converted'`)
-        : sql`${leads.status} != 'converted'`,
+        ? and(
+            ownerFilter,
+            sql`${leads.status} != 'converted'`,
+            eq(leads.isDeleted, false),
+          )
+        : and(
+            sql`${leads.status} != 'converted'`,
+            eq(leads.isDeleted, false),
+          ),
     )
     .orderBy(desc(leads.lastActivityAt));
 

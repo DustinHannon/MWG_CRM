@@ -18,6 +18,8 @@ import { updateLeadStatusAction } from "../actions";
 interface Card {
   id: string;
   status: string;
+  // Phase 8D Wave 4 (FIX-003) — OCC version stamp threaded through DnD.
+  version: number;
   firstName: string;
   lastName: string | null;
   companyName: string | null;
@@ -76,7 +78,11 @@ export function PipelineBoard({
     }));
 
     startTransition(async () => {
-      const res = await updateLeadStatusAction(cardId, overStatus);
+      const res = await updateLeadStatusAction(
+        cardId,
+        overStatus,
+        card!.version,
+      );
       if (!res.ok) {
         toast.error(res.error);
         // Roll back.
@@ -85,6 +91,19 @@ export function PipelineBoard({
           [overStatus]: prev[overStatus].filter((c) => c.id !== cardId),
           [fromStatus!]: [card!, ...(prev[fromStatus!] ?? [])],
         }));
+      } else {
+        // Bump local version so a second drag of the same card carries
+        // the new stamp; otherwise it would post the now-stale value
+        // and the second move would fail the OCC check.
+        const newVersion = res.data?.version;
+        if (typeof newVersion === "number") {
+          setColumns((prev) => ({
+            ...prev,
+            [overStatus]: prev[overStatus].map((c) =>
+              c.id === cardId ? { ...c, version: newVersion } : c,
+            ),
+          }));
+        }
       }
     });
   }

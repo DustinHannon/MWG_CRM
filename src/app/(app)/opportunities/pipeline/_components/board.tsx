@@ -18,6 +18,8 @@ import { updateOpportunityStageAction } from "../actions";
 interface Card {
   id: string;
   stage: string;
+  // Phase 8D Wave 4 (FIX-004) — OCC version threaded through DnD.
+  version: number;
   name: string;
   accountName: string | null;
   amount: string | null;
@@ -71,7 +73,11 @@ export function OppPipelineBoard({
     }));
 
     startTransition(async () => {
-      const res = await updateOpportunityStageAction(cardId, overStage);
+      const res = await updateOpportunityStageAction(
+        cardId,
+        overStage,
+        card!.version,
+      );
       if (!res.ok) {
         toast.error(res.error);
         setColumns((prev) => ({
@@ -79,6 +85,18 @@ export function OppPipelineBoard({
           [overStage]: prev[overStage].filter((c) => c.id !== cardId),
           [fromStage!]: [card!, ...(prev[fromStage!] ?? [])],
         }));
+      } else {
+        // Phase 8D — bump local version so a follow-up drag posts the
+        // right stamp instead of the now-stale one.
+        const newVersion = res.data?.version;
+        if (typeof newVersion === "number") {
+          setColumns((prev) => ({
+            ...prev,
+            [overStage]: prev[overStage].map((c) =>
+              c.id === cardId ? { ...c, version: newVersion } : c,
+            ),
+          }));
+        }
       }
     });
   }

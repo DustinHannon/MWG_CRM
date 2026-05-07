@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { db } from "@/db";
 import {
   bulkTagLeads,
   deleteTag,
@@ -10,14 +11,18 @@ import {
   updateTag,
   type TagRow,
 } from "@/lib/tags";
+import { auditLog } from "@/db/schema/audit";
 import { TAG_COLORS } from "@/db/schema/tags";
-import { writeAudit } from "@/lib/audit";
+import { users } from "@/db/schema/users";
+import { eq } from "drizzle-orm";
 import {
   requireAdmin,
   requireLeadAccess,
   requireSession,
 } from "@/lib/auth-helpers";
 import { ForbiddenError } from "@/lib/errors";
+import { logger } from "@/lib/logger";
+import { tagName } from "@/lib/validation/primitives";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
@@ -59,7 +64,11 @@ export async function getOrCreateTagAction(
       const session = await requireSession();
       const trimmed = name.trim();
       if (trimmed.length === 0) return null;
-      const created = await getOrCreateTag(trimmed, "slate", session.id);
+      // Phase 8D Wave 7 (FIX-018) — apply the tagName primitive at the
+      // boundary. Throws ValidationError via withErrorBoundary on bad
+      // length/charset; closes F-038's lack of length/charset gates.
+      const validated = tagName.parse(trimmed);
+      const created = await getOrCreateTag(validated, "slate", session.id);
       return strip(created);
     },
   );
@@ -124,18 +133,39 @@ export async function bulkTagLeadsAction(
         parsed.operation,
         session.id,
       );
-      // One audit row per lead — keeps the trail searchable per-record.
-      // (Wave 4 FIX-019 will collapse to a single bulk insert.)
-      for (const leadId of parsed.leadIds) {
-        await writeAudit({
+      // Phase 8D Wave 7 (FIX-019) — collapse N sequential writeAudit
+      // calls into a single bulk INSERT. Resolves the actor email
+      // snapshot once up front and constructs the row array, then
+      // commits in one round-trip. Same per-lead audit shape; just
+      // ~1000x faster for the max-batch case (1000 leads).
+      const action =
+        parsed.operation === "add"
+          ? "lead.tag_bulk_add"
+          : "lead.tag_bulk_remove";
+
+      try {
+        const [actor] = await db
+          .select({ email: users.email })
+          .from(users)
+          .where(eq(users.id, session.id))
+          .limit(1);
+        const snapshot = actor?.email ?? null;
+        const auditRows = parsed.leadIds.map((leadId) => ({
           actorId: session.id,
-          action:
-            parsed.operation === "add"
-              ? "lead.tag_bulk_add"
-              : "lead.tag_bulk_remove",
+          actorEmailSnapshot: snapshot,
+          action,
           targetType: "lead",
           targetId: leadId,
-          after: { tagIds: parsed.tagIds },
+          afterJson: { tagIds: parsed.tagIds } as object,
+        }));
+        await db.insert(auditLog).values(auditRows);
+      } catch (err) {
+        // Best-effort, like writeAudit — never block the mutation it's
+        // recording.
+        logger.error("audit.bulk_write_failed", {
+          action,
+          leadCount: parsed.leadIds.length,
+          errorMessage: err instanceof Error ? err.message : String(err),
         });
       }
       return summary;

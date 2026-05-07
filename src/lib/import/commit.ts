@@ -17,6 +17,7 @@ import { writeAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { expectAffected } from "@/lib/db/concurrent-update";
 import { ConflictError, NotFoundError } from "@/lib/errors";
+import { tagName } from "@/lib/validation/primitives";
 import { computeImportDedupKey } from "./dedup-key";
 import { lookupByName, resolveByNames, resolveOwnerEmails } from "./resolve-users";
 import type { ParsedRow } from "./parse-row";
@@ -71,12 +72,28 @@ export async function commitImport({
   const byNameMap = await resolveByNames(byNames);
 
   // Tag autocreate — collect distinct names and ensure tags rows exist.
+  // Phase 8D Wave 7 (FIX-018) — every candidate is validated through
+  // the `tagName` primitive (length + charset). Failures are logged
+  // (row + reason) and the offending tag is dropped; the rest of the
+  // row's tags still go through. Keeps junk like raw HTML, 200-char
+  // pasted blobs, or control chars out of the tags table.
   const tagNames = new Set<string>();
   for (const r of rows) {
+    if (!r.ok) continue;
     if (!r.leadPatch.tags) continue;
     for (const t of r.leadPatch.tags.split(",")) {
       const trimmed = t.trim();
-      if (trimmed.length > 0) tagNames.add(trimmed);
+      if (trimmed.length === 0) continue;
+      const parsed = tagName.safeParse(trimmed);
+      if (!parsed.success) {
+        logger.warn("import.tag_rejected", {
+          rowNumber: r.rowNumber,
+          tagPreview: trimmed.slice(0, 60),
+          reason: parsed.error.issues[0]?.message ?? "invalid",
+        });
+        continue;
+      }
+      tagNames.add(parsed.data);
     }
   }
   const tagMap = await ensureTags(Array.from(tagNames), importerUserId);
@@ -193,7 +210,13 @@ async function processChunk(args: {
       isUpdate = true;
       leadId = existing.id;
       try {
-        await db
+        // Phase 8D Wave 4 (FIX-007) — re-import UPDATE now goes through
+        // expectAffected so a stale `version` raises a real
+        // ConflictError instead of silently no-op'ing while the row id
+        // got pushed to updatedLeadIds. lastActivityAt is folded into
+        // the same UPDATE so we don't burn a second un-versioned write
+        // for it.
+        const updateRows = await db
           .update(leads)
           .set({
             ownerId,
@@ -231,14 +254,25 @@ async function processChunk(args: {
             updatedById: args.importerUserId,
             updatedAt: sql`now()`,
             version: sql`${leads.version} + 1`,
+            // Fold last_activity_at into the OCC'd update — was a
+            // separate un-versioned write previously (F-027).
+            ...(row.leadPatch.lastActivityAt
+              ? { lastActivityAt: row.leadPatch.lastActivityAt }
+              : {}),
           })
           .where(
             and(
               eq(leads.id, existing.id),
               eq(leads.version, existing.version),
+              eq(leads.isDeleted, false),
             ),
           )
           .returning({ id: leads.id, version: leads.version });
+        expectAffected(updateRows, {
+          table: leads,
+          id: existing.id,
+          entityLabel: "lead",
+        });
       } catch (err) {
         if (err instanceof ConflictError || err instanceof NotFoundError) {
           args.result.failedRows.push({
@@ -409,10 +443,16 @@ async function processChunk(args: {
 
     // ---- Tags --------------------------------------------------------
     if (row.leadPatch.tags) {
-      for (const tagName of row.leadPatch.tags.split(",")) {
-        const trimmed = tagName.trim();
+      for (const candidate of row.leadPatch.tags.split(",")) {
+        const trimmed = candidate.trim();
         if (trimmed.length === 0) continue;
-        const tagId = args.tagMap.get(trimmed.toLowerCase());
+        // Phase 8D Wave 7 (FIX-018) — re-run primitive here too. If the
+        // string was rejected at the upstream Set-build step, the
+        // tagMap won't have an entry and we silently skip; this mirrors
+        // that without re-warning per row.
+        const parsed = tagName.safeParse(trimmed);
+        if (!parsed.success) continue;
+        const tagId = args.tagMap.get(parsed.data.toLowerCase());
         if (!tagId) continue;
         // ON CONFLICT DO NOTHING — leadTags has a (lead_id, tag_id) PK.
         await db
@@ -427,7 +467,12 @@ async function processChunk(args: {
     }
 
     // ---- last_activity_at ---------------------------------------------
-    if (row.leadPatch.lastActivityAt) {
+    // Phase 8D Wave 4 (F-027) — for re-imports we already folded
+    // lastActivityAt into the OCC-checked UPDATE above. For freshly
+    // INSERTed leads the value is set here; the row was just created,
+    // so there is no concurrent writer to race with and a non-versioned
+    // UPDATE is safe.
+    if (!isUpdate && row.leadPatch.lastActivityAt) {
       await db
         .update(leads)
         .set({ lastActivityAt: row.leadPatch.lastActivityAt })

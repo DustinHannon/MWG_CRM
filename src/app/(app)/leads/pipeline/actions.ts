@@ -10,6 +10,8 @@ import {
   requireLeadEditAccess,
   requireSession,
 } from "@/lib/auth-helpers";
+import { updateLead } from "@/lib/leads";
+import { versionField } from "@/lib/validation/primitives";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 const PIPELINE_STATUSES = z.enum([
@@ -20,15 +22,24 @@ const PIPELINE_STATUSES = z.enum([
   "lost",
 ]);
 
+/**
+ * Phase 8D Wave 4 (FIX-003) — kanban DnD now goes through the
+ * version-checked `updateLead` helper. Stale boards refuse to commit
+ * with a ConflictError so two users can't trample each other's drag
+ * results. The new version is returned so the client can rebind the
+ * card without a full refetch.
+ */
 export async function updateLeadStatusAction(
   leadId: string,
   newStatus: z.infer<typeof PIPELINE_STATUSES>,
-): Promise<ActionResult> {
+  expectedVersion: number,
+): Promise<ActionResult<{ version: number }>> {
   return withErrorBoundary(
     { action: "lead.status_change", entityType: "lead", entityId: leadId },
-    async () => {
+    async (): Promise<{ version: number }> => {
       const session = await requireSession();
       const parsed = PIPELINE_STATUSES.parse(newStatus);
+      const version = versionField.parse(expectedVersion);
 
       await requireLeadEditAccess(session, leadId);
       const before = await db
@@ -36,10 +47,10 @@ export async function updateLeadStatusAction(
         .from(leads)
         .where(eq(leads.id, leadId))
         .limit(1);
-      await db
-        .update(leads)
-        .set({ status: parsed, updatedById: session.id })
-        .where(eq(leads.id, leadId));
+
+      const updated = await updateLead(session, leadId, version, {
+        status: parsed,
+      });
 
       await writeAudit({
         actorId: session.id,
@@ -53,6 +64,8 @@ export async function updateLeadStatusAction(
       revalidatePath("/leads/pipeline");
       revalidatePath("/leads");
       revalidatePath(`/leads/${leadId}`);
+
+      return { version: updated.version };
     },
   );
 }
