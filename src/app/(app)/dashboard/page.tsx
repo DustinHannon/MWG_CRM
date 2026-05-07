@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
+import { GlassCard } from "@/components/ui/glass-card";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import {
   CreatedOverTime,
@@ -180,9 +181,9 @@ export default async function DashboardPage() {
         </p>
         <h1 className="mt-1 text-2xl font-semibold">{user.displayName}</h1>
 
-        <section className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-10 text-center backdrop-blur-xl">
+        <GlassCard className="mt-10 p-10 text-center">
           <h2 className="text-lg font-semibold">Nothing here yet</h2>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-2 text-sm text-muted-foreground">
             You haven&apos;t added any leads yet. Add your first lead to start
             seeing metrics, or import a list.
           </p>
@@ -190,7 +191,7 @@ export default async function DashboardPage() {
             {perms.canCreateLeads || user.isAdmin ? (
               <Link
                 href="/leads/new"
-                className="rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-white"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
               >
                 + Add lead
               </Link>
@@ -198,13 +199,13 @@ export default async function DashboardPage() {
             {perms.canImport || user.isAdmin ? (
               <Link
                 href="/leads/import"
-                className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/80 transition hover:bg-white/10"
+                className="rounded-md border border-glass-border bg-glass-1 px-3 py-2 text-sm text-foreground/80 transition hover:bg-accent/40"
               >
                 Import
               </Link>
             ) : null}
           </div>
-        </section>
+        </GlassCard>
       </div>
     );
   }
@@ -275,10 +276,12 @@ export default async function DashboardPage() {
 
 function Kpi({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
-      <p className="text-xs uppercase tracking-wide text-white/40">{label}</p>
+    <GlassCard className="p-5">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
       <p className="mt-3 text-3xl font-semibold tabular-nums">{value}</p>
-    </div>
+    </GlassCard>
   );
 }
 
@@ -290,12 +293,12 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
-      <h2 className="text-xs font-medium uppercase tracking-wide text-white/60">
+    <GlassCard className="p-5">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
       <div className="mt-4">{children}</div>
-    </section>
+    </GlassCard>
   );
 }
 

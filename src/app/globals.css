@@ -1,24 +1,20 @@
 @import "tailwindcss";
 
 /* -----------------------------------------------------------------------------
- * Tailwind v4 token model (shadcn-compatible).
+ * Tailwind v4 token model (shadcn-compatible) + Phase 3 glass system.
  *
- * Two-step pattern:
- *   1. Raw color values are defined under :root and .dark below.
- *   2. @theme inline maps them to Tailwind utility classes (bg-popover etc.).
+ * Layer order:
+ *   1. Raw color values under :root and .dark.
+ *   2. Phase 3 glass tokens (--glass-1/2/3, --glass-border, --glass-shadow,
+ *      --glass-blur, --glass-saturate, --bg-gradient).
+ *   3. Phase 3 tag color tokens (--tag-<name>, --tag-<name>-foreground).
+ *   4. @theme inline mapping to Tailwind utility classes.
  *
- * This is the structure shadcn primitives expect — every primitive references
- * `bg-popover`, `bg-card`, `text-muted-foreground`, etc. Even though Phase 2A
- * only fixes native <select> options, this layout is the foundation for the
- * shadcn primitives Phase 2F adds (Select, DropdownMenu, Popover, Command,
- * Dialog, Chart). Brand tokens (--color-brand-navy etc.) are preserved.
- *
- * The CRM is dark-only today: <html class="dark"> is set in layout.tsx. The
- * :root block defines a sane light theme so future primitives still resolve.
+ * The CRM forces dark mode globally (<html class="dark">).
  * --------------------------------------------------------------------------- */
 
 :root {
-  /* shadcn semantic tokens — light mode. Cool warm-grey + MWG accent. */
+  /* shadcn semantic tokens — light mode. */
   --background: oklch(0.98 0.005 95);
   --foreground: oklch(0.22 0.05 250);
   --card: oklch(1 0 0);
@@ -46,7 +42,7 @@
   --chart-4: oklch(0.60 0.18 145);
   --chart-5: oklch(0.65 0.20 27);
 
-  /* Brand-specific tokens — used by glass surfaces and gradients. */
+  /* Brand-specific tokens. */
   --color-brand-navy: #0a2342;
   --color-brand-navy-700: #143055;
   --color-brand-navy-500: #1f4878;
@@ -54,6 +50,36 @@
   --color-brand-blue-soft: #4a90d9;
   --color-brand-gold: #c9a961;
   --color-brand-cream: #f7f5ef;
+
+  /* Phase 3 glass tokens — three weights. */
+  --glass-1: oklch(1 0 0 / 0.55);
+  --glass-2: oklch(1 0 0 / 0.72);
+  --glass-3: oklch(1 0 0 / 0.88);
+  --glass-border: oklch(0.32 0.10 255 / 0.10);
+  --glass-shadow:
+    0 8px 32px oklch(0.32 0.10 255 / 0.08),
+    0 1px 0 oklch(1 0 0 / 0.6) inset;
+  --glass-blur: 18px;
+  --glass-saturate: 140%;
+
+  --bg-gradient:
+    radial-gradient(ellipse 80% 60% at 20% 0%, oklch(0.55 0.15 250 / 0.10), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 100% 80%, oklch(0.32 0.10 255 / 0.08), transparent 60%),
+    var(--background);
+
+  /* Phase 3 tag palette — light mode. Each tag has a soft fill and a deep
+   * text color so chips read on white surfaces. */
+  --tag-slate: oklch(0.92 0.01 250);    --tag-slate-foreground: oklch(0.30 0.03 250);
+  --tag-navy: oklch(0.85 0.05 255);     --tag-navy-foreground: oklch(0.25 0.10 255);
+  --tag-blue: oklch(0.88 0.06 240);     --tag-blue-foreground: oklch(0.30 0.15 240);
+  --tag-teal: oklch(0.88 0.07 195);     --tag-teal-foreground: oklch(0.30 0.10 195);
+  --tag-green: oklch(0.88 0.08 145);    --tag-green-foreground: oklch(0.30 0.12 145);
+  --tag-amber: oklch(0.90 0.10 80);     --tag-amber-foreground: oklch(0.35 0.12 80);
+  --tag-gold: oklch(0.88 0.09 90);      --tag-gold-foreground: oklch(0.40 0.10 90);
+  --tag-orange: oklch(0.86 0.12 50);    --tag-orange-foreground: oklch(0.35 0.15 50);
+  --tag-rose: oklch(0.88 0.09 15);      --tag-rose-foreground: oklch(0.35 0.15 15);
+  --tag-violet: oklch(0.88 0.08 290);   --tag-violet-foreground: oklch(0.35 0.15 290);
+  --tag-gray: oklch(0.93 0 0);          --tag-gray-foreground: oklch(0.30 0 0);
 }
 
 .dark {
@@ -83,10 +109,39 @@
   --chart-3: oklch(0.75 0.14 80);
   --chart-4: oklch(0.65 0.18 145);
   --chart-5: oklch(0.70 0.20 27);
+
+  --glass-1: oklch(0.18 0.02 250 / 0.55);
+  --glass-2: oklch(0.22 0.03 250 / 0.72);
+  --glass-3: oklch(0.18 0.02 250 / 0.92);
+  --glass-border: oklch(1 0 0 / 0.06);
+  --glass-shadow:
+    0 8px 32px oklch(0 0 0 / 0.40),
+    0 1px 0 oklch(1 0 0 / 0.04) inset;
+  --glass-blur: 20px;
+  --glass-saturate: 150%;
+
+  --bg-gradient:
+    radial-gradient(ellipse 80% 60% at 20% 0%, oklch(0.45 0.15 250 / 0.18), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 100% 80%, oklch(0.55 0.18 255 / 0.10), transparent 60%),
+    var(--background);
+
+  /* Phase 3 tag palette — dark mode. Tag chips on dark glass want a
+   * brightened foreground and a low-alpha tinted fill. */
+  --tag-slate: oklch(0.45 0.02 250 / 0.30);    --tag-slate-foreground: oklch(0.85 0.03 250);
+  --tag-navy: oklch(0.45 0.10 255 / 0.35);     --tag-navy-foreground: oklch(0.82 0.08 255);
+  --tag-blue: oklch(0.55 0.15 240 / 0.28);     --tag-blue-foreground: oklch(0.82 0.12 240);
+  --tag-teal: oklch(0.55 0.12 195 / 0.30);     --tag-teal-foreground: oklch(0.85 0.10 195);
+  --tag-green: oklch(0.55 0.15 145 / 0.28);    --tag-green-foreground: oklch(0.85 0.13 145);
+  --tag-amber: oklch(0.65 0.15 80 / 0.25);     --tag-amber-foreground: oklch(0.88 0.15 80);
+  --tag-gold: oklch(0.65 0.13 90 / 0.25);      --tag-gold-foreground: oklch(0.85 0.13 90);
+  --tag-orange: oklch(0.62 0.18 50 / 0.25);    --tag-orange-foreground: oklch(0.85 0.18 50);
+  --tag-rose: oklch(0.55 0.18 15 / 0.25);      --tag-rose-foreground: oklch(0.85 0.16 15);
+  --tag-violet: oklch(0.55 0.18 290 / 0.25);   --tag-violet-foreground: oklch(0.85 0.15 290);
+  --tag-gray: oklch(0.40 0 0 / 0.30);          --tag-gray-foreground: oklch(0.85 0 0);
 }
 
 @theme inline {
-  /* Map raw values to Tailwind utility classes. */
+  /* shadcn semantic mappings. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -117,7 +172,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  /* Brand utilities (preserved from Phase 1). */
+  /* Brand utilities. */
   --color-brand-navy: #0a2342;
   --color-brand-navy-700: #143055;
   --color-brand-navy-500: #1f4878;
@@ -126,7 +181,27 @@
   --color-brand-gold: #c9a961;
   --color-brand-cream: #f7f5ef;
 
-  /* Fonts — see layout.tsx; keep next/font variables. */
+  /* Phase 3 glass utilities — exposed as Tailwind colors so engineers can
+   * write `bg-glass-1`, `border-glass-border`, etc. */
+  --color-glass-1: var(--glass-1);
+  --color-glass-2: var(--glass-2);
+  --color-glass-3: var(--glass-3);
+  --color-glass-border: var(--glass-border);
+
+  /* Phase 3 tag color utilities — `bg-tag-blue text-tag-blue-foreground`. */
+  --color-tag-slate: var(--tag-slate);    --color-tag-slate-foreground: var(--tag-slate-foreground);
+  --color-tag-navy: var(--tag-navy);      --color-tag-navy-foreground: var(--tag-navy-foreground);
+  --color-tag-blue: var(--tag-blue);      --color-tag-blue-foreground: var(--tag-blue-foreground);
+  --color-tag-teal: var(--tag-teal);      --color-tag-teal-foreground: var(--tag-teal-foreground);
+  --color-tag-green: var(--tag-green);    --color-tag-green-foreground: var(--tag-green-foreground);
+  --color-tag-amber: var(--tag-amber);    --color-tag-amber-foreground: var(--tag-amber-foreground);
+  --color-tag-gold: var(--tag-gold);      --color-tag-gold-foreground: var(--tag-gold-foreground);
+  --color-tag-orange: var(--tag-orange);  --color-tag-orange-foreground: var(--tag-orange-foreground);
+  --color-tag-rose: var(--tag-rose);      --color-tag-rose-foreground: var(--tag-rose-foreground);
+  --color-tag-violet: var(--tag-violet);  --color-tag-violet-foreground: var(--tag-violet-foreground);
+  --color-tag-gray: var(--tag-gray);      --color-tag-gray-foreground: var(--tag-gray-foreground);
+
+  /* Fonts. */
   --font-sans:
     var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, sans-serif;
@@ -137,45 +212,42 @@
 }
 
 /* -----------------------------------------------------------------------------
- * Base layer — apply the semantic tokens to body + native form elements.
+ * Base layer — body background field + native form element legibility.
  * --------------------------------------------------------------------------- */
 html,
 body {
-  background: #07111e;
-  color: #e6eef8;
+  background: var(--background);
+  color: var(--foreground);
+  min-height: 100dvh;
+}
+
+body {
+  background: var(--bg-gradient);
+  background-attachment: fixed;
 }
 
 .dark {
   color-scheme: dark;
 }
 
-/* Dark glass background — preserved from Phase 1. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: -1;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(43, 108, 176, 0.18), transparent 45%),
-    radial-gradient(circle at 88% 82%, rgba(31, 72, 120, 0.22), transparent 52%),
-    radial-gradient(circle at 50% 50%, rgba(10, 35, 66, 0.4), #07111e 75%);
-}
-
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
+  z-index: 0;
   opacity: 0.025;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
 }
 
-/* Native <select> dropdown options inherit OS / browser defaults — which
- * collide with our dark navy theme (white text on white panel = invisible).
- * Apply the popover tokens directly to <option> so dropdowns are legible
- * even before shadcn primitives land in Phase 2F. */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Native <select> options inherit OS defaults — collide with our dark
+ * theme. Apply popover tokens directly so dropdowns are legible. */
 select option {
   background-color: var(--popover);
   color: var(--popover-foreground);
@@ -191,4 +263,61 @@ h2.font-display,
 code,
 pre {
   font-family: var(--font-mono);
+}
+
+/* -----------------------------------------------------------------------------
+ * Glass surface utility — used by <GlassCard> and any ad-hoc surface that
+ * wants the same treatment. Three weights:
+ *
+ *   weight 1 — default cards, panels (translucent).
+ *   weight 2 — elevated cards (hover/active/user panel).
+ *   weight 3 — modals, popovers (near-opaque).
+ *
+ * NEVER animate `backdrop-filter` — it's GPU-expensive. Hover transitions
+ * use transform + box-shadow only.
+ * --------------------------------------------------------------------------- */
+.glass-surface {
+  background: var(--glass-1);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius);
+}
+
+.glass-surface--2 {
+  background: var(--glass-2);
+}
+
+.glass-surface--3 {
+  background: var(--glass-3);
+}
+
+/* Hover/transition affordance for clickable glass surfaces. */
+.glass-surface--interactive {
+  transition: transform 200ms ease, box-shadow 200ms ease, background 200ms ease;
+}
+
+.glass-surface--interactive:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 36px oklch(0.32 0.10 255 / 0.10),
+    0 1px 0 oklch(1 0 0 / 0.6) inset;
+}
+
+.dark .glass-surface--interactive:hover {
+  box-shadow:
+    0 12px 36px oklch(0 0 0 / 0.50),
+    0 1px 0 oklch(1 0 0 / 0.04) inset;
+}
+
+.glass-surface--interactive:active {
+  transform: scale(0.99);
+  transition-duration: 100ms;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-surface {
+    background: var(--card);
+  }
 }

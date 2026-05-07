@@ -4,6 +4,12 @@ import { requireSession } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Authenticated app shell. Sidebar uses Phase 3 glass tokens. The
+ * bottom-left identity block is the Phase 1/2 static block — it's
+ * replaced by <UserPanel> in Phase 3B (which also moves Sign out into
+ * a popover menu and adds Settings).
+ */
 export default async function AppLayout({
   children,
 }: {
@@ -12,11 +18,11 @@ export default async function AppLayout({
   const user = await requireSession();
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-white">
-      <aside className="w-60 border-r border-white/10 bg-white/5 backdrop-blur-xl">
+    <div className="flex min-h-screen text-foreground">
+      <aside className="relative w-60 shrink-0 border-r border-glass-border bg-glass-1 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))]">
         <div className="px-5 py-6">
           <Link href="/dashboard" className="block">
-            <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
               Morgan White Group
             </p>
             <p className="mt-1 text-sm font-semibold">MWG CRM</p>
@@ -27,14 +33,14 @@ export default async function AppLayout({
           <SidebarLink href="/leads" label="Leads" />
           {user.isAdmin ? (
             <>
-              <div className="my-3 h-px bg-white/10" />
+              <div className="my-3 h-px bg-glass-border" />
               <SidebarLink href="/admin" label="Admin" />
             </>
           ) : null}
         </nav>
-        <div className="absolute bottom-0 w-60 border-t border-white/10 px-5 py-4">
-          <p className="truncate text-xs text-white/50">{user.displayName}</p>
-          <p className="truncate text-[10px] text-white/30">{user.email}</p>
+        <div className="absolute bottom-0 w-60 border-t border-glass-border px-5 py-4">
+          <p className="truncate text-xs text-foreground/80">{user.displayName}</p>
+          <p className="truncate text-[10px] text-muted-foreground">{user.email}</p>
           <form
             action={async () => {
               "use server";
@@ -44,7 +50,7 @@ export default async function AppLayout({
           >
             <button
               type="submit"
-              className="text-xs text-white/50 underline-offset-4 hover:text-white/80 hover:underline"
+              className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             >
               Sign out
             </button>
@@ -60,7 +66,7 @@ function SidebarLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="rounded-md px-3 py-2 text-sm text-white/70 transition hover:bg-white/5 hover:text-white"
+      className="rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
     >
       {label}
     </Link>
