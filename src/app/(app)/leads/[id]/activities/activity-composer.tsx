@@ -53,7 +53,7 @@ function Pill({
       onClick={onClick}
       className={`rounded-full px-3 py-1 text-xs uppercase tracking-wide transition ${
         active
-          ? "bg-white text-primary-foreground"
+          ? "bg-primary text-primary-foreground"
           : "border border-border bg-muted/40 text-muted-foreground hover:bg-muted"
       }`}
     >
