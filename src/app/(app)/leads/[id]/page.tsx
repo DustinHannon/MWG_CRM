@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
 import { deleteLeadAction } from "../actions";
+import { ActivityComposer } from "./activities/activity-composer";
+import { ActivityFeed } from "./activities/activity-feed";
 
 export const dynamic = "force-dynamic";
 
@@ -114,11 +116,16 @@ export default async function LeadDetailPage({
           </p>
         </Card>
 
-        <Card title="Activity feed" wide>
-          <p className="text-sm text-white/40">
-            Activity feed (notes, calls, emails, meetings) lands in Phase 6.
-          </p>
-        </Card>
+        <div className="lg:col-span-3">
+          <ActivityComposer leadId={lead.id} />
+        </div>
+
+        <div className="lg:col-span-3">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-white/50">
+            Activity timeline
+          </h2>
+          <ActivityFeed leadId={lead.id} user={user} />
+        </div>
       </div>
     </div>
   );
