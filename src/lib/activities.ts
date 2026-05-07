@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -157,7 +158,9 @@ export async function createNote(input: {
       );
     }
   } catch (err) {
-    console.error("[mentions] dispatch failed", err);
+    logger.error("mentions.dispatch_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 
   return { id: inserted[0].id };

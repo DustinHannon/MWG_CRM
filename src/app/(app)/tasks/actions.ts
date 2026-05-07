@@ -13,6 +13,7 @@ import {
   type TaskUpdateInput,
 } from "@/lib/tasks";
 import { createNotification } from "@/lib/notifications";
+import { logger } from "@/lib/logger";
 import { db } from "@/db";
 import { userPreferences } from "@/db/schema/views";
 import { eq } from "drizzle-orm";
@@ -62,7 +63,9 @@ export async function createTaskAction(
     }
     return { ok: true, id: result.id };
   } catch (err) {
-    console.error("[tasks] createTaskAction failed", err);
+    logger.error("task.create_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not create task." };
   }
 }
@@ -86,7 +89,10 @@ export async function updateTaskAction(
     revalidatePath("/tasks");
     return { ok: true };
   } catch (err) {
-    console.error("[tasks] updateTaskAction failed", err);
+    logger.error("task.update_failed", {
+      taskId: parsed.data.id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not update task." };
   }
 }
@@ -100,7 +106,10 @@ export async function deleteTaskAction(
     revalidatePath("/tasks");
     return { ok: true };
   } catch (err) {
-    console.error("[tasks] deleteTaskAction failed", err);
+    logger.error("task.delete_failed", {
+      taskId: id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not delete task." };
   }
 }
@@ -119,7 +128,10 @@ export async function toggleTaskCompleteAction(
     revalidatePath("/tasks");
     return { ok: true };
   } catch (err) {
-    console.error("[tasks] toggleTaskCompleteAction failed", err);
+    logger.error("task.toggle_complete_failed", {
+      taskId: id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not update task." };
   }
 }

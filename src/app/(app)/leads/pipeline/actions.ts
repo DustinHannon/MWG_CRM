@@ -11,6 +11,7 @@ import {
   requireLeadEditAccess,
   requireSession,
 } from "@/lib/auth-helpers";
+import { logger } from "@/lib/logger";
 
 const PIPELINE_STATUSES = z.enum([
   "new",
@@ -59,7 +60,10 @@ export async function updateLeadStatusAction(
     if (err instanceof ForbiddenError) {
       return { ok: false, error: err.message };
     }
-    console.error("[pipeline] updateLeadStatusAction failed", err);
+    logger.error("pipeline.update_lead_status_failed", {
+      leadId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not update status." };
   }
 }

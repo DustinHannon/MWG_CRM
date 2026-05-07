@@ -2,6 +2,7 @@ import "server-only";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications } from "@/db/schema/tasks";
+import { logger } from "@/lib/logger";
 
 interface CreateNotificationInput {
   userId: string;
@@ -28,7 +29,11 @@ export async function createNotification(
       link: input.link ?? null,
     });
   } catch (err) {
-    console.error("[notifications] create failed", err);
+    logger.error("notifications.create_failed", {
+      userId: input.userId,
+      kind: input.kind,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -47,7 +52,10 @@ export async function createNotifications(
       })),
     );
   } catch (err) {
-    console.error("[notifications] bulk create failed", err);
+    logger.error("notifications.bulk_create_failed", {
+      count: list.length,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

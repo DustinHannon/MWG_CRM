@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 import {
   and,
   asc,
@@ -186,10 +187,9 @@ export async function listLeads(
   // and crash the page. Bad filters produce an empty result set + warning.
   const parsed = leadFiltersSchema.safeParse(rawFilters ?? {});
   if (!parsed.success) {
-    console.warn(
-      "[leads] invalid filters, falling back to defaults:",
-      parsed.error.flatten().fieldErrors,
-    );
+    logger.warn("leads.invalid_filters", {
+      issues: parsed.error.flatten().fieldErrors,
+    });
   }
   const filters = parsed.success
     ? parsed.data

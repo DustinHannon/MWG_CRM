@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { recentViews } from "@/db/schema/recent-views";
@@ -40,7 +41,10 @@ export async function trackView(
         )
     `);
   } catch (err) {
-    console.error("[recent-views] trackView failed", err);
+    logger.error("recent_views.track_failed", {
+      userId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, attachments } from "@/db/schema/activities";
@@ -190,10 +191,9 @@ async function persistGraphAttachments(args: {
       });
     }
   } catch (err) {
-    console.warn(
-      "[graph-email] attachment persistence failed (non-fatal)",
-      err instanceof Error ? err.message : err,
-    );
+    logger.warn("graph_email.attachment_persist_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

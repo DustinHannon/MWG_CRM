@@ -8,6 +8,7 @@ import { savedSearchSubscriptions } from "@/db/schema/saved-search-subscriptions
 import { savedViews } from "@/db/schema/views";
 import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
+import { logger } from "@/lib/logger";
 
 const subscribeSchema = z.object({
   savedViewId: z.string().uuid(),
@@ -61,7 +62,10 @@ export async function subscribeToViewAction(
     revalidatePath("/settings");
     return { ok: true };
   } catch (err) {
-    console.error("[subs] subscribe failed", err);
+    logger.error("subscription.subscribe_failed", {
+      savedViewId: parsed.data.savedViewId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not subscribe." };
   }
 }
@@ -90,7 +94,10 @@ export async function unsubscribeFromViewAction(
     revalidatePath("/settings");
     return { ok: true };
   } catch (err) {
-    console.error("[subs] unsubscribe failed", err);
+    logger.error("subscription.unsubscribe_failed", {
+      savedViewId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not unsubscribe." };
   }
 }

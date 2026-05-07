@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { permissions, users, accounts } from "@/db/schema/users";
@@ -62,10 +63,9 @@ export async function provisionEntraUser(
       "/me?$select=id,givenName,surname,displayName,mail,userPrincipalName,jobTitle,department,officeLocation,businessPhones,mobilePhone,country",
     );
   } catch (err) {
-    console.warn(
-      "[entra] /me lookup failed during provisioning — using UPN-derived names",
-      err instanceof Error ? err.message : err,
-    );
+    logger.warn("entra.me_lookup_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // Phase 3B: /me/manager. 404 means "no manager set" — null those fields.
@@ -86,10 +86,9 @@ export async function provisionEntraUser(
     if (err instanceof GraphError && err.status === 404) {
       managerState = { kind: "no_manager" };
     } else {
-      console.warn(
-        "[entra] /me/manager lookup failed — leaving existing values alone",
-        err instanceof Error ? err.message : err,
-      );
+      logger.warn("entra.manager_lookup_failed", {
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { runSavedSearchDigest } from "@/lib/saved-search-runner";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,9 @@ export async function GET(req: Request) {
     const summary = await runSavedSearchDigest();
     return NextResponse.json({ ok: true, ...summary });
   } catch (err) {
-    console.error("[cron] saved-search-digest failed", err);
+    logger.error("cron.saved_search_digest_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return NextResponse.json(
       { ok: false, error: "Cron job failed" },
       { status: 500 },

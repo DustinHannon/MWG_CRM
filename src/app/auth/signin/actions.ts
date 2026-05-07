@@ -4,6 +4,7 @@ import { AuthError } from "next-auth";
 import { z } from "zod";
 import { signIn } from "@/auth";
 import { ensureBreakglass } from "@/lib/breakglass";
+import { logger } from "@/lib/logger";
 
 const inputSchema = z.object({
   username: z.string().trim().min(1, "Username is required").max(120),
@@ -65,7 +66,9 @@ export async function signInBreakglassAction(
       return { ok: false, error: "Sign-in failed. Try again." };
     }
 
-    console.error("[signInBreakglassAction] unexpected error", err);
+    logger.error("signin.breakglass_unexpected_error", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Sign-in failed. Try again." };
   }
 }

@@ -10,6 +10,7 @@ import {
   requireSession,
 } from "@/lib/auth-helpers";
 import { sendEmailAndTrack } from "@/lib/graph-email";
+import { logger } from "@/lib/logger";
 import { scheduleMeetingAndTrack } from "@/lib/graph-meeting";
 import { ReauthRequiredError } from "@/lib/graph-token";
 
@@ -101,7 +102,9 @@ export async function sendEmailAction(
           "Your Microsoft session expired. Reconnect to continue sending mail.",
       };
     }
-    console.error("[graph] sendEmail error", err);
+    logger.error("graph.send_email_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Send failed.",
@@ -191,7 +194,9 @@ export async function scheduleMeetingAction(
           "Your Microsoft session expired. Reconnect to continue scheduling.",
       };
     }
-    console.error("[graph] scheduleMeeting error", err);
+    logger.error("graph.schedule_meeting_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Scheduling failed.",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { listTasksDueTodayForCron } from "@/lib/tasks";
 import { createNotifications } from "@/lib/notifications";
 
@@ -36,7 +37,9 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ ok: true, processed: tasks.length });
   } catch (err) {
-    console.error("[cron] tasks-due-today failed", err);
+    logger.error("cron.tasks_due_today_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return NextResponse.json(
       { ok: false, error: "Cron job failed" },
       { status: 500 },

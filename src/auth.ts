@@ -14,6 +14,7 @@ import {
   upsertAccount,
 } from "@/lib/entra-provisioning";
 import { entraConfigured, env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 
 /**
@@ -83,9 +84,9 @@ const providers: Provider[] = [
       // counter — this is acceptable because breakglass usage is rare.
       // If breakglass usage spikes, swap for Upstash Redis (TODO).
       if (!checkBreakglassRateLimit(username.toLowerCase())) {
-        console.warn(
-          `[breakglass] rate-limited username=${username.toLowerCase()}`,
-        );
+        logger.warn("breakglass.rate_limited", {
+          username: username.toLowerCase(),
+        });
         return null;
       }
 
@@ -157,7 +158,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ account, profile }) {
       if (account?.provider !== "microsoft-entra-id") return true;
       if (!account.access_token) {
-        console.error("[auth] Entra sign-in missing access_token");
+        logger.error("auth.entra_missing_access_token");
         return "/auth/signin?error=missing_token";
       }
 
@@ -217,10 +218,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           });
 
           if (!provisioned.isActive) {
-            console.warn(
-              "[auth] entra sign-in for inactive user",
-              provisioned.id,
-            );
+            logger.warn("auth.entra_inactive_user", {
+              userId: provisioned.id,
+            });
             return null;
           }
 
@@ -245,16 +245,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // tokens on the JWT — they're large and would push the session
           // cookie into chunked-cookie territory. The accounts table is
           // authoritative for token state; Phase 7 reads from there.
-          console.warn(
-            `[auth] entra sign-in ok userId=${provisioned.id} email=${email}`,
-          );
+          logger.info("auth.entra_signin_ok", {
+            userId: provisioned.id,
+            email,
+          });
           return token;
         } catch (err) {
           if (err instanceof EntraDomainNotAllowedError) {
-            console.warn("[auth] entra domain not allowed:", err.domain);
+            logger.warn("auth.entra_domain_not_allowed", {
+              domain: err.domain,
+            });
             return null;
           }
-          console.error("[auth] entra jwt provisioning error", err);
+          logger.error("auth.entra_provisioning_failed", {
+            errorMessage: err instanceof Error ? err.message : String(err),
+          });
           return null;
         }
       }
@@ -315,10 +320,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             row = fresh[0] ?? null;
             break;
           } catch (err) {
-            console.warn(
-              `[auth] jwt revalidate query failed (attempt ${attempt + 1}/2):`,
-              err instanceof Error ? err.message : err,
-            );
+            logger.warn("auth.jwt_revalidate_query_failed", {
+              attempt: attempt + 1,
+              maxAttempts: 2,
+              errorMessage: err instanceof Error ? err.message : String(err),
+            });
             if (attempt === 1) {
               // Both attempts failed — return the existing token as-is.
               return token;

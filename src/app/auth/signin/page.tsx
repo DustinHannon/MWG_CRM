@@ -30,7 +30,13 @@ export default async function SigninPage({
   try {
     await ensureBreakglass();
   } catch (err) {
-    console.error("[signin] ensureBreakglass failed (continuing):", err);
+    // Server component: log via logger for parity with the rest of the app
+    // but don't block the page render — the signin form must remain usable
+    // even if the breakglass bootstrap path errors transiently.
+    const { logger } = await import("@/lib/logger");
+    logger.error("signin.ensure_breakglass_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 
   const { callbackUrl, error } = await searchParams;

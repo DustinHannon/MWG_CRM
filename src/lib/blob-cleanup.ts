@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 import { eq } from "drizzle-orm";
 import { del } from "@vercel/blob";
 import { db } from "@/db";
@@ -25,10 +26,10 @@ async function deleteBlobs(pathnames: string[]): Promise<void> {
     // @vercel/blob `del` accepts a single url/pathname or an array.
     await del(pathnames);
   } catch (err) {
-    console.error(
-      `[blob-cleanup] del failed for ${pathnames.length} blobs (continuing):`,
-      err,
-    );
+    logger.error("blob_cleanup.del_failed", {
+      blobCount: pathnames.length,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

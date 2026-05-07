@@ -6,6 +6,7 @@ import { leads } from "@/db/schema/leads";
 import { tags } from "@/db/schema/tags";
 import { tasks } from "@/db/schema/tasks";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { logger } from "@/lib/logger";
 import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -179,7 +180,9 @@ export async function GET(req: Request) {
       });
     }
   } catch (err) {
-    console.error("[search] failed", err);
+    logger.error("search.failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 
   return NextResponse.json({ hits });

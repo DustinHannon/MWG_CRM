@@ -11,6 +11,7 @@ import {
 } from "@/lib/tags";
 import { TAG_COLORS } from "@/db/schema/tags";
 import { requireAdmin, requireSession } from "@/lib/auth-helpers";
+import { logger } from "@/lib/logger";
 
 /**
  * Server action wrappers around src/lib/tags.ts. searchTagsAction +
@@ -64,7 +65,10 @@ export async function updateTagAction(
     revalidatePath("/admin/tags");
     return { ok: true };
   } catch (err) {
-    console.error("[tags] update failed", err);
+    logger.error("tag.update_failed", {
+      tagId: parsed.data.id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not update tag." };
   }
 }
@@ -78,7 +82,10 @@ export async function deleteTagAction(
     revalidatePath("/admin/tags");
     return { ok: true };
   } catch (err) {
-    console.error("[tags] delete failed", err);
+    logger.error("tag.delete_failed", {
+      tagId: id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not delete tag." };
   }
 }

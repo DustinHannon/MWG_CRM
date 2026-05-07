@@ -33,10 +33,20 @@ const client = postgres(env.POSTGRES_URL, {
   ssl: "require",
   // Surface postgres notice / error context in logs so we can see what's
   // actually wrong instead of a Drizzle "Failed query" wrapper.
-  onnotice: (n) =>
-    console.warn(
-      `[postgres] ${n.severity ?? "NOTICE"}: ${n.message ?? ""}`,
-    ),
+  onnotice: (n) => {
+    // postgres-js calls this synchronously during driver setup. We can't
+    // import the structured logger here without a circular dependency
+    // through env.ts; route to stderr in JSON line format directly.
+    process.stderr.write(
+      `${JSON.stringify({
+        ts: new Date().toISOString(),
+        level: "WARN",
+        msg: "postgres.notice",
+        severity: n.severity ?? "NOTICE",
+        detail: n.message ?? "",
+      })}\n`,
+    );
+  },
 });
 
 export const db = drizzle(client, { schema });

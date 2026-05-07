@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { permissions, users } from "@/db/schema/users";
@@ -100,8 +101,11 @@ export async function ensureBreakglass(): Promise<void> {
   if (inserted) {
     // ONE-TIME LOG. After this Lambda restarts and finds the row, no further log.
     // Vercel runtime captures stdout; retrieve via mcp__vercel__get_runtime_logs.
+    // Intentional plaintext print — single-shot bootstrap event captured via
+    // `vercel logs`. The logger redacts known credential keys, so route this
+    // through stderr directly with a marker the operator can grep.
     const banner = "=".repeat(60);
-    console.warn(
+    process.stderr.write(
       `\n${banner}\nBREAKGLASS ACCOUNT INITIALIZED — STORE THIS NOW\nUsername: ${BREAKGLASS_USERNAME}\nPassword: ${plaintext}\nSave this in your password manager. It will not be shown again.\nRotate via: Admin → Users → breakglass → Rotate password\n${banner}\n`,
     );
   }

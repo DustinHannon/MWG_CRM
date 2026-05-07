@@ -11,6 +11,7 @@ import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { cleanupBlobsForUser, gatherBlobsForUser } from "@/lib/blob-cleanup";
+import { logger } from "@/lib/logger";
 
 /**
  * Pre-flight info shown in the delete-user modal.
@@ -252,7 +253,10 @@ export async function deleteUserAction(
       await tx.delete(users).where(eq(users.id, userId));
     });
   } catch (err) {
-    console.error("[admin] deleteUser txn failed", err);
+    logger.error("admin.delete_user_txn_failed", {
+      targetUserId: userId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Delete failed.",
@@ -263,7 +267,10 @@ export async function deleteUserAction(
   // surface as an error to the admin (the DB record is the truth).
   if (blobPaths.length > 0) {
     void cleanupBlobsForUser(userId).catch((err) =>
-      console.warn("[admin] blob cleanup after user delete failed:", err),
+      logger.warn("admin.blob_cleanup_after_user_delete_failed", {
+        targetUserId: userId,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      }),
     );
   }
 

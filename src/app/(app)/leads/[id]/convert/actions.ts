@@ -12,6 +12,7 @@ import {
   requireLeadEditAccess,
   requireSession,
 } from "@/lib/auth-helpers";
+import { logger } from "@/lib/logger";
 
 export async function convertLeadAction(
   raw: ConversionInput,
@@ -49,7 +50,10 @@ export async function convertLeadAction(
   } catch (err) {
     // redirect() throws — let it propagate.
     if (err && typeof err === "object" && "digest" in err) throw err;
-    console.error("[convert] failed", err);
+    logger.error("lead.convert_failed", {
+      leadId: parsed.data.leadId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Conversion failed." };
   }
 }

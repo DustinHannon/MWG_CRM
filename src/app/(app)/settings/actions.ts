@@ -8,6 +8,7 @@ import { accounts, users } from "@/db/schema/users";
 import { userPreferences } from "@/db/schema/views";
 import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
+import { logger } from "@/lib/logger";
 
 /**
  * Phase 3B server actions for /settings. Editable fields auto-save on
@@ -82,7 +83,10 @@ export async function updatePreferencesAction(
     revalidatePath("/settings");
     return { ok: true };
   } catch (err) {
-    console.error("[settings] updatePreferencesAction failed", err);
+    logger.error("settings.update_preferences_failed", {
+      userId: session.id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not save preferences." };
   }
 }
@@ -109,7 +113,10 @@ export async function signOutEverywhereAction(): Promise<
     });
     return { ok: true };
   } catch (err) {
-    console.error("[settings] signOutEverywhereAction failed", err);
+    logger.error("settings.sign_out_everywhere_failed", {
+      userId: session.id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not sign out everywhere." };
   }
 }
@@ -142,7 +149,10 @@ export async function disconnectGraphAction(): Promise<
     revalidatePath("/settings");
     return { ok: true };
   } catch (err) {
-    console.error("[settings] disconnectGraphAction failed", err);
+    logger.error("settings.disconnect_graph_failed", {
+      userId: session.id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not disconnect Microsoft 365." };
   }
 }

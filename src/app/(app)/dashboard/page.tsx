@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { logger } from "@/lib/logger";
 import {
   CreatedOverTime,
   type CreatedOverTimePoint,
@@ -140,7 +141,9 @@ export default async function DashboardPage() {
           : Promise.resolve([] as OwnerRow[]),
       ]);
   } catch (err) {
-    console.error("[dashboard] query failed:", err);
+    logger.error("dashboard.query_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     // Render a minimal page instead of crashing — surfaces a friendly
     // error, lets the user navigate elsewhere.
     return (
@@ -332,7 +335,9 @@ async function RecentActivity({
       LIMIT 8
     `);
   } catch (err) {
-    console.error("[dashboard] recent activity failed:", err);
+    logger.error("dashboard.recent_activity_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     recent = [];
   }
 

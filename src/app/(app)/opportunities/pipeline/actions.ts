@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { opportunities } from "@/db/schema/crm-records";
 import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
+import { logger } from "@/lib/logger";
 
 const STAGES = z.enum([
   "prospecting",
@@ -60,7 +61,10 @@ export async function updateOpportunityStageAction(
     revalidatePath(`/opportunities/${id}`);
     return { ok: true };
   } catch (err) {
-    console.error("[opportunities] stage change failed", err);
+    logger.error("opportunity.stage_change_failed", {
+      opportunityId: id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not update stage." };
   }
 }

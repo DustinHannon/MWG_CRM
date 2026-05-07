@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
@@ -182,16 +183,19 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
             });
           } else {
             summary.errors += 1;
-            console.error(
-              `[digest] email send failed for user ${sub.userId}`,
-              err,
-            );
+            logger.error("digest.email_send_failed", {
+              userId: sub.userId,
+              errorMessage: err instanceof Error ? err.message : String(err),
+            });
           }
         }
       }
     } catch (err) {
       summary.errors += 1;
-      console.error("[digest] sub run failed", sub.id, err);
+      logger.error("digest.sub_run_failed", {
+        subscriptionId: sub.id,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

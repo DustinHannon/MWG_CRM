@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth-helpers";
+import { logger } from "@/lib/logger";
 import { markAllRead, markRead } from "@/lib/notifications";
 
 export async function markAllReadAction(): Promise<
@@ -13,7 +14,10 @@ export async function markAllReadAction(): Promise<
     revalidatePath("/notifications");
     return { ok: true };
   } catch (err) {
-    console.error("[notifications] markAllReadAction failed", err);
+    logger.error("notifications.mark_all_read_failed", {
+      userId: session.id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not mark notifications read." };
   }
 }
@@ -27,7 +31,11 @@ export async function markReadAction(
     revalidatePath("/notifications");
     return { ok: true };
   } catch (err) {
-    console.error("[notifications] markReadAction failed", err);
+    logger.error("notifications.mark_read_failed", {
+      userId: session.id,
+      notificationId: id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, error: "Could not mark notification read." };
   }
 }

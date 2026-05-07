@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 import { put } from "@vercel/blob";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -43,9 +44,10 @@ export async function refreshUserPhotoIfStale(userId: string): Promise<void> {
       return;
     }
     if (!res.ok) {
-      console.warn(
-        `[graph-photo] non-OK ${res.status} for user ${userId}; will retry next session`,
-      );
+      logger.warn("graph_photo.non_ok", {
+        userId,
+        status: res.status,
+      });
       return;
     }
 
@@ -63,15 +65,15 @@ export async function refreshUserPhotoIfStale(userId: string): Promise<void> {
   } catch (err) {
     if (err instanceof ReauthRequiredError) {
       // Non-fatal — the dashboard handles missing photos gracefully.
-      console.warn(
-        "[graph-photo] reauth required; skipping photo refresh",
-        err.message,
-      );
+      logger.warn("graph_photo.reauth_required", {
+        userId,
+        errorMessage: err.message,
+      });
       return;
     }
-    console.warn(
-      "[graph-photo] failed",
-      err instanceof Error ? err.message : err,
-    );
+    logger.warn("graph_photo.failed", {
+      userId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 }

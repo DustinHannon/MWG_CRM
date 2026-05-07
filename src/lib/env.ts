@@ -47,10 +47,16 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  // Print to stderr so Vercel surfaces it in the build log.
-  console.error(
-    "[env] Invalid environment variables:",
-    parsed.error.flatten().fieldErrors,
+  // env.ts is loaded *before* logger.ts (which imports from here). We
+  // can't import the structured logger without a cycle; emit to stderr
+  // in the same JSON-line shape so the Vercel build log stays parseable.
+  process.stderr.write(
+    `${JSON.stringify({
+      ts: new Date().toISOString(),
+      level: "ERROR",
+      msg: "env.invalid",
+      issues: parsed.error.flatten().fieldErrors,
+    })}\n`,
   );
   throw new Error("Invalid environment variables — see logs above");
 }

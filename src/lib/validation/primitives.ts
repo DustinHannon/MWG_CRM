@@ -108,7 +108,6 @@ export const versionField = z.coerce.number().int().nonnegative();
  */
 export function sanitizeFilename(name: string): string {
   return name
-    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1f\x7f/\\:*?"<>|]/g, "_")
     .replace(/^\.+/, "_")
     .trim()
