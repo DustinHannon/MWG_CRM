@@ -51,12 +51,17 @@ export async function createViewAction(
   }
   try {
     const { id } = await createSavedView(user.id, result.data);
+    // Phase 4B — auto-revert: when the user saves the current state as a
+    // new view, the originating built-in view's modifications (adhoc columns)
+    // should reset so switching back shows clean defaults. The new saved
+    // view is now the single source of truth for that state.
+    await setAdhocColumns(user.id, null);
     await writeAudit({
       actorId: user.id,
       action: "view.create",
       targetType: "saved_view",
       targetId: id,
-      after: { name: result.data.name },
+      after: { name: result.data.name, adhocReverted: true },
     });
     revalidatePath("/leads");
     return { ok: true, id };

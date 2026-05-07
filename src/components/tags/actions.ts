@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
+  bulkTagLeads,
   deleteTag,
   getOrCreateTag,
   searchTags,
@@ -10,7 +11,12 @@ import {
   type TagRow,
 } from "@/lib/tags";
 import { TAG_COLORS } from "@/db/schema/tags";
-import { requireAdmin, requireSession } from "@/lib/auth-helpers";
+import { writeAudit } from "@/lib/audit";
+import {
+  requireAdmin,
+  requireLeadAccess,
+  requireSession,
+} from "@/lib/auth-helpers";
 import { logger } from "@/lib/logger";
 
 /**
@@ -70,6 +76,72 @@ export async function updateTagAction(
       errorMessage: err instanceof Error ? err.message : String(err),
     });
     return { ok: false, error: "Could not update tag." };
+  }
+}
+
+/**
+ * Phase 4E — bulk add or remove a list of tags across many leads.
+ * Refuses the entire batch if the user lacks access to any of the leads.
+ *
+ * @actor signed-in user with edit access to every lead in the list.
+ */
+const bulkSchema = z.object({
+  leadIds: z.array(z.string().uuid()).min(1).max(1000),
+  tagIds: z.array(z.string().uuid()).min(1),
+  operation: z.enum(["add", "remove"]),
+});
+
+export async function bulkTagLeadsAction(
+  raw: z.infer<typeof bulkSchema>,
+): Promise<
+  | { ok: true; leadsTouched: number; tagsAdded: number; tagsRemoved: number }
+  | { ok: false; error: string }
+> {
+  const session = await requireSession();
+  const parsed = bulkSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
+  }
+  // Fail-fast access check on every lead — refuse the whole batch.
+  for (const id of parsed.data.leadIds) {
+    try {
+      await requireLeadAccess(session, id);
+    } catch {
+      return {
+        ok: false,
+        error: "You don't have access to one or more of the selected leads.",
+      };
+    }
+  }
+  try {
+    const summary = await bulkTagLeads(
+      parsed.data.leadIds,
+      parsed.data.tagIds,
+      parsed.data.operation,
+      session.id,
+    );
+    // One audit row per lead — keeps the trail searchable per-record.
+    for (const leadId of parsed.data.leadIds) {
+      await writeAudit({
+        actorId: session.id,
+        action:
+          parsed.data.operation === "add"
+            ? "lead.tag_bulk_add"
+            : "lead.tag_bulk_remove",
+        targetType: "lead",
+        targetId: leadId,
+        after: { tagIds: parsed.data.tagIds },
+      });
+    }
+    return { ok: true, ...summary };
+  } catch (err) {
+    logger.error("tag.bulk_failed", {
+      operation: parsed.data.operation,
+      leadCount: parsed.data.leadIds.length,
+      tagCount: parsed.data.tagIds.length,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+    return { ok: false, error: "Could not apply bulk tag operation." };
   }
 }
 

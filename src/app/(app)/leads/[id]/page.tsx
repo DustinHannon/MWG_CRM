@@ -133,6 +133,15 @@ export default async function LeadDetailPage({
               Edit
             </Link>
           ) : null}
+          <a
+            href={`/leads/print/${lead.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/80 transition hover:bg-white/10"
+            title="Open print preview — use your browser's Save as PDF"
+          >
+            Print / PDF
+          </a>
           {canDelete ? (
             <form action={deleteLeadAction}>
               <input type="hidden" name="id" value={lead.id} />

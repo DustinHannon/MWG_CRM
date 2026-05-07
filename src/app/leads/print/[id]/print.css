@@ -1,0 +1,122 @@
+/* Phase 4F — print stylesheet for /leads/print/[id]. */
+
+.print-root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #111;
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+  background: #fff;
+}
+
+.print-root h1 {
+  font-size: 24px;
+  margin: 0 0 4px;
+}
+
+.print-root h2 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #444;
+  margin: 24px 0 8px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 4px;
+}
+
+.print-root .meta {
+  color: #666;
+  font-size: 12px;
+  margin-bottom: 16px;
+}
+
+.print-root dl {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.print-root dt {
+  color: #666;
+}
+
+.print-root dd {
+  margin: 0;
+}
+
+.print-root .activity {
+  margin: 12px 0;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+}
+
+.print-root .activity-head {
+  font-weight: 600;
+}
+
+.print-root .activity-body {
+  white-space: pre-wrap;
+  margin-top: 4px;
+}
+
+.print-root .tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eee;
+  font-size: 11px;
+  margin-right: 4px;
+}
+
+.print-root .footer {
+  margin-top: 32px;
+  padding-top: 12px;
+  border-top: 1px solid #ccc;
+  font-size: 11px;
+  color: #888;
+}
+
+.print-hide-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  padding: 6px 12px;
+  background: #fef3c7;
+  border: 1px solid #ca8a04;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #713f12;
+}
+
+@media print {
+  body {
+    color: #000;
+    background: #fff;
+  }
+  @page {
+    margin: 1cm;
+    size: letter;
+  }
+  a::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #555;
+  }
+  h1,
+  h2,
+  h3 {
+    page-break-after: avoid;
+  }
+  section {
+    page-break-inside: avoid;
+  }
+  [data-print-hide],
+  .print-hide-btn {
+    display: none !important;
+  }
+  .print-root {
+    padding: 0;
+  }
+}

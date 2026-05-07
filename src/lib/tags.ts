@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, ilike, sql } from "drizzle-orm";
+import { and, eq, ilike, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { leadTags, tags, TAG_COLORS, type TagColor } from "@/db/schema/tags";
@@ -119,6 +119,69 @@ export async function setLeadTags(
       );
     }
   });
+}
+
+/**
+ * Phase 4E — bulk tag operations. Apply or remove a list of tags across
+ * many leads in a single transaction. `ON CONFLICT DO NOTHING` keeps adds
+ * idempotent. Caller is responsible for permission checks (call
+ * `requireLeadAccess` per id before invoking).
+ *
+ * @param leadIds   Up to 1000 lead UUIDs.
+ * @param tagIds    Tag UUIDs to add or remove.
+ * @param operation 'add' inserts; 'remove' deletes the (lead, tag) pairs.
+ * @param actorId   Author of the change — recorded as `lead_tags.added_by_id`.
+ * @returns         { leadsTouched, tagsAdded, tagsRemoved } summary.
+ * @throws ValidationError when leadIds.length > 1000.
+ */
+export async function bulkTagLeads(
+  leadIds: string[],
+  tagIds: string[],
+  operation: "add" | "remove",
+  actorId: string,
+): Promise<{ leadsTouched: number; tagsAdded: number; tagsRemoved: number }> {
+  if (leadIds.length === 0 || tagIds.length === 0) {
+    return { leadsTouched: 0, tagsAdded: 0, tagsRemoved: 0 };
+  }
+  if (leadIds.length > 1000) {
+    throw new Error("Bulk tag operation capped at 1000 leads.");
+  }
+  const uniqueLeads = Array.from(new Set(leadIds));
+  const uniqueTags = Array.from(new Set(tagIds));
+
+  let added = 0;
+  let removed = 0;
+
+  await db.transaction(async (tx) => {
+    if (operation === "add") {
+      const rows = uniqueLeads.flatMap((leadId) =>
+        uniqueTags.map((tagId) => ({ leadId, tagId, addedById: actorId })),
+      );
+      const result = await tx
+        .insert(leadTags)
+        .values(rows)
+        .onConflictDoNothing()
+        .returning({ leadId: leadTags.leadId });
+      added = result.length;
+    } else {
+      const result = await tx
+        .delete(leadTags)
+        .where(
+          and(
+            inArray(leadTags.leadId, uniqueLeads),
+            inArray(leadTags.tagId, uniqueTags),
+          ),
+        )
+        .returning({ leadId: leadTags.leadId });
+      removed = result.length;
+    }
+  });
+
+  return {
+    leadsTouched: uniqueLeads.length,
+    tagsAdded: added,
+    tagsRemoved: removed,
+  };
 }
 
 export async function getTagsForLead(leadId: string): Promise<TagRow[]> {
