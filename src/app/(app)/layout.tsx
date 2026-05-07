@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Toaster } from "sonner";
+import { CommandPalette } from "@/components/command-palette/command-palette";
 import { NotificationsBell } from "@/components/notifications/bell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserPanel } from "@/components/user-panel/user-panel";
@@ -8,6 +9,7 @@ import {
   countUnread,
   listNotificationsForUser,
 } from "@/lib/notifications";
+import { listRecentForUser } from "@/lib/recent-views";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +24,10 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireSession();
-  const [unreadCount, recentNotifs] = await Promise.all([
+  const [unreadCount, recentNotifs, recentViews] = await Promise.all([
     countUnread(user.id),
     listNotificationsForUser(user.id, 10),
+    listRecentForUser(user.id, 5),
   ]);
 
   return (
@@ -73,6 +76,7 @@ export default async function AppLayout({
           {children}
         </main>
       </div>
+      <CommandPalette recent={recentViews} />
       <Toaster theme="dark" position="bottom-right" />
     </TooltipProvider>
   );

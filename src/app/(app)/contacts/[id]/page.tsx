@@ -45,6 +45,12 @@ export default async function ContactDetailPage({
   if (!contact) notFound();
   if (!canViewAll && contact.ownerId !== session.id) notFound();
 
+  void (await import("@/lib/recent-views")).trackView(
+    session.id,
+    "contact",
+    contact.id,
+  );
+
   return (
     <div className="px-10 py-10">
       <Link

@@ -42,6 +42,12 @@ export default async function AccountDetailPage({
   if (!account) notFound();
   if (!canViewAll && account.ownerId !== session.id) notFound();
 
+  void (await import("@/lib/recent-views")).trackView(
+    session.id,
+    "account",
+    account.id,
+  );
+
   const [accountContacts, accountOpps] = await Promise.all([
     db
       .select()

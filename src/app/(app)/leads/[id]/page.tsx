@@ -26,6 +26,9 @@ export default async function LeadDetailPage({
   const lead = await getLeadById(user, id, perms.canViewAllRecords);
   if (!lead) notFound();
 
+  // Phase 3I — track this view for the Cmd+K palette's recent list.
+  void (await import("@/lib/recent-views")).trackView(user.id, "lead", lead.id);
+
   const canEdit = user.isAdmin || perms.canEditLeads;
   const canDelete = user.isAdmin || perms.canDeleteLeads;
 

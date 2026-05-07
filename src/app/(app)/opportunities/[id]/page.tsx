@@ -47,6 +47,12 @@ export default async function OpportunityDetailPage({
   if (!opp) notFound();
   if (!canViewAll && opp.ownerId !== session.id) notFound();
 
+  void (await import("@/lib/recent-views")).trackView(
+    session.id,
+    "opportunity",
+    opp.id,
+  );
+
   return (
     <div className="px-10 py-10">
       <Link
