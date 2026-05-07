@@ -17,7 +17,7 @@ Phases 1–9 deployed and live. Phase 7 (Microsoft Graph integration — email/c
 | 4 | Admin foundation (users, perms, audit log writes) | ✅ |
 | 5 | Leads CRUD | ✅ |
 | 6 | Activities (notes, calls, tasks) | ✅ |
-| 7 | Microsoft Graph (email, meetings, photo cache) | ⏳ awaits §3 credentials |
+| 7 | Microsoft Graph (email, meetings, photo cache) | ✅ |
 | 8 | Excel import / export | ✅ |
 | 9 | Admin data tools + audit viewer + settings | ✅ |
 | 10 | UI polish (fonts, glass, navy palette) | ✅ baseline |
@@ -163,6 +163,7 @@ The MCP `get_runtime_logs` truncates long messages, so use the CLI for the full 
 `/admin/data` has type-to-confirm flows for deleting all leads, all activities, or all import history. There is no undo. Each operation cascades via FKs and writes an audit row.
 
 ### Cron (background sync)
+<a id="cron-background-sync"></a>
 
 Phase 7 stubs Vercel cron endpoints for `/api/jobs/sync-sent-items` and `/api/jobs/sync-calendar`. To enable, add to `vercel.json` once Phase 7 is fully fleshed out:
 
@@ -175,22 +176,20 @@ Phase 7 stubs Vercel cron endpoints for `/api/jobs/sync-sent-items` and `/api/jo
 }
 ```
 
-## Phase 7 — Microsoft Graph (pending Entra credentials)
+## Phase 7 — Microsoft Graph (live)
 
-The Auth.js Microsoft Entra provider is registered and the user provisioning flow (`src/lib/entra-provisioning.ts`) is wired per the brief §7.3 — including Graph `/me` lookup with `givenName` / `surname` / `displayName` resolution, domain allowlist enforcement, and refresh-token persistence on `accounts`.
+Implemented:
+- **Token refresh** (`src/lib/graph-token.ts`): `getValidAccessTokenForUser(userId)` reads the `accounts` row, refreshes when `expires_at` is within 60s, persists rotated tokens. `ReauthRequiredError` thrown on `invalid_grant` is caught by the UI and surfaces a "Reconnect Microsoft" button that re-runs `signIn("microsoft-entra-id")` with `redirectTo` set to the current page.
+- **Send Email** (`src/lib/graph-email.ts`): `/me/sendMail` with `saveToSentItems:true`, then walks Sent Items by subject + recipient (5 attempts × 700ms) to fetch the message back. Persists as an `activities` row with `kind=email`, `direction=outbound`, `graph_message_id`, `graph_internet_message_id`. Inline base64 attachments capped at 3MB each (v1 limit; larger needs `createUploadSession`). Graph attachments are pulled down and re-stored to Vercel Blob with a stable pathname.
+- **Schedule Meeting** (`src/lib/graph-meeting.ts`): `POST /me/events` with attendee + start/end + timezone + location, persists as `kind=meeting` with `graph_event_id` and `meeting_attendees` jsonb.
+- **Profile photo cache** (`src/lib/graph-photo.ts`): `/me/photo/$value` → public Vercel Blob, 24-hour TTL. 404 short-circuits retries for a day.
 
-To activate:
+UI surface: `GraphActionPanel` on `/leads/[id]` with Send email / Schedule meeting tabs (gated by `canSendEmail` or admin; hidden when `do_not_email=true`).
 
-1. Create the App Registration in entra.microsoft.com (single tenant, MWG). Redirect URIs:
-   - `https://mwg-crm.vercel.app/api/auth/callback/microsoft-entra-id`
-   - `http://localhost:3000/api/auth/callback/microsoft-entra-id`
-2. Delegated Graph permissions to grant: `openid`, `profile`, `email`, `offline_access`, `User.Read`, `Mail.Read`, `Mail.Send`, `Mail.ReadWrite`, `Calendars.Read`, `Calendars.ReadWrite`. Click **Grant admin consent**.
-3. Generate a client secret (24-month lifetime, copy the VALUE).
-4. `vercel env add AUTH_MICROSOFT_ENTRA_ID_ID production` (paste client ID).
-5. `vercel env add AUTH_MICROSOFT_ENTRA_ID_SECRET production` (paste secret VALUE).
-6. Redeploy: `vercel --prod` or push any commit to `master`.
-
-After redeploy, the Microsoft sign-in button on `/auth/signin` becomes active. The Send Email / Schedule Meeting / Track Email actions on `/leads/[id]` and the cron-driven sent-items sync land as Phase 7 fills in.
+Not yet wired (post-v1):
+- The Outlook add-in "Track" button.
+- A "Track existing email" manual-track endpoint that takes an Outlook web URL or internet message ID and pulls the message into the activity feed.
+- Cron-driven background sync of sent items + calendar — see [Cron section](#cron-background-sync) below for the stub config.
 
 ## Open items / non-goals (v1)
 
