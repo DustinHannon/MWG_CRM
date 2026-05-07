@@ -32,7 +32,7 @@ type RowMap = Record<string, unknown>;
 export default async function DashboardPage() {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
-  const canViewAll = user.isAdmin || perms.canViewAllLeads;
+  const canViewAll = user.isAdmin || perms.canViewAllRecords;
 
   // Owner-scope predicate as raw SQL.
   const ownerScope = canViewAll

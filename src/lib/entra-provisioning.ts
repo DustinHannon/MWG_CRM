@@ -197,7 +197,7 @@ export async function provisionEntraUser(
 
     await tx.insert(permissions).values({
       userId: row.id,
-      canViewAllLeads: false,
+      canViewAllRecords: false,
       canCreateLeads: true,
       canEditLeads: true,
       canDeleteLeads: false,

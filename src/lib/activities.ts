@@ -33,7 +33,11 @@ export const taskSchema = z.object({
 
 export interface ActivityRow {
   id: string;
-  leadId: string;
+  // Phase 3G: leadId is nullable now (activities can attach to
+  // accounts/contacts/opportunities). The activities CHECK constraint
+  // ensures exactly-one-parent, so a row will always have at least one
+  // of {leadId, accountId, contactId, opportunityId} set.
+  leadId: string | null;
   userId: string | null;
   userDisplayName: string | null;
   kind: string;

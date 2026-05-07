@@ -45,7 +45,7 @@ export default async function LeadsPage({
   const user = await requireSession();
   const sp = await searchParams;
   const perms = await getPermissions(user.id);
-  const canViewAll = user.isAdmin || perms.canViewAllLeads;
+  const canViewAll = user.isAdmin || perms.canViewAllRecords;
 
   // ---- Resolve active view -----------------------------------------------
   // 1. ?view= explicit. 2. last_used_view_id from prefs. 3. fallback to my-open.

@@ -9,3 +9,4 @@ export * from "./audit";
 export * from "./views";
 export * from "./tags";
 export * from "./tasks";
+export * from "./crm-records";

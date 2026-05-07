@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 /**
  * Phase 3F duplicate detection. GET ?email= and/or ?phone= returns up
  * to 10 likely duplicate leads. Permission-checked: non-admins without
- * canViewAllLeads only see their own owned leads.
+ * canViewAllRecords only see their own owned leads.
  *
  * Match rules:
  *   - email: case-insensitive exact (strongest)
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
   }
 
   const perms = await getPermissions(session.id);
-  const canViewAll = session.isAdmin || perms.canViewAllLeads;
+  const canViewAll = session.isAdmin || perms.canViewAllRecords;
 
   const conditions = [];
   if (email.length > 0) {

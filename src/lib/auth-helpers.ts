@@ -55,7 +55,7 @@ export async function requireAdmin(): Promise<SessionUser> {
 }
 
 export type PermissionKey =
-  | "canViewAllLeads"
+  | "canViewAllRecords"
   | "canCreateLeads"
   | "canEditLeads"
   | "canDeleteLeads"
@@ -98,7 +98,7 @@ export class ForbiddenError extends Error {
  * Verify the user can access a specific lead. Closes the horizontal
  * privilege escalation where a server action accepts a leadId from form
  * data but does not check whether the actor owns it or has the
- * canViewAllLeads flag. Admin always passes.
+ * canViewAllRecords flag. Admin always passes.
  *
  * Throws `ForbiddenError` if the lead doesn't exist or the user can't
  * access it. Returns the lead row's owner_id on success so callers don't
@@ -117,15 +117,15 @@ export async function requireLeadAccess(
 
   if (user.isAdmin) return { ownerId: row[0].ownerId };
 
-  // Non-admin: must be owner OR have canViewAllLeads.
+  // Non-admin: must be owner OR have canViewAllRecords.
   if (row[0].ownerId === user.id) return { ownerId: row[0].ownerId };
 
   const perm = await db
-    .select({ canViewAllLeads: permissions.canViewAllLeads })
+    .select({ canViewAllRecords: permissions.canViewAllRecords })
     .from(permissions)
     .where(eq(permissions.userId, user.id))
     .limit(1);
-  if (perm[0]?.canViewAllLeads) return { ownerId: row[0].ownerId };
+  if (perm[0]?.canViewAllRecords) return { ownerId: row[0].ownerId };
 
   throw new ForbiddenError("You don't have access to this lead.");
 }
@@ -169,7 +169,7 @@ export async function getPermissions(
     .limit(1);
   if (!row[0]) {
     return {
-      canViewAllLeads: false,
+      canViewAllRecords: false,
       canCreateLeads: true,
       canEditLeads: true,
       canDeleteLeads: false,
@@ -181,7 +181,7 @@ export async function getPermissions(
   }
   const r = row[0];
   return {
-    canViewAllLeads: r.canViewAllLeads,
+    canViewAllRecords: r.canViewAllRecords,
     canCreateLeads: r.canCreateLeads,
     canEditLeads: r.canEditLeads,
     canDeleteLeads: r.canDeleteLeads,

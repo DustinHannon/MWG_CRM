@@ -34,7 +34,7 @@ const CARDS_PER_COLUMN = 50;
 export default async function PipelinePage() {
   const session = await requireSession();
   const perms = await getPermissions(session.id);
-  const canViewAll = session.isAdmin || perms.canViewAllLeads;
+  const canViewAll = session.isAdmin || perms.canViewAllRecords;
 
   const ownerFilter = canViewAll
     ? undefined

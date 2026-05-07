@@ -76,7 +76,7 @@ export async function ensureBreakglass(): Promise<void> {
 
     await tx.insert(permissions).values({
       userId: id,
-      canViewAllLeads: true,
+      canViewAllRecords: true,
       canCreateLeads: true,
       canEditLeads: true,
       canDeleteLeads: true,

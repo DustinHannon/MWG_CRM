@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { activityDirectionEnum, activityKindEnum } from "./enums";
+import { contacts, crmAccounts, opportunities } from "./crm-records";
 import { leads } from "./leads";
 import { users } from "./users";
 
@@ -18,9 +19,19 @@ export const activities = pgTable(
   "activities",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    leadId: uuid("lead_id")
-      .notNull()
-      .references(() => leads.id, { onDelete: "cascade" }),
+    // Phase 3G: lead_id is nullable now. CHECK constraint
+    // `activities_one_parent` enforces exactly-one-of {lead, account,
+    // contact, opportunity}. New rows must set exactly one parent.
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").references(() => crmAccounts.id, {
+      onDelete: "cascade",
+    }),
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "cascade",
+    }),
+    opportunityId: uuid("opportunity_id").references(() => opportunities.id, {
+      onDelete: "cascade",
+    }),
     userId: uuid("user_id").references(() => users.id, {
       onDelete: "set null",
     }),

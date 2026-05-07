@@ -8,6 +8,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { contacts, crmAccounts, opportunities } from "./crm-records";
 import { leads } from "./leads";
 import { users } from "./users";
 
@@ -37,6 +38,15 @@ export const tasks = pgTable(
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").references(() => crmAccounts.id, {
+      onDelete: "cascade",
+    }),
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "cascade",
+    }),
+    opportunityId: uuid("opportunity_id").references(() => opportunities.id, {
+      onDelete: "cascade",
+    }),
     title: text("title").notNull(),
     description: text("description"),
     status: taskStatusEnum("status").notNull().default("open"),

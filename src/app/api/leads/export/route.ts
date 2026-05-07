@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const result = await listLeads(
     user,
     { ...sp, pageSize: 10_000, page: 1 },
-    perms.canViewAllLeads,
+    perms.canViewAllRecords,
   );
 
   const rows = result.rows.map((l) => ({

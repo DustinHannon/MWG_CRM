@@ -10,7 +10,7 @@ import { writeAudit } from "@/lib/audit";
 import { hashPassword } from "@/lib/password";
 
 const PERMISSION_KEYS = [
-  "canViewAllLeads",
+  "canViewAllRecords",
   "canCreateLeads",
   "canEditLeads",
   "canDeleteLeads",

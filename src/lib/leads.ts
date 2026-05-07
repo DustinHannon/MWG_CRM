@@ -215,7 +215,7 @@ export async function listLeads(
   if (filters.tag) {
     wheres.push(sql`${leads.tags} && ARRAY[${filters.tag}]::text[]`);
   }
-  // Non-admin without canViewAllLeads sees only their own.
+  // Non-admin without canViewAllRecords sees only their own.
   if (!user.isAdmin && !canViewAll) {
     wheres.push(eq(leads.ownerId, user.id));
   }

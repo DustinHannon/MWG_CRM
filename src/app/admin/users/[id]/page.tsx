@@ -13,7 +13,7 @@ const PERMISSION_LABELS: Array<[
   string,
   string,
 ]> = [
-  ["canViewAllLeads", "View all leads", "See leads owned by anyone (otherwise only own / assigned)"],
+  ["canViewAllRecords", "View all leads", "See leads owned by anyone (otherwise only own / assigned)"],
   ["canCreateLeads", "Create leads", "Add new leads to the system"],
   ["canEditLeads", "Edit leads", "Modify lead fields"],
   ["canDeleteLeads", "Delete leads", "Permanently remove leads"],

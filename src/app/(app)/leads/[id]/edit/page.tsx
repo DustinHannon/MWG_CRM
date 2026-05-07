@@ -16,7 +16,7 @@ export default async function EditLeadPage({
     redirect("/leads");
   }
   const { id } = await params;
-  const lead = await getLeadById(user, id, perms.canViewAllLeads);
+  const lead = await getLeadById(user, id, perms.canViewAllRecords);
   if (!lead) notFound();
 
   return (

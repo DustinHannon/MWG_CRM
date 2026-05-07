@@ -46,7 +46,7 @@ export async function addNoteAction(
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
   }
-  // Lead access gate — actor must own the lead OR have canViewAllLeads.
+  // Lead access gate — actor must own the lead OR have canViewAllRecords.
   try {
     await requireLeadAccess(user, parsed.data.leadId);
   } catch (err) {

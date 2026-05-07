@@ -79,12 +79,17 @@ export const users = pgTable(
   ],
 );
 
-/** Per-user feature flags. Admin bypasses these (see auth helpers). */
+/**
+ * Per-user feature flags. Admin bypasses these (see auth helpers).
+ *
+ * Phase 3G renamed `can_view_all_leads` → `can_view_all_records` since
+ * the flag now governs leads + crm_accounts + contacts + opportunities.
+ */
 export const permissions = pgTable("permissions", {
   userId: uuid("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
-  canViewAllLeads: boolean("can_view_all_leads").notNull().default(false),
+  canViewAllRecords: boolean("can_view_all_records").notNull().default(false),
   canCreateLeads: boolean("can_create_leads").notNull().default(true),
   canEditLeads: boolean("can_edit_leads").notNull().default(true),
   canDeleteLeads: boolean("can_delete_leads").notNull().default(false),

@@ -16,7 +16,7 @@ import { users } from "./users";
  *
  * `scope` controls owner-side filtering: 'mine' restricts to the user's
  * own leads; 'all' requires the user to be admin or have
- * canViewAllLeads. The lead-list query enforces this at fetch time, not
+ * canViewAllRecords. The lead-list query enforces this at fetch time, not
  * here, so any view stored as 'all' is just a UI hint.
  *
  * `filters` shape: { status?: string[]; rating?: string[]; source?: string[];

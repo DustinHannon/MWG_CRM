@@ -31,7 +31,7 @@ export interface ViewDefinition {
   id: string;
   name: string;
   scope: "mine" | "all";
-  /** Built-in views that MUST gate on canViewAllLeads / isAdmin. */
+  /** Built-in views that MUST gate on canViewAllRecords / isAdmin. */
   requiresAllLeads?: boolean;
   filters: ViewFilters;
   columns: ColumnKey[];

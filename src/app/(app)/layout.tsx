@@ -42,6 +42,9 @@ export default async function AppLayout({
           <nav className="flex flex-1 flex-col gap-1 px-3">
             <SidebarLink href="/dashboard" label="Dashboard" />
             <SidebarLink href="/leads" label="Leads" />
+            <SidebarLink href="/accounts" label="Accounts" />
+            <SidebarLink href="/contacts" label="Contacts" />
+            <SidebarLink href="/opportunities" label="Opportunities" />
             <SidebarLink href="/tasks" label="Tasks" />
             {user.isAdmin ? (
               <>

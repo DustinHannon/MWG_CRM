@@ -8,6 +8,7 @@ import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { env } from "@/lib/env";
 import { getLeadById } from "@/lib/leads";
 import { deleteLeadAction } from "../actions";
+import { ConvertModal } from "./convert/_components/convert-modal";
 import { ActivityComposer } from "./activities/activity-composer";
 import { ActivityFeed } from "./activities/activity-feed";
 import { GraphActionPanel } from "./graph/graph-actions";
@@ -22,7 +23,7 @@ export default async function LeadDetailPage({
   const user = await requireSession();
   const perms = await getPermissions(user.id);
   const { id } = await params;
-  const lead = await getLeadById(user, id, perms.canViewAllLeads);
+  const lead = await getLeadById(user, id, perms.canViewAllRecords);
   if (!lead) notFound();
 
   const canEdit = user.isAdmin || perms.canEditLeads;
@@ -108,6 +109,19 @@ export default async function LeadDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
+          {canEdit && lead.status !== "converted" ? (
+            <ConvertModal
+              leadId={lead.id}
+              defaultCompany={lead.companyName}
+              defaultFirstName={lead.firstName}
+              defaultLastName={lead.lastName}
+              defaultJobTitle={lead.jobTitle}
+              defaultEmail={lead.email}
+              defaultPhone={lead.phone}
+              defaultMobile={lead.mobilePhone}
+              defaultEstValue={lead.estimatedValue}
+            />
+          ) : null}
           {canEdit ? (
             <Link
               href={`/leads/${lead.id}/edit`}
