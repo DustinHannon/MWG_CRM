@@ -10,3 +10,4 @@ export * from "./views";
 export * from "./tags";
 export * from "./tasks";
 export * from "./crm-records";
+export * from "./saved-search-subscriptions";
