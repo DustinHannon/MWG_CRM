@@ -41,6 +41,10 @@ next-env.d.ts
 .playwright-mcp/
 mwg-crm-live.png
 
+# Local-only screenshot drops (manual visual audits)
+screenshottemp/
+.phase8-evidence/
+
 # Phase 6H — local-only test workbooks
 test-data/
 
