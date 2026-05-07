@@ -1,3 +1,8 @@
-// Schema barrel — populated in Phase 2.
-// Phase 1 keeps this empty so `import * as schema from "./schema"` compiles.
-export {};
+// Schema barrel — imported by the Drizzle client (src/db/index.ts) and by
+// drizzle-kit (drizzle.config.ts).
+export * from "./enums";
+export * from "./users";
+export * from "./leads";
+export * from "./activities";
+export * from "./imports";
+export * from "./audit";

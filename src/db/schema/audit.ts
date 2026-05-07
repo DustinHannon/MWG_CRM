@@ -1,0 +1,41 @@
+import { sql } from "drizzle-orm";
+import {
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
+import { users } from "./users";
+
+/**
+ * Append-only audit log. Every admin action, every delete, every permission
+ * change writes one row. `before_json`/`after_json` hold the changed fields,
+ * not the full record, to keep volume manageable.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    actorId: uuid("actor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    action: text("action").notNull(),
+    targetType: text("target_type"),
+    targetId: text("target_id"),
+    beforeJson: jsonb("before_json"),
+    afterJson: jsonb("after_json"),
+    requestId: text("request_id"),
+    ipAddress: text("ip_address"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index("audit_actor_idx").on(t.actorId),
+    index("audit_action_idx").on(t.action),
+    index("audit_target_idx").on(t.targetType, t.targetId),
+    index("audit_created_idx").on(t.createdAt.desc()),
+  ],
+);

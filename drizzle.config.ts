@@ -1,4 +1,6 @@
-import "dotenv/config";
+// We don't import dotenv here — drizzle-kit is invoked with the env populated
+// from `vercel env pull` (.env.production.local) or by pnpm scripts that
+// inline the var. Keeping this import-free avoids an extra dev dep.
 import type { Config } from "drizzle-kit";
 
 /**
