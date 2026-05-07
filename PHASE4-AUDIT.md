@@ -47,3 +47,38 @@ Green. All 32 routes compile. Middleware compiles. No type / lint blockers.
 
 ## §2.9 Smoke-test
 *(in progress)*
+
+---
+
+## Final smoke test (2026-05-07 11:55 CDT)
+
+| Check | Result |
+|---|---|
+| `pnpm tsc --noEmit` | clean |
+| `pnpm lint` | clean (zero warnings) |
+| `pnpm build` | clean — 36 routes including new `/leads/archived`, `/leads/print/[id]`, `/api/cron/rescore-leads`, `/api/cron/purge-archived` |
+| `pnpm audit --prod` | 2 HIGH (`xlsx` accepted-risk per SECURITY-NOTES) — moderate `postcss` resolved via override |
+| Orphan scan | zero across 16 parent/child relationships |
+| CHECK rejects `email = 'not-an-email'` | confirmed via DO-block test |
+| Supabase `get_advisors security` | zero ERRORS (down from 7); 23 INFO-level rls_enabled_no_policy (intentional BYPASSRLS pattern); 2 WARN extension_in_public for pg_trgm/unaccent (cosmetic) |
+| Vercel deployment | latest commit `eddc2e2` deploying; previous commit `c986530` (4G+4C+4H) verified READY in production |
+
+## Phase 4 deliverables shipped
+
+- **4A** Static audit · DB integrity · validation primitives + CHECK · security gates · structured logger · `withErrorBoundary` · OCC stamps · documentation (`ARCHITECTURE.md`, `SECURITY-NOTES.md`).
+- **4B** View auto-revert backend.
+- **4C** Lead scoring engine + nightly cron + badge component (admin UI deferred).
+- **4E** Bulk-tag server action (toolbar UI deferred).
+- **4F** Print / Save-as-PDF route + button.
+- **4G** Soft delete + archive view + purge cron.
+- **4H** Full-text search rewrite of Cmd+K.
+
+## Phase 4 deliverables deferred (see ROADMAP.md)
+
+- 4D Forecasting dashboard.
+- 4I Mobile responsiveness pass.
+- 4J Manager → CRM user linking.
+- 4B column drag-and-drop reorder UI.
+- 4E bulk-tag selection toolbar UI.
+- 4C `/admin/scoring` rule-builder UI.
+- OCC UI conflict banners on lead-detail / opportunity-edit forms.

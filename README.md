@@ -134,6 +134,45 @@ Routes (App Router):
 
 **Security tightening:** strict CSP with per-request nonces is now generated in `src/proxy.ts` (replaces the static permissive CSP from `next.config.ts`). `style-src 'unsafe-inline'` is retained as a pragmatic compromise for shadcn/Radix runtime style injection — documented in `SECURITY-NOTES.md`.
 
+## Phase 4 — what's new
+
+Phase 4A is a **defense-in-depth hardening pass**; 4B–H ship features on top of it. See `ARCHITECTURE.md` and `SECURITY-NOTES.md` (both updated).
+
+**4A — Hardening foundations:**
+- `src/lib/logger.ts` — structured JSON logger with key redaction. Forbidden across the codebase: bare `console.*` (3 documented boot-path exceptions).
+- `src/lib/errors.ts` + `src/lib/server-action.ts` — `KnownError` hierarchy + `withErrorBoundary` wrap for every server action / route handler. Public errors carry a `requestId`; stacks never leak in production.
+- `src/lib/validation/primitives.ts` — Zod field validators (`nameField`, `emailField`, `phoneField`, `urlField`, `currencyField`, `dateField`, `noteBody`, `tagName`).
+- `src/lib/validation/file-upload.ts` — magic-byte + MIME + size enforcement.
+- `src/lib/access.ts` — IDOR access gates for accounts/contacts/opportunities/tasks/saved-views. Lead gates pre-existing in `auth-helpers.ts`.
+- `src/lib/db/concurrent-update.ts` — optimistic-concurrency UPDATE helper. Every mutable record now has a `version` column.
+- `scripts/orphan-scan.ts` — DB + Vercel Blob orphan scanner (zero rows at Phase 4 baseline).
+
+**4B — View management:** `createViewAction` clears the user's adhoc-column override after saving a built-in view's modified state as a new view, so the originating built-in returns to clean defaults.
+
+**4C — Lead scoring (rules-based):** `lead_scoring_rules` table + `leads.score / score_band / scored_at`. Engine in `src/lib/scoring/engine.ts`. Predicate format mirrors saved-views filters; pseudo-fields `last_activity_within_days` and `activity_count` available. Bands: `hot ≥70 / warm 40-69 / cool 15-39 / cold <15`. `<ScoreBadge>` component for displays. Daily cron `/api/cron/rescore-leads` at 09:00 UTC.
+
+**4E — Bulk tag operations (backend):** `bulkTagLeadsAction` server action — capped 1000 leads per call, refuses entire batch on any access failure, transactional ON CONFLICT DO NOTHING / DELETE, audit row per lead. Selection-toolbar UI deferred.
+
+**4F — Print / Save-as-PDF:** `/leads/print/[id]` route outside the (app) chrome. Auto-fires `window.print()` on load; user picks Save-as-PDF from the system print dialog. `Print / PDF` link in the lead detail header. No server-side Chromium required.
+
+**4G — Soft delete:** `is_deleted / deleted_at / deleted_by_id / delete_reason` on leads/accounts/contacts/opportunities/tasks. Default queries filter `is_deleted=false`. The "Delete" button now archives; admin-only `/leads/archived` view restores or hard-deletes. Daily cron `/api/cron/purge-archived` at 10:00 UTC purges archives older than 30 days, with row snapshot in `audit_log`.
+
+**4H — Full-text search:** `pg_trgm` + `unaccent` extensions; functional GIN FTS + trigram indexes on `leads`, `crm_accounts`, `contacts`, `opportunities`. Cmd+K rewrite uses `websearch_to_tsquery` + similarity union ranking. Typo-tolerant.
+
+**Schema migrations applied (Phase 4):**
+1. `phase4_db_hardening` — RLS on missing tables, `audit_log.actor_email_snapshot`, ~24 covering indexes for FK CASCADE/SET NULL chains.
+2. `phase4_check_constraints` — DB-layer name/email/url/numeric/date bounds.
+3. `phase4_versioning` — `version int NOT NULL DEFAULT 1` for OCC.
+4. `phase4_soft_delete` — soft-delete columns + partial active/deleted indexes.
+5. `phase4_lead_scoring` — `lead_scoring_rules` + `leads.score / score_band / scored_at`.
+6. `phase4_fts_indexes` — `pg_trgm` + `unaccent` extensions; FTS + trigram indexes.
+
+**Deferred (tracked in ROADMAP.md):**
+- 4D forecasting dashboard, 4I mobile responsiveness pass, 4J manager → CRM user linking.
+- 4B drag-and-drop column reorder UI (the auto-revert backend ships now).
+- 4E selection-toolbar UI on the leads list (the bulk-tag server action ships now).
+- 4C `/admin/scoring` rule-builder UI (the engine + cron + badge ship now; admins create rules via SQL or future UI).
+
 ## Environment variables
 
 Set every one of these on Vercel (production scope) before the deploy works at runtime. `src/lib/env.ts` validates them all on boot — the build fails loudly if anything's missing.

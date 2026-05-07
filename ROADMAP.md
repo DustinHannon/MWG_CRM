@@ -33,3 +33,16 @@ All currently INFO-level — non-blocking.
 ## RLS
 
 All public tables have RLS enabled with no policies. The app uses a custom Postgres role (`mwg_crm_app`) with `BYPASSRLS`. Defence-in-depth, not the primary access control. If the role is ever changed, RLS becomes a hard wall — desired.
+
+## Phase 4 follow-ups (deferred to a later sprint)
+
+The Phase 4 hardening pass (4A) and most features (4B / 4C / 4E backend / 4F / 4G / 4H) shipped 2026-05-07. Items below are explicitly deferred:
+
+- **4B drag-and-drop column reorder UI** — the auto-revert backend (createViewAction clearing adhoc overrides) is live; the dnd-kit-based column-header drag UI + per-header keyboard-menu alternative are pending.
+- **4C `/admin/scoring` admin UI** — engine + nightly cron + badges live; admins must create rules via SQL (`INSERT INTO lead_scoring_rules`) or wait for the rule-builder UI.
+- **4D Forecasting dashboard** — not yet started. Aggregation queries, Recharts components, owner table.
+- **4E bulk-tag selection toolbar** — `bulkTagLeadsAction` server action is live with full IDOR + audit; the leads-table sticky selection toolbar UI is pending.
+- **4I Mobile responsiveness pass** — sidebar drawer, card-list tables, full-screen modals, real-device QA. Largest deferred item; deserves its own phase.
+- **4J Manager → CRM user linking** — `users_manager_links` view, `can_view_team_records` permission, access-gate update, settings + admin + dashboard surfaces.
+- **Optimistic-concurrency UI banners** — backend `concurrentUpdate` rejects with `ConflictError`; lead detail / opportunity edit forms still need the per-form "View their changes / Discard yours" banner.
+- **`exceljs` migration** — keep watching for SheetJS to ship a new npm advisory; switch when a clean alternative is convenient.
