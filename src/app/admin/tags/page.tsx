@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leadTags, tags } from "@/db/schema/tags";
 import { GlassCard } from "@/components/ui/glass-card";
+import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { TagsAdminTable } from "./_components/tags-admin-table";
 
@@ -44,7 +45,7 @@ export default async function AdminTagsPage() {
       </p>
 
       <GlassCard className="mt-6 p-0 overflow-hidden">
-        <TagsAdminTable rows={rows} />
+        <TagsAdminTable rows={rows} prefs={await getCurrentUserTimePrefs()} />
       </GlassCard>
     </div>
   );

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
+import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import {
   AVAILABLE_COLUMNS,
@@ -45,12 +47,20 @@ export default async function LeadsPage({
   const user = await requireSession();
   const sp = await searchParams;
   const perms = await getPermissions(user.id);
+  const timePrefs = await getCurrentUserTimePrefs();
   const canViewAll = user.isAdmin || perms.canViewAllRecords;
 
   // ---- Resolve active view -----------------------------------------------
-  // 1. ?view= explicit. 2. last_used_view_id from prefs. 3. fallback to my-open.
+  // Phase 5A precedence:
+  //   1. ?view= explicit
+  //   2. user_preferences.default_leads_view_id (the "stick this view" pref)
+  //   3. user_preferences.last_used_view_id (drives "remember where I was")
+  //   4. fallback to builtin:my-open
   const prefs = await getPreferences(user.id);
   let activeViewParam = sp.view;
+  if (!activeViewParam && prefs.defaultLeadsViewId) {
+    activeViewParam = `saved:${prefs.defaultLeadsViewId}`;
+  }
   if (!activeViewParam && prefs.lastUsedViewId) {
     activeViewParam = `saved:${prefs.lastUsedViewId}`;
   }
@@ -256,7 +266,7 @@ export default async function LeadsPage({
       </form>
 
       <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
-        <table className="min-w-full divide-y divide-white/5 text-sm">
+        <table className="data-table min-w-full divide-y divide-white/5 text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-white/50">
               {activeColumns.map((c) => (
@@ -281,7 +291,7 @@ export default async function LeadsPage({
               <tr key={l.id} className="transition hover:bg-white/5">
                 {activeColumns.map((c) => (
                   <td key={c} className="px-5 py-3 align-top">
-                    {renderCell(l, c)}
+                    {renderCell(l, c, timePrefs)}
                   </td>
                 ))}
               </tr>
@@ -310,7 +320,7 @@ function buildExportHref(sp: SearchParams): string {
   return `/api/leads/export?${params.toString()}`;
 }
 
-function renderCell(lead: LeadRow, col: ColumnKey) {
+function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
   switch (col) {
     case "firstName":
       return (
@@ -385,21 +395,19 @@ function renderCell(lead: LeadRow, col: ColumnKey) {
     case "createdAt":
       return (
         <span className="text-white/50">
-          {new Date(lead.createdAt).toLocaleDateString()}
+          {formatUserTime(lead.createdAt, prefs, "date")}
         </span>
       );
     case "lastActivityAt":
       return (
         <span className="text-white/50">
-          {lead.lastActivityAt
-            ? new Date(lead.lastActivityAt).toLocaleString()
-            : "—"}
+          {formatUserTime(lead.lastActivityAt, prefs)}
         </span>
       );
     case "updatedAt":
       return (
         <span className="text-white/50">
-          {new Date(lead.updatedAt).toLocaleString()}
+          {formatUserTime(lead.updatedAt, prefs)}
         </span>
       );
     default:

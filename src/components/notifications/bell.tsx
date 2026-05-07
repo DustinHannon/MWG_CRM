@@ -10,6 +10,10 @@ import {
 } from "@/components/ui/popover";
 import { markAllReadAction } from "./actions";
 import { toast } from "sonner";
+import {
+  formatUserTime,
+  type TimePrefs,
+} from "@/lib/format-time";
 
 interface NotificationItem {
   id: string;
@@ -24,9 +28,10 @@ interface NotificationItem {
 interface BellProps {
   unreadCount: number;
   recent: NotificationItem[];
+  prefs: TimePrefs;
 }
 
-export function NotificationsBell({ unreadCount, recent }: BellProps) {
+export function NotificationsBell({ unreadCount, recent, prefs }: BellProps) {
   const [pending, startTransition] = useTransition();
 
   function markAll() {
@@ -93,14 +98,14 @@ export function NotificationsBell({ unreadCount, recent }: BellProps) {
                         </p>
                       ) : null}
                       <p className="mt-1 text-[10px] text-muted-foreground">
-                        {new Date(n.createdAt).toLocaleString()}
+                        {formatUserTime(n.createdAt, prefs)}
                       </p>
                     </Link>
                   ) : (
                     <>
                       <p className="font-medium">{n.title}</p>
                       <p className="mt-1 text-[10px] text-muted-foreground">
-                        {new Date(n.createdAt).toLocaleString()}
+                        {formatUserTime(n.createdAt, prefs)}
                       </p>
                     </>
                   )}

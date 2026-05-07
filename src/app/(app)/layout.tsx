@@ -1,9 +1,13 @@
+import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { Toaster } from "sonner";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import { NotificationsBell } from "@/components/notifications/bell";
+import { ThemeSync } from "@/components/theme/theme-sync";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserPanel } from "@/components/user-panel/user-panel";
+import { db } from "@/db";
+import { userPreferences } from "@/db/schema/views";
 import { requireSession } from "@/lib/auth-helpers";
 import {
   countUnread,
@@ -24,15 +28,47 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireSession();
-  const [unreadCount, recentNotifs, recentViews] = await Promise.all([
+  const [unreadCount, recentNotifs, recentViews, prefsRow] = await Promise.all([
     countUnread(user.id),
     listNotificationsForUser(user.id, 10),
     listRecentForUser(user.id, 5),
+    db
+      .select({
+        theme: userPreferences.theme,
+        tableDensity: userPreferences.tableDensity,
+        timezone: userPreferences.timezone,
+        dateFormat: userPreferences.dateFormat,
+        timeFormat: userPreferences.timeFormat,
+      })
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, user.id))
+      .limit(1),
   ]);
+  const prefs = prefsRow[0] ?? {
+    theme: "system",
+    tableDensity: "comfortable",
+    timezone: "America/Chicago",
+    dateFormat: "MM/DD/YYYY",
+    timeFormat: "12h",
+  };
+  const theme = (prefs.theme === "light" || prefs.theme === "dark"
+    ? prefs.theme
+    : "system") as "system" | "light" | "dark";
+  const density =
+    prefs.tableDensity === "compact" ? "compact" : "comfortable";
+  const timePrefs = {
+    timezone: prefs.timezone || "America/Chicago",
+    dateFormat: prefs.dateFormat || "MM/DD/YYYY",
+    timeFormat: prefs.timeFormat === "24h" ? ("24h" as const) : ("12h" as const),
+  };
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex min-h-screen text-foreground">
+      <ThemeSync theme={theme} />
+      <div
+        data-density={density}
+        className="flex min-h-screen text-foreground"
+      >
         <aside className="relative flex w-60 shrink-0 flex-col border-r border-glass-border bg-glass-1 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))]">
           <div className="px-5 py-6">
             <Link href="/dashboard" className="block">
@@ -71,6 +107,7 @@ export default async function AppLayout({
             <NotificationsBell
               unreadCount={unreadCount}
               recent={recentNotifs}
+              prefs={timePrefs}
             />
           </div>
           {children}

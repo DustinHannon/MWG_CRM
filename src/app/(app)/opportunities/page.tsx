@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
+import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ export default async function OpportunitiesPage() {
             No opportunities yet. Convert a lead to create one.
           </p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="data-table w-full text-sm">
             <thead className="bg-input/30 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">Name</th>
@@ -103,9 +104,7 @@ export default async function OpportunitiesPage() {
                     ) : null}
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
-                    {r.expectedCloseDate
-                      ? new Date(r.expectedCloseDate).toLocaleDateString()
-                      : "—"}
+                    <UserTime value={r.expectedCloseDate} mode="date" />
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
                     {r.ownerName ?? "—"}

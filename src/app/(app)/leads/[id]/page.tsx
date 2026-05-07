@@ -4,6 +4,11 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { importJobs } from "@/db/schema/imports";
 import { users } from "@/db/schema/users";
+import {
+  getCurrentUserTimePrefs,
+  UserTime,
+} from "@/components/ui/user-time";
+import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { env } from "@/lib/env";
 import { getLeadById } from "@/lib/leads";
@@ -25,6 +30,7 @@ export default async function LeadDetailPage({
   const { id } = await params;
   const lead = await getLeadById(user, id, perms.canViewAllRecords);
   if (!lead) notFound();
+  const prefs = await getCurrentUserTimePrefs();
 
   // Phase 3I — track this view for the Cmd+K palette's recent list.
   void (await import("@/lib/recent-views")).trackView(user.id, "lead", lead.id);
@@ -78,7 +84,7 @@ export default async function LeadDetailPage({
               <span className="text-white/70">
                 {creator?.displayName ?? "Deleted user"}
               </span>{" "}
-              on {new Date(lead.createdAt).toLocaleDateString()}
+              on <UserTime value={lead.createdAt} mode="date" />
             </span>
             {lead.createdVia === "imported" ? (
               <ImportedBadge
@@ -86,6 +92,7 @@ export default async function LeadDetailPage({
                 filename={importJob?.filename ?? null}
                 jobCreatedAt={importJob?.createdAt ?? null}
                 isAdmin={user.isAdmin}
+                prefs={prefs}
               />
             ) : null}
             {lead.createdVia === "api" ? (
@@ -233,16 +240,18 @@ function ImportedBadge({
   filename,
   jobCreatedAt,
   isAdmin,
+  prefs,
 }: {
   jobId: string | null;
   filename: string | null;
   jobCreatedAt: Date | null;
   isAdmin: boolean;
+  prefs: TimePrefs;
 }) {
   const tooltip = filename
     ? `Imported from ${filename}${
         jobCreatedAt
-          ? ` on ${new Date(jobCreatedAt).toLocaleDateString()}`
+          ? ` on ${formatUserTime(jobCreatedAt, prefs, "date")}`
           : ""
       }`
     : "Imported from a spreadsheet";

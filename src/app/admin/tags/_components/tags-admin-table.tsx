@@ -9,6 +9,10 @@ import {
   updateTagAction,
 } from "@/components/tags/actions";
 import { TAG_COLORS } from "@/db/schema/tags";
+import {
+  formatUserTime,
+  type TimePrefs,
+} from "@/lib/format-time";
 
 interface TagRow {
   id: string;
@@ -19,7 +23,13 @@ interface TagRow {
   leadCount: number;
 }
 
-export function TagsAdminTable({ rows }: { rows: TagRow[] }) {
+export function TagsAdminTable({
+  rows,
+  prefs,
+}: {
+  rows: TagRow[];
+  prefs: TimePrefs;
+}) {
   const [pending, startTransition] = useTransition();
   const [data, setData] = useState(rows);
 
@@ -81,7 +91,7 @@ export function TagsAdminTable({ rows }: { rows: TagRow[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="data-table w-full text-sm">
         <thead className="bg-input/30 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
           <tr>
             <th className="px-4 py-3">Tag</th>
@@ -127,7 +137,7 @@ export function TagsAdminTable({ rows }: { rows: TagRow[] }) {
                 {t.leadCount}
               </td>
               <td className="px-4 py-3 text-muted-foreground">
-                {new Date(t.createdAt).toLocaleDateString()}
+                {formatUserTime(t.createdAt, prefs, "date")}
               </td>
               <td className="px-4 py-3 text-right">
                 <button

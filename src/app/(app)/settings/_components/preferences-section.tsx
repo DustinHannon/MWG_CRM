@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
+import { ThemeControl } from "@/components/theme/theme-control";
 import { GlassCard } from "@/components/ui/glass-card";
 import {
   updatePreferencesAction,
@@ -77,17 +78,7 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
 
         <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
           <Field label="Theme">
-            <RadioRow
-              name="theme"
-              value={theme}
-              options={[
-                { value: "system", label: "System" },
-                { value: "light", label: "Light" },
-                { value: "dark", label: "Dark" },
-              ]}
-              onChange={(v) => save({ theme: v as "system" | "light" | "dark" })}
-              disabled={pending}
-            />
+            <ThemeControl initial={theme as "system" | "light" | "dark"} />
           </Field>
 
           <Field label="Default landing page">

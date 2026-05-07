@@ -2,6 +2,7 @@ import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { users } from "@/db/schema/users";
+import { UserTime } from "@/components/ui/user-time";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +91,7 @@ export default async function AuditLogPage({
       </form>
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
-        <table className="min-w-full divide-y divide-white/5 text-sm">
+        <table className="data-table min-w-full divide-y divide-white/5 text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-white/50">
               <th className="px-5 py-3 font-medium">When</th>
@@ -111,7 +112,7 @@ export default async function AuditLogPage({
             {rows.map((r) => (
               <tr key={r.id} className="align-top">
                 <td className="px-5 py-3 text-xs text-white/60 tabular-nums">
-                  {new Date(r.createdAt).toLocaleString()}
+                  <UserTime value={r.createdAt} />
                 </td>
                 <td className="px-5 py-3">
                   {r.actorDisplayName ? (

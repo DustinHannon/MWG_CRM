@@ -278,6 +278,7 @@ export async function getPreferences(userId: string): Promise<{
   theme: string;
   defaultLandingPage: string;
   lastUsedViewId: string | null;
+  defaultLeadsViewId: string | null;
   adhocColumns: ColumnKey[] | null;
 }> {
   const row = await db
@@ -290,6 +291,7 @@ export async function getPreferences(userId: string): Promise<{
       theme: "system",
       defaultLandingPage: "/dashboard",
       lastUsedViewId: null,
+      defaultLeadsViewId: null,
       adhocColumns: null,
     };
   }
@@ -297,6 +299,7 @@ export async function getPreferences(userId: string): Promise<{
     theme: row[0].theme,
     defaultLandingPage: row[0].defaultLandingPage,
     lastUsedViewId: row[0].lastUsedViewId,
+    defaultLeadsViewId: row[0].defaultLeadsViewId,
     adhocColumns: (row[0].adhocColumns as ColumnKey[] | null) ?? null,
   };
 }

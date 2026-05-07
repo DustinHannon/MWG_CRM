@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { GlassCard } from "@/components/ui/glass-card";
+import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { logger } from "@/lib/logger";
 import {
@@ -363,7 +364,7 @@ async function RecentActivity({
             </span>
           </Link>
           <span className="ml-3 shrink-0 text-xs text-white/40">
-            {new Date(r.occurred_at).toLocaleDateString()}
+            <UserTime value={r.occurred_at as unknown as Date} mode="date" />
           </span>
         </li>
       ))}

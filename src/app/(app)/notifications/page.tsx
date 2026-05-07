@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/glass-card";
+import { UserTime } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
 import { listNotificationsForUser } from "@/lib/notifications";
 
@@ -44,7 +45,7 @@ export default async function NotificationsPage() {
                   </>
                 )}
                 <p className="mt-2 text-[10px] text-muted-foreground">
-                  {new Date(n.createdAt).toLocaleString()} · {n.kind}
+                  <UserTime value={n.createdAt} /> · {n.kind}
                 </p>
               </li>
             ))}

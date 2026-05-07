@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
+import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
@@ -66,9 +67,7 @@ export default async function OpportunityDetailPage({
         Stage: {opp.stage} ·{" "}
         {opp.amount ? `$${Number(opp.amount).toLocaleString()}` : "—"} ·
         Expected close{" "}
-        {opp.expectedCloseDate
-          ? new Date(opp.expectedCloseDate).toLocaleDateString()
-          : "—"}
+        <UserTime value={opp.expectedCloseDate} mode="date" />
       </p>
 
       <GlassCard className="mt-6 p-5">
@@ -93,10 +92,7 @@ export default async function OpportunityDetailPage({
               value="Source lead"
             />
           ) : null}
-          <Row
-            label="Created"
-            value={new Date(opp.createdAt).toLocaleString()}
-          />
+          <Row label="Created" value={<UserTime value={opp.createdAt} />} />
         </dl>
       </GlassCard>
     </div>
@@ -109,7 +105,7 @@ function Row({
   href,
 }: {
   label: string;
-  value: string | null;
+  value: React.ReactNode | null;
   href?: string | null;
 }) {
   return (

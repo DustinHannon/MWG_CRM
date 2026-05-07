@@ -9,13 +9,18 @@ import {
   toggleTaskCompleteAction,
 } from "../actions";
 import type { TaskRow } from "@/lib/tasks";
+import {
+  formatUserTime,
+  type TimePrefs,
+} from "@/lib/format-time";
 
 interface TaskListClientProps {
   buckets: { label: string; tasks: TaskRow[] }[];
   userId: string;
+  prefs: TimePrefs;
 }
 
-export function TaskListClient({ buckets }: TaskListClientProps) {
+export function TaskListClient({ buckets, prefs }: TaskListClientProps) {
   const [pending, startTransition] = useTransition();
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
 
@@ -93,9 +98,7 @@ export function TaskListClient({ buckets }: TaskListClientProps) {
                         </p>
                         <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           {t.dueAt ? (
-                            <span>
-                              Due {new Date(t.dueAt).toLocaleString()}
-                            </span>
+                            <span>Due {formatUserTime(t.dueAt, prefs)}</span>
                           ) : null}
                           {t.priority !== "normal" ? (
                             <span className="rounded-full bg-accent/40 px-1.5 py-0.5 text-[10px] uppercase">

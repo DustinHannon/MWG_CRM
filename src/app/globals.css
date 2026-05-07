@@ -321,3 +321,21 @@ pre {
     background: var(--card);
   }
 }
+
+/* -----------------------------------------------------------------------------
+ * Phase 5A — table density. The authenticated app shell stamps
+ * data-density="compact" or "comfortable" on its outer container based on
+ * user_preferences.table_density. Compact mode tightens row height and
+ * cell padding on every <table class="data-table">.
+ * --------------------------------------------------------------------------- */
+[data-density="compact"] .data-table tbody tr {
+  height: 36px;
+}
+[data-density="compact"] .data-table th,
+[data-density="compact"] .data-table td {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+

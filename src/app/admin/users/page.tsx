@@ -3,6 +3,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
+import { UserTime } from "@/components/ui/user-time";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ export default async function UsersListPage() {
       </div>
 
       <div className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
-        <table className="min-w-full divide-y divide-white/5">
+        <table className="data-table min-w-full divide-y divide-white/5">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-white/50">
               <th className="px-5 py-3 font-medium">Name</th>
@@ -86,9 +87,7 @@ export default async function UsersListPage() {
                   {u.leadCount}
                 </td>
                 <td className="px-5 py-3 text-white/60">
-                  {u.lastLoginAt
-                    ? new Date(u.lastLoginAt).toLocaleString()
-                    : "—"}
+                  <UserTime value={u.lastLoginAt} />
                 </td>
               </tr>
             ))}

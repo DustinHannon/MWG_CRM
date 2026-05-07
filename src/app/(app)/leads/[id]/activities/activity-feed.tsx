@@ -1,4 +1,5 @@
-import { format, formatDistanceToNow } from "date-fns";
+import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
+import { formatUserTime } from "@/lib/format-time";
 import { listActivitiesForLead } from "@/lib/activities";
 import { deleteActivityAction } from "./actions";
 import type { SessionUser } from "@/lib/auth-helpers";
@@ -27,6 +28,7 @@ export async function ActivityFeed({
   user: SessionUser;
 }) {
   const rows = await listActivitiesForLead(leadId);
+  const prefs = await getCurrentUserTimePrefs();
 
   if (rows.length === 0) {
     return (
@@ -41,10 +43,8 @@ export async function ActivityFeed({
     <ol className="space-y-4">
       {rows.map((r) => {
         const canDelete = user.isAdmin || r.userId === user.id;
-        const tooltip = format(new Date(r.occurredAt), "PPpp");
-        const relative = formatDistanceToNow(new Date(r.occurredAt), {
-          addSuffix: true,
-        });
+        const tooltip = formatUserTime(r.occurredAt, prefs);
+        const relative = formatUserTime(r.occurredAt, prefs, "relative");
 
         return (
           <li

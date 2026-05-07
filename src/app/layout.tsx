@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 
 const geist = Geist({
   subsets: ["latin"],
@@ -35,10 +36,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${geist.variable} ${fraunces.variable} ${jetbrains.variable}`}
+      className={`${geist.variable} ${fraunces.variable} ${jetbrains.variable}`}
       suppressHydrationWarning
     >
-      <body className="antialiased font-sans">{children}</body>
+      <body className="antialiased font-sans">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

@@ -20,6 +20,7 @@ type SubRow = {
   frequency: string;
   lastSeenMaxCreatedAt: Date | null;
   emailDigestFreq: string;
+  notifyInApp: boolean;
   isAdmin: boolean;
   canViewAllRecords: boolean;
 } & Record<string, unknown>;
@@ -60,6 +61,7 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
       s.frequency,
       s.last_seen_max_created_at AS "lastSeenMaxCreatedAt",
       coalesce(p.email_digest_frequency, 'off') AS "emailDigestFreq",
+      coalesce(p.notify_saved_search, true) AS "notifyInApp",
       u.is_admin AS "isAdmin",
       coalesce(perm.can_view_all_records, false) AS "canViewAllRecords"
     FROM saved_search_subscriptions s
@@ -143,14 +145,17 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
 
       if (matches.length === 0) continue;
 
-      // In-app notification.
-      await createNotification({
-        userId: sub.userId,
-        kind: "saved_search",
-        title: `${matches.length} new lead${matches.length === 1 ? "" : "s"} matching "${sub.viewName}"`,
-        link: `/leads?view=saved:${sub.viewId}`,
-      });
-      summary.notified += 1;
+      // Phase 5A — respect the user's notify_saved_search preference. The
+      // email digest runs through its own pref below regardless.
+      if (sub.notifyInApp) {
+        await createNotification({
+          userId: sub.userId,
+          kind: "saved_search",
+          title: `${matches.length} new lead${matches.length === 1 ? "" : "s"} matching "${sub.viewName}"`,
+          link: `/leads?view=saved:${sub.viewId}`,
+        });
+        summary.notified += 1;
+      }
 
       // Email digest if pref matches.
       const wantsEmail =

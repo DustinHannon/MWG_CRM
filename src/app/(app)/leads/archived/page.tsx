@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
+import { UserTime } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
 import {
   hardDeleteLeadAction,
@@ -69,7 +70,7 @@ export default async function ArchivedLeadsPage() {
         </GlassCard>
       ) : (
         <GlassCard className="overflow-hidden p-0">
-          <table className="w-full text-sm">
+          <table className="data-table w-full text-sm">
             <thead className="border-b border-white/10 bg-white/5 text-left text-xs uppercase tracking-wider text-white/40">
               <tr>
                 <th className="px-4 py-3">Name</th>
@@ -88,7 +89,7 @@ export default async function ArchivedLeadsPage() {
                   </td>
                   <td className="px-4 py-3 text-white/70">{r.company ?? "—"}</td>
                   <td className="px-4 py-3 text-white/60">
-                    {r.deletedAt ? new Date(r.deletedAt).toLocaleDateString() : "—"}
+                    <UserTime value={r.deletedAt} mode="date" />
                   </td>
                   <td className="px-4 py-3 text-white/60">
                     {r.deletedByName ?? r.deletedByEmail ?? "—"}

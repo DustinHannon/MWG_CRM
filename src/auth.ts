@@ -16,6 +16,7 @@ import {
 import { entraConfigured, env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
+import { refreshUserPhotoIfStale } from "@/lib/graph-photo";
 
 /**
  * Auth.js v5 surface. The MicrosoftEntraID provider registers only when
@@ -234,6 +235,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             scope: account.scope,
             idToken: account.id_token,
           });
+
+          // Phase 5A — refresh the cached Microsoft profile photo if it's
+          // older than 24h (or never set). The function swallows its own
+          // errors so a transient Graph hiccup never blocks sign-in; we
+          // wrap in another try/catch as a belt-and-braces guard against
+          // anything sneaking out.
+          try {
+            await refreshUserPhotoIfStale(provisioned.id);
+          } catch (err) {
+            logger.warn("auth.photo_refresh_failed", {
+              userId: provisioned.id,
+              errorMessage: err instanceof Error ? err.message : String(err),
+            });
+          }
 
           token.userId = provisioned.id;
           token.isAdmin = provisioned.isAdmin;

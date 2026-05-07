@@ -1,4 +1,5 @@
 import { GlassCard } from "@/components/ui/glass-card";
+import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
 import { listTasksForUser, type TaskRow } from "@/lib/tasks";
 import { TaskListClient } from "./_components/task-list-client";
@@ -29,6 +30,7 @@ export default async function TasksPage({
   });
 
   const buckets = bucketTasks(tasks);
+  const prefs = await getCurrentUserTimePrefs();
 
   return (
     <div className="px-10 py-10">
@@ -41,7 +43,7 @@ export default async function TasksPage({
       </p>
 
       <GlassCard className="mt-6 p-4">
-        <TaskListClient buckets={buckets} userId={session.id} />
+        <TaskListClient buckets={buckets} userId={session.id} prefs={prefs} />
       </GlassCard>
     </div>
   );

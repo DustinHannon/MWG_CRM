@@ -5,6 +5,11 @@ import { activities, attachments } from "@/db/schema/activities";
 import { tags as tagsTable, leadTags } from "@/db/schema/tags";
 import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
+import {
+  getCurrentUserTimePrefs,
+  UserTime,
+} from "@/components/ui/user-time";
+import { formatUserTime } from "@/lib/format-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
 import "./print.css";
@@ -33,6 +38,7 @@ export default async function LeadPrintPage({
   const { id } = await params;
   const lead = await getLeadById(user, id, perms.canViewAllRecords);
   if (!lead) notFound();
+  const prefs = await getCurrentUserTimePrefs();
 
   const [acts, leadTagsRows, taskRows, fileRows] = await Promise.all([
     db
@@ -115,14 +121,16 @@ export default async function LeadPrintPage({
           <dd>{lead.estimatedValue ?? "—"}</dd>
           <dt>Estimated close</dt>
           <dd>
-            {lead.estimatedCloseDate
-              ? new Date(lead.estimatedCloseDate).toLocaleDateString()
-              : "—"}
+            <UserTime value={lead.estimatedCloseDate} mode="date" />
           </dd>
           <dt>Created</dt>
-          <dd>{new Date(lead.createdAt).toLocaleString()}</dd>
+          <dd>
+            <UserTime value={lead.createdAt} />
+          </dd>
           <dt>Updated</dt>
-          <dd>{new Date(lead.updatedAt).toLocaleString()}</dd>
+          <dd>
+            <UserTime value={lead.updatedAt} />
+          </dd>
         </dl>
       </section>
 
@@ -148,7 +156,7 @@ export default async function LeadPrintPage({
               {String(a.kind)}
               {a.direction ? ` · ${String(a.direction)}` : ""}
               {" · "}
-              {new Date(a.occurredAt).toLocaleString()}
+              <UserTime value={a.occurredAt} />
               {a.actorName ? ` · ${a.actorName}` : ""}
             </div>
             {a.subject && <div className="activity-subject">{a.subject}</div>}
@@ -167,7 +175,7 @@ export default async function LeadPrintPage({
               <li key={t.id}>
                 <strong>[{t.status}]</strong> {t.title}
                 {t.dueAt
-                  ? ` (due ${new Date(t.dueAt).toLocaleDateString()})`
+                  ? ` (due ${formatUserTime(t.dueAt, prefs, "date")})`
                   : ""}
               </li>
             ))}
@@ -190,7 +198,7 @@ export default async function LeadPrintPage({
 
       <div className="footer">
         Printed by {user.displayName ?? user.email} on{" "}
-        {new Date().toLocaleString()}
+        <UserTime value={new Date()} />
       </div>
 
       <script

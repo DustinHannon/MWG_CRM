@@ -46,7 +46,7 @@ export default async function ContactsPage() {
             No contacts yet.
           </p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="data-table w-full text-sm">
             <thead className="bg-input/30 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">Name</th>

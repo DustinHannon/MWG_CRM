@@ -1,18 +1,28 @@
+import {
+  formatUserTime,
+  type TimePrefs,
+} from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
 /**
  * Phase 4C — colored score badge. Renders next to the lead name on detail
  * pages, list rows, and Kanban cards. Tooltip surfaces last-scored time.
+ *
+ * Phase 5A — accept an optional `prefs` so the tooltip uses the user's
+ * timezone + date format. When not provided, falls back to the default
+ * prefs.
  */
 export function ScoreBadge({
   score,
   band,
   scoredAt,
+  prefs,
   className,
 }: {
   score: number;
   band: "hot" | "warm" | "cool" | "cold" | string;
   scoredAt?: Date | string | null;
+  prefs?: TimePrefs;
   className?: string;
 }) {
   const styles: Record<string, string> = {
@@ -28,7 +38,7 @@ export function ScoreBadge({
     cold: "❄",
   };
   const tooltip = scoredAt
-    ? `Score ${score} · last computed ${new Date(scoredAt).toLocaleString()}`
+    ? `Score ${score} · last computed ${formatUserTime(scoredAt, prefs)}`
     : `Score ${score} · not yet computed`;
 
   return (
