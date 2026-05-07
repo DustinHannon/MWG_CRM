@@ -34,3 +34,12 @@ npm-debug.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+
+# Playwright MCP screenshots/artifacts (local only)
+.playwright-mcp/
+mwg-crm-live.png
+
+
+.env*.local
