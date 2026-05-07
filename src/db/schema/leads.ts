@@ -82,6 +82,18 @@ export const leads = pgTable(
     // Optimistic concurrency stamp. Bumped by every UPDATE through
     // concurrentUpdate(); a stale `version` causes ConflictError.
     version: integer("version").notNull().default(1),
+    // Phase 4G — soft delete. activeLeads() filters by `is_deleted = false`.
+    // Cron `/api/cron/purge-archived` hard-deletes after 30 days.
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedById: uuid("deleted_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    deleteReason: text("delete_reason"),
+    // Phase 4C — lead scoring (rules-based).
+    score: integer("score").notNull().default(0),
+    scoreBand: text("score_band").notNull().default("cold"),
+    scoredAt: timestamp("scored_at", { withTimezone: true }),
   },
   (t) => [
     index("leads_owner_idx").on(t.ownerId),

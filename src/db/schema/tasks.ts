@@ -67,6 +67,12 @@ export const tasks = pgTable(
       .notNull()
       .default(sql`now()`),
     version: integer("version").notNull().default(1),
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedById: uuid("deleted_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    deleteReason: text("delete_reason"),
   },
   (t) => [
     index("tasks_assigned_due_idx").on(t.assignedToId, t.dueAt),

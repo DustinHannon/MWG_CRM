@@ -52,6 +52,12 @@ export const crmAccounts = pgTable(
       .notNull()
       .default(sql`now()`),
     version: integer("version").notNull().default(1),
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedById: uuid("deleted_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    deleteReason: text("delete_reason"),
   },
   (t) => [
     index("crm_accounts_owner_idx").on(t.ownerId),
@@ -92,6 +98,12 @@ export const contacts = pgTable(
       .notNull()
       .default(sql`now()`),
     version: integer("version").notNull().default(1),
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedById: uuid("deleted_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    deleteReason: text("delete_reason"),
   },
   (t) => [
     index("contacts_account_idx").on(t.accountId),
@@ -142,6 +154,12 @@ export const opportunities = pgTable(
       .default(sql`now()`),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     version: integer("version").notNull().default(1),
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedById: uuid("deleted_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    deleteReason: text("delete_reason"),
   },
   (t) => [
     index("opportunities_account_idx").on(t.accountId),

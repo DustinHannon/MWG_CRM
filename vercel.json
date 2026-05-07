@@ -1,6 +1,8 @@
 {
   "crons": [
     { "path": "/api/cron/tasks-due-today", "schedule": "0 14 * * *" },
-    { "path": "/api/cron/saved-search-digest", "schedule": "0 14 * * *" }
+    { "path": "/api/cron/saved-search-digest", "schedule": "0 14 * * *" },
+    { "path": "/api/cron/rescore-leads", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/purge-archived", "schedule": "0 10 * * *" }
   ]
 }

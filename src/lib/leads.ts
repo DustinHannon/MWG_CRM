@@ -220,6 +220,9 @@ export async function listLeads(
     wheres.push(eq(leads.ownerId, user.id));
   }
 
+  // Phase 4G — default queries hide archived rows.
+  wheres.push(eq(leads.isDeleted, false));
+
   const whereExpr = wheres.length > 0 ? and(...wheres) : undefined;
 
   const sortColumn = (() => {
@@ -355,7 +358,61 @@ export async function updateLead(
   await db.update(leads).set(update).where(eq(leads.id, id));
 }
 
+/**
+ * Hard-delete a batch of lead ids. Cascades through activities, tasks,
+ * lead_tags, attachments. Use only from admin flows or the purge cron;
+ * regular users archive via `archiveLeadsById()`.
+ *
+ * @actor admin or purge cron only
+ */
 export async function deleteLeadsById(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.delete(leads).where(inArray(leads.id, ids));
+}
+
+/**
+ * Phase 4G — soft delete (archive). Sets `is_deleted=true` and the
+ * deletion-attribution columns. Reversible via `restoreLeadsById()`.
+ *
+ * @actor lead owner or admin
+ */
+export async function archiveLeadsById(
+  ids: string[],
+  actorId: string,
+  reason?: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(leads)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorId,
+      deleteReason: reason ?? null,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(leads.id, ids));
+}
+
+/**
+ * Phase 4G — restore archived leads. Returns row count for logging.
+ *
+ * @actor admin only
+ */
+export async function restoreLeadsById(
+  ids: string[],
+  actorId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(leads)
+    .set({
+      isDeleted: false,
+      deletedAt: null,
+      deletedById: null,
+      deleteReason: null,
+      updatedAt: sql`now()`,
+      updatedById: actorId,
+    })
+    .where(inArray(leads.id, ids));
 }

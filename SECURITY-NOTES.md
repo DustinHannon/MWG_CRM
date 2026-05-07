@@ -172,3 +172,106 @@ bundle loading via the trusted (nonced) script.
 
 **Verification:** open every authenticated page with browser console; zero
 CSP violations expected.
+
+---
+
+# Security Hardening — Phase 4A (2026-05-07)
+
+A defense-in-depth pass on top of Phase 2B. No new auth providers, no MFA. The
+goal: make every server boundary, every DB column, and every error path safer
+by default so future phases inherit the safety budget instead of paying it.
+
+## Dependency audit
+
+`pnpm audit --prod` after Phase 4A:
+
+| Severity | Package | Status |
+|---|---|---|
+| HIGH × 2 | `xlsx@0.18.5` | **Accepted, unchanged.** No npm patch exists. Mitigations: `server-only`, admin-only access, 10 MB attachment cap / 25 MB import cap, magic-byte validation, 10k-row import cap, chunked-transaction inserts, `failed_rows` cap (1000). All enforced at the server boundary in `src/lib/validation/`. |
+| MODERATE | `postcss<8.5.10` | **Resolved.** `pnpm.overrides` pin: `"postcss@<8.5.10": "^8.5.14"`. Build verified green. |
+
+## Validation primitives
+
+`src/lib/validation/primitives.ts` — single source of Zod field validators:
+
+- `nameField`        — letters / spaces / hyphens / apostrophes / periods, 1–100
+- `emailField`       — RFC-ish, normalized lowercase, ≤ 254 chars (Postgres UNIQUE limit)
+- `phoneField`       — parsed to E.164 via `libphonenumber-js`, falls back to literal
+- `urlField`         — http / https only — rejects `javascript:`, `data:`, `file:`
+- `currencyField`    — non-negative, ≤ 1B, max two decimal places
+- `dateField`        — coerced, year ∈ [1900, 2100]
+- `noteBody`         — 1–50,000 chars; HTML sanitization via `isomorphic-dompurify` is layered on top where rendering may include user-supplied HTML
+- `tagName`          — letters / numbers / spaces / hyphens, 1–50
+- `uuidField`        — strict UUID
+- `versionField`     — coerced int ≥ 0 (optimistic concurrency stamp)
+- `sanitizeFilename` — strips path separators, control chars, leading dots; cap 255
+
+## File-upload validation
+
+`src/lib/validation/file-upload.ts`:
+- Magic-byte check via `file-type` — never trust client `Content-Type`.
+- MIME allowlist: `pdf, png, jpeg, gif, webp, txt, csv, xlsx, docx, doc, xls`.
+- Extension blocklist: `exe, bat, cmd, ps1, sh, scr, msi, dll, com, vbs, js, jar, app, lnk`.
+- Size cap: 10 MB attachments, 25 MB imports.
+- Octet-stream tolerance for `xlsx`/`docx` (legitimately mis-declared by old clients).
+
+## CHECK constraints
+
+Migration `phase4_check_constraints` adds DB-level seatbelts on every name /
+email / url / numeric / date column across `leads`, `crm_accounts`, `contacts`,
+`opportunities`, `tasks`, `activities`, `tags`, `notifications`. Existing data
+scanned clean before applying. Garbage SQL inserts now reject at the DB even if
+a future server action skips Zod.
+
+## Optimistic concurrency
+
+Migration `phase4_versioning` adds `version int NOT NULL DEFAULT 1` to every
+mutable record. `concurrentUpdate()` enforces it. Append-only / safe-LWW
+exceptions (audit_log, notifications, recent_views, lead_tags) are documented
+in `ARCHITECTURE.md §7`.
+
+## IDOR access gates
+
+`src/lib/access.ts` — `requireAccountAccess`, `requireContactAccess`,
+`requireOpportunityAccess`, `requireTaskAccess`, `requireSavedViewAccess`.
+Phase 2's `requireLeadAccess` / `requireLeadEditAccess` (in
+`src/lib/auth-helpers.ts`) cover lead actions. Every server action that takes
+a record id calls one of these before reading or writing. Denials are
+audit-logged at WARN with `access.denied.<entity>.<action>`.
+
+## Database integrity
+
+Migration `phase4_db_hardening`:
+- RLS enabled on tables that were missing it: `notifications`, `recent_views`,
+  `crm_accounts`, `contacts`, `opportunities`, `tasks`,
+  `saved_search_subscriptions`, `tags`, `lead_tags`. (No policies: defense-in-depth
+  pattern; `mwg_crm_app` role has BYPASSRLS.)
+- `audit_log.actor_email_snapshot text` added; backfilled from current users.
+  FK on `actor_id` is already `ON DELETE SET NULL` — emails now persist for
+  forensic attribution after user delete.
+- Covering indexes for every CASCADE FK + the SET-NULL FKs that participate
+  in user-deactivation reassignment scans. ~24 indexes added.
+
+Orphan scan (`scripts/orphan-scan.ts`) — zero rows across 16 parent/child
+relationships at Phase 4A baseline.
+
+## Structured logging
+
+`src/lib/logger.ts` — JSON-line format, key redaction
+(`password|token|secret|cookie|session|...`). `console.*` is forbidden in
+committed code. Three documented exceptions (boot path; documented in
+`ARCHITECTURE.md §8`).
+
+`KnownError` hierarchy + `withErrorBoundary` (`src/lib/server-action.ts`)
+ensure no DB strings, stack traces, or internal IDs leak in production
+responses. Public messages are safe to render; the request id is the
+support-ticket reference.
+
+## Documented residual risks
+
+| Risk | Mitigation | Tracking |
+|---|---|---|
+| `xlsx` HIGH × 2 (Prototype Pollution + ReDoS) | server-only, admin upload, 25 MB cap, magic bytes, 10k-row cap, chunked tx, capped failed rows | ROADMAP — switch to `exceljs` when bandwidth allows |
+| Optimistic-concurrency UI banner not yet wired into every form | Backend rejects with `ConflictError`; UI fallback shows the generic error toast until per-form banners ship | Phase 4 follow-up — wire into lead detail and opportunity edit |
+| Breakglass rate limit is in-memory (per-process) | Acceptable: breakglass usage is rare; cold starts reset the counter | If usage spikes, swap for Upstash Redis |
+

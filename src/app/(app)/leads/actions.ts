@@ -13,7 +13,9 @@ import {
 import { writeAudit } from "@/lib/audit";
 import {
   createLead,
+  archiveLeadsById,
   deleteLeadsById,
+  restoreLeadsById,
   leadCreateSchema,
   leadPartialSchema,
   updateLead,
@@ -133,6 +135,13 @@ export async function updateLeadAction(
   redirect(`/leads/${id}`);
 }
 
+/**
+ * Phase 4G — what was "delete" is now "archive". Sets `is_deleted=true`;
+ * the row is preserved for 30 days, then `cron/purge-archived` hard-deletes.
+ * Admins can hard-delete from /leads/archived.
+ *
+ * @actor signed-in user with delete permission and lead access
+ */
 export async function deleteLeadAction(formData: FormData) {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
@@ -140,15 +149,56 @@ export async function deleteLeadAction(formData: FormData) {
     throw new Error("You don't have permission to delete leads.");
   }
   const id = z.string().uuid().parse(formData.get("id"));
-  // Confirm access to this specific lead before deleting.
   await requireLeadAccess(user, id);
-  await deleteLeadsById([id]);
+  const reason = (formData.get("reason") as string | null)?.trim() || undefined;
+  await archiveLeadsById([id], user.id, reason);
   await writeAudit({
     actorId: user.id,
-    action: "lead.delete",
+    action: "lead.archive",
     targetType: "lead",
     targetId: id,
+    after: { reason: reason ?? null },
   });
   revalidatePath("/leads");
   redirect("/leads");
+}
+
+/**
+ * Phase 4G — admin-only restore from the archive view.
+ *
+ * @actor admin
+ */
+export async function restoreLeadAction(formData: FormData) {
+  const user = await requireSession();
+  if (!user.isAdmin) throw new Error("Admin only.");
+  const id = z.string().uuid().parse(formData.get("id"));
+  await restoreLeadsById([id], user.id);
+  await writeAudit({
+    actorId: user.id,
+    action: "lead.restore",
+    targetType: "lead",
+    targetId: id,
+  });
+  revalidatePath("/leads/archived");
+  revalidatePath("/leads");
+}
+
+/**
+ * Phase 4G — admin-only hard delete from the archive view.
+ * Cascades through children; Vercel Blob cleanup runs separately.
+ *
+ * @actor admin
+ */
+export async function hardDeleteLeadAction(formData: FormData) {
+  const user = await requireSession();
+  if (!user.isAdmin) throw new Error("Admin only.");
+  const id = z.string().uuid().parse(formData.get("id"));
+  await deleteLeadsById([id]);
+  await writeAudit({
+    actorId: user.id,
+    action: "lead.hard_delete",
+    targetType: "lead",
+    targetId: id,
+  });
+  revalidatePath("/leads/archived");
 }
