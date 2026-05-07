@@ -23,6 +23,8 @@ import {
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
+import { cleanupBlobsForLeads, gatherBlobsForLeads } from "@/lib/blob-cleanup";
+import { logger } from "@/lib/logger";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 function formToObject(formData: FormData): Record<string, unknown> {
@@ -201,7 +203,8 @@ export async function restoreLeadAction(
 
 /**
  * Phase 4G — admin-only hard delete from the archive view.
- * Cascades through children; Vercel Blob cleanup runs separately.
+ * Cascades through children. Phase 8D — Vercel Blob cleanup now runs
+ * fire-and-forget after the DB delete commits (Audit E F-024).
  *
  * @actor admin
  */
@@ -214,6 +217,18 @@ export async function hardDeleteLeadAction(
       const user = await requireSession();
       if (!user.isAdmin) throw new ForbiddenError("Admin only.");
       const id = z.string().uuid().parse(formData.get("id"));
+      // Phase 8D F-024 — collect attachment blob pathnames BEFORE the DB
+      // delete; after CASCADE the join rows are gone and the blobs are
+      // unrecoverable. Failure to gather is non-fatal.
+      let blobPathnames: string[] = [];
+      try {
+        blobPathnames = await gatherBlobsForLeads([id]);
+      } catch (err) {
+        logger.error("blob_cleanup_gather_failure_hard_delete", {
+          leadId: id,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+      }
       await deleteLeadsById([id]);
       await writeAudit({
         actorId: user.id,
@@ -221,6 +236,17 @@ export async function hardDeleteLeadAction(
         targetType: "lead",
         targetId: id,
       });
+      // Phase 8D F-024 — fire-and-forget blob cleanup. cleanupBlobsForLeads
+      // already swallows internal errors; this catch is belt-and-suspenders
+      // for an unhandled throw that would otherwise unhandle-reject.
+      if (blobPathnames.length > 0) {
+        void cleanupBlobsForLeads([id]).catch((err) => {
+          logger.error("blob_cleanup_failure_hard_delete", {
+            leadId: id,
+            errorMessage: err instanceof Error ? err.message : String(err),
+          });
+        });
+      }
       revalidatePath("/leads/archived");
     },
   );

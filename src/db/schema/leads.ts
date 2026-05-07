@@ -66,7 +66,9 @@ export const leads = pgTable(
     doNotContact: boolean("do_not_contact").notNull().default(false),
     doNotEmail: boolean("do_not_email").notNull().default(false),
     doNotCall: boolean("do_not_call").notNull().default(false),
-    tags: text("tags").array(),
+    // Phase 8D — legacy `tags text[]` column dropped in
+    // phase8d_drop_legacy_leads_tags. The relational `lead_tags` junction
+    // table (Phase 3C) is the source of truth for lead tagging.
     externalId: text("external_id"),
     convertedAt: timestamp("converted_at", { withTimezone: true }),
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
@@ -111,8 +113,8 @@ export const leads = pgTable(
     index("leads_company_idx").on(t.companyName),
     index("leads_external_id_idx").on(t.externalId),
     index("leads_last_activity_idx").on(t.lastActivityAt.desc()),
-    // GIN index on tags array for membership filters.
-    index("leads_tags_gin_idx").using("gin", t.tags),
+    // Phase 8D — `leads_tags_gin_idx` on the legacy `tags text[]` column was
+    // dropped along with that column. Tag filters now use the lead_tags join.
     // Partial index — only useful when querying by import.
     index("leads_import_job_idx")
       .on(t.importJobId)

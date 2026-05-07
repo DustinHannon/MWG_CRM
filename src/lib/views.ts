@@ -464,7 +464,17 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
     );
   }
   if (merged.tags?.length) {
-    wheres.push(sql`${leads.tags} && ${merged.tags}::text[]`);
+    // Phase 8D — legacy `leads.tags text[]` was dropped. Tag membership
+    // resolves via the relational lead_tags table joined to tags.name.
+    wheres.push(
+      sql`EXISTS (
+        SELECT 1 FROM lead_tags lt
+        JOIN tags t ON t.id = lt.tag_id
+        WHERE lt.lead_id = ${leads.id} AND lower(t.name) = ANY(
+          SELECT lower(x) FROM unnest(${merged.tags}::text[]) AS x
+        )
+      )`,
+    );
   }
   if (merged.doNotContact === true) {
     wheres.push(eq(leads.doNotContact, true));
@@ -541,7 +551,14 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
         source: leads.source,
         ownerId: leads.ownerId,
         ownerDisplayName: users.displayName,
-        tags: leads.tags,
+        // Phase 8D — hydrate tag names from the relational lead_tags
+        // join. Legacy `leads.tags text[]` column was dropped.
+        tags: sql<string[] | null>`(
+          SELECT array_agg(t.name ORDER BY t.name)
+          FROM lead_tags lt
+          JOIN tags t ON t.id = lt.tag_id
+          WHERE lt.lead_id = ${leads.id}
+        )`,
         city: leads.city,
         state: leads.state,
         estimatedValue: leads.estimatedValue,

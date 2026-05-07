@@ -262,9 +262,11 @@ export async function importLeadsFromBuffer(
     }
 
     const d = parsed.data;
-    const tags = d.tags
-      ? d.tags.split(",").map((s) => s.trim()).filter(Boolean)
-      : null;
+    // Phase 8D — legacy `leads.tags text[]` was dropped. Tag strings
+    // from the import row are no longer written to the leads table; the
+    // primary import path (lib/import/commit.ts) handles tag fan-out via
+    // the relational lead_tags table. This legacy buffer importer no
+    // longer creates tag rows on its own.
     const estimatedValue =
       d.estimatedValue && d.estimatedValue.length > 0
         ? Number(d.estimatedValue)
@@ -314,7 +316,6 @@ export async function importLeadsFromBuffer(
             estimatedValue: estimatedValue !== null ? estimatedValue.toFixed(2) : null,
             estimatedCloseDate: d.estimatedCloseDate || null,
             description: d.description || null,
-            tags,
             doNotContact: d.doNotContact,
             doNotEmail: d.doNotEmail,
             doNotCall: d.doNotCall,
@@ -370,7 +371,6 @@ export async function importLeadsFromBuffer(
         estimatedValue: estimatedValue !== null ? estimatedValue.toFixed(2) : null,
         estimatedCloseDate: d.estimatedCloseDate || null,
         description: d.description || null,
-        tags,
         externalId: d.externalId || null,
         doNotContact: d.doNotContact,
         doNotEmail: d.doNotEmail,

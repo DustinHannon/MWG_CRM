@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
+import { cleanupBlobsForLeads, gatherBlobsForLeads } from "@/lib/blob-cleanup";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { writeAudit } from "@/lib/audit";
@@ -56,6 +57,20 @@ export async function GET(req: Request) {
       });
     }
 
+    // Phase 8D F-024 — gather attachment blob pathnames BEFORE the DB
+    // delete; after CASCADE the join rows are gone and the blobs become
+    // unrecoverable orphans. Gather failure is non-fatal — purge proceeds.
+    const candidateIds = candidates.map((c) => c.id);
+    let blobPathnames: string[] = [];
+    try {
+      blobPathnames = await gatherBlobsForLeads(candidateIds);
+    } catch (err) {
+      logger.error("blob_cleanup_gather_failure_purge_archived", {
+        leadCount: candidateIds.length,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // Hard-delete cascades through activities, tasks, lead_tags, attachments.
     await db.delete(leads).where(
       and(
@@ -64,8 +79,21 @@ export async function GET(req: Request) {
       ),
     );
 
+    // Phase 8D F-024 — fire-and-forget Vercel Blob cleanup. The cron
+    // window is generous (maxDuration=300) but we still don't await the
+    // network round-trip per blob — `del()` accepts a batch.
+    if (blobPathnames.length > 0) {
+      void cleanupBlobsForLeads(candidateIds).catch((err) => {
+        logger.error("blob_cleanup_failure_purge_archived", {
+          leadCount: candidateIds.length,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+
     logger.info("cron.purge_archived_completed", {
       processed: candidates.length,
+      blobsQueued: blobPathnames.length,
     });
     return NextResponse.json({ ok: true, processed: candidates.length });
   } catch (err) {

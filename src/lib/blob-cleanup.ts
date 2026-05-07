@@ -1,6 +1,6 @@
 import "server-only";
 import { logger } from "@/lib/logger";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { del } from "@vercel/blob";
 import { db } from "@/db";
 import { activities, attachments } from "@/db/schema/activities";
@@ -50,6 +50,36 @@ export async function gatherBlobsForLead(leadId: string): Promise<string[]> {
 /** One-shot helper: gather + delete blobs for a single lead. */
 export async function cleanupBlobsForLead(leadId: string): Promise<void> {
   const paths = await gatherBlobsForLead(leadId);
+  await deleteBlobs(paths);
+}
+
+/**
+ * Phase 8D — gather every blob pathname attached to any of the given
+ * leads' activities. Used by hard-delete and the purge-archived cron.
+ * Call BEFORE the DB delete (after which the join rows are gone).
+ */
+export async function gatherBlobsForLeads(
+  leadIds: string[],
+): Promise<string[]> {
+  if (leadIds.length === 0) return [];
+  const rows = await db
+    .select({ pathname: attachments.blobPathname })
+    .from(attachments)
+    .innerJoin(activities, eq(activities.id, attachments.activityId))
+    .where(inArray(activities.leadId, leadIds));
+  return rows.map((r) => r.pathname);
+}
+
+/**
+ * Phase 8D — gather + delete blobs for a batch of leads. Failures are
+ * logged but don't throw, so callers can fire-and-forget after the DB
+ * delete commits without worrying about a network blip rolling anything
+ * back.
+ */
+export async function cleanupBlobsForLeads(
+  leadIds: string[],
+): Promise<void> {
+  const paths = await gatherBlobsForLeads(leadIds);
   await deleteBlobs(paths);
 }
 

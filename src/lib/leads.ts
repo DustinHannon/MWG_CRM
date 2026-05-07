@@ -13,6 +13,7 @@ import {
 import { z } from "zod";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
+import { leadTags, tags as tagsTable } from "@/db/schema/tags";
 import { users } from "@/db/schema/users";
 import { expectAffected } from "@/lib/db/concurrent-update";
 import type { SessionUser } from "@/lib/auth-helpers";
@@ -107,16 +108,10 @@ const leadCreateSchemaBase = z.object({
   doNotContact: z.boolean().default(false),
   doNotEmail: z.boolean().default(false),
   doNotCall: z.boolean().default(false),
-  tags: z
-    .union([z.string(), z.array(z.string())])
-    .optional()
-    .transform((v) => {
-      if (!v) return null;
-      const arr = Array.isArray(v)
-        ? v
-        : v.split(",").map((s) => s.trim()).filter(Boolean);
-      return arr.length === 0 ? null : arr;
-    }),
+  // Phase 8D — `tags` removed from lead create/update schema. Tags are
+  // managed via the relational lead_tags table; the lead-form's free-text
+  // tags input is silently ignored (will be replaced with a tag picker
+  // in a follow-up). Schema is permissive — extra keys are stripped.
   ownerId: z.string().uuid().optional().nullable(),
 });
 
@@ -220,7 +215,15 @@ export async function listLeads(
   if (filters.source) wheres.push(eq(leads.source, filters.source));
   if (filters.ownerId) wheres.push(eq(leads.ownerId, filters.ownerId));
   if (filters.tag) {
-    wheres.push(sql`${leads.tags} && ARRAY[${filters.tag}]::text[]`);
+    // Phase 8D — legacy `leads.tags` column was dropped. Membership now
+    // resolves via the relational lead_tags table joined to tags.name.
+    wheres.push(
+      sql`EXISTS (
+        SELECT 1 FROM ${leadTags} lt
+        JOIN ${tagsTable} t ON t.id = lt.tag_id
+        WHERE lt.lead_id = ${leads.id} AND lower(t.name) = lower(${filters.tag})
+      )`,
+    );
   }
   // Non-admin without canViewAllRecords sees only their own.
   if (!user.isAdmin && !canViewAll) {
@@ -267,7 +270,15 @@ export async function listLeads(
         estimatedValue: leads.estimatedValue,
         lastActivityAt: leads.lastActivityAt,
         createdAt: leads.createdAt,
-        tags: leads.tags,
+        // Phase 8D — hydrate tag names from the relational lead_tags
+        // join. Returns NULL when the lead has no tags so existing UI
+        // null-checks keep working.
+        tags: sql<string[] | null>`(
+          SELECT array_agg(t.name ORDER BY t.name)
+          FROM ${leadTags} lt
+          JOIN ${tagsTable} t ON t.id = lt.tag_id
+          WHERE lt.lead_id = ${leads.id}
+        )`,
       })
       .from(leads)
       .leftJoin(users, eq(leads.ownerId, users.id))
@@ -303,7 +314,18 @@ export async function getLeadById(
     .from(leads)
     .where(and(...wheres))
     .limit(1);
-  return row[0] ?? null;
+  if (!row[0]) return null;
+  // Phase 8D — hydrate tag names from the relational lead_tags table.
+  // The legacy `leads.tags text[]` column was dropped; consumers still
+  // expect `lead.tags: string[] | null` so we fetch and attach.
+  const tagRows = await db
+    .select({ name: tagsTable.name })
+    .from(leadTags)
+    .innerJoin(tagsTable, eq(tagsTable.id, leadTags.tagId))
+    .where(eq(leadTags.leadId, row[0].id))
+    .orderBy(asc(tagsTable.name));
+  const tagNames = tagRows.map((t) => t.name);
+  return { ...row[0], tags: tagNames.length > 0 ? tagNames : null };
 }
 
 export async function createLead(
@@ -342,7 +364,6 @@ export async function createLead(
       doNotCall: input.doNotCall,
       estimatedValue: input.estimatedValue,
       estimatedCloseDate: input.estimatedCloseDate ?? null,
-      tags: input.tags ?? null,
       createdById: user.id,
       updatedById: user.id,
       // Phase 5B — `last_activity_at` left NULL on creation so scoring
@@ -378,10 +399,21 @@ export async function updateLead(
   for (const key of Object.keys(input) as Array<keyof LeadCreateInput>) {
     update[key] = input[key];
   }
+  // Phase 8D F-046 — `is_deleted = false` clause prevents a stale
+  // edit form from silently overwriting a row that was archived between
+  // load and submit. With this filter the UPDATE matches zero rows,
+  // expectAffected throws NotFoundError, and the user sees the correct
+  // public message instead of a phantom success.
   const rows = await db
     .update(leads)
     .set(update)
-    .where(and(eq(leads.id, id), eq(leads.version, expectedVersion)))
+    .where(
+      and(
+        eq(leads.id, id),
+        eq(leads.version, expectedVersion),
+        eq(leads.isDeleted, false),
+      ),
+    )
     .returning({ id: leads.id, version: leads.version });
   expectAffected(rows, { table: leads, id, entityLabel: "lead" });
   return rows[0];
