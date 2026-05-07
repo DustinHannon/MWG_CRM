@@ -152,7 +152,12 @@ export default async function LeadDetailPage({
             Print / PDF
           </a>
           {canDelete ? (
-            <form action={deleteLeadAction}>
+            <form
+              action={async (fd) => {
+                "use server";
+                await deleteLeadAction(fd);
+              }}
+            >
               <input type="hidden" name="id" value={lead.id} />
               <button
                 type="submit"

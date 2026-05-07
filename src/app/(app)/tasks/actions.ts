@@ -12,63 +12,59 @@ import {
   type TaskCreateInput,
   type TaskUpdateInput,
 } from "@/lib/tasks";
-import { ConflictError, NotFoundError } from "@/lib/errors";
 import { createNotification } from "@/lib/notifications";
-import { logger } from "@/lib/logger";
 import { db } from "@/db";
 import { userPreferences } from "@/db/schema/views";
 import { eq } from "drizzle-orm";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
  * Phase 3D server actions for tasks. Validate, audit, optionally notify
  * the assignee.
  */
 
+export interface TaskIdData {
+  id: string;
+}
+export interface TaskVersionData {
+  version: number;
+}
+
 export async function createTaskAction(
   raw: TaskCreateInput,
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const session = await requireSession();
-  const parsed = taskCreateSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
-  }
+): Promise<ActionResult<TaskIdData>> {
+  return withErrorBoundary(
+    { action: "task.create" },
+    async (): Promise<TaskIdData> => {
+      const session = await requireSession();
+      const parsed = taskCreateSchema.parse(raw);
 
-  try {
-    const result = await createTask(parsed.data, session.id);
+      const result = await createTask(parsed, session.id);
 
-    // Notify the assignee if it's not the current user (and they want to know).
-    if (
-      parsed.data.assignedToId &&
-      parsed.data.assignedToId !== session.id
-    ) {
-      const prefs = await db
-        .select({ notify: userPreferences.notifyTasksAssigned })
-        .from(userPreferences)
-        .where(eq(userPreferences.userId, parsed.data.assignedToId))
-        .limit(1);
-      if (prefs[0]?.notify !== false) {
-        await createNotification({
-          userId: parsed.data.assignedToId,
-          kind: "task_assigned",
-          title: `New task: ${parsed.data.title}`,
-          link: parsed.data.leadId
-            ? `/leads/${parsed.data.leadId}`
-            : `/tasks`,
-        });
+      // Notify the assignee if it's not the current user (and they want to know).
+      if (parsed.assignedToId && parsed.assignedToId !== session.id) {
+        const prefs = await db
+          .select({ notify: userPreferences.notifyTasksAssigned })
+          .from(userPreferences)
+          .where(eq(userPreferences.userId, parsed.assignedToId))
+          .limit(1);
+        if (prefs[0]?.notify !== false) {
+          await createNotification({
+            userId: parsed.assignedToId,
+            kind: "task_assigned",
+            title: `New task: ${parsed.title}`,
+            link: parsed.leadId ? `/leads/${parsed.leadId}` : `/tasks`,
+          });
+        }
       }
-    }
 
-    revalidatePath("/tasks");
-    if (parsed.data.leadId) {
-      revalidatePath(`/leads/${parsed.data.leadId}`);
-    }
-    return { ok: true, id: result.id };
-  } catch (err) {
-    logger.error("task.create_failed", {
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not create task." };
-  }
+      revalidatePath("/tasks");
+      if (parsed.leadId) {
+        revalidatePath(`/leads/${parsed.leadId}`);
+      }
+      return { id: result.id };
+    },
+  );
 }
 
 const updateActionSchema = taskUpdateSchema.extend({
@@ -79,79 +75,56 @@ const updateActionSchema = taskUpdateSchema.extend({
 
 export async function updateTaskAction(
   raw: z.infer<typeof updateActionSchema>,
-): Promise<
-  { ok: true; version: number } | { ok: false; error: string }
-> {
-  const session = await requireSession();
-  const parsed = updateActionSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
-  }
+): Promise<ActionResult<TaskVersionData>> {
+  return withErrorBoundary(
+    { action: "task.update" },
+    async (): Promise<TaskVersionData> => {
+      const session = await requireSession();
+      const parsed = updateActionSchema.parse(raw);
 
-  try {
-    const { id, version, ...patch } = parsed.data;
-    const result = await updateTask(
-      id,
-      version,
-      patch as TaskUpdateInput,
-      session.id,
-    );
-    revalidatePath("/tasks");
-    return { ok: true, version: result.version };
-  } catch (err) {
-    if (err instanceof ConflictError || err instanceof NotFoundError) {
-      return { ok: false, error: err.publicMessage };
-    }
-    logger.error("task.update_failed", {
-      taskId: parsed.data.id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not update task." };
-  }
+      const { id, version, ...patch } = parsed;
+      const result = await updateTask(
+        id,
+        version,
+        patch as TaskUpdateInput,
+        session.id,
+      );
+      revalidatePath("/tasks");
+      return { version: result.version };
+    },
+  );
 }
 
 export async function deleteTaskAction(
   id: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const session = await requireSession();
-  try {
-    await deleteTask(id, session.id);
-    revalidatePath("/tasks");
-    return { ok: true };
-  } catch (err) {
-    logger.error("task.delete_failed", {
-      taskId: id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not delete task." };
-  }
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "task.delete", entityType: "task", entityId: id },
+    async () => {
+      const session = await requireSession();
+      await deleteTask(id, session.id);
+      revalidatePath("/tasks");
+    },
+  );
 }
 
 export async function toggleTaskCompleteAction(
   id: string,
   expectedVersion: number,
   completed: boolean,
-): Promise<
-  { ok: true; version: number } | { ok: false; error: string }
-> {
-  const session = await requireSession();
-  try {
-    const result = await updateTask(
-      id,
-      expectedVersion,
-      { status: completed ? "completed" : "open" },
-      session.id,
-    );
-    revalidatePath("/tasks");
-    return { ok: true, version: result.version };
-  } catch (err) {
-    if (err instanceof ConflictError || err instanceof NotFoundError) {
-      return { ok: false, error: err.publicMessage };
-    }
-    logger.error("task.toggle_complete_failed", {
-      taskId: id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not update task." };
-  }
+): Promise<ActionResult<TaskVersionData>> {
+  return withErrorBoundary(
+    { action: "task.toggle_complete", entityType: "task", entityId: id },
+    async (): Promise<TaskVersionData> => {
+      const session = await requireSession();
+      const result = await updateTask(
+        id,
+        expectedVersion,
+        { status: completed ? "completed" : "open" },
+        session.id,
+      );
+      revalidatePath("/tasks");
+      return { version: result.version };
+    },
+  );
 }

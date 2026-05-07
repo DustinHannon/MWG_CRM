@@ -2,40 +2,31 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth-helpers";
-import { logger } from "@/lib/logger";
 import { markAllRead, markRead } from "@/lib/notifications";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
-export async function markAllReadAction(): Promise<
-  { ok: true } | { ok: false; error: string }
-> {
-  const session = await requireSession();
-  try {
-    await markAllRead(session.id);
-    revalidatePath("/notifications");
-    return { ok: true };
-  } catch (err) {
-    logger.error("notifications.mark_all_read_failed", {
-      userId: session.id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not mark notifications read." };
-  }
+export async function markAllReadAction(): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "notifications.mark_all_read" },
+    async () => {
+      const session = await requireSession();
+      await markAllRead(session.id);
+      revalidatePath("/notifications");
+    },
+  );
 }
 
-export async function markReadAction(
-  id: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const session = await requireSession();
-  try {
-    await markRead(id, session.id);
-    revalidatePath("/notifications");
-    return { ok: true };
-  } catch (err) {
-    logger.error("notifications.mark_read_failed", {
-      userId: session.id,
-      notificationId: id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not mark notification read." };
-  }
+export async function markReadAction(id: string): Promise<ActionResult> {
+  return withErrorBoundary(
+    {
+      action: "notifications.mark_read",
+      entityType: "notification",
+      entityId: id,
+    },
+    async () => {
+      const session = await requireSession();
+      await markRead(id, session.id);
+      revalidatePath("/notifications");
+    },
+  );
 }

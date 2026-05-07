@@ -11,7 +11,14 @@ import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { cleanupBlobsForUser, gatherBlobsForUser } from "@/lib/blob-cleanup";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
  * Pre-flight info shown in the delete-user modal.
@@ -19,15 +26,9 @@ import { logger } from "@/lib/logger";
  * `leadCount` drives the disposition options:
  *  - 0 leads → simple "type DELETE" confirmation, no radio
  *  - ≥1 leads → reassign or cascade-delete radio
- *
- * `activityCount` is informational only — activities authored by the
- * deleted user always have user_id SET NULL via the FK; we surface that
- * "your activities will be preserved with author shown as 'Deleted user'".
  */
-export interface DeleteUserPreflight {
-  ok: boolean;
-  error?: string;
-  user?: {
+export interface DeleteUserPreflightData {
+  user: {
     id: string;
     displayName: string;
     isBreakglass: boolean;
@@ -36,67 +37,77 @@ export interface DeleteUserPreflight {
     activityCount: number;
   };
   /** Active non-breakglass users (excluding the target) — reassign options. */
-  reassignTargets?: Array<{ id: string; displayName: string; email: string }>;
+  reassignTargets: Array<{ id: string; displayName: string; email: string }>;
   /** Total admin count — used to enforce "can't delete the last admin". */
-  adminCount?: number;
+  adminCount: number;
 }
 
 export async function getDeleteUserPreflight(
   userId: string,
-): Promise<DeleteUserPreflight> {
-  const admin = await requireAdmin();
-
-  const target = await db
-    .select({
-      id: users.id,
-      displayName: users.displayName,
-      isAdmin: users.isAdmin,
-      isBreakglass: users.isBreakglass,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  if (!target[0]) return { ok: false, error: "User not found." };
-
-  const [counts, candidates, adminRows] = await Promise.all([
-    db.execute<{ leads: number; activities: number } & Record<string, unknown>>(sql`
-      SELECT
-        (SELECT count(*)::int FROM ${leads} WHERE owner_id = ${userId}) AS leads,
-        (SELECT count(*)::int FROM ${activities} WHERE user_id = ${userId}) AS activities
-    `),
-    db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        email: users.email,
-      })
-      .from(users)
-      .where(
-        and(
-          eq(users.isActive, true),
-          eq(users.isBreakglass, false),
-          ne(users.id, userId),
-        ),
-      ),
-    db
-      .select({ id: users.id })
-      .from(users)
-      .where(and(eq(users.isAdmin, true), eq(users.isActive, true))),
-  ]);
-
-  return {
-    ok: true,
-    user: {
-      id: target[0].id,
-      displayName: target[0].displayName,
-      isBreakglass: target[0].isBreakglass,
-      isSelf: admin.id === target[0].id,
-      leadCount: counts[0]?.leads ?? 0,
-      activityCount: counts[0]?.activities ?? 0,
+): Promise<ActionResult<DeleteUserPreflightData>> {
+  return withErrorBoundary(
+    {
+      action: "user.delete_preflight",
+      entityType: "user",
+      entityId: userId,
     },
-    reassignTargets: candidates,
-    adminCount: adminRows.length,
-  };
+    async (): Promise<DeleteUserPreflightData> => {
+      const admin = await requireAdmin();
+
+      const target = await db
+        .select({
+          id: users.id,
+          displayName: users.displayName,
+          isAdmin: users.isAdmin,
+          isBreakglass: users.isBreakglass,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      if (!target[0]) throw new NotFoundError("user");
+
+      const [counts, candidates, adminRows] = await Promise.all([
+        db.execute<
+          { leads: number; activities: number } & Record<string, unknown>
+        >(sql`
+          SELECT
+            (SELECT count(*)::int FROM ${leads} WHERE owner_id = ${userId}) AS leads,
+            (SELECT count(*)::int FROM ${activities} WHERE user_id = ${userId}) AS activities
+        `),
+        db
+          .select({
+            id: users.id,
+            displayName: users.displayName,
+            email: users.email,
+          })
+          .from(users)
+          .where(
+            and(
+              eq(users.isActive, true),
+              eq(users.isBreakglass, false),
+              ne(users.id, userId),
+            ),
+          ),
+        db
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.isAdmin, true), eq(users.isActive, true))),
+      ]);
+
+      return {
+        user: {
+          id: target[0].id,
+          displayName: target[0].displayName,
+          isBreakglass: target[0].isBreakglass,
+          isSelf: admin.id === target[0].id,
+          leadCount: counts[0]?.leads ?? 0,
+          activityCount: counts[0]?.activities ?? 0,
+        },
+        reassignTargets: candidates,
+        adminCount: adminRows.length,
+      };
+    },
+  );
 }
 
 const deleteSchema = z
@@ -112,11 +123,6 @@ const deleteSchema = z
     { message: "Pick a user to reassign to.", path: ["reassignTo"] },
   );
 
-export interface DeleteUserResult {
-  ok: boolean;
-  error?: string;
-}
-
 /**
  * Single transaction:
  * - reassign disposition: UPDATE leads SET owner_id = newOwner; DELETE user.
@@ -129,86 +135,75 @@ export interface DeleteUserResult {
  */
 export async function deleteUserAction(
   formData: FormData,
-): Promise<DeleteUserResult> {
-  const admin = await requireAdmin();
-  const parsed = deleteSchema.safeParse({
-    userId: formData.get("userId"),
-    disposition: formData.get("disposition"),
-    reassignTo: formData.get("reassignTo") || undefined,
-    confirm: formData.get("confirm"),
-  });
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error:
-        parsed.error.issues[0]?.message ??
-        "Invalid input.",
-    };
-  }
-  const { userId, disposition, reassignTo, confirm } = parsed.data;
+): Promise<ActionResult<never>> {
+  return withErrorBoundary({ action: "user.delete" }, async () => {
+    const admin = await requireAdmin();
+    const parsed = deleteSchema.parse({
+      userId: formData.get("userId"),
+      disposition: formData.get("disposition"),
+      reassignTo: formData.get("reassignTo") || undefined,
+      confirm: formData.get("confirm"),
+    });
+    const { userId, disposition, reassignTo, confirm } = parsed;
 
-  // Type-to-confirm gate, different per disposition.
-  const expected =
-    disposition === "delete_leads" ? "DELETE LEADS" : "DELETE";
-  if (confirm !== expected) {
-    return { ok: false, error: `Type "${expected}" exactly to confirm.` };
-  }
-
-  if (admin.id === userId) {
-    return { ok: false, error: "You cannot delete your own account." };
-  }
-
-  const target = await db
-    .select({
-      id: users.id,
-      displayName: users.displayName,
-      isAdmin: users.isAdmin,
-      isBreakglass: users.isBreakglass,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  if (!target[0]) return { ok: false, error: "User not found." };
-  if (target[0].isBreakglass) {
-    return { ok: false, error: "Cannot delete the breakglass account." };
-  }
-
-  // Last-admin guard.
-  if (target[0].isAdmin) {
-    const otherAdmins = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.isAdmin, true),
-          eq(users.isActive, true),
-          ne(users.id, userId),
-        ),
-      );
-    if (otherAdmins.length === 0) {
-      return {
-        ok: false,
-        error:
-          "Cannot delete the last remaining active admin. Promote another user first.",
-      };
+    // Type-to-confirm gate, different per disposition.
+    const expected = disposition === "delete_leads" ? "DELETE LEADS" : "DELETE";
+    if (confirm !== expected) {
+      throw new ValidationError(`Type "${expected}" exactly to confirm.`);
     }
-  }
 
-  let blobPaths: string[] = [];
-  if (disposition === "delete_leads") {
-    blobPaths = await gatherBlobsForUser(userId);
-  }
+    if (admin.id === userId) {
+      throw new ForbiddenError("You cannot delete your own account.");
+    }
 
-  const beforeSnapshot = {
-    id: target[0].id,
-    displayName: target[0].displayName,
-    isAdmin: target[0].isAdmin,
-  };
+    const target = await db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        isAdmin: users.isAdmin,
+        isBreakglass: users.isBreakglass,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!target[0]) throw new NotFoundError("user");
+    if (target[0].isBreakglass) {
+      throw new ForbiddenError("Cannot delete the breakglass account.");
+    }
 
-  try {
+    // Last-admin guard.
+    if (target[0].isAdmin) {
+      const otherAdmins = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          and(
+            eq(users.isAdmin, true),
+            eq(users.isActive, true),
+            ne(users.id, userId),
+          ),
+        );
+      if (otherAdmins.length === 0) {
+        throw new ConflictError(
+          "Cannot delete the last remaining active admin. Promote another user first.",
+        );
+      }
+    }
+
+    let blobPaths: string[] = [];
+    if (disposition === "delete_leads") {
+      blobPaths = await gatherBlobsForUser(userId);
+    }
+
+    const beforeSnapshot = {
+      id: target[0].id,
+      displayName: target[0].displayName,
+      isAdmin: target[0].isAdmin,
+    };
+
     await db.transaction(async (tx) => {
       if (disposition === "reassign") {
-        if (!reassignTo) throw new Error("reassignTo missing");
+        if (!reassignTo) throw new ValidationError("reassignTo missing");
         const newOwner = await tx
           .select({
             id: users.id,
@@ -218,8 +213,14 @@ export async function deleteUserAction(
           .from(users)
           .where(eq(users.id, reassignTo))
           .limit(1);
-        if (!newOwner[0] || !newOwner[0].isActive || newOwner[0].isBreakglass) {
-          throw new Error("Reassign target must be an active non-breakglass user.");
+        if (
+          !newOwner[0] ||
+          !newOwner[0].isActive ||
+          newOwner[0].isBreakglass
+        ) {
+          throw new ValidationError(
+            "Reassign target must be an active non-breakglass user.",
+          );
         }
         await tx
           .update(leads)
@@ -230,10 +231,6 @@ export async function deleteUserAction(
         // takes activities + attachments; we already gathered the blob
         // paths above, deletion of the actual blob objects happens
         // post-transaction.
-        // attachments are removed via FK cascade from activities; but
-        // we issue an explicit delete on activities first so we get a
-        // count if needed (Drizzle returns void, but Postgres still
-        // executes ahead of the cascade).
         await tx
           .delete(attachments)
           .where(
@@ -252,41 +249,32 @@ export async function deleteUserAction(
       // user have user_id set null automatically.
       await tx.delete(users).where(eq(users.id, userId));
     });
-  } catch (err) {
-    logger.error("admin.delete_user_txn_failed", {
-      targetUserId: userId,
-      errorMessage: err instanceof Error ? err.message : String(err),
+
+    // Blob cleanup — outside the transaction. Failures here log but do not
+    // surface as an error to the admin (the DB record is the truth).
+    if (blobPaths.length > 0) {
+      void cleanupBlobsForUser(userId).catch((err) =>
+        logger.warn("admin.blob_cleanup_after_user_delete_failed", {
+          targetUserId: userId,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+
+    await writeAudit({
+      actorId: admin.id,
+      action: "user.delete",
+      targetType: "user",
+      targetId: userId,
+      before: beforeSnapshot,
+      after: {
+        disposition,
+        reassignTo: reassignTo ?? null,
+        blobsScheduledForCleanup: blobPaths.length,
+      },
     });
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "Delete failed.",
-    };
-  }
 
-  // Blob cleanup — outside the transaction. Failures here log but do not
-  // surface as an error to the admin (the DB record is the truth).
-  if (blobPaths.length > 0) {
-    void cleanupBlobsForUser(userId).catch((err) =>
-      logger.warn("admin.blob_cleanup_after_user_delete_failed", {
-        targetUserId: userId,
-        errorMessage: err instanceof Error ? err.message : String(err),
-      }),
-    );
-  }
-
-  await writeAudit({
-    actorId: admin.id,
-    action: "user.delete",
-    targetType: "user",
-    targetId: userId,
-    before: beforeSnapshot,
-    after: {
-      disposition,
-      reassignTo: reassignTo ?? null,
-      blobsScheduledForCleanup: blobPaths.length,
-    },
+    revalidatePath("/admin/users");
+    redirect("/admin/users");
   });
-
-  revalidatePath("/admin/users");
-  redirect("/admin/users");
 }

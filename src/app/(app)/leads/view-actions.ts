@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
-import { ConflictError, NotFoundError } from "@/lib/errors";
+import { ConflictError, ValidationError } from "@/lib/errors";
 import { COLUMN_KEYS, type ColumnKey } from "@/lib/view-constants";
 import {
   createSavedView,
@@ -14,11 +14,10 @@ import {
   setLastUsedView,
   updateSavedView,
 } from "@/lib/views";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
-export interface ViewActionResult {
-  ok: boolean;
-  error?: string;
-  id?: string;
+export interface ViewIdData {
+  id: string;
 }
 
 /**
@@ -27,51 +26,46 @@ export interface ViewActionResult {
  */
 export async function createViewAction(
   formData: FormData,
-): Promise<ViewActionResult> {
-  const user = await requireSession();
-  const raw = formData.get("payload");
-  if (typeof raw !== "string") {
-    return { ok: false, error: "Missing payload." };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { ok: false, error: "Invalid payload JSON." };
-  }
-  const result = savedViewSchema.safeParse(parsed);
-  if (!result.success) {
-    return {
-      ok: false,
-      error:
-        "Validation failed: " +
-        Object.values(result.error.flatten().fieldErrors)
-          .flat()
-          .join("; "),
-    };
-  }
-  try {
-    const { id } = await createSavedView(user.id, result.data);
-    // Phase 4B — auto-revert: when the user saves the current state as a
-    // new view, the originating built-in view's modifications (adhoc columns)
-    // should reset so switching back shows clean defaults. The new saved
-    // view is now the single source of truth for that state.
-    await setAdhocColumns(user.id, null);
-    await writeAudit({
-      actorId: user.id,
-      action: "view.create",
-      targetType: "saved_view",
-      targetId: id,
-      after: { name: result.data.name, adhocReverted: true },
-    });
-    revalidatePath("/leads");
-    return { ok: true, id };
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("unique")) {
-      return { ok: false, error: "A view with that name already exists." };
-    }
-    throw err;
-  }
+): Promise<ActionResult<ViewIdData>> {
+  return withErrorBoundary(
+    { action: "view.create" },
+    async (): Promise<ViewIdData> => {
+      const user = await requireSession();
+      const raw = formData.get("payload");
+      if (typeof raw !== "string") {
+        throw new ValidationError("Missing payload.");
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new ValidationError("Invalid payload JSON.");
+      }
+      const result = savedViewSchema.parse(parsed);
+
+      try {
+        const { id } = await createSavedView(user.id, result);
+        // Phase 4B — auto-revert: when the user saves the current state as
+        // a new view, the originating built-in view's modifications (adhoc
+        // columns) should reset so switching back shows clean defaults.
+        await setAdhocColumns(user.id, null);
+        await writeAudit({
+          actorId: user.id,
+          action: "view.create",
+          targetType: "saved_view",
+          targetId: id,
+          after: { name: result.name, adhocReverted: true },
+        });
+        revalidatePath("/leads");
+        return { id };
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("unique")) {
+          throw new ConflictError("A view with that name already exists.");
+        }
+        throw err;
+      }
+    },
+  );
 }
 
 /**
@@ -80,65 +74,67 @@ export async function createViewAction(
  */
 export async function updateViewAction(
   formData: FormData,
-): Promise<ViewActionResult> {
-  const user = await requireSession();
-  const id = z.string().uuid().parse(formData.get("id"));
-  // Phase 6B — version stamps every saved-view edit.
-  const version = z.coerce
-    .number()
-    .int()
-    .positive()
-    .parse(formData.get("version"));
-  const raw = formData.get("payload");
-  if (typeof raw !== "string") return { ok: false, error: "Missing payload." };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { ok: false, error: "Invalid payload JSON." };
-  }
-  const result = savedViewSchema.partial().safeParse(parsed);
-  if (!result.success) {
-    return {
-      ok: false,
-      error: "Validation failed.",
-    };
-  }
-  try {
-    await updateSavedView(user.id, id, version, result.data);
-  } catch (err) {
-    if (err instanceof ConflictError || err instanceof NotFoundError) {
-      return { ok: false, error: err.publicMessage };
-    }
-    throw err;
-  }
-  await writeAudit({
-    actorId: user.id,
-    action: "view.update",
-    targetType: "saved_view",
-    targetId: id,
-  });
-  revalidatePath("/leads");
-  return { ok: true, id };
+): Promise<ActionResult<ViewIdData>> {
+  return withErrorBoundary(
+    { action: "view.update" },
+    async (): Promise<ViewIdData> => {
+      const user = await requireSession();
+      const id = z.string().uuid().parse(formData.get("id"));
+      // Phase 6B — version stamps every saved-view edit.
+      const version = z.coerce
+        .number()
+        .int()
+        .positive()
+        .parse(formData.get("version"));
+      const raw = formData.get("payload");
+      if (typeof raw !== "string") throw new ValidationError("Missing payload.");
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new ValidationError("Invalid payload JSON.");
+      }
+      const result = savedViewSchema.partial().parse(parsed);
+
+      await updateSavedView(user.id, id, version, result);
+
+      await writeAudit({
+        actorId: user.id,
+        action: "view.update",
+        targetType: "saved_view",
+        targetId: id,
+      });
+      revalidatePath("/leads");
+      return { id };
+    },
+  );
 }
 
-export async function deleteViewAction(formData: FormData) {
-  const user = await requireSession();
-  const id = z.string().uuid().parse(formData.get("id"));
-  await deleteSavedView(user.id, id);
-  await writeAudit({
-    actorId: user.id,
-    action: "view.delete",
-    targetType: "saved_view",
-    targetId: id,
+export async function deleteViewAction(
+  formData: FormData,
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "view.delete" }, async () => {
+    const user = await requireSession();
+    const id = z.string().uuid().parse(formData.get("id"));
+    await deleteSavedView(user.id, id);
+    await writeAudit({
+      actorId: user.id,
+      action: "view.delete",
+      targetType: "saved_view",
+      targetId: id,
+    });
+    revalidatePath("/leads");
   });
-  revalidatePath("/leads");
 }
 
 /** Persist last-used view + adhoc column choices. Fire-and-forget. */
-export async function trackViewSelection(viewId: string) {
-  const user = await requireSession();
-  await setLastUsedView(user.id, viewId);
+export async function trackViewSelection(
+  viewId: string,
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "view.track_selection" }, async () => {
+    const user = await requireSession();
+    await setLastUsedView(user.id, viewId);
+  });
 }
 
 const adhocSchema = z.object({
@@ -149,18 +145,18 @@ const adhocSchema = z.object({
 
 export async function setAdhocColumnsAction(
   formData: FormData,
-): Promise<ViewActionResult> {
-  const user = await requireSession();
-  const raw = formData.get("payload");
-  if (typeof raw !== "string") return { ok: false, error: "Missing payload." };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { ok: false, error: "Invalid payload JSON." };
-  }
-  const result = adhocSchema.safeParse(parsed);
-  if (!result.success) return { ok: false, error: "Validation failed." };
-  await setAdhocColumns(user.id, result.data.columns);
-  return { ok: true };
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "view.set_adhoc_columns" }, async () => {
+    const user = await requireSession();
+    const raw = formData.get("payload");
+    if (typeof raw !== "string") throw new ValidationError("Missing payload.");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new ValidationError("Invalid payload JSON.");
+    }
+    const result = adhocSchema.parse(parsed);
+    await setAdhocColumns(user.id, result.columns);
+  });
 }

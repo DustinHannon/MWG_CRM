@@ -5,10 +5,14 @@ import {
   deleteAllActivitiesAction,
   deleteAllImportsAction,
   deleteAllLeadsAction,
-  type DangerActionResult,
+  type DangerSuccessData,
 } from "./actions";
+import type { ActionResult } from "@/lib/server-action";
 
-const initial: DangerActionResult = { ok: true };
+const initial: ActionResult<DangerSuccessData> = {
+  ok: true,
+  data: { affected: -1 },
+};
 
 export function DangerSection({
   title,
@@ -28,10 +32,10 @@ export function DangerSection({
         ? deleteAllActivitiesAction
         : deleteAllImportsAction;
 
-  const [state, action, pending] = useActionState(
-    async (_p: DangerActionResult, fd: FormData) => handler(fd),
-    initial,
-  );
+  const [state, action, pending] = useActionState<
+    ActionResult<DangerSuccessData>,
+    FormData
+  >(async (_p, fd) => handler(fd), initial);
 
   return (
     <section className="rounded-2xl border border-rose-300/30 bg-rose-500/5 p-6 backdrop-blur-xl">
@@ -60,12 +64,12 @@ export function DangerSection({
         </button>
       </form>
 
-      {state.error ? (
+      {!state.ok ? (
         <p className="mt-3 text-sm text-rose-200">{state.error}</p>
-      ) : null}
-      {state.ok && state.affected !== undefined ? (
+      ) : state.data.affected >= 0 ? (
         <p className="mt-3 text-sm text-emerald-200">
-          Deleted {state.affected} row{state.affected === 1 ? "" : "s"}.
+          Deleted {state.data.affected} row
+          {state.data.affected === 1 ? "" : "s"}.
         </p>
       ) : null}
     </section>

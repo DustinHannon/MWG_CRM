@@ -36,9 +36,10 @@ export function TagInput({ value, onChange, hiddenInputName }: TagInputProps) {
   // Search on query change (debounced).
   useEffect(() => {
     const handle = setTimeout(async () => {
-      const found = await searchTagsAction(query);
+      const res = await searchTagsAction(query);
+      if (!res.ok) return;
       // Filter out already-selected.
-      setResults(found.filter((r) => !value.some((v) => v.id === r.id)));
+      setResults(res.data.filter((r) => !value.some((v) => v.id === r.id)));
     }, 150);
     return () => clearTimeout(handle);
   }, [query, value]);
@@ -75,8 +76,9 @@ export function TagInput({ value, onChange, hiddenInputName }: TagInputProps) {
   }
 
   async function createAndSelect(name: string) {
-    const created = await getOrCreateTagAction(name);
-    if (created) {
+    const res = await getOrCreateTagAction(name);
+    if (res.ok && res.data) {
+      const created = res.data;
       selectTag({ id: created.id, name: created.name, color: created.color });
     }
   }

@@ -7,26 +7,21 @@ import {
   cancelImportAction,
   commitImportAction,
   previewImportAction,
-  type CommitActionResult,
-  type PreviewActionResult,
+  type CommitSuccessData,
+  type PreviewSuccessData,
 } from "./actions";
+import type { ActionResult } from "@/lib/server-action";
 
 type Stage = "upload" | "preview" | "result";
 
-interface ResultState {
-  ok: boolean;
-  preview?: PreviewActionResult;
-  commit?: CommitActionResult;
-}
-
 export function ImportClient() {
   const [stage, setStage] = useState<Stage>("upload");
-  const [previewState, setPreviewState] = useState<PreviewActionResult | null>(
+  const [previewState, setPreviewState] = useState<PreviewSuccessData | null>(
     null,
   );
-  const [commitState, setCommitState] = useState<CommitActionResult | null>(
-    null,
-  );
+  const [commitState, setCommitState] = useState<
+    ActionResult<CommitSuccessData> | null
+  >(null);
   const [pending, startTransition] = useTransition();
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -38,7 +33,7 @@ export function ImportClient() {
         setUploadError(res.error ?? "Upload failed.");
         return;
       }
-      setPreviewState(res);
+      setPreviewState(res.data);
       setStage("preview");
     });
   }
@@ -46,7 +41,7 @@ export function ImportClient() {
   function onCommit() {
     if (!previewState?.jobId) return;
     startTransition(async () => {
-      const res = await commitImportAction(previewState.jobId!);
+      const res = await commitImportAction(previewState.jobId);
       setCommitState(res);
       setStage("result");
       if (!res.ok) {
@@ -67,7 +62,7 @@ export function ImportClient() {
       return;
     }
     startTransition(async () => {
-      await cancelImportAction(previewState.jobId!);
+      await cancelImportAction(previewState.jobId);
       setStage("upload");
       setPreviewState(null);
     });
@@ -85,8 +80,8 @@ export function ImportClient() {
       {stage === "preview" && previewState?.preview ? (
         <PreviewView
           preview={previewState.preview}
-          fileName={previewState.fileName ?? ""}
-          smartDetect={previewState.smartDetect ?? false}
+          fileName={previewState.fileName}
+          smartDetect={previewState.smartDetect}
           pending={pending}
           onCommit={onCommit}
           onCancel={onCancel}
@@ -169,7 +164,7 @@ function PreviewView({
   onCommit,
   onCancel,
 }: {
-  preview: NonNullable<PreviewActionResult["preview"]>;
+  preview: PreviewSuccessData["preview"];
   fileName: string;
   smartDetect: boolean;
   pending: boolean;
@@ -268,7 +263,11 @@ function PreviewView({
   );
 }
 
-function ResultView({ state }: { state: CommitActionResult }) {
+function ResultView({
+  state,
+}: {
+  state: ActionResult<CommitSuccessData>;
+}) {
   if (!state.ok) {
     return (
       <div className="mt-8 rounded-2xl border border-rose-300/30 bg-rose-500/10 p-6 backdrop-blur-xl">
@@ -277,7 +276,7 @@ function ResultView({ state }: { state: CommitActionResult }) {
       </div>
     );
   }
-  const r = state.result!;
+  const r = state.data.result;
   return (
     <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
       <h2 className="text-sm font-medium uppercase tracking-wide text-white/60">

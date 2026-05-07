@@ -4,8 +4,9 @@ import { useState, useTransition } from "react";
 import {
   deleteUserAction,
   getDeleteUserPreflight,
-  type DeleteUserPreflight,
+  type DeleteUserPreflightData,
 } from "./delete-user-actions";
+import type { ActionResult } from "@/lib/server-action";
 
 /**
  * Delete-user button + modal.
@@ -30,7 +31,9 @@ export function DeleteUserButton({
   disabledReason?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [preflight, setPreflight] = useState<DeleteUserPreflight | null>(null);
+  const [preflight, setPreflight] = useState<ActionResult<
+    DeleteUserPreflightData
+  > | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [, startTransition] = useTransition();
@@ -62,7 +65,7 @@ export function DeleteUserButton({
         <Modal onClose={() => !submitting && setOpen(false)}>
           {preflight === null ? (
             <p className="text-sm text-white/60">Loading…</p>
-          ) : !preflight.ok || !preflight.user ? (
+          ) : !preflight.ok ? (
             <div>
               <h2 className="text-lg font-semibold">Cannot delete</h2>
               <p className="mt-2 text-sm text-rose-100">
@@ -80,7 +83,7 @@ export function DeleteUserButton({
             </div>
           ) : (
             <DeleteForm
-              preflight={preflight}
+              preflight={preflight.data}
               userId={userId}
               error={error}
               submitting={submitting}
@@ -110,15 +113,15 @@ function DeleteForm({
   onSubmit,
   onCancel,
 }: {
-  preflight: DeleteUserPreflight;
+  preflight: DeleteUserPreflightData;
   userId: string;
   error: string | null;
   submitting: boolean;
   onSubmit: (fd: FormData) => Promise<void>;
   onCancel: () => void;
 }) {
-  const u = preflight.user!;
-  const targets = preflight.reassignTargets ?? [];
+  const u = preflight.user;
+  const targets = preflight.reassignTargets;
   const hasLeads = u.leadCount > 0;
   const expected = !hasLeads ? "DELETE" : null;
   // For the leads case the user picks the disposition; expected confirm

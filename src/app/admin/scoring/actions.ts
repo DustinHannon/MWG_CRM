@@ -10,7 +10,7 @@ import {
 } from "@/db/schema/lead-scoring";
 import { writeAudit } from "@/lib/audit";
 import { requireAdmin } from "@/lib/auth-helpers";
-import { logger } from "@/lib/logger";
+import { ConflictError, ValidationError } from "@/lib/errors";
 import {
   evaluateLead,
   invalidateThresholdCache,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/scoring/engine";
 import { db as dbAlias } from "@/db";
 import { leads } from "@/db/schema/leads";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 void dbAlias;
 
@@ -78,205 +79,185 @@ const SET_THRESHOLDS = z.object({
   coolThreshold: z.number().int().min(-1000).max(1000),
 });
 
+export interface ScoringRuleIdData {
+  id: string;
+}
+export interface RecomputeData {
+  processed: number;
+}
+
 export async function createScoringRuleAction(
   raw: z.input<typeof CREATE_RULE>,
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const session = await requireAdmin();
-  const parsed = CREATE_RULE.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
-  }
-  try {
-    const inserted = await db
-      .insert(leadScoringRules)
-      .values({
-        name: parsed.data.name,
-        description: parsed.data.description ?? null,
-        predicate: parsed.data.predicate,
-        points: parsed.data.points,
-        isActive: parsed.data.isActive,
-        createdById: session.id,
-      })
-      .returning({ id: leadScoringRules.id });
-    await writeAudit({
-      actorId: session.id,
-      action: "scoring.rule_create",
-      targetType: "lead_scoring_rules",
-      targetId: inserted[0].id,
-      after: parsed.data as Record<string, unknown>,
-    });
-    revalidatePath("/admin/scoring");
-    return { ok: true, id: inserted[0].id };
-  } catch (err) {
-    logger.error("scoring.rule_create_failed", {
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not create rule." };
-  }
+): Promise<ActionResult<ScoringRuleIdData>> {
+  return withErrorBoundary(
+    { action: "scoring.rule_create" },
+    async (): Promise<ScoringRuleIdData> => {
+      const session = await requireAdmin();
+      const parsed = CREATE_RULE.parse(raw);
+      const inserted = await db
+        .insert(leadScoringRules)
+        .values({
+          name: parsed.name,
+          description: parsed.description ?? null,
+          predicate: parsed.predicate,
+          points: parsed.points,
+          isActive: parsed.isActive,
+          createdById: session.id,
+        })
+        .returning({ id: leadScoringRules.id });
+      await writeAudit({
+        actorId: session.id,
+        action: "scoring.rule_create",
+        targetType: "lead_scoring_rules",
+        targetId: inserted[0].id,
+        after: parsed as Record<string, unknown>,
+      });
+      revalidatePath("/admin/scoring");
+      return { id: inserted[0].id };
+    },
+  );
 }
 
 export async function updateScoringRuleAction(
   raw: z.input<typeof UPDATE_RULE>,
-): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
-  const session = await requireAdmin();
-  const parsed = UPDATE_RULE.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
-  }
-  try {
-    const set: Record<string, unknown> = {
-      updatedAt: sql`now()`,
-      version: sql`${leadScoringRules.version} + 1`,
-    };
-    if (parsed.data.name !== undefined) set.name = parsed.data.name;
-    if (parsed.data.description !== undefined)
-      set.description = parsed.data.description;
-    if (parsed.data.predicate !== undefined)
-      set.predicate = parsed.data.predicate;
-    if (parsed.data.points !== undefined) set.points = parsed.data.points;
-    if (parsed.data.isActive !== undefined) set.isActive = parsed.data.isActive;
-
-    const result = await db
-      .update(leadScoringRules)
-      .set(set)
-      .where(
-        sql`${leadScoringRules.id} = ${parsed.data.id}::uuid AND ${leadScoringRules.version} = ${parsed.data.expectedVersion}`,
-      )
-      .returning({ id: leadScoringRules.id });
-
-    if (result.length === 0) {
-      return {
-        ok: false,
-        error:
-          "This rule was modified by someone else. Refresh and try again.",
-        code: "CONFLICT",
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "scoring.rule_update" },
+    async () => {
+      const session = await requireAdmin();
+      const parsed = UPDATE_RULE.parse(raw);
+      const set: Record<string, unknown> = {
+        updatedAt: sql`now()`,
+        version: sql`${leadScoringRules.version} + 1`,
       };
-    }
+      if (parsed.name !== undefined) set.name = parsed.name;
+      if (parsed.description !== undefined) set.description = parsed.description;
+      if (parsed.predicate !== undefined) set.predicate = parsed.predicate;
+      if (parsed.points !== undefined) set.points = parsed.points;
+      if (parsed.isActive !== undefined) set.isActive = parsed.isActive;
 
-    await writeAudit({
-      actorId: session.id,
-      action: "scoring.rule_update",
-      targetType: "lead_scoring_rules",
-      targetId: parsed.data.id,
-      after: parsed.data as Record<string, unknown>,
-    });
-    revalidatePath("/admin/scoring");
-    return { ok: true };
-  } catch (err) {
-    logger.error("scoring.rule_update_failed", {
-      ruleId: parsed.data.id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not update rule." };
-  }
+      const result = await db
+        .update(leadScoringRules)
+        .set(set)
+        .where(
+          sql`${leadScoringRules.id} = ${parsed.id}::uuid AND ${leadScoringRules.version} = ${parsed.expectedVersion}`,
+        )
+        .returning({ id: leadScoringRules.id });
+
+      if (result.length === 0) {
+        throw new ConflictError(
+          "This rule was modified by someone else. Refresh and try again.",
+        );
+      }
+
+      await writeAudit({
+        actorId: session.id,
+        action: "scoring.rule_update",
+        targetType: "lead_scoring_rules",
+        targetId: parsed.id,
+        after: parsed as Record<string, unknown>,
+      });
+      revalidatePath("/admin/scoring");
+    },
+  );
 }
 
 export async function deleteScoringRuleAction(
   id: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const session = await requireAdmin();
-  try {
-    await db.delete(leadScoringRules).where(eq(leadScoringRules.id, id));
-    await writeAudit({
-      actorId: session.id,
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    {
       action: "scoring.rule_delete",
-      targetType: "lead_scoring_rules",
-      targetId: id,
-    });
-    revalidatePath("/admin/scoring");
-    return { ok: true };
-  } catch (err) {
-    logger.error("scoring.rule_delete_failed", {
-      ruleId: id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not delete rule." };
-  }
+      entityType: "lead_scoring_rules",
+      entityId: id,
+    },
+    async () => {
+      const session = await requireAdmin();
+      await db.delete(leadScoringRules).where(eq(leadScoringRules.id, id));
+      await writeAudit({
+        actorId: session.id,
+        action: "scoring.rule_delete",
+        targetType: "lead_scoring_rules",
+        targetId: id,
+      });
+      revalidatePath("/admin/scoring");
+    },
+  );
 }
 
 export async function setScoringThresholdsAction(
   raw: z.input<typeof SET_THRESHOLDS>,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const session = await requireAdmin();
-  const parsed = SET_THRESHOLDS.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
-  }
-  if (
-    !(
-      parsed.data.hotThreshold > parsed.data.warmThreshold &&
-      parsed.data.warmThreshold > parsed.data.coolThreshold
-    )
-  ) {
-    return {
-      ok: false,
-      error: "Hot must be greater than Warm; Warm must be greater than Cool.",
-    };
-  }
-  try {
-    await db
-      .update(leadScoringSettings)
-      .set({
-        hotThreshold: parsed.data.hotThreshold,
-        warmThreshold: parsed.data.warmThreshold,
-        coolThreshold: parsed.data.coolThreshold,
-        updatedById: session.id,
-        updatedAt: sql`now()`,
-        version: sql`${leadScoringSettings.version} + 1`,
-      })
-      .where(eq(leadScoringSettings.id, 1));
-    invalidateThresholdCache();
-    await writeAudit({
-      actorId: session.id,
-      action: "scoring.thresholds_update",
-      targetType: "lead_scoring_settings",
-      targetId: "1",
-      after: parsed.data as Record<string, unknown>,
-    });
-    revalidatePath("/admin/scoring");
-    return { ok: true };
-  } catch (err) {
-    logger.error("scoring.thresholds_update_failed", {
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not update thresholds." };
-  }
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "scoring.thresholds_update" },
+    async () => {
+      const session = await requireAdmin();
+      const parsed = SET_THRESHOLDS.parse(raw);
+      if (
+        !(
+          parsed.hotThreshold > parsed.warmThreshold &&
+          parsed.warmThreshold > parsed.coolThreshold
+        )
+      ) {
+        throw new ValidationError(
+          "Hot must be greater than Warm; Warm must be greater than Cool.",
+        );
+      }
+      await db
+        .update(leadScoringSettings)
+        .set({
+          hotThreshold: parsed.hotThreshold,
+          warmThreshold: parsed.warmThreshold,
+          coolThreshold: parsed.coolThreshold,
+          updatedById: session.id,
+          updatedAt: sql`now()`,
+          version: sql`${leadScoringSettings.version} + 1`,
+        })
+        .where(eq(leadScoringSettings.id, 1));
+      invalidateThresholdCache();
+      await writeAudit({
+        actorId: session.id,
+        action: "scoring.thresholds_update",
+        targetType: "lead_scoring_settings",
+        targetId: "1",
+        after: parsed as Record<string, unknown>,
+      });
+      revalidatePath("/admin/scoring");
+    },
+  );
 }
 
 export async function recomputeAllScoresAction(): Promise<
-  { ok: true; processed: number } | { ok: false; error: string }
+  ActionResult<RecomputeData>
 > {
-  const session = await requireAdmin();
-  try {
-    const totalCount = await db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(leads)
-      .where(eq(leads.isDeleted, false));
-    const total = totalCount[0]?.n ?? 0;
-    if (total > 10_000) {
-      return {
-        ok: false,
-        error: `Manual recompute capped at 10,000 leads (current: ${total}). Tonight's nightly cron will pick this up.`,
-      };
-    }
-    invalidateThresholdCache();
-    const processed = await rescoreAllLeads();
-    await writeAudit({
-      actorId: session.id,
-      action: "scoring.recompute_manual",
-      targetType: "leads",
-      targetId: "all",
-      after: { processed } as Record<string, unknown>,
-    });
-    revalidatePath("/admin/scoring");
-    revalidatePath("/dashboard");
-    return { ok: true, processed };
-  } catch (err) {
-    logger.error("scoring.recompute_manual_failed", {
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not recompute scores." };
-  }
+  return withErrorBoundary(
+    { action: "scoring.recompute_manual" },
+    async (): Promise<RecomputeData> => {
+      const session = await requireAdmin();
+      const totalCount = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(leads)
+        .where(eq(leads.isDeleted, false));
+      const total = totalCount[0]?.n ?? 0;
+      if (total > 10_000) {
+        throw new ValidationError(
+          `Manual recompute capped at 10,000 leads (current: ${total}). Tonight's nightly cron will pick this up.`,
+        );
+      }
+      invalidateThresholdCache();
+      const processed = await rescoreAllLeads();
+      await writeAudit({
+        actorId: session.id,
+        action: "scoring.recompute_manual",
+        targetType: "leads",
+        targetId: "all",
+        after: { processed } as Record<string, unknown>,
+      });
+      revalidatePath("/admin/scoring");
+      revalidatePath("/dashboard");
+      return { processed };
+    },
+  );
 }
 
 void evaluateLead;

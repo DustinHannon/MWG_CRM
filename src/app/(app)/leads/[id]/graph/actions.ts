@@ -4,22 +4,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { writeAudit } from "@/lib/audit";
 import {
-  ForbiddenError,
   getPermissions,
   requireLeadAccess,
   requireSession,
 } from "@/lib/auth-helpers";
+import { ForbiddenError, ReauthRequiredKnownError } from "@/lib/errors";
 import { sendEmailAndTrack } from "@/lib/graph-email";
-import { logger } from "@/lib/logger";
 import { scheduleMeetingAndTrack } from "@/lib/graph-meeting";
 import { ReauthRequiredError } from "@/lib/graph-token";
-
-export interface GraphActionResult {
-  ok: boolean;
-  error?: string;
-  reauthRequired?: boolean;
-  fieldErrors?: Record<string, string[]>;
-}
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 const sendEmailSchema = z.object({
   leadId: z.string().uuid(),
@@ -30,86 +23,70 @@ const sendEmailSchema = z.object({
 
 export async function sendEmailAction(
   formData: FormData,
-): Promise<GraphActionResult> {
-  const user = await requireSession();
-  const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canSendEmail) {
-    return { ok: false, error: "You don't have permission to send emails." };
-  }
-
-  const parsed = sendEmailSchema.safeParse({
-    leadId: formData.get("leadId"),
-    to: formData.get("to"),
-    subject: formData.get("subject"),
-    body: formData.get("body"),
-  });
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: "Validation failed.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-
-  try {
-    await requireLeadAccess(user, parsed.data.leadId);
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return { ok: false, error: err.message };
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "graph.email_sent" }, async () => {
+    const user = await requireSession();
+    const perms = await getPermissions(user.id);
+    if (!user.isAdmin && !perms.canSendEmail) {
+      throw new ForbiddenError("You don't have permission to send emails.");
     }
-    throw err;
-  }
 
-  // Attachments: pull from formData (multiple <File>s under name "attachment").
-  const files = formData.getAll("attachment").filter((f): f is File => f instanceof File);
-  const atts: Array<{ filename: string; contentType: string; bytes: Uint8Array }> = [];
-  for (const f of files) {
-    if (f.size === 0) continue;
-    const buf = new Uint8Array(await f.arrayBuffer());
-    atts.push({
-      filename: f.name,
-      contentType: f.type || "application/octet-stream",
-      bytes: buf,
-    });
-  }
-
-  try {
-    const { activityId } = await sendEmailAndTrack({
-      leadId: parsed.data.leadId,
-      userId: user.id,
-      to: parsed.data.to,
-      subject: parsed.data.subject,
-      body: parsed.data.body,
-      attachments: atts,
+    const parsed = sendEmailSchema.parse({
+      leadId: formData.get("leadId"),
+      to: formData.get("to"),
+      subject: formData.get("subject"),
+      body: formData.get("body"),
     });
 
-    await writeAudit({
-      actorId: user.id,
-      action: "graph.email_sent",
-      targetType: "activity",
-      targetId: activityId,
-      after: { leadId: parsed.data.leadId, to: parsed.data.to },
-    });
+    await requireLeadAccess(user, parsed.leadId);
 
-    revalidatePath(`/leads/${parsed.data.leadId}`);
-    return { ok: true };
-  } catch (err) {
-    if (err instanceof ReauthRequiredError) {
-      return {
-        ok: false,
-        reauthRequired: true,
-        error:
+    // Attachments: pull from formData (multiple <File>s under name "attachment").
+    const files = formData
+      .getAll("attachment")
+      .filter((f): f is File => f instanceof File);
+    const atts: Array<{
+      filename: string;
+      contentType: string;
+      bytes: Uint8Array;
+    }> = [];
+    for (const f of files) {
+      if (f.size === 0) continue;
+      const buf = new Uint8Array(await f.arrayBuffer());
+      atts.push({
+        filename: f.name,
+        contentType: f.type || "application/octet-stream",
+        bytes: buf,
+      });
+    }
+
+    try {
+      const { activityId } = await sendEmailAndTrack({
+        leadId: parsed.leadId,
+        userId: user.id,
+        to: parsed.to,
+        subject: parsed.subject,
+        body: parsed.body,
+        attachments: atts,
+      });
+
+      await writeAudit({
+        actorId: user.id,
+        action: "graph.email_sent",
+        targetType: "activity",
+        targetId: activityId,
+        after: { leadId: parsed.leadId, to: parsed.to },
+      });
+
+      revalidatePath(`/leads/${parsed.leadId}`);
+    } catch (err) {
+      if (err instanceof ReauthRequiredError) {
+        throw new ReauthRequiredKnownError(
           "Your Microsoft session expired. Reconnect to continue sending mail.",
-      };
+        );
+      }
+      throw err;
     }
-    logger.error("graph.send_email_failed", {
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "Send failed.",
-    };
-  }
+  });
 }
 
 const scheduleMeetingSchema = z.object({
@@ -126,80 +103,58 @@ const scheduleMeetingSchema = z.object({
 
 export async function scheduleMeetingAction(
   formData: FormData,
-): Promise<GraphActionResult> {
-  const user = await requireSession();
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "graph.meeting_scheduled" }, async () => {
+    const user = await requireSession();
 
-  const parsed = scheduleMeetingSchema.safeParse({
-    leadId: formData.get("leadId"),
-    attendeeEmail: formData.get("attendeeEmail"),
-    attendeeName: formData.get("attendeeName") || undefined,
-    subject: formData.get("subject"),
-    body: formData.get("body") || undefined,
-    startIso: formData.get("startIso"),
-    endIso: formData.get("endIso"),
-    timeZone: formData.get("timeZone"),
-    location: formData.get("location") || undefined,
-  });
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: "Validation failed.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-
-  try {
-    await requireLeadAccess(user, parsed.data.leadId);
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return { ok: false, error: err.message };
-    }
-    throw err;
-  }
-
-  try {
-    const { activityId } = await scheduleMeetingAndTrack({
-      leadId: parsed.data.leadId,
-      userId: user.id,
-      attendeeEmail: parsed.data.attendeeEmail,
-      attendeeName: parsed.data.attendeeName,
-      subject: parsed.data.subject,
-      body: parsed.data.body,
-      startIso: parsed.data.startIso,
-      endIso: parsed.data.endIso,
-      timeZone: parsed.data.timeZone,
-      location: parsed.data.location,
+    const parsed = scheduleMeetingSchema.parse({
+      leadId: formData.get("leadId"),
+      attendeeEmail: formData.get("attendeeEmail"),
+      attendeeName: formData.get("attendeeName") || undefined,
+      subject: formData.get("subject"),
+      body: formData.get("body") || undefined,
+      startIso: formData.get("startIso"),
+      endIso: formData.get("endIso"),
+      timeZone: formData.get("timeZone"),
+      location: formData.get("location") || undefined,
     });
 
-    await writeAudit({
-      actorId: user.id,
-      action: "graph.meeting_scheduled",
-      targetType: "activity",
-      targetId: activityId,
-      after: {
-        leadId: parsed.data.leadId,
-        attendee: parsed.data.attendeeEmail,
-        startIso: parsed.data.startIso,
-      },
-    });
+    await requireLeadAccess(user, parsed.leadId);
 
-    revalidatePath(`/leads/${parsed.data.leadId}`);
-    return { ok: true };
-  } catch (err) {
-    if (err instanceof ReauthRequiredError) {
-      return {
-        ok: false,
-        reauthRequired: true,
-        error:
+    try {
+      const { activityId } = await scheduleMeetingAndTrack({
+        leadId: parsed.leadId,
+        userId: user.id,
+        attendeeEmail: parsed.attendeeEmail,
+        attendeeName: parsed.attendeeName,
+        subject: parsed.subject,
+        body: parsed.body,
+        startIso: parsed.startIso,
+        endIso: parsed.endIso,
+        timeZone: parsed.timeZone,
+        location: parsed.location,
+      });
+
+      await writeAudit({
+        actorId: user.id,
+        action: "graph.meeting_scheduled",
+        targetType: "activity",
+        targetId: activityId,
+        after: {
+          leadId: parsed.leadId,
+          attendee: parsed.attendeeEmail,
+          startIso: parsed.startIso,
+        },
+      });
+
+      revalidatePath(`/leads/${parsed.leadId}`);
+    } catch (err) {
+      if (err instanceof ReauthRequiredError) {
+        throw new ReauthRequiredKnownError(
           "Your Microsoft session expired. Reconnect to continue scheduling.",
-      };
+        );
+      }
+      throw err;
     }
-    logger.error("graph.schedule_meeting_failed", {
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "Scheduling failed.",
-    };
-  }
+  });
 }

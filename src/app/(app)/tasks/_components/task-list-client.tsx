@@ -37,7 +37,7 @@ export function TaskListClient({ buckets, prefs }: TaskListClientProps) {
         toast.error(res.error, { duration: Infinity, dismissible: true });
         setOptimistic((o) => ({ ...o, [id]: !completed }));
       } else {
-        setVersions((m) => ({ ...m, [id]: res.version }));
+        setVersions((m) => ({ ...m, [id]: res.data.version }));
       }
     });
   }

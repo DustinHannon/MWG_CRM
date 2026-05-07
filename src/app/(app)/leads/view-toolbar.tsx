@@ -420,7 +420,7 @@ function SaveViewDialog({
       setError(res.error ?? "Save failed.");
       return;
     }
-    if (res.id) onSaved(`saved:${res.id}`);
+    if (res.data?.id) onSaved(`saved:${res.data.id}`);
   };
 
   return (

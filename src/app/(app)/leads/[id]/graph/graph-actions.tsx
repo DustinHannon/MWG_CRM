@@ -2,13 +2,10 @@
 
 import { useActionState, useState } from "react";
 import { signIn } from "next-auth/react";
-import {
-  scheduleMeetingAction,
-  sendEmailAction,
-  type GraphActionResult,
-} from "./actions";
+import { scheduleMeetingAction, sendEmailAction } from "./actions";
+import type { ActionResult } from "@/lib/server-action";
 
-const initial: GraphActionResult = { ok: true };
+const initial: ActionResult = { ok: true };
 
 export function GraphActionPanel({
   leadId,
@@ -82,7 +79,7 @@ function EmailForm({
   defaultEmail?: string | null;
 }) {
   const [state, action, pending] = useActionState(
-    async (_p: GraphActionResult, fd: FormData) => sendEmailAction(fd),
+    async (_p: ActionResult, fd: FormData) => sendEmailAction(fd),
     initial,
   );
 
@@ -113,8 +110,7 @@ function EmailForm({
         </span>
       </label>
 
-      {state.error ? <ErrorBox state={state} /> : null}
-      {state.ok && state.error === undefined && pending === false ? null : null}
+      {!state.ok ? <ErrorBox state={state} /> : null}
       <Submit pending={pending} label="Send email" />
     </form>
   );
@@ -132,7 +128,7 @@ function MeetingForm({
   defaultTimeZone: string;
 }) {
   const [state, action, pending] = useActionState(
-    async (_p: GraphActionResult, fd: FormData) => scheduleMeetingAction(fd),
+    async (_p: ActionResult, fd: FormData) => scheduleMeetingAction(fd),
     initial,
   );
 
@@ -171,7 +167,7 @@ function MeetingForm({
         </label>
       </div>
 
-      {state.error ? (
+      {!state.ok ? (
         <div className="md:col-span-2"><ErrorBox state={state} /></div>
       ) : null}
       <div className="md:col-span-2">
@@ -220,14 +216,18 @@ function Submit({ pending, label }: { pending: boolean; label: string }) {
   );
 }
 
-function ErrorBox({ state }: { state: GraphActionResult }) {
+function ErrorBox({
+  state,
+}: {
+  state: Extract<ActionResult, { ok: false }>;
+}) {
   return (
     <div
       role="alert"
       className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
     >
       {state.error}
-      {state.reauthRequired ? (
+      {state.code === "REAUTH_REQUIRED" ? (
         <>
           {" "}
           <button

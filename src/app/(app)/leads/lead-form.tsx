@@ -1,11 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import {
-  createLeadAction,
-  updateLeadAction,
-  type ActionResult,
-} from "./actions";
+import { createLeadAction, updateLeadAction } from "./actions";
+import type { ActionResult } from "@/lib/server-action";
 import { DuplicateWarning } from "@/components/leads/duplicate-warning";
 import {
   LEAD_RATINGS,
@@ -63,12 +60,12 @@ export function LeadForm({
   mode: "create" | "edit";
   lead?: LeadFormValues;
 }) {
-  const initial: ActionResult = { ok: true };
+  const initial: ActionResult<never> = { ok: true };
   const action = mode === "create" ? createLeadAction : updateLeadAction;
-  const [state, formAction, pending] = useActionState(
-    async (_prev: ActionResult, fd: FormData) => action(fd),
-    initial,
-  );
+  const [state, formAction, pending] = useActionState<
+    ActionResult<never>,
+    FormData
+  >(async (_prev, fd) => action(fd), initial);
 
   const v = lead ?? empty;
 
@@ -163,15 +160,6 @@ export function LeadForm({
           className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100 lg:col-span-2"
         >
           {state.error}
-          {state.fieldErrors ? (
-            <ul className="mt-2 list-disc pl-4 text-xs text-rose-100/80">
-              {Object.entries(state.fieldErrors).map(([f, errs]) => (
-                <li key={f}>
-                  <strong>{f}:</strong> {errs?.join(", ")}
-                </li>
-              ))}
-            </ul>
-          ) : null}
         </div>
       ) : null}
 

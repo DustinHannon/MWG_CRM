@@ -21,7 +21,7 @@ export function RecomputeButton() {
       if (!res.ok) {
         toast.error(res.error);
       } else {
-        toast.success(`Recomputed ${res.processed} leads in ${elapsed}s`);
+        toast.success(`Recomputed ${res.data.processed} leads in ${elapsed}s`);
       }
     });
   }

@@ -8,38 +8,23 @@ import {
   type ConversionInput,
 } from "@/lib/conversion";
 import {
-  ForbiddenError,
   requireLeadEditAccess,
   requireSession,
 } from "@/lib/auth-helpers";
-import { logger } from "@/lib/logger";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 export async function convertLeadAction(
   raw: ConversionInput,
-): Promise<{ ok: false; error: string }> {
-  const session = await requireSession();
-  const parsed = conversionSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
-  }
+): Promise<ActionResult<never>> {
+  return withErrorBoundary({ action: "lead.convert" }, async () => {
+    const session = await requireSession();
+    const parsed = conversionSchema.parse(raw);
 
-  try {
-    await requireLeadEditAccess(session, parsed.data.leadId);
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return { ok: false, error: err.message };
-    }
-    throw err;
-  }
+    await requireLeadEditAccess(session, parsed.leadId);
 
-  try {
-    const result = await convertLeadWithAudit(
-      parsed.data,
-      session.id,
-      session.id,
-    );
+    const result = await convertLeadWithAudit(parsed, session.id, session.id);
 
-    revalidatePath(`/leads/${parsed.data.leadId}`);
+    revalidatePath(`/leads/${parsed.leadId}`);
     revalidatePath("/leads");
     revalidatePath("/accounts");
 
@@ -47,13 +32,5 @@ export async function convertLeadAction(
       redirect(`/opportunities/${result.opportunityId}`);
     }
     redirect(`/accounts/${result.accountId}`);
-  } catch (err) {
-    // redirect() throws — let it propagate.
-    if (err && typeof err === "object" && "digest" in err) throw err;
-    logger.error("lead.convert_failed", {
-      leadId: parsed.data.leadId,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Conversion failed." };
-  }
+  });
 }

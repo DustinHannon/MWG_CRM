@@ -26,7 +26,7 @@ export function NotificationsSection({ prefs }: { prefs: PrefsRow | null }) {
     startTransition(async () => {
       const res = await updatePreferencesAction({ ...patch, version });
       if (res.ok) {
-        setVersion(res.version);
+        setVersion(res.data.version);
         toast.success("Saved");
       } else {
         toast.error(res.error, { duration: Infinity, dismissible: true });

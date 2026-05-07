@@ -35,11 +35,17 @@ export function UserActions({
   const [rotated, setRotated] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function call(action: (fd: FormData) => Promise<unknown>, fd: FormData) {
+  function call(
+    action: (
+      fd: FormData,
+    ) => Promise<{ ok: true } | { ok: false; error: string }>,
+    fd: FormData,
+  ) {
     setError(null);
     startTransition(async () => {
       try {
-        await action(fd);
+        const res = await action(fd);
+        if (!res.ok) setError(res.error);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Action failed.");
       }
@@ -120,9 +126,11 @@ export function UserActions({
                       setError(r.error ?? "Rotation failed.");
                       return;
                     }
-                    setRotated(r.password ?? "");
+                    setRotated(r.data.password);
                   } catch (e) {
-                    setError(e instanceof Error ? e.message : "Rotation failed.");
+                    setError(
+                      e instanceof Error ? e.message : "Rotation failed.",
+                    );
                   }
                 });
               }}

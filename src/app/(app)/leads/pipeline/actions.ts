@@ -7,11 +7,10 @@ import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { writeAudit } from "@/lib/audit";
 import {
-  ForbiddenError,
   requireLeadEditAccess,
   requireSession,
 } from "@/lib/auth-helpers";
-import { logger } from "@/lib/logger";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 const PIPELINE_STATUSES = z.enum([
   "new",
@@ -24,46 +23,36 @@ const PIPELINE_STATUSES = z.enum([
 export async function updateLeadStatusAction(
   leadId: string,
   newStatus: z.infer<typeof PIPELINE_STATUSES>,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const session = await requireSession();
-  const parsed = PIPELINE_STATUSES.safeParse(newStatus);
-  if (!parsed.success) {
-    return { ok: false, error: "Invalid status." };
-  }
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "lead.status_change", entityType: "lead", entityId: leadId },
+    async () => {
+      const session = await requireSession();
+      const parsed = PIPELINE_STATUSES.parse(newStatus);
 
-  try {
-    await requireLeadEditAccess(session, leadId);
-    const before = await db
-      .select({ status: leads.status })
-      .from(leads)
-      .where(eq(leads.id, leadId))
-      .limit(1);
-    await db
-      .update(leads)
-      .set({ status: parsed.data, updatedById: session.id })
-      .where(eq(leads.id, leadId));
+      await requireLeadEditAccess(session, leadId);
+      const before = await db
+        .select({ status: leads.status })
+        .from(leads)
+        .where(eq(leads.id, leadId))
+        .limit(1);
+      await db
+        .update(leads)
+        .set({ status: parsed, updatedById: session.id })
+        .where(eq(leads.id, leadId));
 
-    await writeAudit({
-      actorId: session.id,
-      action: "lead.status_change",
-      targetType: "leads",
-      targetId: leadId,
-      before: before[0] ?? null,
-      after: { status: parsed.data },
-    });
+      await writeAudit({
+        actorId: session.id,
+        action: "lead.status_change",
+        targetType: "leads",
+        targetId: leadId,
+        before: before[0] ?? null,
+        after: { status: parsed },
+      });
 
-    revalidatePath("/leads/pipeline");
-    revalidatePath("/leads");
-    revalidatePath(`/leads/${leadId}`);
-    return { ok: true };
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return { ok: false, error: err.message };
-    }
-    logger.error("pipeline.update_lead_status_failed", {
-      leadId,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not update status." };
-  }
+      revalidatePath("/leads/pipeline");
+      revalidatePath("/leads");
+      revalidatePath(`/leads/${leadId}`);
+    },
+  );
 }

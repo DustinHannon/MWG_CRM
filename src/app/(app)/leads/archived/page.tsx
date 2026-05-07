@@ -97,7 +97,12 @@ export default async function ArchivedLeadsPage() {
                   <td className="px-4 py-3 text-white/60">{r.reason ?? "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      <form action={restoreLeadAction}>
+                      <form
+                        action={async (fd) => {
+                          "use server";
+                          await restoreLeadAction(fd);
+                        }}
+                      >
                         <input type="hidden" name="id" value={r.id} />
                         <button
                           type="submit"
@@ -106,7 +111,12 @@ export default async function ArchivedLeadsPage() {
                           Restore
                         </button>
                       </form>
-                      <form action={hardDeleteLeadAction}>
+                      <form
+                        action={async (fd) => {
+                          "use server";
+                          await hardDeleteLeadAction(fd);
+                        }}
+                      >
                         <input type="hidden" name="id" value={r.id} />
                         <button
                           type="submit"

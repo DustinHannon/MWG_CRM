@@ -5,10 +5,10 @@ import {
   addCallAction,
   addNoteAction,
   addTaskAction,
-  type ActivityActionResult,
 } from "./actions";
+import type { ActionResult } from "@/lib/server-action";
 
-const initial: ActivityActionResult = { ok: true };
+const initial: ActionResult = { ok: true };
 
 type Tab = "note" | "call" | "task";
 
@@ -64,7 +64,7 @@ function Pill({
 
 function NoteForm({ leadId }: { leadId: string }) {
   const [state, action, pending] = useActionState(
-    async (_p: ActivityActionResult, fd: FormData) => addNoteAction(fd),
+    async (_p: ActionResult, fd: FormData) => addNoteAction(fd),
     initial,
   );
   return (
@@ -85,7 +85,7 @@ function NoteForm({ leadId }: { leadId: string }) {
 
 function CallForm({ leadId }: { leadId: string }) {
   const [state, action, pending] = useActionState(
-    async (_p: ActivityActionResult, fd: FormData) => addCallAction(fd),
+    async (_p: ActionResult, fd: FormData) => addCallAction(fd),
     initial,
   );
   return (
@@ -127,7 +127,7 @@ function CallForm({ leadId }: { leadId: string }) {
 
 function TaskForm({ leadId }: { leadId: string }) {
   const [state, action, pending] = useActionState(
-    async (_p: ActivityActionResult, fd: FormData) => addTaskAction(fd),
+    async (_p: ActionResult, fd: FormData) => addTaskAction(fd),
     initial,
   );
   return (

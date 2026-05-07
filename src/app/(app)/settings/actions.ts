@@ -9,7 +9,7 @@ import { userPreferences } from "@/db/schema/views";
 import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
 import { ConflictError } from "@/lib/errors";
-import { logger } from "@/lib/logger";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
  * Phase 3B server actions for /settings. Editable fields auto-save on
@@ -21,21 +21,27 @@ import { logger } from "@/lib/logger";
 
 const updatePreferencesSchema = z.object({
   theme: z.enum(["system", "light", "dark"]).optional(),
-  defaultLandingPage: z.enum([
-    "/dashboard",
-    "/leads",
-    "/leads?view=builtin:my-open",
-    "/leads?view=builtin:all-mine",
-    "/leads?view=builtin:recent",
-    "/custom",
-  ]).optional(),
+  defaultLandingPage: z
+    .enum([
+      "/dashboard",
+      "/leads",
+      "/leads?view=builtin:my-open",
+      "/leads?view=builtin:all-mine",
+      "/leads?view=builtin:recent",
+      "/custom",
+    ])
+    .optional(),
   customLandingPath: z
     .string()
     .trim()
     .max(200)
-    .regex(/^\/(dashboard|leads|opportunities|accounts|contacts|tasks)(\?.*)?$/, {
-      message: "Path must start with /dashboard, /leads, /opportunities, /accounts, /contacts, or /tasks",
-    })
+    .regex(
+      /^\/(dashboard|leads|opportunities|accounts|contacts|tasks)(\?.*)?$/,
+      {
+        message:
+          "Path must start with /dashboard, /leads, /opportunities, /accounts, /contacts, or /tasks",
+      },
+    )
     .nullable()
     .optional(),
   defaultLeadsViewId: z.string().uuid().nullable().optional(),
@@ -53,75 +59,68 @@ const updatePreferencesSchema = z.object({
 
 export type PreferencesPatch = z.infer<typeof updatePreferencesSchema>;
 
+export interface PreferencesUpdateData {
+  version: number;
+}
+
 export async function updatePreferencesAction(
   patch: PreferencesPatch & { version?: number },
-): Promise<
-  { ok: true; version: number } | { ok: false; error: string }
-> {
-  const session = await requireSession();
+): Promise<ActionResult<PreferencesUpdateData>> {
+  return withErrorBoundary(
+    { action: "user_preferences.update" },
+    async (): Promise<PreferencesUpdateData> => {
+      const session = await requireSession();
 
-  // Phase 6B — extract version from the patch before Zod validates the
-  // pref slice. Optional: a brand-new prefs row has no version yet, so
-  // first-save can omit it.
-  const expectedVersion = patch.version;
-  const cleanPatch: Record<string, unknown> = { ...patch };
-  delete cleanPatch.version;
+      // Phase 6B — extract version from the patch before Zod validates the
+      // pref slice. Optional: a brand-new prefs row has no version yet, so
+      // first-save can omit it.
+      const expectedVersion = patch.version;
+      const cleanPatch: Record<string, unknown> = { ...patch };
+      delete cleanPatch.version;
 
-  const parsed = updatePreferencesSchema.safeParse(cleanPatch);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
-  }
+      const parsed = updatePreferencesSchema.parse(cleanPatch);
 
-  try {
-    const set: Record<string, unknown> = {
-      ...parsed.data,
-      updatedAt: sql`now()`,
-      version: sql`${userPreferences.version} + 1`,
-    };
-    // INSERT new prefs row OR conditionally UPDATE existing one. The
-    // ON CONFLICT DO UPDATE ... WHERE filters out conflicting writes:
-    // when expected version is provided, the update only fires if
-    // version matches. Empty rows = no row matched = conflict.
-    const rows = await db
-      .insert(userPreferences)
-      .values({ userId: session.id, ...parsed.data })
-      .onConflictDoUpdate({
-        target: userPreferences.userId,
-        set,
-        setWhere:
-          expectedVersion !== undefined
-            ? eq(userPreferences.version, expectedVersion)
-            : undefined,
-      })
-      .returning({ version: userPreferences.version });
+      const set: Record<string, unknown> = {
+        ...parsed,
+        updatedAt: sql`now()`,
+        version: sql`${userPreferences.version} + 1`,
+      };
+      // INSERT new prefs row OR conditionally UPDATE existing one. The
+      // ON CONFLICT DO UPDATE ... WHERE filters out conflicting writes:
+      // when expected version is provided, the update only fires if
+      // version matches. Empty rows = no row matched = conflict.
+      const rows = await db
+        .insert(userPreferences)
+        .values({ userId: session.id, ...parsed })
+        .onConflictDoUpdate({
+          target: userPreferences.userId,
+          set,
+          setWhere:
+            expectedVersion !== undefined
+              ? eq(userPreferences.version, expectedVersion)
+              : undefined,
+        })
+        .returning({ version: userPreferences.version });
 
-    if (rows.length === 0) {
-      throw new ConflictError(
-        "Your preferences were modified in another tab. Refresh to see the latest, then try again.",
-        { userId: session.id, expectedVersion },
-      );
-    }
+      if (rows.length === 0) {
+        throw new ConflictError(
+          "Your preferences were modified in another tab. Refresh to see the latest, then try again.",
+          { userId: session.id, expectedVersion },
+        );
+      }
 
-    await writeAudit({
-      actorId: session.id,
-      action: "user_preferences.update",
-      targetType: "user_preferences",
-      targetId: session.id,
-      after: parsed.data,
-    });
+      await writeAudit({
+        actorId: session.id,
+        action: "user_preferences.update",
+        targetType: "user_preferences",
+        targetId: session.id,
+        after: parsed,
+      });
 
-    revalidatePath("/settings");
-    return { ok: true, version: rows[0].version };
-  } catch (err) {
-    if (err instanceof ConflictError) {
-      return { ok: false, error: err.publicMessage };
-    }
-    logger.error("settings.update_preferences_failed", {
-      userId: session.id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not save preferences." };
-  }
+      revalidatePath("/settings");
+      return { version: rows[0].version };
+    },
+  );
 }
 
 /**
@@ -129,29 +128,26 @@ export async function updatePreferencesAction(
  * device on its next request. The current device's JWT is also
  * invalidated, so the user has to sign in again here too.
  */
-export async function signOutEverywhereAction(): Promise<
-  { ok: true } | { ok: false; error: string }
-> {
-  const session = await requireSession();
-  try {
-    await db
-      .update(users)
-      .set({ sessionVersion: sql`session_version + 1`, updatedAt: sql`now()` })
-      .where(eq(users.id, session.id));
-    await writeAudit({
-      actorId: session.id,
-      action: "user.sign_out_everywhere",
-      targetType: "users",
-      targetId: session.id,
-    });
-    return { ok: true };
-  } catch (err) {
-    logger.error("settings.sign_out_everywhere_failed", {
-      userId: session.id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not sign out everywhere." };
-  }
+export async function signOutEverywhereAction(): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "user.sign_out_everywhere" },
+    async () => {
+      const session = await requireSession();
+      await db
+        .update(users)
+        .set({
+          sessionVersion: sql`session_version + 1`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(users.id, session.id));
+      await writeAudit({
+        actorId: session.id,
+        action: "user.sign_out_everywhere",
+        targetType: "users",
+        targetId: session.id,
+      });
+    },
+  );
 }
 
 /**
@@ -159,33 +155,27 @@ export async function signOutEverywhereAction(): Promise<
  * delegated Graph features (email send, calendar) are disabled until they
  * reconnect. Does NOT sign them out — they keep their current session.
  */
-export async function disconnectGraphAction(): Promise<
-  { ok: true } | { ok: false; error: string }
-> {
-  const session = await requireSession();
-  try {
-    await db
-      .update(accounts)
-      .set({
-        access_token: null,
-        refresh_token: null,
-        expires_at: null,
-        id_token: null,
-      })
-      .where(eq(accounts.userId, session.id));
-    await writeAudit({
-      actorId: session.id,
-      action: "user.disconnect_graph",
-      targetType: "accounts",
-      targetId: session.id,
-    });
-    revalidatePath("/settings");
-    return { ok: true };
-  } catch (err) {
-    logger.error("settings.disconnect_graph_failed", {
-      userId: session.id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not disconnect Microsoft 365." };
-  }
+export async function disconnectGraphAction(): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "user.disconnect_graph" },
+    async () => {
+      const session = await requireSession();
+      await db
+        .update(accounts)
+        .set({
+          access_token: null,
+          refresh_token: null,
+          expires_at: null,
+          id_token: null,
+        })
+        .where(eq(accounts.userId, session.id));
+      await writeAudit({
+        actorId: session.id,
+        action: "user.disconnect_graph",
+        targetType: "accounts",
+        targetId: session.id,
+      });
+      revalidatePath("/settings");
+    },
+  );
 }

@@ -13,17 +13,11 @@ import {
 } from "@/lib/activities";
 import { writeAudit } from "@/lib/audit";
 import {
-  ForbiddenError,
   getPermissions,
   requireLeadAccess,
   requireSession,
 } from "@/lib/auth-helpers";
-
-export interface ActivityActionResult {
-  ok: boolean;
-  error?: string;
-  fieldErrors?: Record<string, string[]>;
-}
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 function fdToObj(formData: FormData): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
@@ -36,135 +30,96 @@ function fdToObj(formData: FormData): Record<string, unknown> {
 
 export async function addNoteAction(
   formData: FormData,
-): Promise<ActivityActionResult> {
-  const user = await requireSession();
-  const parsed = noteSchema.safeParse(fdToObj(formData));
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: "Validation failed.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-  // Lead access gate — actor must own the lead OR have canViewAllRecords.
-  try {
-    await requireLeadAccess(user, parsed.data.leadId);
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return { ok: false, error: err.message };
-    }
-    throw err;
-  }
-  const { id } = await createNote({
-    leadId: parsed.data.leadId,
-    userId: user.id,
-    body: parsed.data.body,
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "activity.note_create" }, async () => {
+    const user = await requireSession();
+    const parsed = noteSchema.parse(fdToObj(formData));
+    // Lead access gate — actor must own the lead OR have canViewAllRecords.
+    await requireLeadAccess(user, parsed.leadId);
+    const { id } = await createNote({
+      leadId: parsed.leadId,
+      userId: user.id,
+      body: parsed.body,
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: "activity.note_create",
+      targetType: "activity",
+      targetId: id,
+    });
+    revalidatePath(`/leads/${parsed.leadId}`);
   });
-  await writeAudit({
-    actorId: user.id,
-    action: "activity.note_create",
-    targetType: "activity",
-    targetId: id,
-  });
-  revalidatePath(`/leads/${parsed.data.leadId}`);
-  return { ok: true };
 }
 
 export async function addCallAction(
   formData: FormData,
-): Promise<ActivityActionResult> {
-  const user = await requireSession();
-  const parsed = callSchema.safeParse(fdToObj(formData));
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: "Validation failed.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-  try {
-    await requireLeadAccess(user, parsed.data.leadId);
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return { ok: false, error: err.message };
-    }
-    throw err;
-  }
-  const { id } = await createCall({
-    leadId: parsed.data.leadId,
-    userId: user.id,
-    subject: parsed.data.subject ?? null,
-    body: parsed.data.body ?? null,
-    outcome: parsed.data.outcome ?? null,
-    durationMinutes: parsed.data.durationMinutes ?? null,
-    occurredAt: parsed.data.occurredAt
-      ? new Date(parsed.data.occurredAt)
-      : null,
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "activity.call_create" }, async () => {
+    const user = await requireSession();
+    const parsed = callSchema.parse(fdToObj(formData));
+    await requireLeadAccess(user, parsed.leadId);
+    const { id } = await createCall({
+      leadId: parsed.leadId,
+      userId: user.id,
+      subject: parsed.subject ?? null,
+      body: parsed.body ?? null,
+      outcome: parsed.outcome ?? null,
+      durationMinutes: parsed.durationMinutes ?? null,
+      occurredAt: parsed.occurredAt ? new Date(parsed.occurredAt) : null,
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: "activity.call_create",
+      targetType: "activity",
+      targetId: id,
+    });
+    revalidatePath(`/leads/${parsed.leadId}`);
   });
-  await writeAudit({
-    actorId: user.id,
-    action: "activity.call_create",
-    targetType: "activity",
-    targetId: id,
-  });
-  revalidatePath(`/leads/${parsed.data.leadId}`);
-  return { ok: true };
 }
 
 export async function addTaskAction(
   formData: FormData,
-): Promise<ActivityActionResult> {
-  const user = await requireSession();
-  const parsed = taskSchema.safeParse(fdToObj(formData));
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: "Validation failed.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-  try {
-    await requireLeadAccess(user, parsed.data.leadId);
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return { ok: false, error: err.message };
-    }
-    throw err;
-  }
-  const { id } = await createTask({
-    leadId: parsed.data.leadId,
-    userId: user.id,
-    subject: parsed.data.subject,
-    body: parsed.data.body ?? null,
-    occurredAt: parsed.data.occurredAt
-      ? new Date(parsed.data.occurredAt)
-      : null,
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "activity.task_create" }, async () => {
+    const user = await requireSession();
+    const parsed = taskSchema.parse(fdToObj(formData));
+    await requireLeadAccess(user, parsed.leadId);
+    const { id } = await createTask({
+      leadId: parsed.leadId,
+      userId: user.id,
+      subject: parsed.subject,
+      body: parsed.body ?? null,
+      occurredAt: parsed.occurredAt ? new Date(parsed.occurredAt) : null,
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: "activity.task_create",
+      targetType: "activity",
+      targetId: id,
+    });
+    revalidatePath(`/leads/${parsed.leadId}`);
   });
-  await writeAudit({
-    actorId: user.id,
-    action: "activity.task_create",
-    targetType: "activity",
-    targetId: id,
-  });
-  revalidatePath(`/leads/${parsed.data.leadId}`);
-  return { ok: true };
 }
 
-export async function deleteActivityAction(formData: FormData) {
-  const user = await requireSession();
-  const activityId = z.string().uuid().parse(formData.get("activityId"));
-  const leadId = z.string().uuid().parse(formData.get("leadId"));
-  // Lead access gate first — without this, an attacker who knows an
-  // activity id can delete from leads they don't own.
-  await requireLeadAccess(user, leadId);
-  await deleteActivity(activityId, user.id, user.isAdmin);
-  await writeAudit({
-    actorId: user.id,
-    action: "activity.delete",
-    targetType: "activity",
-    targetId: activityId,
+export async function deleteActivityAction(
+  formData: FormData,
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "activity.delete" }, async () => {
+    const user = await requireSession();
+    const activityId = z.string().uuid().parse(formData.get("activityId"));
+    const leadId = z.string().uuid().parse(formData.get("leadId"));
+    // Lead access gate first — without this, an attacker who knows an
+    // activity id can delete from leads they don't own.
+    await requireLeadAccess(user, leadId);
+    await deleteActivity(activityId, user.id, user.isAdmin);
+    await writeAudit({
+      actorId: user.id,
+      action: "activity.delete",
+      targetType: "activity",
+      targetId: activityId,
+    });
+    revalidatePath(`/leads/${leadId}`);
   });
-  revalidatePath(`/leads/${leadId}`);
 }
 
 // Future Phase 7 placeholder for permission-gated email send.

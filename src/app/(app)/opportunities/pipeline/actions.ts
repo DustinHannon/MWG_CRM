@@ -7,7 +7,8 @@ import { db } from "@/db";
 import { opportunities } from "@/db/schema/crm-records";
 import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
-import { logger } from "@/lib/logger";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 const STAGES = z.enum([
   "prospecting",
@@ -21,50 +22,52 @@ const STAGES = z.enum([
 export async function updateOpportunityStageAction(
   id: string,
   stage: z.infer<typeof STAGES>,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const session = await requireSession();
-  const parsed = STAGES.safeParse(stage);
-  if (!parsed.success) return { ok: false, error: "Invalid stage." };
-
-  try {
-    const before = await db
-      .select({ stage: opportunities.stage, ownerId: opportunities.ownerId })
-      .from(opportunities)
-      .where(eq(opportunities.id, id))
-      .limit(1);
-    if (!before[0]) return { ok: false, error: "Opportunity not found." };
-    if (!session.isAdmin && before[0].ownerId !== session.id) {
-      return { ok: false, error: "You don't own that opportunity." };
-    }
-
-    await db
-      .update(opportunities)
-      .set({
-        stage: parsed.data,
-        closedAt:
-          parsed.data === "closed_won" || parsed.data === "closed_lost"
-            ? new Date()
-            : null,
-      })
-      .where(eq(opportunities.id, id));
-
-    await writeAudit({
-      actorId: session.id,
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    {
       action: "opportunity.stage_change",
-      targetType: "opportunities",
-      targetId: id,
-      before: before[0],
-      after: { stage: parsed.data },
-    });
+      entityType: "opportunity",
+      entityId: id,
+    },
+    async () => {
+      const session = await requireSession();
+      const parsed = STAGES.parse(stage);
 
-    revalidatePath("/opportunities/pipeline");
-    revalidatePath(`/opportunities/${id}`);
-    return { ok: true };
-  } catch (err) {
-    logger.error("opportunity.stage_change_failed", {
-      opportunityId: id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not update stage." };
-  }
+      const before = await db
+        .select({
+          stage: opportunities.stage,
+          ownerId: opportunities.ownerId,
+        })
+        .from(opportunities)
+        .where(eq(opportunities.id, id))
+        .limit(1);
+      if (!before[0]) throw new NotFoundError("opportunity");
+      if (!session.isAdmin && before[0].ownerId !== session.id) {
+        throw new ForbiddenError("You don't own that opportunity.");
+      }
+
+      await db
+        .update(opportunities)
+        .set({
+          stage: parsed,
+          closedAt:
+            parsed === "closed_won" || parsed === "closed_lost"
+              ? new Date()
+              : null,
+        })
+        .where(eq(opportunities.id, id));
+
+      await writeAudit({
+        actorId: session.id,
+        action: "opportunity.stage_change",
+        targetType: "opportunities",
+        targetId: id,
+        before: before[0],
+        after: { stage: parsed },
+      });
+
+      revalidatePath("/opportunities/pipeline");
+      revalidatePath(`/opportunities/${id}`);
+    },
+  );
 }

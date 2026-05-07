@@ -56,7 +56,7 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
     startTransition(async () => {
       const res = await updatePreferencesAction({ ...patch, version });
       if (res.ok) {
-        setVersion(res.version);
+        setVersion(res.data.version);
         toast.success("Saved");
       } else {
         toast.error(res.error, { duration: Infinity, dismissible: true });
@@ -91,7 +91,7 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
                   version,
                 });
                 if (res.ok) {
-                  setVersion(res.version);
+                  setVersion(res.data.version);
                   return { ok: true };
                 }
                 return { ok: false, error: res.error };

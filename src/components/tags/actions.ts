@@ -17,7 +17,8 @@ import {
   requireLeadAccess,
   requireSession,
 } from "@/lib/auth-helpers";
-import { logger } from "@/lib/logger";
+import { ForbiddenError } from "@/lib/errors";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
  * Server action wrappers around src/lib/tags.ts. searchTagsAction +
@@ -36,20 +37,32 @@ function strip(t: TagRow): PublicTag {
   return { id: t.id, name: t.name, color: t.color };
 }
 
-export async function searchTagsAction(query: string): Promise<PublicTag[]> {
-  await requireSession();
-  const rows = await searchTags(query);
-  return rows.map(strip);
+export async function searchTagsAction(
+  query: string,
+): Promise<ActionResult<PublicTag[]>> {
+  return withErrorBoundary(
+    { action: "tag.search" },
+    async (): Promise<PublicTag[]> => {
+      await requireSession();
+      const rows = await searchTags(query);
+      return rows.map(strip);
+    },
+  );
 }
 
 export async function getOrCreateTagAction(
   name: string,
-): Promise<PublicTag | null> {
-  const session = await requireSession();
-  const trimmed = name.trim();
-  if (trimmed.length === 0) return null;
-  const created = await getOrCreateTag(trimmed, "slate", session.id);
-  return strip(created);
+): Promise<ActionResult<PublicTag | null>> {
+  return withErrorBoundary(
+    { action: "tag.get_or_create" },
+    async (): Promise<PublicTag | null> => {
+      const session = await requireSession();
+      const trimmed = name.trim();
+      if (trimmed.length === 0) return null;
+      const created = await getOrCreateTag(trimmed, "slate", session.id);
+      return strip(created);
+    },
+  );
 }
 
 const updateSchema = z.object({
@@ -60,23 +73,13 @@ const updateSchema = z.object({
 
 export async function updateTagAction(
   patch: z.infer<typeof updateSchema>,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const session = await requireAdmin();
-  const parsed = updateSchema.safeParse(patch);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
-  }
-  try {
-    await updateTag(parsed.data.id, parsed.data, session.id);
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "tag.update" }, async () => {
+    const session = await requireAdmin();
+    const parsed = updateSchema.parse(patch);
+    await updateTag(parsed.id, parsed, session.id);
     revalidatePath("/admin/tags");
-    return { ok: true };
-  } catch (err) {
-    logger.error("tag.update_failed", {
-      tagId: parsed.data.id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not update tag." };
-  }
+  });
 }
 
 /**
@@ -91,73 +94,62 @@ const bulkSchema = z.object({
   operation: z.enum(["add", "remove"]),
 });
 
-export async function bulkTagLeadsAction(
-  raw: z.infer<typeof bulkSchema>,
-): Promise<
-  | { ok: true; leadsTouched: number; tagsAdded: number; tagsRemoved: number }
-  | { ok: false; error: string }
-> {
-  const session = await requireSession();
-  const parsed = bulkSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
-  }
-  // Fail-fast access check on every lead — refuse the whole batch.
-  for (const id of parsed.data.leadIds) {
-    try {
-      await requireLeadAccess(session, id);
-    } catch {
-      return {
-        ok: false,
-        error: "You don't have access to one or more of the selected leads.",
-      };
-    }
-  }
-  try {
-    const summary = await bulkTagLeads(
-      parsed.data.leadIds,
-      parsed.data.tagIds,
-      parsed.data.operation,
-      session.id,
-    );
-    // One audit row per lead — keeps the trail searchable per-record.
-    for (const leadId of parsed.data.leadIds) {
-      await writeAudit({
-        actorId: session.id,
-        action:
-          parsed.data.operation === "add"
-            ? "lead.tag_bulk_add"
-            : "lead.tag_bulk_remove",
-        targetType: "lead",
-        targetId: leadId,
-        after: { tagIds: parsed.data.tagIds },
-      });
-    }
-    return { ok: true, ...summary };
-  } catch (err) {
-    logger.error("tag.bulk_failed", {
-      operation: parsed.data.operation,
-      leadCount: parsed.data.leadIds.length,
-      tagCount: parsed.data.tagIds.length,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not apply bulk tag operation." };
-  }
+export interface BulkTagSummary {
+  leadsTouched: number;
+  tagsAdded: number;
+  tagsRemoved: number;
 }
 
-export async function deleteTagAction(
-  id: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const session = await requireAdmin();
-  try {
-    await deleteTag(id, session.id);
-    revalidatePath("/admin/tags");
-    return { ok: true };
-  } catch (err) {
-    logger.error("tag.delete_failed", {
-      tagId: id,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, error: "Could not delete tag." };
-  }
+export async function bulkTagLeadsAction(
+  raw: z.infer<typeof bulkSchema>,
+): Promise<ActionResult<BulkTagSummary>> {
+  return withErrorBoundary(
+    { action: "tag.bulk" },
+    async (): Promise<BulkTagSummary> => {
+      const session = await requireSession();
+      const parsed = bulkSchema.parse(raw);
+      // Fail-fast access check on every lead — refuse the whole batch.
+      for (const id of parsed.leadIds) {
+        try {
+          await requireLeadAccess(session, id);
+        } catch {
+          throw new ForbiddenError(
+            "You don't have access to one or more of the selected leads.",
+          );
+        }
+      }
+      const summary = await bulkTagLeads(
+        parsed.leadIds,
+        parsed.tagIds,
+        parsed.operation,
+        session.id,
+      );
+      // One audit row per lead — keeps the trail searchable per-record.
+      // (Wave 4 FIX-019 will collapse to a single bulk insert.)
+      for (const leadId of parsed.leadIds) {
+        await writeAudit({
+          actorId: session.id,
+          action:
+            parsed.operation === "add"
+              ? "lead.tag_bulk_add"
+              : "lead.tag_bulk_remove",
+          targetType: "lead",
+          targetId: leadId,
+          after: { tagIds: parsed.tagIds },
+        });
+      }
+      return summary;
+    },
+  );
+}
+
+export async function deleteTagAction(id: string): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "tag.delete", entityType: "tag", entityId: id },
+    async () => {
+      const session = await requireAdmin();
+      await deleteTag(id, session.id);
+      revalidatePath("/admin/tags");
+    },
+  );
 }

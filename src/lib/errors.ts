@@ -12,6 +12,7 @@ export type ErrorCode =
   | "FORBIDDEN"
   | "CONFLICT"
   | "RATE_LIMIT"
+  | "REAUTH_REQUIRED"
   | "INTERNAL";
 
 export class KnownError extends Error {
@@ -67,5 +68,22 @@ export class RateLimitError extends KnownError {
   constructor(publicMessage = "Too many attempts. Please try again later.") {
     super("RATE_LIMIT", publicMessage, "rate_limited");
     this.name = "RateLimitError";
+  }
+}
+
+/**
+ * Signals that the actor's federated identity (e.g., Microsoft Graph) needs
+ * to re-consent / re-auth before the action can proceed. UI surfaces a
+ * Reconnect button on `code === "REAUTH_REQUIRED"`. Distinct class name
+ * from the lower-level `ReauthRequiredError` thrown by `graph-token.ts`
+ * (that one is a plain `Error`; this one is a `KnownError` consumed by
+ * `withErrorBoundary`).
+ */
+export class ReauthRequiredKnownError extends KnownError {
+  constructor(
+    publicMessage = "Your Microsoft session expired. Reconnect to continue.",
+  ) {
+    super("REAUTH_REQUIRED", publicMessage, "reauth_required");
+    this.name = "ReauthRequiredKnownError";
   }
 }

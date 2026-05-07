@@ -110,7 +110,13 @@ export async function ActivityFeed({
             ) : null}
 
             {canDelete ? (
-              <form action={deleteActivityAction} className="mt-3">
+              <form
+                action={async (fd) => {
+                  "use server";
+                  await deleteActivityAction(fd);
+                }}
+                className="mt-3"
+              >
                 <input type="hidden" name="activityId" value={r.id} />
                 <input type="hidden" name="leadId" value={leadId} />
                 <button

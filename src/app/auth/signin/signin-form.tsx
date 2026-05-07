@@ -1,13 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import {
-  signInBreakglassAction,
-  type SignInResult,
-} from "./actions";
+import { signInBreakglassAction } from "./actions";
+import type { ActionResult } from "@/lib/server-action";
 import { MicrosoftSignInButton } from "./microsoft-button";
 
-const initialState: SignInResult = { ok: true };
+const initialState: ActionResult<never> = { ok: true };
 
 export function SigninForm({
   callbackUrl,
@@ -19,13 +17,10 @@ export function SigninForm({
   topError?: string | null;
 }) {
   const [showBreakglass, setShowBreakglass] = useState(false);
-  const [state, formAction, pending] = useActionState(
-    async (
-      _prev: SignInResult,
-      formData: FormData,
-    ): Promise<SignInResult> => signInBreakglassAction(formData),
-    initialState,
-  );
+  const [state, formAction, pending] = useActionState<
+    ActionResult<never>,
+    FormData
+  >(async (_prev, formData) => signInBreakglassAction(formData), initialState);
 
   return (
     <div className="flex flex-col gap-6">
