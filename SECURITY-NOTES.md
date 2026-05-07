@@ -153,3 +153,22 @@ TODO in `ROADMAP.md`: upgrade to Upstash Redis for a durable sliding window once
 - Strict nonce-based CSP (replace `'unsafe-inline'` on script-src).
 - WebAuthn / passkey for breakglass instead of password.
 - Upstash Redis for credential rate limiting (durable across cold starts).
+
+## Phase 3J — Strict CSP with nonces (2026-05-07)
+
+CSP migrated from static next.config.ts headers to per-request generation
+in `src/proxy.ts`. Each request mints a fresh nonce, attaches it to the
+request via `x-nonce`, and sets a `Content-Security-Policy` header on the
+response using `'nonce-${nonce}' 'strict-dynamic'` for `script-src`.
+
+**Pragmatic compromise:** `style-src 'unsafe-inline'` is retained because
+shadcn/Radix and react-hook-form inject styles at runtime; nonce-tagging
+every insertion would require deep framework integration. Inline scripts
+are still blocked (script-src has no `'unsafe-inline'`).
+
+**Why `'unsafe-eval'` is kept on script-src:** Next.js dev mode and
+certain runtime libraries use eval. The strict-dynamic rule still gates
+bundle loading via the trusted (nonced) script.
+
+**Verification:** open every authenticated page with browser console; zero
+CSP violations expected.
