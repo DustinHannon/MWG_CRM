@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { desc } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +18,12 @@ export default async function UsersListPage() {
       isActive: users.isActive,
       lastLoginAt: users.lastLoginAt,
       createdAt: users.createdAt,
+      // Owned-lead count — drives the "delete vs reassign" UX flag in 2F.4.
+      leadCount: sql<number>`(SELECT count(*)::int FROM ${leads} WHERE owner_id = ${users.id})`,
     })
     .from(users)
     .orderBy(desc(users.createdAt));
+  void eq;
 
   return (
     <div className="px-10 py-10">
@@ -41,6 +45,7 @@ export default async function UsersListPage() {
               <th className="px-5 py-3 font-medium">Email</th>
               <th className="px-5 py-3 font-medium">Role</th>
               <th className="px-5 py-3 font-medium">Active</th>
+              <th className="px-5 py-3 font-medium text-right">Leads</th>
               <th className="px-5 py-3 font-medium">Last login</th>
             </tr>
           </thead>
@@ -76,6 +81,9 @@ export default async function UsersListPage() {
                   ) : (
                     <Pill tone="off">Disabled</Pill>
                   )}
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums text-white/70">
+                  {u.leadCount}
                 </td>
                 <td className="px-5 py-3 text-white/60">
                   {u.lastLoginAt

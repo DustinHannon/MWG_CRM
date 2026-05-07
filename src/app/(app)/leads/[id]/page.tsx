@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { importJobs } from "@/db/schema/imports";
+import { users } from "@/db/schema/users";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { env } from "@/lib/env";
 import { getLeadById } from "@/lib/leads";
@@ -24,6 +28,32 @@ export default async function LeadDetailPage({
   const canEdit = user.isAdmin || perms.canEditLeads;
   const canDelete = user.isAdmin || perms.canDeleteLeads;
 
+  // Provenance — created-by display name + import job filename. Two
+  // small lookups; the joins live here rather than on getLeadById so
+  // the table-list path stays a single hot query.
+  const [creator, importJob] = await Promise.all([
+    lead.createdById
+      ? db
+          .select({ id: users.id, displayName: users.displayName })
+          .from(users)
+          .where(eq(users.id, lead.createdById))
+          .limit(1)
+          .then((r) => r[0] ?? null)
+      : Promise.resolve(null),
+    lead.importJobId
+      ? db
+          .select({
+            id: importJobs.id,
+            filename: importJobs.filename,
+            createdAt: importJobs.createdAt,
+          })
+          .from(importJobs)
+          .where(eq(importJobs.id, lead.importJobId))
+          .limit(1)
+          .then((r) => r[0] ?? null)
+      : Promise.resolve(null),
+  ]);
+
   return (
     <div className="px-10 py-10">
       <Link href="/leads" className="text-xs text-white/40 hover:text-white/70">
@@ -37,6 +67,28 @@ export default async function LeadDetailPage({
           <p className="mt-1 text-sm text-white/60">
             {lead.jobTitle ? `${lead.jobTitle} · ` : ""}
             {lead.companyName ?? "No company"}
+          </p>
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/40">
+            <span>
+              Created by{" "}
+              <span className="text-white/70">
+                {creator?.displayName ?? "Deleted user"}
+              </span>{" "}
+              on {new Date(lead.createdAt).toLocaleDateString()}
+            </span>
+            {lead.createdVia === "imported" ? (
+              <ImportedBadge
+                jobId={lead.importJobId}
+                filename={importJob?.filename ?? null}
+                jobCreatedAt={importJob?.createdAt ?? null}
+                isAdmin={user.isAdmin}
+              />
+            ) : null}
+            {lead.createdVia === "api" ? (
+              <span className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-cyan-100">
+                API
+              </span>
+            ) : null}
           </p>
           <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-wide">
             <span className="rounded-full border border-blue-300/30 bg-blue-500/10 px-2 py-0.5 text-blue-100">
@@ -141,6 +193,50 @@ export default async function LeadDetailPage({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Imported badge — surfaces the import job's filename + date in the
+ * native browser tooltip via title=. Admin sees a link into a future
+ * /admin/imports/<id> page (placeholder for now); non-admins just
+ * get the tooltip.
+ */
+function ImportedBadge({
+  jobId,
+  filename,
+  jobCreatedAt,
+  isAdmin,
+}: {
+  jobId: string | null;
+  filename: string | null;
+  jobCreatedAt: Date | null;
+  isAdmin: boolean;
+}) {
+  const tooltip = filename
+    ? `Imported from ${filename}${
+        jobCreatedAt
+          ? ` on ${new Date(jobCreatedAt).toLocaleDateString()}`
+          : ""
+      }`
+    : "Imported from a spreadsheet";
+  const className =
+    "rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-100";
+  if (isAdmin && jobId) {
+    return (
+      <Link
+        href={`/admin/audit?action=leads.import&target=${jobId}`}
+        title={tooltip}
+        className={`${className} hover:bg-amber-500/20`}
+      >
+        Imported
+      </Link>
+    );
+  }
+  return (
+    <span title={tooltip} className={className}>
+      Imported
+    </span>
   );
 }
 

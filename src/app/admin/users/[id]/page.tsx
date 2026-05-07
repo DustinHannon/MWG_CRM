@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { permissions, users } from "@/db/schema/users";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { DeleteUserButton } from "./delete-user";
 import { UserActions } from "./user-actions";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +74,33 @@ export default async function UserDetailPage({
           value: Boolean((perms as unknown as Record<string, boolean>)[k]),
         })) : []}
       />
+
+      {/* Danger zone — phase 2F.4 */}
+      <section className="mt-10 rounded-2xl border border-rose-300/30 bg-rose-500/5 p-6">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-rose-100">
+          Danger zone
+        </h2>
+        <p className="mt-2 text-sm text-white/60">
+          {isSelf
+            ? "You cannot delete your own account."
+            : u.isBreakglass
+              ? "The breakglass account cannot be deleted."
+              : "Removes the user, their personal saved views and preferences, OAuth links, and active sessions. Owned leads must be reassigned or deleted as part of the flow."}
+        </p>
+        <div className="mt-4">
+          <DeleteUserButton
+            userId={u.id}
+            disabled={isSelf || u.isBreakglass}
+            disabledReason={
+              isSelf
+                ? "Cannot delete yourself."
+                : u.isBreakglass
+                  ? "Cannot delete the breakglass account."
+                  : undefined
+            }
+          />
+        </div>
+      </section>
     </div>
   );
 }
