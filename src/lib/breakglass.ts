@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { permissions, users } from "@/db/schema/users";
 import { userPreferences } from "@/db/schema/views";
@@ -30,11 +30,15 @@ const BREAKGLASS_EMAIL = "breakglass@local.mwg-crm";
 export async function ensureBreakglass(): Promise<void> {
   if (alreadyEnsured) return;
 
-  // Cheap check first — most cold starts will hit this.
-  const existing = await db.execute<{ exists: boolean }>(sql`
-    SELECT EXISTS (SELECT 1 FROM users WHERE is_breakglass = true) AS exists
-  `);
-  if (existing[0]?.exists) {
+  // Cheap "does it exist?" probe via the query builder. Avoids any
+  // edge-case around `EXISTS(...) AS exists` column aliasing across
+  // postgres-js / drizzle versions.
+  const probe = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.isBreakglass, true))
+    .limit(1);
+  if (probe.length > 0) {
     alreadyEnsured = true;
     return;
   }

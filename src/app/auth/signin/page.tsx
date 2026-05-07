@@ -23,7 +23,15 @@ export default async function SigninPage({
 }: {
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }) {
-  await ensureBreakglass();
+  // Best-effort: a transient DB blip on signin must not take the page
+  // down. The signInBreakglassAction runs ensureBreakglass() too as a
+  // belt-and-suspenders before the actual login attempt, so even if this
+  // call fails the breakglass account still bootstraps on first sign-in.
+  try {
+    await ensureBreakglass();
+  } catch (err) {
+    console.error("[signin] ensureBreakglass failed (continuing):", err);
+  }
 
   const { callbackUrl, error } = await searchParams;
   const topError =
