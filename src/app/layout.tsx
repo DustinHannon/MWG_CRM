@@ -35,7 +35,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geist.variable} ${fraunces.variable} ${jetbrains.variable}`}
+      className={`dark ${geist.variable} ${fraunces.variable} ${jetbrains.variable}`}
+      suppressHydrationWarning
     >
       <body className="antialiased font-sans">{children}</body>
     </html>

@@ -22,25 +22,33 @@ import {
 
 export { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES };
 
+/**
+ * The filters arrive from URL query strings (and from saved-view JSON).
+ * URL forms always serialise empty <select> values as `key=` — an empty
+ * string. zod's z.enum REJECTS empty strings (they're not in the enum),
+ * which is the root cause of the "Apply button throws" bug from Phase 2A.
+ *
+ * Fix: pre-process the raw input via `sanitizeFilterInput` below so empty
+ * strings collapse to undefined BEFORE the schema parse. This applies to
+ * the URL submit path (the Apply button) and to any future programmatic
+ * caller, so the schema itself stays strict.
+ */
+const emptyToUndef = <T extends z.ZodTypeAny>(s: T) =>
+  z.preprocess((v) => (v === "" || v === null ? undefined : v), s);
+
 export const leadFiltersSchema = z.object({
-  q: z.string().trim().max(200).optional(),
-  status: z.enum(LEAD_STATUSES).optional(),
-  rating: z.enum(LEAD_RATINGS).optional(),
-  source: z.enum(LEAD_SOURCES).optional(),
-  ownerId: z.string().uuid().optional(),
-  tag: z.string().trim().max(80).optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(10).max(200).default(50),
-  sort: z
-    .enum([
-      "lastActivity",
-      "created",
-      "name",
-      "company",
-      "value",
-    ])
-    .default("lastActivity"),
-  dir: z.enum(["asc", "desc"]).default("desc"),
+  q: emptyToUndef(z.string().trim().max(200)).optional(),
+  status: emptyToUndef(z.enum(LEAD_STATUSES)).optional(),
+  rating: emptyToUndef(z.enum(LEAD_RATINGS)).optional(),
+  source: emptyToUndef(z.enum(LEAD_SOURCES)).optional(),
+  ownerId: emptyToUndef(z.string().uuid()).optional(),
+  tag: emptyToUndef(z.string().trim().max(80)).optional(),
+  page: emptyToUndef(z.coerce.number().int().min(1)).default(1),
+  pageSize: emptyToUndef(z.coerce.number().int().min(10).max(200)).default(50),
+  sort: emptyToUndef(
+    z.enum(["lastActivity", "created", "name", "company", "value"]),
+  ).default("lastActivity"),
+  dir: emptyToUndef(z.enum(["asc", "desc"])).default("desc"),
 });
 
 export type LeadFilters = z.infer<typeof leadFiltersSchema>;
@@ -134,7 +142,18 @@ export async function listLeads(
   rawFilters: unknown,
   canViewAll: boolean,
 ): Promise<LeadListResult> {
-  const filters = leadFiltersSchema.parse(rawFilters ?? {});
+  // safeParse + log on failure: an unknown filter shape should NOT throw
+  // and crash the page. Bad filters produce an empty result set + warning.
+  const parsed = leadFiltersSchema.safeParse(rawFilters ?? {});
+  if (!parsed.success) {
+    console.warn(
+      "[leads] invalid filters, falling back to defaults:",
+      parsed.error.flatten().fieldErrors,
+    );
+  }
+  const filters = parsed.success
+    ? parsed.data
+    : leadFiltersSchema.parse({});
 
   const wheres = [];
   if (filters.q) {

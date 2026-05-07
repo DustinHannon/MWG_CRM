@@ -71,7 +71,11 @@ export default async function LeadsPage({
         </div>
       </div>
 
-      <form className="mt-6 flex flex-wrap gap-3">
+      <form
+        action="/leads"
+        method="get"
+        className="mt-6 flex flex-wrap gap-3"
+      >
         <input
           name="q"
           defaultValue={sp.q ?? ""}
