@@ -129,6 +129,33 @@ export async function createNote(input: {
     })
     .returning({ id: activities.id });
   await bumpLastActivityAt(input.leadId);
+
+  // Phase 3D: parse @-mentions and fan out notifications. Failure of
+  // mention resolution / notification dispatch must NOT fail the parent
+  // create — it's best-effort.
+  try {
+    const { resolveMentions, filterMentionsByPref } = await import(
+      "./mention-parser"
+    );
+    const mentioned = await resolveMentions(input.body);
+    const recipients = await filterMentionsByPref(
+      mentioned.filter((m) => m.id !== input.userId).map((m) => m.id),
+    );
+    if (recipients.length > 0) {
+      const { createNotifications } = await import("./notifications");
+      await createNotifications(
+        recipients.map((rid) => ({
+          userId: rid,
+          kind: "mention" as const,
+          title: "You were mentioned in a note",
+          link: `/leads/${input.leadId}`,
+        })),
+      );
+    }
+  } catch (err) {
+    console.error("[mentions] dispatch failed", err);
+  }
+
   return { id: inserted[0].id };
 }
 

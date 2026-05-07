@@ -24,6 +24,9 @@ const envSchema = z.object({
 
   // App
   APP_NAME: z.string().default("MWG CRM"),
+
+  // Cron / scheduled jobs (Phase 3D, 3H)
+  CRON_SECRET: z.string().min(20).optional(),
   ALLOWED_EMAIL_DOMAINS: z
     .string()
     .default("")

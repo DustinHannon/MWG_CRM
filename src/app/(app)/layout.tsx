@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { Toaster } from "sonner";
+import { NotificationsBell } from "@/components/notifications/bell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserPanel } from "@/components/user-panel/user-panel";
 import { requireSession } from "@/lib/auth-helpers";
+import {
+  countUnread,
+  listNotificationsForUser,
+} from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +22,10 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireSession();
+  const [unreadCount, recentNotifs] = await Promise.all([
+    countUnread(user.id),
+    listNotificationsForUser(user.id, 10),
+  ]);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -33,6 +42,7 @@ export default async function AppLayout({
           <nav className="flex flex-1 flex-col gap-1 px-3">
             <SidebarLink href="/dashboard" label="Dashboard" />
             <SidebarLink href="/leads" label="Leads" />
+            <SidebarLink href="/tasks" label="Tasks" />
             {user.isAdmin ? (
               <>
                 <div className="my-3 h-px bg-glass-border" />
@@ -50,7 +60,15 @@ export default async function AppLayout({
             />
           </div>
         </aside>
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="relative flex-1 overflow-y-auto">
+          <div className="absolute right-6 top-6 z-10">
+            <NotificationsBell
+              unreadCount={unreadCount}
+              recent={recentNotifs}
+            />
+          </div>
+          {children}
+        </main>
       </div>
       <Toaster theme="dark" position="bottom-right" />
     </TooltipProvider>
