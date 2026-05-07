@@ -41,14 +41,34 @@ export default async function LeadsPage({
             {sp.q ? ` matching "${sp.q}"` : ""}.
           </p>
         </div>
-        {perms.canCreateLeads || user.isAdmin ? (
-          <Link
-            href="/leads/new"
-            className="rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-white"
-          >
-            + Add lead
-          </Link>
-        ) : null}
+        <div className="flex gap-2">
+          {perms.canImport || user.isAdmin ? (
+            <Link
+              href="/leads/import"
+              className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/80 transition hover:bg-white/10"
+            >
+              Import
+            </Link>
+          ) : null}
+          {perms.canExport || user.isAdmin ? (
+            <a
+              href={`/api/leads/export?${new URLSearchParams(
+                Object.entries(sp).filter(([, v]) => Boolean(v)) as [string, string][],
+              ).toString()}`}
+              className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/80 transition hover:bg-white/10"
+            >
+              Export
+            </a>
+          ) : null}
+          {perms.canCreateLeads || user.isAdmin ? (
+            <Link
+              href="/leads/new"
+              className="rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-white"
+            >
+              + Add lead
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       <form className="mt-6 flex flex-wrap gap-3">

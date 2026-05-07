@@ -1,0 +1,73 @@
+"use client";
+
+import { useActionState } from "react";
+import {
+  deleteAllActivitiesAction,
+  deleteAllImportsAction,
+  deleteAllLeadsAction,
+  type DangerActionResult,
+} from "./actions";
+
+const initial: DangerActionResult = { ok: true };
+
+export function DangerSection({
+  title,
+  description,
+  phrase,
+  actionId,
+}: {
+  title: string;
+  description: string;
+  phrase: string;
+  actionId: "leads" | "activities" | "imports";
+}) {
+  const handler =
+    actionId === "leads"
+      ? deleteAllLeadsAction
+      : actionId === "activities"
+        ? deleteAllActivitiesAction
+        : deleteAllImportsAction;
+
+  const [state, action, pending] = useActionState(
+    async (_p: DangerActionResult, fd: FormData) => handler(fd),
+    initial,
+  );
+
+  return (
+    <section className="rounded-2xl border border-rose-300/30 bg-rose-500/5 p-6 backdrop-blur-xl">
+      <h2 className="text-base font-semibold text-rose-50">{title}</h2>
+      <p className="mt-1 text-sm text-white/60">{description}</p>
+
+      <form action={action} className="mt-4 flex flex-wrap items-end gap-3">
+        <label className="text-xs uppercase tracking-wide text-white/50">
+          Type{" "}
+          <code className="rounded bg-black/30 px-1 py-0.5 text-rose-100">
+            {phrase}
+          </code>{" "}
+          to confirm
+          <input
+            name="confirm"
+            autoComplete="off"
+            className="mt-1 block min-w-[280px] rounded-md border border-white/10 bg-white/5 px-3 py-2 font-mono text-sm text-white placeholder-white/30 focus:border-rose-300/50 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-md border border-rose-300/40 bg-rose-500/20 px-4 py-2 text-sm font-medium text-rose-50 transition hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {pending ? "Working…" : title}
+        </button>
+      </form>
+
+      {state.error ? (
+        <p className="mt-3 text-sm text-rose-200">{state.error}</p>
+      ) : null}
+      {state.ok && state.affected !== undefined ? (
+        <p className="mt-3 text-sm text-emerald-200">
+          Deleted {state.affected} row{state.affected === 1 ? "" : "s"}.
+        </p>
+      ) : null}
+    </section>
+  );
+}

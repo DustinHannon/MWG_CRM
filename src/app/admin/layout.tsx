@@ -27,6 +27,7 @@ export default async function AdminLayout({
           <SidebarLink href="/admin/users" label="Users" />
           <SidebarLink href="/admin/audit" label="Audit log" />
           <SidebarLink href="/admin/data" label="Data tools" />
+          <SidebarLink href="/admin/settings" label="Settings" />
           <div className="my-3 h-px bg-white/10" />
           <SidebarLink href="/dashboard" label="← Back to dashboard" />
         </nav>
