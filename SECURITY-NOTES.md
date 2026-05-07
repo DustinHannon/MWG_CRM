@@ -275,3 +275,47 @@ support-ticket reference.
 | Optimistic-concurrency UI banner not yet wired into every form | Backend rejects with `ConflictError`; UI fallback shows the generic error toast until per-form banners ship | Phase 4 follow-up — wire into lead detail and opportunity edit |
 | Breakglass rate limit is in-memory (per-process) | Acceptable: breakglass usage is rare; cold starts reset the counter | If usage spikes, swap for Upstash Redis |
 
+---
+
+# Security Hardening — Phase 5G (2026-05-07)
+
+## `xlsx` → `exceljs` migration (closed)
+
+Both Phase 2B/4A HIGH advisories on `xlsx@0.18.5` (Prototype Pollution + ReDoS, no
+upstream npm patch) are now **closed** by removing the dependency.
+
+- `pnpm remove xlsx && pnpm add exceljs` — exceljs 4.4.0.
+- Three call sites rewritten to ExcelJS API: `src/lib/xlsx-import.ts`
+  (`importLeadsFromBuffer`, `buildErrorReport`, `buildLeadsExport`) and
+  `src/lib/xlsx-template.ts` (`buildLeadImportTemplate`). Read path now uses
+  `wb.xlsx.load(Uint8Array)`; write path uses `wb.xlsx.writeBuffer()`.
+- Public surface: writer functions are now `async` (return `Promise<Uint8Array>`),
+  matching the natively async ExcelJS API. The two route handlers
+  (`/api/leads/export`, `/api/leads/import-template`) updated accordingly.
+- `pnpm audit --prod` after migration: **No known vulnerabilities found.** Down
+  from `2 HIGH (xlsx) + 0 MODERATE` after the Phase 4A postcss override.
+- All other `xlsx`-era mitigations (server-only, admin-gated, 25 MB cap, magic
+  bytes, 10k-row import cap, chunked-tx inserts, capped failed_rows) remain in
+  place — they are good defense in depth regardless of parser.
+
+## Database client / RLS verification
+
+The codebase uses `postgres-js` directly via `src/db/index.ts` against the
+Supabase Supavisor pooler with the privileged Postgres role (`POSTGRES_URL`).
+There is no `@supabase/supabase-js` client (`createClient` / `createServerClient`)
+anywhere in `src/`. Grep confirms zero matches.
+
+Implication: server-side queries do **not** go through PostgREST + JWT and are
+not subject to RLS. The `rls_enabled_no_policy` advisories on every public table
+are intentional — RLS is enabled as a deny-default backstop for the anon key
+(which we never expose / use), and our service-role-equivalent connection
+bypasses RLS by design. No action required.
+
+## Other Phase 5G items — status
+
+- **JSDoc long tail** (every exported function in `src/lib/`, every server action
+  / route handler) — **DEFERRED** to a follow-up. The high-traffic functions
+  documented in Phase 4A still apply; the tail is a documentation backfill, not
+  a security or correctness issue.
+
+

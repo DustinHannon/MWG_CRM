@@ -5,6 +5,13 @@
 > Push direct to `master` after each logical chunk; verify the Vercel deploy succeeds before continuing.
 > Migrations apply via Supabase MCP `apply_migration`; run `get_advisors` (security + performance) after each.
 
+> **Status (2026-05-07 1:45pm CDT):**
+> - 5A ✅ shipped (push 25a6b0d).
+> - 5B ✅ shipped (push d23e163).
+> - 5G ✅ partial (xlsx→exceljs + RLS verification shipped; JSDoc long tail deferred).
+> - 5E ✅ partial (permission column + user_manager_links view shipped; access-gate update + UI surfaces deferred).
+> - 5C, 5D, 5F: deferred. See ROADMAP.md "Phase 5 — what shipped, what's deferred" for the full breakdown and rationale.
+
 ---
 
 ## Phase 5A — Settings page wiring + Entra photo  *(must finish first)*

@@ -9,7 +9,7 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const buf = buildLeadImportTemplate();
+  const buf = await buildLeadImportTemplate();
   const body = new Uint8Array(buf);
   return new NextResponse(body as unknown as BodyInit, {
     status: 200,

@@ -1,6 +1,6 @@
 import "server-only";
 import { eq, sql } from "drizzle-orm";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { z } from "zod";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
@@ -111,15 +111,26 @@ const importRowSchema = z.object({
   externalId: z.string().trim().max(120).optional(),
 });
 
+/**
+ * Phase 5G — migrated from `xlsx` (deprecated, two HIGH advisories) to
+ * `exceljs`. Same parsing semantics: first sheet named "Leads"
+ * (case-insensitive) or fall back to the first worksheet; row 1 is the
+ * header; subsequent rows mapped via HEADER_MAP.
+ */
 export async function importLeadsFromBuffer(
   buf: ArrayBuffer | Buffer,
   importerUserId: string,
   importJobId?: string,
 ): Promise<ImportResult> {
-  const wb = XLSX.read(buf, { type: "array" });
-  const sheetName =
-    wb.SheetNames.find((n) => n.toLowerCase() === "leads") ?? wb.SheetNames[0];
-  const sheet = wb.Sheets[sheetName];
+  const wb = new ExcelJS.Workbook();
+  // ExcelJS's .load() Buffer typing collides with Node 24's
+  // Buffer<ArrayBufferLike>. The runtime accepts Uint8Array; this cast
+  // makes Next.js's stricter tsc happy without changing behaviour.
+  // @ts-expect-error -- ExcelJS Buffer typing mismatch with Node 24
+  await wb.xlsx.load(new Uint8Array(buf as ArrayBuffer));
+  const sheet =
+    wb.worksheets.find((s) => s.name.toLowerCase() === "leads") ??
+    wb.worksheets[0];
   if (!sheet) {
     return {
       totalRows: 0,
@@ -128,25 +139,50 @@ export async function importLeadsFromBuffer(
       needsReview: 0,
       inserted: [],
       updated: [],
-      errors: [{ row: 0, field: "_sheet", message: `Missing sheet: ${sheetName}` }],
+      errors: [{ row: 0, field: "_sheet", message: "Missing Leads sheet" }],
       needsReviewRows: [],
     };
   }
 
-  const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(sheet, {
-    raw: false,
-    defval: "",
-  });
+  // Read row 1 as headers, then map subsequent rows by header position.
+  // exceljs row.values is 1-indexed (index 0 is empty), so we slice it.
+  const headerRow = sheet.getRow(1);
+  const headers: string[] = [];
+  for (let c = 1; c <= sheet.columnCount; c++) {
+    const v = headerRow.getCell(c).value;
+    headers.push(v == null ? "" : String(v).trim());
+  }
 
-  // Header mapping: normalise to internal field names.
-  const raw: RawRow[] = rows.map((r, i) => {
+  const raw: RawRow[] = [];
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    if (!row || row.cellCount === 0) continue;
     const data: Record<string, string> = {};
-    for (const [k, v] of Object.entries(r)) {
-      const mapped = HEADER_MAP[k] ?? k;
-      data[mapped] = String(v ?? "").trim();
+    let hasAny = false;
+    for (let c = 1; c <= headers.length; c++) {
+      const header = headers[c - 1];
+      if (!header) continue;
+      const mapped = HEADER_MAP[header] ?? header;
+      const cellValue = row.getCell(c).value;
+      const text =
+        cellValue == null
+          ? ""
+          : typeof cellValue === "object" && "text" in cellValue
+            ? String((cellValue as { text: unknown }).text ?? "")
+            : typeof cellValue === "object" &&
+                "richText" in cellValue
+              ? String(
+                  ((cellValue as { richText: { text: string }[] }).richText ?? [])
+                    .map((rt) => rt.text)
+                    .join(""),
+                )
+              : String(cellValue);
+      data[mapped] = text.trim();
+      if (text.trim().length > 0) hasAny = true;
     }
-    return { rowNumber: i + 2, data }; // row 1 is header
-  });
+    if (!hasAny) continue;
+    raw.push({ rowNumber: r, data });
+  }
 
   // Resolve owner emails -> userIds in one query.
   const ownerEmails = Array.from(
@@ -363,22 +399,43 @@ export async function importLeadsFromBuffer(
   };
 }
 
-export function buildErrorReport(errors: ImportError[]): Uint8Array {
-  const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.aoa_to_sheet([
-    ["Row", "Field", "Error"],
-    ...errors.map((e) => [String(e.row), e.field, e.message]),
-  ]);
-  sheet["!cols"] = [{ wch: 8 }, { wch: 24 }, { wch: 60 }];
-  XLSX.utils.book_append_sheet(wb, sheet, "Errors");
-  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-  return new Uint8Array(buf);
+export async function buildErrorReport(
+  errors: ImportError[],
+): Promise<Uint8Array> {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet("Errors");
+  sheet.addRow(["Row", "Field", "Error"]);
+  for (const e of errors) sheet.addRow([String(e.row), e.field, e.message]);
+  sheet.columns = [{ width: 8 }, { width: 24 }, { width: 60 }];
+  const buf = await wb.xlsx.writeBuffer();
+  return new Uint8Array(buf as ArrayBuffer);
 }
 
-export function buildLeadsExport(rows: Array<Record<string, unknown>>): Uint8Array {
-  const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.json_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb, sheet, "Leads");
-  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-  return new Uint8Array(buf);
+export async function buildLeadsExport(
+  rows: Array<Record<string, unknown>>,
+): Promise<Uint8Array> {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet("Leads");
+  if (rows.length === 0) {
+    const buf = await wb.xlsx.writeBuffer();
+    return new Uint8Array(buf as ArrayBuffer);
+  }
+  // Header order is the union of all row keys, preserving first-seen
+  // order across rows so columns are stable across exports.
+  const headers: string[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    for (const k of Object.keys(r)) {
+      if (!seen.has(k)) {
+        seen.add(k);
+        headers.push(k);
+      }
+    }
+  }
+  sheet.addRow(headers);
+  for (const r of rows) {
+    sheet.addRow(headers.map((h) => r[h] ?? ""));
+  }
+  const buf = await wb.xlsx.writeBuffer();
+  return new Uint8Array(buf as ArrayBuffer);
 }

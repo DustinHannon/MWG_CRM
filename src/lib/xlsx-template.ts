@@ -1,6 +1,12 @@
 import "server-only";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES } from "@/lib/lead-constants";
+
+/**
+ * Phase 5G — migrated from `xlsx` (deprecated, two HIGH advisories) to
+ * `exceljs`. Same on-disk output: a workbook with three sheets (Leads
+ * sample data, field-by-field instructions, allowed enum values).
+ */
 
 const HEADERS = [
   "First Name*",
@@ -33,7 +39,7 @@ const HEADERS = [
   "External ID",
 ] as const;
 
-const EXAMPLE_ROWS = [
+const EXAMPLE_ROWS: string[][] = [
   [
     "Dusty",
     "Hannon",
@@ -96,7 +102,7 @@ const EXAMPLE_ROWS = [
   ],
 ];
 
-const INSTRUCTIONS = [
+const INSTRUCTIONS: string[][] = [
   ["Field", "Required", "Notes"],
   ["First Name*", "Yes", "Lead's first name."],
   ["Last Name*", "Yes", "Lead's last name."],
@@ -122,34 +128,42 @@ const INSTRUCTIONS = [
   ["External ID", "No", "D365 leadid or similar. Used for upsert: matching ID -> updated."],
 ];
 
-const ALLOWED_VALUES = [
+const ALLOWED_VALUES: string[][] = [
   ["Status", ...LEAD_STATUSES],
   ["Rating", ...LEAD_RATINGS],
   ["Source", ...LEAD_SOURCES],
   ["Boolean fields", "yes", "no", "true", "false", "(blank)"],
 ];
 
-export function buildLeadImportTemplate(): Uint8Array {
-  const wb = XLSX.utils.book_new();
+export async function buildLeadImportTemplate(): Promise<Uint8Array> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "MWG CRM";
+  wb.created = new Date();
 
-  const leadsSheet = XLSX.utils.aoa_to_sheet([
-    HEADERS as unknown as string[],
-    ...EXAMPLE_ROWS,
-  ]);
-  // Set reasonable column widths (in characters).
-  leadsSheet["!cols"] = HEADERS.map((h) => ({
-    wch: Math.max(12, Math.min(28, h.length + 4)),
+  const leadsSheet = wb.addWorksheet("Leads");
+  leadsSheet.addRow(HEADERS as unknown as string[]);
+  for (const row of EXAMPLE_ROWS) leadsSheet.addRow(row);
+  leadsSheet.columns = HEADERS.map((h) => ({
+    width: Math.max(12, Math.min(28, h.length + 4)),
   }));
-  XLSX.utils.book_append_sheet(wb, leadsSheet, "Leads");
 
-  const instructionsSheet = XLSX.utils.aoa_to_sheet(INSTRUCTIONS);
-  instructionsSheet["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 80 }];
-  XLSX.utils.book_append_sheet(wb, instructionsSheet, "Instructions");
+  const instructionsSheet = wb.addWorksheet("Instructions");
+  for (const row of INSTRUCTIONS) instructionsSheet.addRow(row);
+  instructionsSheet.columns = [
+    { width: 28 },
+    { width: 12 },
+    { width: 80 },
+  ];
 
-  const allowedSheet = XLSX.utils.aoa_to_sheet(ALLOWED_VALUES);
-  allowedSheet["!cols"] = [{ wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, allowedSheet, "Allowed Values");
+  const allowedSheet = wb.addWorksheet("Allowed Values");
+  for (const row of ALLOWED_VALUES) allowedSheet.addRow(row);
+  allowedSheet.columns = [
+    { width: 16 },
+    { width: 14 },
+    { width: 14 },
+    { width: 14 },
+  ];
 
-  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-  return new Uint8Array(buf);
+  const buf = await wb.xlsx.writeBuffer();
+  return new Uint8Array(buf as ArrayBuffer);
 }

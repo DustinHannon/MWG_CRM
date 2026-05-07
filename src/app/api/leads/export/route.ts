@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     "Created At": new Date(l.createdAt).toISOString(),
   }));
 
-  const buf = buildLeadsExport(rows);
+  const buf = await buildLeadsExport(rows);
   return new NextResponse(new Uint8Array(buf) as unknown as BodyInit, {
     status: 200,
     headers: {
