@@ -10,18 +10,25 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import {
+  leadCreationMethodEnum,
   leadRatingEnum,
   leadSourceEnum,
   leadStatusEnum,
 } from "./enums";
+import { importJobs } from "./imports";
 import { users } from "./users";
 
 export const leads = pgTable(
   "leads",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    // ON DELETE RESTRICT: deleting a user with owned leads must go
+    // through the admin "delete user" flow which forces a reassign or a
+    // cascade-delete decision. Phase 1 used SET NULL which silently
+    // orphaned leads — corrected in the phase2_integrity_owner_restrict
+    // migration.
     ownerId: uuid("owner_id").references(() => users.id, {
-      onDelete: "set null",
+      onDelete: "restrict",
     }),
     status: leadStatusEnum("status").notNull().default("new"),
     rating: leadRatingEnum("rating").notNull().default("warm"),
@@ -53,6 +60,12 @@ export const leads = pgTable(
     externalId: text("external_id"),
     convertedAt: timestamp("converted_at", { withTimezone: true }),
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
+    // How this lead was created. Defaults to manual; the import handler
+    // sets this to 'imported' alongside import_job_id.
+    createdVia: leadCreationMethodEnum("created_via").notNull().default("manual"),
+    importJobId: uuid("import_job_id").references(() => importJobs.id, {
+      onDelete: "set null",
+    }),
     createdById: uuid("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -75,5 +88,9 @@ export const leads = pgTable(
     index("leads_last_activity_idx").on(t.lastActivityAt.desc()),
     // GIN index on tags array for membership filters.
     index("leads_tags_gin_idx").using("gin", t.tags),
+    // Partial index — only useful when querying by import.
+    index("leads_import_job_idx")
+      .on(t.importJobId)
+      .where(sql`import_job_id IS NOT NULL`),
   ],
 );

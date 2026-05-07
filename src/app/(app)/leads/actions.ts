@@ -15,6 +15,7 @@ import {
   createLead,
   deleteLeadsById,
   leadCreateSchema,
+  leadPartialSchema,
   updateLead,
 } from "@/lib/leads";
 import { eq } from "drizzle-orm";
@@ -94,7 +95,7 @@ export async function updateLeadAction(
     throw err;
   }
 
-  const parsed = leadCreateSchema.partial().safeParse(formToObject(formData));
+  const parsed = leadPartialSchema.safeParse(formToObject(formData));
   if (!parsed.success) {
     return {
       ok: false,

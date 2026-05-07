@@ -114,6 +114,7 @@ const importRowSchema = z.object({
 export async function importLeadsFromBuffer(
   buf: ArrayBuffer | Buffer,
   importerUserId: string,
+  importJobId?: string,
 ): Promise<ImportResult> {
   const wb = XLSX.read(buf, { type: "array" });
   const sheetName =
@@ -173,6 +174,9 @@ export async function importLeadsFromBuffer(
   const inserted: string[] = [];
   const updated: string[] = [];
   const needsReview: ImportResult["needsReviewRows"] = [];
+  // Used to mark inserted rows so they're discoverable on the lead detail
+  // page and via the "Recently Imported" built-in view.
+  const importJobIdForRows = importJobId ?? null;
 
   // Single-row processing keeps the surface simple. For very large imports
   // (>5k rows) we'd want chunked transactions; v1 caps at 10MB upload which
@@ -337,6 +341,9 @@ export async function importLeadsFromBuffer(
         createdById: importerUserId,
         updatedById: importerUserId,
         lastActivityAt: sql`now()`,
+        // Provenance — Phase 2D.
+        createdVia: "imported",
+        importJobId: importJobIdForRows,
       })
       .returning({ id: leads.id });
     inserted.push(insertedRow[0].id);

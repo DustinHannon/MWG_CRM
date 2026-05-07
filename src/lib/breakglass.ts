@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { permissions, users } from "@/db/schema/users";
+import { userPreferences } from "@/db/schema/views";
 import { hashPassword } from "@/lib/password";
 
 /**
@@ -80,6 +81,12 @@ export async function ensureBreakglass(): Promise<void> {
       canSendEmail: true,
       canViewReports: true,
     });
+
+    // Phase 2D: every user (incl. breakglass) gets a preferences row.
+    await tx
+      .insert(userPreferences)
+      .values({ userId: id })
+      .onConflictDoNothing({ target: userPreferences.userId });
 
     insertedId = id;
   });

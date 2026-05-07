@@ -44,3 +44,11 @@ export const importStatusEnum = pgEnum("import_status", [
   "completed",
   "failed",
 ]);
+
+// How a lead row was first created. `imported` rows always carry an
+// `import_job_id`; `api` is reserved for a future public API.
+export const leadCreationMethodEnum = pgEnum("lead_creation_method", [
+  "manual",
+  "imported",
+  "api",
+]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   createLeadAction,
   updateLeadAction,
@@ -117,11 +117,11 @@ export function LeadForm({
           />
         </Row>
         <Input name="tags" label="Tags (comma-separated)" defaultValue={v.tags ?? ""} />
-        <div className="flex flex-wrap gap-4 text-sm">
-          <Checkbox name="doNotContact" label="Do not contact" defaultChecked={v.doNotContact} />
-          <Checkbox name="doNotEmail" label="Do not email" defaultChecked={v.doNotEmail} />
-          <Checkbox name="doNotCall" label="Do not call" defaultChecked={v.doNotCall} />
-        </div>
+        <ContactPreferences
+          initialDoNotContact={v.doNotContact}
+          initialDoNotEmail={v.doNotEmail}
+          initialDoNotCall={v.doNotCall}
+        />
       </Section>
 
       <Section title="Address" wide>
@@ -264,24 +264,83 @@ function Select({
   );
 }
 
-function Checkbox({
-  name,
-  label,
-  defaultChecked,
+/**
+ * Do Not Contact implies Do Not Email AND Do Not Call. When DNC is checked,
+ * auto-check both child boxes and disable them so the user can't toggle
+ * them back on. When DNC is un-checked, restore the children to whatever
+ * the user had set before — so a "Do Not Email but allow calls" choice
+ * survives toggling DNC twice.
+ *
+ * Server-side zod refinement (see leadCreateSchema in lib/leads.ts)
+ * rejects any submission where do_not_contact=true with do_not_email=false
+ * or do_not_call=false — defends against a forged form bypassing this UX.
+ */
+function ContactPreferences({
+  initialDoNotContact,
+  initialDoNotEmail,
+  initialDoNotCall,
 }: {
-  name: string;
-  label: string;
-  defaultChecked: boolean;
+  initialDoNotContact: boolean;
+  initialDoNotEmail: boolean;
+  initialDoNotCall: boolean;
 }) {
+  const [dnc, setDnc] = useState(initialDoNotContact);
+  // The user's "real" choices for email / call — restored when DNC is off.
+  const [userEmail, setUserEmail] = useState(initialDoNotEmail);
+  const [userCall, setUserCall] = useState(initialDoNotCall);
+
+  const effectiveEmail = dnc ? true : userEmail;
+  const effectiveCall = dnc ? true : userCall;
+
   return (
-    <label className="flex items-center gap-2">
-      <input
-        type="checkbox"
-        name={name}
-        defaultChecked={defaultChecked}
-        className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
-      />
-      <span>{label}</span>
-    </label>
+    <div className="flex flex-col gap-3 text-sm">
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="doNotContact"
+            checked={dnc}
+            onChange={(e) => setDnc(e.target.checked)}
+            className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
+          />
+          <span className="font-medium">Do not contact</span>
+        </label>
+
+        <label
+          className={`flex items-center gap-2 ${dnc ? "opacity-50" : ""}`}
+          aria-disabled={dnc}
+        >
+          <input
+            type="checkbox"
+            name="doNotEmail"
+            checked={effectiveEmail}
+            onChange={(e) => setUserEmail(e.target.checked)}
+            disabled={dnc}
+            className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed"
+          />
+          <span>Do not email</span>
+        </label>
+
+        <label
+          className={`flex items-center gap-2 ${dnc ? "opacity-50" : ""}`}
+          aria-disabled={dnc}
+        >
+          <input
+            type="checkbox"
+            name="doNotCall"
+            checked={effectiveCall}
+            onChange={(e) => setUserCall(e.target.checked)}
+            disabled={dnc}
+            className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed"
+          />
+          <span>Do not call</span>
+        </label>
+      </div>
+      {dnc ? (
+        <p className="text-xs text-white/40">
+          Do Not Email and Do Not Call are implied by Do Not Contact.
+        </p>
+      ) : null}
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { permissions, users, accounts } from "@/db/schema/users";
+import { userPreferences } from "@/db/schema/views";
 import { env } from "@/lib/env";
 import { graphFetchWithToken, type GraphMeProfile } from "@/lib/graph";
 
@@ -168,6 +169,13 @@ export async function provisionEntraUser(
       canSendEmail: true,
       canViewReports: true,
     });
+
+    // Phase 2D: every user gets a preferences row on provisioning. Idempotent
+    // ON CONFLICT so a backfilled row from migration time stays put.
+    await tx
+      .insert(userPreferences)
+      .values({ userId: row.id })
+      .onConflictDoNothing({ target: userPreferences.userId });
 
     return row;
   });

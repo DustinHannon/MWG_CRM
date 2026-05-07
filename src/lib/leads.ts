@@ -53,6 +53,12 @@ export const leadFiltersSchema = z.object({
 
 export type LeadFilters = z.infer<typeof leadFiltersSchema>;
 
+/**
+ * Belt + suspenders: reject any payload where do_not_contact=true but
+ * do_not_email=false or do_not_call=false. The lead-form UX auto-checks
+ * + disables those when DNC is on, but a forged form / API caller could
+ * skip that — this refinement closes that gap server-side.
+ */
 const leadCreateSchemaBase = z.object({
   salutation: z.string().max(20).optional().nullable(),
   firstName: z.string().trim().min(1, "First name required").max(120),
@@ -106,10 +112,44 @@ const leadCreateSchemaBase = z.object({
   ownerId: z.string().uuid().optional().nullable(),
 });
 
-export const leadCreateSchema = leadCreateSchemaBase;
-export const leadUpdateSchema = leadCreateSchemaBase.partial().extend({
-  id: z.string().uuid(),
+const dncRefinement = (data: {
+  doNotContact?: boolean;
+  doNotEmail?: boolean;
+  doNotCall?: boolean;
+}) => {
+  if (!data.doNotContact) return true;
+  return data.doNotEmail !== false && data.doNotCall !== false;
+};
+
+export const leadCreateSchema = leadCreateSchemaBase.refine(dncRefinement, {
+  message:
+    "Do Not Contact implies Do Not Email and Do Not Call — both must be true.",
+  path: ["doNotContact"],
 });
+
+/**
+ * Partial-update schema. Built off the unrefined base because z.refine()
+ * turns a ZodObject into ZodEffects, which doesn't have .partial(). Re-
+ * apply the DNC refinement after .partial().
+ */
+export const leadUpdateSchema = leadCreateSchemaBase
+  .partial()
+  .extend({ id: z.string().uuid() })
+  .refine(dncRefinement, {
+    message:
+      "Do Not Contact implies Do Not Email and Do Not Call — both must be true.",
+    path: ["doNotContact"],
+  });
+
+/** For server-action callers that need a partial without the id field. */
+export const leadPartialSchema = leadCreateSchemaBase.partial().refine(
+  dncRefinement,
+  {
+    message:
+      "Do Not Contact implies Do Not Email and Do Not Call — both must be true.",
+    path: ["doNotContact"],
+  },
+);
 
 export type LeadCreateInput = z.infer<typeof leadCreateSchema>;
 export type LeadUpdateInput = z.infer<typeof leadUpdateSchema>;

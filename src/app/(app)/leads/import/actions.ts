@@ -48,7 +48,9 @@ export async function importLeadsAction(
 
   try {
     const buf = await file.arrayBuffer();
-    const result = await importLeadsFromBuffer(buf, user.id);
+    // Pass jobId so each inserted lead carries created_via='imported' and
+    // import_job_id, surfaced on the lead detail page (Phase 2F.3).
+    const result = await importLeadsFromBuffer(buf, user.id, jobId);
 
     await db
       .update(importJobs)
