@@ -154,12 +154,23 @@ export default async function LeadsPage({
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Leads</h1>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-2 text-sm text-muted-foreground">
             {result.total} {result.total === 1 ? "lead" : "leads"}
             {sp.q ? ` matching "${sp.q}"` : ""} · view {activeView.name}
           </p>
         </div>
         <div className="flex gap-2">
+          <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
+            <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
+              Table
+            </span>
+            <Link
+              href="/leads/pipeline"
+              className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Pipeline
+            </Link>
+          </div>
           {perms.canImport || user.isAdmin ? (
             <Link
               href="/leads/import"
