@@ -43,6 +43,21 @@ export const users = pgTable(
     lastCalendarSyncAt: timestamp("last_calendar_sync_at", {
       withTimezone: true,
     }),
+    // Phase 3B: Entra-sourced profile fields. Read-only on /settings.
+    // Refreshed on every Entra sign-in. Never used in lead workflow.
+    jobTitle: text("job_title"),
+    department: text("department"),
+    officeLocation: text("office_location"),
+    businessPhones: text("business_phones")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    mobilePhone: text("mobile_phone"),
+    country: text("country"),
+    managerEntraOid: text("manager_entra_oid"),
+    managerDisplayName: text("manager_display_name"),
+    managerEmail: text("manager_email"),
+    entraSyncedAt: timestamp("entra_synced_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

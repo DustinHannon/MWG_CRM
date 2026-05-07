@@ -71,6 +71,23 @@ export const userPreferences = pgTable("user_preferences", {
   // ad-hoc column visibility chosen on a built-in view (saved views
   // store their own columns array on the saved_views row instead).
   adhocColumns: jsonb("adhoc_columns"),
+  // Phase 3B: editable preferences surfaced on /settings.
+  timezone: text("timezone").notNull().default("America/Chicago"),
+  dateFormat: text("date_format").notNull().default("MM/DD/YYYY"),
+  timeFormat: text("time_format").notNull().default("12h"),
+  tableDensity: text("table_density").notNull().default("comfortable"),
+  defaultLeadsViewId: uuid("default_leads_view_id").references(
+    () => savedViews.id,
+    { onDelete: "set null" },
+  ),
+  customLandingPath: text("custom_landing_path"),
+  notifyTasksDue: boolean("notify_tasks_due").notNull().default(true),
+  notifyTasksAssigned: boolean("notify_tasks_assigned").notNull().default(true),
+  notifyMentions: boolean("notify_mentions").notNull().default(true),
+  notifySavedSearch: boolean("notify_saved_search").notNull().default(true),
+  emailDigestFrequency: text("email_digest_frequency").notNull().default("off"),
+  // Phase 3E: pipeline/table view-mode preference.
+  leadsDefaultMode: text("leads_default_mode").notNull().default("table"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),

@@ -12,6 +12,8 @@ export interface SessionUser {
   displayName: string;
   isAdmin: boolean;
   isActive: boolean;
+  photoUrl: string | null;
+  jobTitle: string | null;
 }
 
 /**
@@ -33,6 +35,8 @@ export async function requireSession(): Promise<SessionUser> {
       displayName: users.displayName,
       isAdmin: users.isAdmin,
       isActive: users.isActive,
+      photoUrl: users.photoBlobUrl,
+      jobTitle: users.jobTitle,
     })
     .from(users)
     .where(eq(users.id, session.user.id))

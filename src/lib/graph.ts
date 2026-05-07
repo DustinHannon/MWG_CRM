@@ -44,3 +44,24 @@ export interface GraphMeProfile {
   mail?: string | null;
   userPrincipalName?: string | null;
 }
+
+/**
+ * Phase 3B — extended /me fields used to populate the read-only Profile
+ * section of /settings. NEVER consumed by lead-tracking surfaces.
+ */
+export interface GraphMeProfileExtended extends GraphMeProfile {
+  jobTitle?: string | null;
+  department?: string | null;
+  officeLocation?: string | null;
+  businessPhones?: string[] | null;
+  mobilePhone?: string | null;
+  country?: string | null;
+}
+
+/** /me/manager response shape (subset). */
+export interface GraphManager {
+  id: string;
+  displayName?: string | null;
+  mail?: string | null;
+  userPrincipalName?: string | null;
+}

@@ -4,7 +4,13 @@ import { db } from "@/db";
 import { permissions, users, accounts } from "@/db/schema/users";
 import { userPreferences } from "@/db/schema/views";
 import { env } from "@/lib/env";
-import { graphFetchWithToken, type GraphMeProfile } from "@/lib/graph";
+import {
+  graphFetchWithToken,
+  GraphError,
+  type GraphMeProfile,
+  type GraphMeProfileExtended,
+  type GraphManager,
+} from "@/lib/graph";
 
 /**
  * Entra OIDC user provisioning per the brief §7.3.
@@ -44,19 +50,47 @@ export async function provisionEntraUser(
     throw new EntraDomainNotAllowedError(domain ?? "(missing)");
   }
 
-  // Phase 3 calls /me here. If the call fails (e.g. consent missing), we
-  // fall back to the parsed UPN — better degraded than fully blocked.
-  let me: GraphMeProfile | null = null;
+  // Phase 3B: extended /me fetch. We pull job_title, department, office,
+  // business_phones, mobile_phone, country alongside the original
+  // name/email fields for the /settings page. If the call fails (e.g.
+  // consent missing), we fall back to the parsed UPN — better degraded
+  // than fully blocked.
+  let me: GraphMeProfileExtended | null = null;
   try {
-    me = await graphFetchWithToken<GraphMeProfile>(
+    me = await graphFetchWithToken<GraphMeProfileExtended>(
       input.accessToken,
-      "/me?$select=id,givenName,surname,displayName,mail,userPrincipalName",
+      "/me?$select=id,givenName,surname,displayName,mail,userPrincipalName,jobTitle,department,officeLocation,businessPhones,mobilePhone,country",
     );
   } catch (err) {
     console.warn(
       "[entra] /me lookup failed during provisioning — using UPN-derived names",
       err instanceof Error ? err.message : err,
     );
+  }
+
+  // Phase 3B: /me/manager. 404 means "no manager set" — null those fields.
+  // Other errors leave existing values alone (don't overwrite on transient
+  // failures).
+  type ManagerState =
+    | { kind: "fresh"; manager: GraphManager | null }
+    | { kind: "no_manager" }
+    | { kind: "error" };
+  let managerState: ManagerState = { kind: "error" };
+  try {
+    const manager = await graphFetchWithToken<GraphManager>(
+      input.accessToken,
+      "/me/manager?$select=id,displayName,mail,userPrincipalName",
+    );
+    managerState = { kind: "fresh", manager };
+  } catch (err) {
+    if (err instanceof GraphError && err.status === 404) {
+      managerState = { kind: "no_manager" };
+    } else {
+      console.warn(
+        "[entra] /me/manager lookup failed — leaving existing values alone",
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   const naive = parseUpn(input.upn);
@@ -88,6 +122,7 @@ export async function provisionEntraUser(
         lastName,
         displayName,
         email,
+        ...buildEntraProfilePatch(me, managerState),
         lastLoginAt: sql`now()`,
         updatedAt: sql`now()`,
       })
@@ -119,6 +154,7 @@ export async function provisionEntraUser(
         firstName,
         lastName,
         displayName,
+        ...buildEntraProfilePatch(me, managerState),
         lastLoginAt: sql`now()`,
         updatedAt: sql`now()`,
       })
@@ -148,6 +184,7 @@ export async function provisionEntraUser(
         isBreakglass: false,
         isAdmin: false,
         isActive: true,
+        ...buildEntraProfilePatch(me, managerState),
         lastLoginAt: sql`now()`,
       })
       .returning({
@@ -270,4 +307,53 @@ function trimOrFallback(
 ): string {
   const c = candidate?.trim();
   return c && c.length > 0 ? c : fallback;
+}
+
+/**
+ * Phase 3B: build the patch for Entra-sourced profile fields. Always sets
+ * entra_synced_at when we have any profile data. Manager fields:
+ *   - "fresh"      → set to manager's data (or null all if manager is null)
+ *   - "no_manager" → null all manager fields (Graph 404 = no manager set)
+ *   - "error"      → don't touch manager fields (transient failure)
+ */
+function buildEntraProfilePatch(
+  me: GraphMeProfileExtended | null,
+  managerState:
+    | { kind: "fresh"; manager: GraphManager | null }
+    | { kind: "no_manager" }
+    | { kind: "error" },
+): Partial<{
+  jobTitle: string | null;
+  department: string | null;
+  officeLocation: string | null;
+  businessPhones: string[];
+  mobilePhone: string | null;
+  country: string | null;
+  managerEntraOid: string | null;
+  managerDisplayName: string | null;
+  managerEmail: string | null;
+  entraSyncedAt: Date;
+}> {
+  const patch: Record<string, unknown> = {};
+  if (me) {
+    patch.jobTitle = me.jobTitle ?? null;
+    patch.department = me.department ?? null;
+    patch.officeLocation = me.officeLocation ?? null;
+    patch.businessPhones = me.businessPhones ?? [];
+    patch.mobilePhone = me.mobilePhone ?? null;
+    patch.country = me.country ?? null;
+    patch.entraSyncedAt = new Date();
+  }
+  if (managerState.kind === "fresh") {
+    patch.managerEntraOid = managerState.manager?.id ?? null;
+    patch.managerDisplayName = managerState.manager?.displayName ?? null;
+    patch.managerEmail =
+      managerState.manager?.mail ?? managerState.manager?.userPrincipalName ?? null;
+  } else if (managerState.kind === "no_manager") {
+    patch.managerEntraOid = null;
+    patch.managerDisplayName = null;
+    patch.managerEmail = null;
+  }
+  // "error" → leave manager_* fields alone.
+  return patch as ReturnType<typeof buildEntraProfilePatch>;
 }
