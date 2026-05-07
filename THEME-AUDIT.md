@@ -1,26 +1,34 @@
 # Phase 7 Theme / Shell Audit
 
-**Audited:** 2026-05-07
+**Audited:** 2026-05-07 (initial pass)
+**Closed:** 2026-05-07 after Phase 7B + 7C committed (commit 949a0b0)
 **Method:** Enumerated all `src/app/**/{page,layout}.tsx`, then
 `grep`'d every page for chrome elements (`<aside>`, `<nav>`, `<header>`)
 and chrome components (`<NotificationsBell>`, `<CommandPalette>`,
 `<UserPanel>`, `<ThemeSync>`, `<Toaster>`, `<TooltipProvider>`).
 
-**Headline:** No `page.tsx` renders its own chrome. Conversion problem
-reduces to **two layout files**: `(app)/layout.tsx` (canonical) and
-`admin/layout.tsx` (stale).
+**Headline:** No `page.tsx` rendered its own chrome. Conversion problem
+collapsed to **two layout files**: `(app)/layout.tsx` (canonical) and
+`admin/layout.tsx` (stale fork from before the Phase 3 redesign).
+Both now wrap `<AppShell>`. Every authenticated route shares the same
+chrome.
 
-## Layout files
+## Layout files — final state
 
 | Layout | Canonical shell | Notes |
 |---|---|---|
-| `src/app/layout.tsx` | n/a — root html/body wrapper | Mounts `<ThemeProvider>` for next-themes. Correct. |
-| `src/app/(app)/layout.tsx` | ✅ canonical | TooltipProvider + ThemeSync + glass sidebar w/ UserPanel + bell + CommandPalette + Toaster. After 7B: thin wrapper around `<AppShell>`. |
-| `src/app/admin/layout.tsx` | ❌ stale → ✅ after 7C | Currently `bg-slate-950`, no glass, no bell, no palette, raw Sign out form. Phase 7C converts. |
+| `src/app/layout.tsx` | n/a — root html/body wrapper | Mounts `<ThemeProvider>` for next-themes. Correct, untouched. |
+| `src/app/(app)/layout.tsx` | ✅ canonical | Thin wrapper — `requireSession` → `<AppShell user nav>`. Admin link conditionally appended. |
+| `src/app/admin/layout.tsx` | ✅ canonical | Thin wrapper — `requireAdmin` → `<AppShell user brand={subtitle:"Admin"} nav>`. |
 
-## Routes by status
+Both layouts now import from `src/components/app-shell/`. Glass
+tokens, notification bell, Cmd+K palette, clickable UserPanel, theme
+sync, and toaster are uniform across both layouts because they're
+literally rendered by the same component.
 
-### Canonical via `(app)/layout.tsx` — no work needed
+## Routes — final status
+
+### Canonical via `(app)/layout.tsx` → AppShell
 
 | Route | Status |
 |---|---|
@@ -43,9 +51,9 @@ reduces to **two layout files**: `(app)/layout.tsx` (canonical) and
 | /settings | canonical |
 | /notifications | canonical |
 
-### Stale → conformed in Phase 7C
+### Canonical via `admin/layout.tsx` → AppShell (subtitle="Admin")
 
-| Route | Status before | Status after 7C |
+| Route | Before 7C | After 7C |
 |---|---|---|
 | /admin | stale | canonical |
 | /admin/users | stale | canonical |
@@ -62,48 +70,54 @@ reduces to **two layout files**: `(app)/layout.tsx` (canonical) and
 
 | Route | Why |
 |---|---|
-| `/` (root `page.tsx`) | Redirect to `/dashboard` or `/auth/signin`. No UI. |
+| `/` (root `page.tsx`) | Redirect to `/dashboard` or sign-in. No UI. |
 | `/auth/signin` | Sign-in flow, deliberately minimal. |
 | `/auth/disabled` | Disabled-account terminal page, deliberately minimal. |
 | `/leads/print/[id]` | Print-only PDF export layout. Must stay minimal. |
 
-## Stale-UI scan
+## Stale-UI scan — final
 
-`grep 'Sign out\|signOut' src/app/`:
+`grep -rn 'Sign out\|signOut' src/app/ src/components/` after 7C:
 
 | File | Status | Notes |
 |---|---|---|
-| `admin/layout.tsx` | ❌ stale → fixed in 7C | Raw form + button. Removed when migrating to AppShell. |
-| `(app)/layout.tsx` | ✅ canonical | Indirect via `<UserPanel>`. |
-| `(app)/settings/_components/danger-zone-section.tsx` | ✅ canonical | Settings → Danger zone Sign-out-all-sessions. Allowed. |
+| `(app)/settings/_components/danger-zone-section.tsx` | ✅ canonical | Settings → Danger zone. Allowed. |
 | `(app)/settings/actions.ts` | ✅ canonical | Server action backing the Danger zone. |
-| `auth.ts` | ✅ canonical | NextAuth library. |
-| `components/user-panel/user-panel.tsx` | ✅ canonical | The new UserPanel popover Sign out. |
+| `components/user-panel/user-panel.tsx` | ✅ canonical | UserPanel popover Sign out. The canonical surface. |
 
-After Phase 7C, the only Sign-out UI surfaces are `<UserPanel>` popover
-and the Settings Danger zone.
+`admin/layout.tsx` no longer matches `Sign out` — the old form was
+deleted with the layout rewrite.
 
-## Chrome-component reuse audit
+## Chrome-component reuse — final
 
-- `<NotificationsBell>` imported only in `(app)/layout.tsx`. After 7B,
-  imported in `app-shell/top-bar.tsx`. Admin gets it via AppShell.
-- `<CommandPalette>` imported only in `(app)/layout.tsx`. After 7B,
-  imported in `app-shell/app-shell.tsx`.
-- `<UserPanel>` imported only in `(app)/layout.tsx`. After 7B, imported
-  in `app-shell/sidebar.tsx`.
-- `<ThemeSync>` imported only in `(app)/layout.tsx`. After 7B, imported
-  in `app-shell/app-shell.tsx`.
-- Root `layout.tsx` mounts `<ThemeProvider>` — correct, unchanged.
+Every chrome component is imported by exactly one consumer:
+
+| Component | Imported by |
+|---|---|
+| `<NotificationsBell>` | `app-shell/top-bar.tsx` |
+| `<CommandPalette>` | `app-shell/app-shell.tsx` |
+| `<UserPanel>` | `app-shell/sidebar.tsx` |
+| `<ThemeSync>` | `app-shell/app-shell.tsx` |
+| `<Toaster>` | `app-shell/app-shell.tsx` |
+| `<TooltipProvider>` | `app-shell/app-shell.tsx` |
+| `<ThemeProvider>` | `src/app/layout.tsx` (root, unchanged) |
+
+No layout or page imports these directly. AppShell is the single
+mounting point.
 
 ## Closing state
 
 After Phase 7B + 7C:
 - Every authenticated route renders the same chrome via `<AppShell>`.
-- Admin section gets the glass aesthetic, bell, Cmd+K trigger, and the
-  clickable UserPanel — same look as `/dashboard`.
-- The "MWG CRM Admin" identity is preserved as `subtitle="Admin"` on
-  the Brand header.
-- Root, auth, and print routes remain intentionally minimal.
-
-This file is rewritten in Phase 7E to flag every previously-stale row
-as canonical and add an "after" column with deploy verification.
+- Admin section gets the glass aesthetic, bell, Cmd+K palette host,
+  and clickable UserPanel — identical look to `/dashboard` apart from
+  the brand subtitle ("MWG CRM Admin") and the admin-specific nav
+  array.
+- The admin nav (Overview, Users, Tags, Scoring, Audit log, Data
+  tools, Import help, Settings, divider, Back to dashboard) is
+  preserved.
+- Root, auth, and print routes intentionally remain outside the shell.
+- No regressions to canonical pages — extraction was a verbatim move
+  of the existing inline shell from `(app)/layout.tsx` into
+  `app-shell/` modules; same DOM, same Tailwind classes, same data
+  fetches.
