@@ -7,3 +7,4 @@ export * from "./activities";
 export * from "./imports";
 export * from "./audit";
 export * from "./views";
+export * from "./tags";
