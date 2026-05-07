@@ -180,7 +180,7 @@ export function OwnersBar({ data }: { data: OwnerBar[] }) {
 
 function ChartEmpty({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-[220px] items-center justify-center text-xs text-white/40">
+    <div className="flex h-[220px] items-center justify-center text-xs text-muted-foreground/80">
       {children}
     </div>
   );

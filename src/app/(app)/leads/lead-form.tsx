@@ -143,13 +143,13 @@ export function LeadForm({
       </Section>
 
       <Section title="Notes" wide>
-        <label className="block text-xs uppercase tracking-wide text-white/50">
+        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
           Description
           <textarea
             name="description"
             defaultValue={v.description ?? ""}
             rows={6}
-            className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
         </label>
       </Section>
@@ -167,7 +167,7 @@ export function LeadForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-white/90 px-5 py-2 text-sm font-medium text-slate-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? "Saving…" : mode === "create" ? "Create lead" : "Save changes"}
         </button>
@@ -187,9 +187,9 @@ function Section({
 }) {
   return (
     <section
-      className={`rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl ${wide ? "lg:col-span-2" : ""}`}
+      className={`rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl ${wide ? "lg:col-span-2" : ""}`}
     >
-      <h2 className="text-xs font-medium uppercase tracking-wide text-white/50">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
       <div className="mt-4 flex flex-col gap-4">{children}</div>
@@ -219,7 +219,7 @@ function Input({
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <label className="block text-xs uppercase tracking-wide text-white/50">
+    <label className="block text-xs uppercase tracking-wide text-muted-foreground">
       {label}
       <input
         name={name}
@@ -228,7 +228,7 @@ function Input({
         step={step}
         defaultValue={defaultValue}
         required={required}
-        className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+        className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
       />
     </label>
   );
@@ -246,12 +246,12 @@ function Select({
   options: readonly string[];
 }) {
   return (
-    <label className="block text-xs uppercase tracking-wide text-white/50">
+    <label className="block text-xs uppercase tracking-wide text-muted-foreground">
       {label}
       <select
         name={name}
         defaultValue={defaultValue}
-        className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+        className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
       >
         {options.map((o) => (
           <option key={o} value={o}>
@@ -300,7 +300,7 @@ function ContactPreferences({
             name="doNotContact"
             checked={dnc}
             onChange={(e) => setDnc(e.target.checked)}
-            className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
+            className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500"
           />
           <span className="font-medium">Do not contact</span>
         </label>
@@ -315,7 +315,7 @@ function ContactPreferences({
             checked={effectiveEmail}
             onChange={(e) => setUserEmail(e.target.checked)}
             disabled={dnc}
-            className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed"
+            className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed"
           />
           <span>Do not email</span>
         </label>
@@ -330,13 +330,13 @@ function ContactPreferences({
             checked={effectiveCall}
             onChange={(e) => setUserCall(e.target.checked)}
             disabled={dnc}
-            className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed"
+            className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed"
           />
           <span>Do not call</span>
         </label>
       </div>
       {dnc ? (
-        <p className="text-xs text-white/40">
+        <p className="text-xs text-muted-foreground/80">
           Do Not Email and Do Not Call are implied by Do Not Contact.
         </p>
       ) : null}

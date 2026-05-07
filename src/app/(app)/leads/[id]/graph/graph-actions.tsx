@@ -21,7 +21,7 @@ export function GraphActionPanel({
   const [tab, setTab] = useState<"email" | "meeting">("email");
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+    <div className="rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
       <div className="flex gap-2">
         <Pill active={tab === "email"} onClick={() => setTab("email")}>
           Send email
@@ -62,8 +62,8 @@ function Pill({
       onClick={onClick}
       className={`rounded-full px-3 py-1 text-xs uppercase tracking-wide transition ${
         active
-          ? "bg-white text-slate-900"
-          : "border border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
+          ? "bg-white text-primary-foreground"
+          : "border border-border bg-muted/40 text-muted-foreground hover:bg-muted"
       }`}
     >
       {children}
@@ -88,24 +88,24 @@ function EmailForm({
       <input type="hidden" name="leadId" value={leadId} />
       <Field name="to" label="To" type="email" defaultValue={defaultEmail ?? ""} required />
       <Field name="subject" label="Subject" required />
-      <label className="text-xs uppercase tracking-wide text-white/50">
+      <label className="text-xs uppercase tracking-wide text-muted-foreground">
         Body
         <textarea
           name="body"
           rows={6}
           required
-          className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+          className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
         />
       </label>
-      <label className="text-xs uppercase tracking-wide text-white/50">
+      <label className="text-xs uppercase tracking-wide text-muted-foreground">
         Attachments
         <input
           type="file"
           name="attachment"
           multiple
-          className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white file:mr-3 file:rounded file:border-0 file:bg-white/90 file:px-2 file:py-1 file:text-xs file:font-medium file:text-slate-900"
+          className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary file:px-2 file:py-1 file:text-xs file:font-medium file:text-primary-foreground"
         />
-        <span className="text-[10px] text-white/40">
+        <span className="text-[10px] text-muted-foreground/80">
           Up to 3MB per file (v1 limit; larger needs upload sessions).
         </span>
       </label>
@@ -157,12 +157,12 @@ function MeetingForm({
         <Field name="location" label="Location (optional)" />
       </div>
       <div className="md:col-span-2">
-        <label className="text-xs uppercase tracking-wide text-white/50">
+        <label className="text-xs uppercase tracking-wide text-muted-foreground">
           Agenda / notes
           <textarea
             name="body"
             rows={3}
-            className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
         </label>
       </div>
@@ -191,14 +191,14 @@ function Field({
   defaultValue?: string;
 }) {
   return (
-    <label className="block text-xs uppercase tracking-wide text-white/50">
+    <label className="block text-xs uppercase tracking-wide text-muted-foreground">
       {label}
       <input
         name={name}
         type={type}
         required={required}
         defaultValue={defaultValue}
-        className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+        className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
       />
     </label>
   );
@@ -209,7 +209,7 @@ function Submit({ pending, label }: { pending: boolean; label: string }) {
     <button
       type="submit"
       disabled={pending}
-      className="self-end rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+      className="self-end rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending ? "Working…" : label}
     </button>

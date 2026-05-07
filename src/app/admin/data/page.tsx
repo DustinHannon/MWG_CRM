@@ -6,7 +6,7 @@ export default function DataToolsPage() {
   return (
     <div className="px-10 py-10">
       <h1 className="text-2xl font-semibold">Data tools</h1>
-      <p className="mt-2 max-w-2xl text-sm text-white/60">
+      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         Destructive operations. Each one requires you to type the exact
         phrase shown to confirm. There is no undo. Every action is logged
         in <a href="/admin/audit" className="underline">the audit log</a>.

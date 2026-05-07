@@ -13,9 +13,9 @@ export default async function NewLeadPage() {
 
   return (
     <div className="px-10 py-10">
-      <p className="text-xs uppercase tracking-[0.3em] text-white/40">New</p>
+      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">New</p>
       <h1 className="mt-1 text-2xl font-semibold">Add lead</h1>
-      <p className="mt-2 text-sm text-white/60">
+      <p className="mt-2 text-sm text-muted-foreground">
         Required fields are marked with an asterisk. Most fields are
         optional — fill them in as you learn more about the lead.
       </p>

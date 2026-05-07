@@ -22,7 +22,7 @@ export default async function EditLeadPage({
 
   return (
     <div className="px-10 py-10">
-      <p className="text-xs uppercase tracking-[0.3em] text-white/40">Edit</p>
+      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Edit</p>
       <h1 className="mt-1 text-2xl font-semibold">{formatPersonName(lead)}</h1>
 
       <LeadForm

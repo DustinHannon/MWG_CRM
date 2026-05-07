@@ -185,7 +185,7 @@ export default async function LeadsPage({
           {perms.canImport || user.isAdmin ? (
             <Link
               href="/leads/import"
-              className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/80 transition hover:bg-white/10"
+              className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
             >
               Import
             </Link>
@@ -193,7 +193,7 @@ export default async function LeadsPage({
           {perms.canExport || user.isAdmin ? (
             <a
               href={buildExportHref(sp)}
-              className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/80 transition hover:bg-white/10"
+              className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
             >
               Export
             </a>
@@ -201,7 +201,7 @@ export default async function LeadsPage({
           {perms.canCreateLeads || user.isAdmin ? (
             <Link
               href="/leads/new"
-              className="rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-white"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
               + Add lead
             </Link>
@@ -230,7 +230,7 @@ export default async function LeadsPage({
           name="q"
           defaultValue={sp.q ?? ""}
           placeholder="Search name / email / company / phone…"
-          className="min-w-[240px] flex-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+          className="min-w-[240px] flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
         />
         <FilterSelect
           name="status"
@@ -252,24 +252,24 @@ export default async function LeadsPage({
         />
         <button
           type="submit"
-          className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/80 transition hover:bg-white/10"
+          className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
         >
           Apply
         </button>
         {sp.q || sp.status || sp.rating || sp.source || sp.tag ? (
           <Link
             href={`/leads?view=${encodeURIComponent(activeViewParam)}`}
-            className="rounded-md px-3 py-2 text-sm text-white/50 hover:text-white/80"
+            className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground/90"
           >
             Clear
           </Link>
         ) : null}
       </form>
 
-      <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
-        <table className="data-table min-w-full divide-y divide-white/5 text-sm">
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
+        <table className="data-table min-w-full divide-y divide-border/60 text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-white/50">
+            <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               {activeColumns.map((c) => (
                 <th key={c} className="px-5 py-3 font-medium whitespace-nowrap">
                   {AVAILABLE_COLUMNS.find((col) => col.key === c)?.label ?? c}
@@ -277,19 +277,19 @@ export default async function LeadsPage({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-border/60">
             {result.rows.length === 0 ? (
               <tr>
                 <td
                   colSpan={activeColumns.length}
-                  className="px-5 py-12 text-center text-white/50"
+                  className="px-5 py-12 text-center text-muted-foreground"
                 >
                   No leads match this view.
                 </td>
               </tr>
             ) : null}
             {result.rows.map((l) => (
-              <tr key={l.id} className="transition hover:bg-white/5">
+              <tr key={l.id} className="transition hover:bg-muted/40">
                 {activeColumns.map((c) => (
                   <td key={c} className="px-5 py-3 align-top">
                     {renderCell(l, c, timePrefs)}
@@ -327,7 +327,7 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
       return (
         <Link
           href={`/leads/${lead.id}`}
-          className="font-medium text-white hover:underline"
+          className="font-medium text-foreground hover:underline"
         >
           {lead.firstName}
         </Link>
@@ -336,23 +336,23 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
       return lead.lastName ? (
         <Link
           href={`/leads/${lead.id}`}
-          className="font-medium text-white hover:underline"
+          className="font-medium text-foreground hover:underline"
         >
           {lead.lastName}
         </Link>
       ) : (
-        <span className="text-white/40">—</span>
+        <span className="text-muted-foreground/80">—</span>
       );
     case "companyName":
-      return <span className="text-white/70">{lead.companyName ?? "—"}</span>;
+      return <span className="text-foreground/80">{lead.companyName ?? "—"}</span>;
     case "email":
-      return <span className="text-white/60">{lead.email ?? "—"}</span>;
+      return <span className="text-muted-foreground">{lead.email ?? "—"}</span>;
     case "phone":
-      return <span className="text-white/60">{lead.phone ?? "—"}</span>;
+      return <span className="text-muted-foreground">{lead.phone ?? "—"}</span>;
     case "mobilePhone":
-      return <span className="text-white/60">{lead.mobilePhone ?? "—"}</span>;
+      return <span className="text-muted-foreground">{lead.mobilePhone ?? "—"}</span>;
     case "jobTitle":
-      return <span className="text-white/60">{lead.jobTitle ?? "—"}</span>;
+      return <span className="text-muted-foreground">{lead.jobTitle ?? "—"}</span>;
     case "status":
       return <Pill kind="status" value={lead.status} />;
     case "rating":
@@ -361,35 +361,35 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
       return <Pill kind="source" value={lead.source} />;
     case "owner":
       return (
-        <span className="text-white/60">
+        <span className="text-muted-foreground">
           {lead.ownerDisplayName ?? "Unassigned"}
         </span>
       );
     case "tags":
       return (
-        <span className="text-xs text-white/60">
+        <span className="text-xs text-muted-foreground">
           {lead.tags?.length ? lead.tags.join(", ") : "—"}
         </span>
       );
     case "city":
-      return <span className="text-white/60">{lead.city ?? "—"}</span>;
+      return <span className="text-muted-foreground">{lead.city ?? "—"}</span>;
     case "state":
-      return <span className="text-white/60">{lead.state ?? "—"}</span>;
+      return <span className="text-muted-foreground">{lead.state ?? "—"}</span>;
     case "estimatedValue":
       return (
-        <span className="tabular-nums text-white/60">
+        <span className="tabular-nums text-muted-foreground">
           {lead.estimatedValue ? `$${Number(lead.estimatedValue).toLocaleString()}` : "—"}
         </span>
       );
     case "estimatedCloseDate":
       return (
-        <span className="text-white/60">
+        <span className="text-muted-foreground">
           {lead.estimatedCloseDate ?? "—"}
         </span>
       );
     case "createdBy":
       return (
-        <span className="text-white/60">
+        <span className="text-muted-foreground">
           {lead.createdByDisplayName ?? "—"}
         </span>
       );
@@ -397,19 +397,19 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
       return <Pill kind="provenance" value={lead.createdVia} />;
     case "createdAt":
       return (
-        <span className="text-white/50">
+        <span className="text-muted-foreground">
           {formatUserTime(lead.createdAt, prefs, "date")}
         </span>
       );
     case "lastActivityAt":
       return (
-        <span className="text-white/50">
+        <span className="text-muted-foreground">
           {formatUserTime(lead.lastActivityAt, prefs)}
         </span>
       );
     case "updatedAt":
       return (
-        <span className="text-white/50">
+        <span className="text-muted-foreground">
           {formatUserTime(lead.updatedAt, prefs)}
         </span>
       );
@@ -432,7 +432,7 @@ function Pill({
       qualified: "border-emerald-300/30 bg-emerald-500/10 text-emerald-100",
       unqualified: "border-rose-300/30 bg-rose-500/10 text-rose-100",
       converted: "border-violet-300/30 bg-violet-500/10 text-violet-100",
-      lost: "border-white/15 bg-white/5 text-white/40",
+      lost: "border-border bg-muted/40 text-muted-foreground/80",
     },
     rating: {
       hot: "border-rose-300/30 bg-rose-500/10 text-rose-100",
@@ -446,16 +446,16 @@ function Pill({
       cold_call: "border-rose-300/30 bg-rose-500/10 text-rose-100",
       partner: "border-cyan-300/30 bg-cyan-500/10 text-cyan-100",
       marketing: "border-blue-300/30 bg-blue-500/10 text-blue-100",
-      import: "border-white/15 bg-white/5 text-white/60",
-      other: "border-white/15 bg-white/5 text-white/60",
+      import: "border-border bg-muted/40 text-muted-foreground",
+      other: "border-border bg-muted/40 text-muted-foreground",
     },
     provenance: {
-      manual: "border-white/15 bg-white/5 text-white/60",
+      manual: "border-border bg-muted/40 text-muted-foreground",
       imported: "border-amber-300/30 bg-amber-500/10 text-amber-100",
       api: "border-cyan-300/30 bg-cyan-500/10 text-cyan-100",
     },
   };
-  const cls = palette[kind]?.[value] ?? "border-white/15 bg-white/5 text-white/40";
+  const cls = palette[kind]?.[value] ?? "border-border bg-muted/40 text-muted-foreground/80";
   return (
     <span
       className={`inline-block rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${cls}`}
@@ -480,7 +480,7 @@ function FilterSelect({
     <select
       name={name}
       defaultValue={defaultValue ?? ""}
-      className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+      className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
     >
       <option value="">All {placeholder}</option>
       {options.map((o) => (
@@ -513,7 +513,7 @@ function Pagination({
     return `/leads?${params.toString()}`;
   };
   return (
-    <nav className="mt-6 flex items-center justify-between text-sm text-white/60">
+    <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
       <span>
         Page {page} of {totalPages}
       </span>
@@ -521,7 +521,7 @@ function Pagination({
         {page > 1 ? (
           <Link
             href={buildHref(page - 1)}
-            className="rounded-md border border-white/15 px-3 py-1.5 hover:bg-white/5"
+            className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
           >
             ← Previous
           </Link>
@@ -529,7 +529,7 @@ function Pagination({
         {page < totalPages ? (
           <Link
             href={buildHref(page + 1)}
-            className="rounded-md border border-white/15 px-3 py-1.5 hover:bg-white/5"
+            className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
           >
             Next →
           </Link>

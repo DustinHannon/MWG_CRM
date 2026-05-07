@@ -106,31 +106,31 @@ function UploadForm({
   return (
     <form
       action={onSubmit}
-      className="mt-8 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl"
+      className="mt-8 flex flex-col gap-4 rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl"
     >
       <div className="flex items-center justify-between gap-4">
-        <label className="flex-1 text-xs uppercase tracking-wide text-white/50">
+        <label className="flex-1 text-xs uppercase tracking-wide text-muted-foreground">
           Upload .xlsx file
           <input
             type="file"
             name="file"
             accept=".xlsx"
             required
-            className="mt-2 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white file:mr-4 file:rounded-md file:border-0 file:bg-white/90 file:px-3 file:py-1 file:text-xs file:font-medium file:text-slate-900 hover:file:bg-white"
+            className="mt-2 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-white"
           />
         </label>
         <Link
           href="/api/leads/import-template"
-          className="self-end rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 transition hover:bg-white/10"
+          className="self-end rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground/90 transition hover:bg-muted"
         >
           Download template (.xlsx)
         </Link>
       </div>
 
-      <label className="flex items-start gap-2 text-xs text-white/70">
+      <label className="flex items-start gap-2 text-xs text-foreground/80">
         <input type="checkbox" name="smartDetect" className="mt-0.5" />
         <span>
-          <span className="font-medium text-white/85">
+          <span className="font-medium text-foreground/90">
             Detect and parse legacy D365 Description column
           </span>
           <br />
@@ -144,7 +144,7 @@ function UploadForm({
       <button
         type="submit"
         disabled={pending}
-        className="self-start rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+        className="self-start rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? "Parsing…" : "Preview import"}
       </button>
@@ -173,13 +173,13 @@ function PreviewView({
 }) {
   return (
     <div className="mt-8 space-y-6">
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">
+      <div className="rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
+        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground/80">
           Import preview
         </p>
-        <h2 className="mt-1 text-xl font-semibold text-white">
+        <h2 className="mt-1 text-xl font-semibold text-foreground">
           {fileName}{" "}
-          <span className="text-white/50">({preview.totalRows} rows)</span>
+          <span className="text-muted-foreground">({preview.totalRows} rows)</span>
         </h2>
         {smartDetect ? (
           <p className="mt-2 text-xs text-amber-100/80">
@@ -246,7 +246,7 @@ function PreviewView({
           type="button"
           onClick={onCancel}
           disabled={pending}
-          className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md border border-border bg-muted/40 px-4 py-2 text-sm text-foreground/90 transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
         >
           Cancel
         </button>
@@ -254,7 +254,7 @@ function PreviewView({
           type="button"
           onClick={onCommit}
           disabled={pending}
-          className="rounded-md bg-emerald-300/90 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md bg-emerald-300/90 px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? "Committing…" : "Commit import"}
         </button>
@@ -278,8 +278,8 @@ function ResultView({
   }
   const r = state.data.result;
   return (
-    <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-white/60">
+    <div className="mt-8 rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         Import committed
       </h2>
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -303,9 +303,9 @@ function ResultView({
           <h3 className="text-xs uppercase tracking-wide text-rose-200">
             Failed rows
           </h3>
-          <ul className="mt-2 divide-y divide-white/5 text-xs">
+          <ul className="mt-2 divide-y divide-border/60 text-xs">
             {r.failedRows.map((f, i) => (
-              <li key={i} className="py-2 text-white/70">
+              <li key={i} className="py-2 text-foreground/80">
                 Row {f.rowNumber}: {f.reason}
               </li>
             ))}
@@ -315,7 +315,7 @@ function ResultView({
 
       <Link
         href="/leads"
-        className="mt-6 inline-block rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:bg-white/10"
+        className="mt-6 inline-block rounded-md border border-border bg-muted/40 px-4 py-2 text-sm text-foreground/90 transition hover:bg-muted"
       >
         View leads
       </Link>
@@ -332,7 +332,7 @@ function Section({
 }) {
   return (
     <div>
-      <h3 className="text-xs uppercase tracking-wide text-white/50">{title}</h3>
+      <h3 className="text-xs uppercase tracking-wide text-muted-foreground">{title}</h3>
       <div className="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">{children}</div>
     </div>
   );
@@ -354,7 +354,7 @@ function Stat({
         ? "border-amber-300/30 bg-amber-500/10 text-amber-100"
         : tone === "ok"
           ? "border-emerald-300/30 bg-emerald-500/10 text-emerald-100"
-          : "border-white/10 bg-white/5 text-white/80";
+          : "border-border bg-muted/40 text-foreground/90";
   return (
     <div className={`rounded-xl border px-4 py-3 ${ring}`}>
       <p className="text-[10px] uppercase tracking-wide opacity-70">{label}</p>
@@ -379,12 +379,12 @@ function CollapsibleList({
   return (
     <details className={`rounded-2xl border ${ring} p-4 backdrop-blur-xl`}>
       <summary className="cursor-pointer text-sm font-medium">{title}</summary>
-      <ul className="mt-3 max-h-72 overflow-y-auto divide-y divide-white/5 text-xs">
+      <ul className="mt-3 max-h-72 overflow-y-auto divide-y divide-border/60 text-xs">
         {items.map((it, i) => (
           <li key={i} className="py-2">
-            <p className="text-white/85">{it.primary}</p>
+            <p className="text-foreground/90">{it.primary}</p>
             {it.secondary ? (
-              <p className="mt-1 text-white/60">{it.secondary}</p>
+              <p className="mt-1 text-muted-foreground">{it.secondary}</p>
             ) : null}
           </li>
         ))}

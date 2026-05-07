@@ -40,10 +40,10 @@ export function DangerSection({
   return (
     <section className="rounded-2xl border border-rose-300/30 bg-rose-500/5 p-6 backdrop-blur-xl">
       <h2 className="text-base font-semibold text-rose-50">{title}</h2>
-      <p className="mt-1 text-sm text-white/60">{description}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
 
       <form action={action} className="mt-4 flex flex-wrap items-end gap-3">
-        <label className="text-xs uppercase tracking-wide text-white/50">
+        <label className="text-xs uppercase tracking-wide text-muted-foreground">
           Type{" "}
           <code className="rounded bg-black/30 px-1 py-0.5 text-rose-100">
             {phrase}
@@ -52,7 +52,7 @@ export function DangerSection({
           <input
             name="confirm"
             autoComplete="off"
-            className="mt-1 block min-w-[280px] rounded-md border border-white/10 bg-white/5 px-3 py-2 font-mono text-sm text-white placeholder-white/30 focus:border-rose-300/50 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+            className="mt-1 block min-w-[280px] rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-rose-300/50 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
           />
         </label>
         <button

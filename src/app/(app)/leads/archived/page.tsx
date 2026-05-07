@@ -23,7 +23,7 @@ export default async function ArchivedLeadsPage() {
   if (!user.isAdmin) {
     return (
       <div className="px-10 py-10">
-        <p className="text-sm text-white/60">Admin only.</p>
+        <p className="text-sm text-muted-foreground">Admin only.</p>
       </div>
     );
   }
@@ -49,29 +49,29 @@ export default async function ArchivedLeadsPage() {
     <div className="px-10 py-10">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Archived leads
           </h1>
-          <p className="mt-1 text-xs text-white/50">
+          <p className="mt-1 text-xs text-muted-foreground">
             Hidden from the main views. Auto-purged 30 days after archive.
           </p>
         </div>
         <Link
           href="/leads"
-          className="text-xs uppercase tracking-[0.2em] text-white/50 hover:text-white/80"
+          className="text-xs uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground/90"
         >
           ← Back to leads
         </Link>
       </div>
 
       {rows.length === 0 ? (
-        <GlassCard className="px-6 py-10 text-center text-sm text-white/50">
+        <GlassCard className="px-6 py-10 text-center text-sm text-muted-foreground">
           No archived leads.
         </GlassCard>
       ) : (
         <GlassCard className="overflow-hidden p-0">
           <table className="data-table w-full text-sm">
-            <thead className="border-b border-white/10 bg-white/5 text-left text-xs uppercase tracking-wider text-white/40">
+            <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground/80">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Company</th>
@@ -81,20 +81,20 @@ export default async function ArchivedLeadsPage() {
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-border/60">
               {rows.map((r) => (
-                <tr key={r.id} className="hover:bg-white/[0.03]">
-                  <td className="px-4 py-3 font-medium text-white">
+                <tr key={r.id} className="hover:bg-accent/40">
+                  <td className="px-4 py-3 font-medium text-foreground">
                     {r.first} {r.last}
                   </td>
-                  <td className="px-4 py-3 text-white/70">{r.company ?? "—"}</td>
-                  <td className="px-4 py-3 text-white/60">
+                  <td className="px-4 py-3 text-foreground/80">{r.company ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
                     <UserTime value={r.deletedAt} mode="date" />
                   </td>
-                  <td className="px-4 py-3 text-white/60">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {r.deletedByName ?? r.deletedByEmail ?? "—"}
                   </td>
-                  <td className="px-4 py-3 text-white/60">{r.reason ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.reason ?? "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       <form
@@ -106,7 +106,7 @@ export default async function ArchivedLeadsPage() {
                         <input type="hidden" name="id" value={r.id} />
                         <button
                           type="submit"
-                          className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10"
+                          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 hover:bg-muted"
                         >
                           Restore
                         </button>

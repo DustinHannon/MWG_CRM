@@ -50,9 +50,9 @@ export default async function UserDetailPage({
 
   return (
     <div className="px-10 py-10">
-      <p className="text-xs uppercase tracking-[0.3em] text-white/40">User</p>
+      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">User</p>
       <h1 className="mt-1 text-2xl font-semibold">{u.displayName}</h1>
-      <p className="mt-1 text-sm text-white/60">
+      <p className="mt-1 text-sm text-muted-foreground">
         {u.email} · {u.username}
         {u.isBreakglass ? (
           <span className="ml-3 inline-block rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-100">
@@ -80,7 +80,7 @@ export default async function UserDetailPage({
         <h2 className="text-xs font-medium uppercase tracking-wide text-rose-100">
           Danger zone
         </h2>
-        <p className="mt-2 text-sm text-white/60">
+        <p className="mt-2 text-sm text-muted-foreground">
           {isSelf
             ? "You cannot delete your own account."
             : u.isBreakglass

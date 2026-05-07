@@ -16,7 +16,7 @@ export function ActivityComposer({ leadId }: { leadId: string }) {
   const [tab, setTab] = useState<Tab>("note");
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+    <div className="rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
       <div className="flex gap-2">
         <Pill active={tab === "note"} onClick={() => setTab("note")}>
           Note
@@ -53,8 +53,8 @@ function Pill({
       onClick={onClick}
       className={`rounded-full px-3 py-1 text-xs uppercase tracking-wide transition ${
         active
-          ? "bg-white text-slate-900"
-          : "border border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
+          ? "bg-white text-primary-foreground"
+          : "border border-border bg-muted/40 text-muted-foreground hover:bg-muted"
       }`}
     >
       {children}
@@ -75,7 +75,7 @@ function NoteForm({ leadId }: { leadId: string }) {
         rows={4}
         required
         placeholder="Write a note about this lead…"
-        className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+        className="w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
       />
       {!state.ok && state.error ? <ErrorBox text={state.error} /> : null}
       <Submit pending={pending} label="Add note" />
@@ -112,7 +112,7 @@ function CallForm({ leadId }: { leadId: string }) {
           name="body"
           rows={3}
           placeholder="What was discussed?"
-          className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+          className="w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
         />
       </div>
       {!state.ok && state.error ? (
@@ -139,7 +139,7 @@ function TaskForm({ leadId }: { leadId: string }) {
         name="body"
         rows={3}
         placeholder="Details…"
-        className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+        className="w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
       />
       {!state.ok && state.error ? <ErrorBox text={state.error} /> : null}
       <Submit pending={pending} label="Add task" />
@@ -159,13 +159,13 @@ function FieldInput({
   required?: boolean;
 }) {
   return (
-    <label className="block text-xs uppercase tracking-wide text-white/50">
+    <label className="block text-xs uppercase tracking-wide text-muted-foreground">
       {label}
       <input
         name={name}
         type={type}
         required={required}
-        className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+        className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
       />
     </label>
   );
@@ -181,12 +181,12 @@ function FieldSelect({
   options: string[];
 }) {
   return (
-    <label className="block text-xs uppercase tracking-wide text-white/50">
+    <label className="block text-xs uppercase tracking-wide text-muted-foreground">
       {label}
       <select
         name={name}
         defaultValue=""
-        className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+        className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
       >
         <option value="">—</option>
         {options.map((o) => (
@@ -204,7 +204,7 @@ function Submit({ pending, label }: { pending: boolean; label: string }) {
     <button
       type="submit"
       disabled={pending}
-      className="self-end rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+      className="self-end rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending ? "Saving…" : label}
     </button>

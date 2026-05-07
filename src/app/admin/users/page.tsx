@@ -31,17 +31,17 @@ export default async function UsersListPage() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Users</h1>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-2 text-sm text-muted-foreground">
             {rows.length} {rows.length === 1 ? "user" : "users"}. Click a row
             to manage permissions and admin flags.
           </p>
         </div>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
-        <table className="data-table min-w-full divide-y divide-white/5">
+      <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
+        <table className="data-table min-w-full divide-y divide-border/60">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-white/50">
+            <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <th className="px-5 py-3 font-medium">Name</th>
               <th className="px-5 py-3 font-medium">Email</th>
               <th className="px-5 py-3 font-medium">Role</th>
@@ -50,22 +50,22 @@ export default async function UsersListPage() {
               <th className="px-5 py-3 font-medium">Last login</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-border/60">
             {rows.map((u) => (
               <tr
                 key={u.id}
-                className="text-sm transition hover:bg-white/5"
+                className="text-sm transition hover:bg-muted/40"
               >
                 <td className="px-5 py-3">
                   <Link
                     href={`/admin/users/${u.id}`}
-                    className="block font-medium text-white hover:underline"
+                    className="block font-medium text-foreground hover:underline"
                   >
                     {u.displayName}
                   </Link>
-                  <span className="text-xs text-white/40">{u.username}</span>
+                  <span className="text-xs text-muted-foreground/80">{u.username}</span>
                 </td>
-                <td className="px-5 py-3 text-white/70">{u.email}</td>
+                <td className="px-5 py-3 text-foreground/80">{u.email}</td>
                 <td className="px-5 py-3">
                   <div className="flex flex-wrap gap-1.5">
                     {u.isAdmin ? (
@@ -83,10 +83,10 @@ export default async function UsersListPage() {
                     <Pill tone="off">Disabled</Pill>
                   )}
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums text-white/70">
+                <td className="px-5 py-3 text-right tabular-nums text-foreground/80">
                   {u.leadCount}
                 </td>
-                <td className="px-5 py-3 text-white/60">
+                <td className="px-5 py-3 text-muted-foreground">
                   <UserTime value={u.lastLoginAt} />
                 </td>
               </tr>
@@ -110,7 +110,7 @@ function Pill({
     off: "border-rose-300/30 bg-rose-500/10 text-rose-100",
     admin: "border-blue-300/30 bg-blue-500/10 text-blue-100",
     warn: "border-amber-300/30 bg-amber-500/10 text-amber-100",
-    muted: "border-white/15 bg-white/5 text-white/60",
+    muted: "border-border bg-muted/40 text-muted-foreground",
   }[tone];
   return (
     <span

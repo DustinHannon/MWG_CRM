@@ -56,7 +56,7 @@ export function DeleteUserButton({
         onClick={handleOpen}
         disabled={disabled}
         title={disabled ? disabledReason : undefined}
-        className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-sm text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-sm text-rose-100 transition hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-50"
       >
         Delete user
       </button>
@@ -64,7 +64,7 @@ export function DeleteUserButton({
       {open ? (
         <Modal onClose={() => !submitting && setOpen(false)}>
           {preflight === null ? (
-            <p className="text-sm text-white/60">Loading…</p>
+            <p className="text-sm text-muted-foreground">Loading…</p>
           ) : !preflight.ok ? (
             <div>
               <h2 className="text-lg font-semibold">Cannot delete</h2>
@@ -75,7 +75,7 @@ export function DeleteUserButton({
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="rounded-md px-3 py-1.5 text-sm text-white/60 hover:text-white"
+                  className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
                   Close
                 </button>
@@ -156,21 +156,21 @@ function DeleteForm({
   return (
     <form onSubmit={onFormSubmit}>
       <h2 className="text-lg font-semibold">Delete {u.displayName}?</h2>
-      <p className="mt-2 text-sm text-white/60">
+      <p className="mt-2 text-sm text-muted-foreground">
         This permanently removes the user account, their personal saved
         views, preferences, OAuth links, and active sessions.
       </p>
 
       {u.activityCount > 0 ? (
-        <p className="mt-2 text-xs text-white/40">
+        <p className="mt-2 text-xs text-muted-foreground/80">
           {u.activityCount} activity rows authored by this user will be
           preserved with author shown as &quot;Deleted user&quot;.
         </p>
       ) : null}
 
       {hasLeads ? (
-        <fieldset className="mt-4 rounded-md border border-white/10 bg-white/5 p-4">
-          <legend className="px-2 text-xs uppercase tracking-wide text-white/40">
+        <fieldset className="mt-4 rounded-md border border-border bg-muted/40 p-4">
+          <legend className="px-2 text-xs uppercase tracking-wide text-muted-foreground/80">
             What about their {u.leadCount} owned lead{u.leadCount === 1 ? "" : "s"}?
           </legend>
           <label className="flex items-start gap-2 py-2">
@@ -180,11 +180,11 @@ function DeleteForm({
               value="reassign"
               checked={disposition === "reassign"}
               onChange={() => setDisposition("reassign")}
-              className="mt-1 h-4 w-4 border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
+              className="mt-1 h-4 w-4 border-border bg-muted/40 text-blue-500 focus:ring-blue-500"
             />
             <span className="flex-1 text-sm">
-              <strong className="text-white">Reassign to another user</strong>
-              <p className="mt-1 text-xs text-white/60">
+              <strong className="text-foreground">Reassign to another user</strong>
+              <p className="mt-1 text-xs text-muted-foreground">
                 Their {u.leadCount} lead{u.leadCount === 1 ? "" : "s"} get a
                 new owner. The &quot;Created by&quot; field on each lead is
                 preserved.
@@ -194,7 +194,7 @@ function DeleteForm({
                   required
                   value={reassignTo}
                   onChange={(e) => setReassignTo(e.target.value)}
-                  className="mt-2 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                  className="mt-2 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground"
                 >
                   {targets.length === 0 ? (
                     <option value="">No active users available</option>
@@ -215,7 +215,7 @@ function DeleteForm({
               value="delete_leads"
               checked={disposition === "delete_leads"}
               onChange={() => setDisposition("delete_leads")}
-              className="mt-1 h-4 w-4 border-white/20 bg-white/5 text-rose-500 focus:ring-rose-500"
+              className="mt-1 h-4 w-4 border-border bg-muted/40 text-rose-500 focus:ring-rose-500"
             />
             <span className="flex-1 text-sm">
               <strong className="text-rose-100">
@@ -232,9 +232,9 @@ function DeleteForm({
       ) : null}
 
       <label className="mt-4 block">
-        <span className="text-xs uppercase tracking-wide text-white/40">
+        <span className="text-xs uppercase tracking-wide text-muted-foreground/80">
           Type{" "}
-          <code className="rounded bg-white/10 px-1.5 py-0.5 text-white">
+          <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">
             {expectedConfirm}
           </code>{" "}
           to confirm
@@ -243,7 +243,7 @@ function DeleteForm({
           autoFocus
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
-          className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-rose-300/50 focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-rose-300/50 focus:outline-none"
         />
       </label>
 
@@ -258,7 +258,7 @@ function DeleteForm({
           type="button"
           onClick={onCancel}
           disabled={submitting}
-          className="rounded-md px-3 py-1.5 text-sm text-white/60 hover:text-white"
+          className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           Cancel
         </button>
@@ -269,7 +269,7 @@ function DeleteForm({
             confirm !== expectedConfirm ||
             (hasLeads && disposition === "reassign" && !reassignTo)
           }
-          className="rounded-md bg-rose-500/80 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-rose-500/80 px-4 py-1.5 text-sm font-medium text-foreground transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? "Deleting…" : "Delete user"}
         </button>
@@ -294,7 +294,7 @@ function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[var(--popover)] text-[var(--popover-foreground)] p-6 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl border border-border bg-[var(--popover)] text-[var(--popover-foreground)] p-6 shadow-2xl"
       >
         {children}
       </div>

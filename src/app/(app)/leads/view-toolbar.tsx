@@ -147,7 +147,7 @@ export function ViewToolbar({
               router.refresh();
             });
           }}
-          className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/80 transition hover:bg-white/10"
+          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted"
         >
           Save changes
         </button>
@@ -157,7 +157,7 @@ export function ViewToolbar({
         <button
           type="button"
           onClick={() => setSaveOpen(true)}
-          className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/80 transition hover:bg-white/10"
+          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted"
         >
           Save as new view
         </button>
@@ -168,7 +168,7 @@ export function ViewToolbar({
         <button
           type="button"
           onClick={() => setColumnsOpen((o) => !o)}
-          className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/80 transition hover:bg-white/10"
+          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted"
         >
           Columns ({activeColumns.length})
         </button>
@@ -215,7 +215,7 @@ export function ViewToolbar({
               router.push("/leads?view=builtin:my-open");
             });
           }}
-          className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-100 transition hover:bg-rose-500/20"
+          className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-100 transition hover:bg-destructive/20"
         >
           Delete view
         </button>
@@ -242,10 +242,10 @@ function ViewSelectMenu({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white transition hover:bg-white/10"
+        className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground transition hover:bg-muted"
       >
         <span className="font-medium">{active?.name ?? "Pick a view"}</span>
-        <span className="text-white/40">▾</span>
+        <span className="text-muted-foreground/80">▾</span>
       </button>
       {open ? (
         <>
@@ -255,8 +255,8 @@ function ViewSelectMenu({
             aria-label="Close menu"
             className="fixed inset-0 z-40 cursor-default"
           />
-          <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border border-white/10 bg-[var(--popover)] text-[var(--popover-foreground)] shadow-2xl">
-            <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-white/40">
+          <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border border-border bg-[var(--popover)] text-[var(--popover-foreground)] shadow-2xl">
+            <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-muted-foreground/80">
               Built-in
             </div>
             {grouped.builtin.map((v) => (
@@ -272,7 +272,7 @@ function ViewSelectMenu({
             ))}
             {grouped.saved.length > 0 ? (
               <>
-                <div className="mt-2 border-t border-white/10 px-3 py-2 text-[10px] uppercase tracking-wide text-white/40">
+                <div className="mt-2 border-t border-border px-3 py-2 text-[10px] uppercase tracking-wide text-muted-foreground/80">
                   Saved
                 </div>
                 {grouped.saved.map((v) => (
@@ -308,7 +308,7 @@ function ViewMenuItem({
     <button
       type="button"
       onClick={onPick}
-      className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-white/5 ${active ? "bg-white/10 font-medium" : ""}`}
+      className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-muted/40 ${active ? "bg-muted font-medium" : ""}`}
     >
       <span className="flex items-center gap-2">
         {view.isPinned ? <span aria-hidden>⭐</span> : null}
@@ -338,15 +338,15 @@ function ColumnChooser({
         aria-label="Close column chooser"
         className="fixed inset-0 z-40 cursor-default"
       />
-      <div className="absolute right-0 top-full z-50 mt-1 max-h-96 w-72 overflow-y-auto rounded-md border border-white/10 bg-[var(--popover)] text-[var(--popover-foreground)] p-2 shadow-2xl">
+      <div className="absolute right-0 top-full z-50 mt-1 max-h-96 w-72 overflow-y-auto rounded-md border border-border bg-[var(--popover)] text-[var(--popover-foreground)] p-2 shadow-2xl">
         <div className="flex items-center justify-between px-2 py-1">
-          <span className="text-[10px] uppercase tracking-wide text-white/40">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80">
             Show columns
           </span>
           <button
             type="button"
             onClick={onReset}
-            className="text-[10px] uppercase tracking-wide text-white/60 hover:text-white"
+            className="text-[10px] uppercase tracking-wide text-muted-foreground hover:text-foreground"
           >
             Reset
           </button>
@@ -354,13 +354,13 @@ function ColumnChooser({
         {AVAILABLE_COLUMNS.map((c) => (
           <label
             key={c.key}
-            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm transition hover:bg-white/5"
+            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm transition hover:bg-muted/40"
           >
             <input
               type="checkbox"
               checked={active.includes(c.key)}
               onChange={() => onToggle(c.key)}
-              className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
+              className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500"
             />
             <span>{c.label}</span>
           </label>
@@ -432,15 +432,15 @@ function SaveViewDialog({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-[var(--popover)] text-[var(--popover-foreground)] p-6 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-border bg-[var(--popover)] text-[var(--popover-foreground)] p-6 shadow-2xl"
       >
         <h2 className="text-lg font-semibold">Save current view</h2>
-        <p className="mt-1 text-sm text-white/60">
+        <p className="mt-1 text-sm text-muted-foreground">
           Captures your current filters and columns so you can come back to
           them with one click.
         </p>
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
-          <label className="block text-xs uppercase tracking-wide text-white/50">
+          <label className="block text-xs uppercase tracking-wide text-muted-foreground">
             Name
             <input
               autoFocus
@@ -448,7 +448,7 @@ function SaveViewDialog({
               onChange={(e) => setName(e.target.value)}
               required
               maxLength={80}
-              className="mt-1 block w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+              className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               placeholder="e.g. East-coast hot leads"
             />
           </label>
@@ -457,7 +457,7 @@ function SaveViewDialog({
               type="checkbox"
               checked={pin}
               onChange={(e) => setPin(e.target.checked)}
-              className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
+              className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500"
             />
             <span>Pin to top of list</span>
           </label>
@@ -470,14 +470,14 @@ function SaveViewDialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md px-3 py-1.5 text-sm text-white/60 hover:text-white"
+              className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting || !name.trim()}
-              className="rounded-md bg-white/90 px-4 py-1.5 text-sm font-medium text-slate-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? "Saving…" : "Save view"}
             </button>

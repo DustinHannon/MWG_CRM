@@ -6,7 +6,7 @@ export default function AdminSettingsPage() {
   return (
     <div className="px-10 py-10">
       <h1 className="text-2xl font-semibold">Settings</h1>
-      <p className="mt-2 text-sm text-white/60">
+      <p className="mt-2 text-sm text-muted-foreground">
         Read-only view of the deployed configuration. Edit via Vercel
         environment variables and redeploy.
       </p>
@@ -23,7 +23,7 @@ export default function AdminSettingsPage() {
             {env.ALLOWED_EMAIL_DOMAINS.map((d) => (
               <li
                 key={d}
-                className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/70"
+                className="rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-foreground/80"
               >
                 {d}
               </li>
@@ -78,8 +78,8 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-      <h2 className="text-xs font-medium uppercase tracking-wide text-white/50">
+    <section className="rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
       <div className="mt-4 flex flex-col gap-3">{children}</div>
@@ -100,7 +100,7 @@ function Row({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="text-xs uppercase tracking-wide text-white/50">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       <span
@@ -109,7 +109,7 @@ function Row({
             ? "text-emerald-200"
             : tone === "warn"
               ? "text-amber-200"
-              : "text-white/80"
+              : "text-foreground/90"
         }`}
       >
         {value}

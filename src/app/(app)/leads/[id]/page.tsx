@@ -67,23 +67,23 @@ export default async function LeadDetailPage({
 
   return (
     <div className="px-10 py-10">
-      <Link href="/leads" className="text-xs text-white/40 hover:text-white/70">
+      <Link href="/leads" className="text-xs text-muted-foreground/80 hover:text-foreground/80">
         ← Back to leads
       </Link>
       <div className="mt-3 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{formatPersonName(lead)}</h1>
           {lead.subject ? (
-            <p className="mt-1 text-sm italic text-white/55">{lead.subject}</p>
+            <p className="mt-1 text-sm italic text-muted-foreground">{lead.subject}</p>
           ) : null}
-          <p className="mt-1 text-sm text-white/60">
+          <p className="mt-1 text-sm text-muted-foreground">
             {lead.jobTitle ? `${lead.jobTitle} · ` : ""}
             {lead.companyName ?? "No company"}
           </p>
-          <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/40">
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/80">
             <span>
               Created by{" "}
-              <span className="text-white/70">
+              <span className="text-foreground/80">
                 {creator?.displayName ?? "Deleted user"}
               </span>{" "}
               on <UserTime value={lead.createdAt} mode="date" />
@@ -110,7 +110,7 @@ export default async function LeadDetailPage({
             <span className="rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-amber-100">
               {lead.rating}
             </span>
-            <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-white/60">
+            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">
               {lead.source.replaceAll("_", " ")}
             </span>
             {lead.doNotContact ? (
@@ -137,7 +137,7 @@ export default async function LeadDetailPage({
           {canEdit ? (
             <Link
               href={`/leads/${lead.id}/edit`}
-              className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/80 transition hover:bg-white/10"
+              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted"
             >
               Edit
             </Link>
@@ -146,7 +146,7 @@ export default async function LeadDetailPage({
             href={`/leads/print/${lead.id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/80 transition hover:bg-white/10"
+            className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted"
             title="Open print preview — use your browser's Save as PDF"
           >
             Print / PDF
@@ -161,7 +161,7 @@ export default async function LeadDetailPage({
               <input type="hidden" name="id" value={lead.id} />
               <button
                 type="submit"
-                className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-sm text-rose-100 transition hover:bg-rose-500/20"
+                className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-1.5 text-sm text-rose-100 transition hover:bg-destructive/20"
               >
                 Archive
               </button>
@@ -205,8 +205,8 @@ export default async function LeadDetailPage({
         </Card>
 
         <Card title="Description" wide>
-          <p className="whitespace-pre-wrap text-sm text-white/80">
-            {lead.description ?? <span className="text-white/40">No notes yet.</span>}
+          <p className="whitespace-pre-wrap text-sm text-foreground/90">
+            {lead.description ?? <span className="text-muted-foreground/80">No notes yet.</span>}
           </p>
         </Card>
 
@@ -226,7 +226,7 @@ export default async function LeadDetailPage({
         </div>
 
         <div className="lg:col-span-3">
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-white/50">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Activity timeline
           </h2>
           <ActivityFeed leadId={lead.id} user={user} />
@@ -293,9 +293,9 @@ function Card({
 }) {
   return (
     <section
-      className={`rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl ${wide ? "lg:col-span-3" : ""}`}
+      className={`rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl ${wide ? "lg:col-span-3" : ""}`}
     >
-      <h2 className="text-xs font-medium uppercase tracking-wide text-white/50">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
       <div className="mt-4 flex flex-col gap-3">{children}</div>
@@ -319,10 +319,10 @@ function Field({
   if (!value) {
     return (
       <div>
-        <p className="text-[11px] uppercase tracking-wide text-white/40">
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground/80">
           {label}
         </p>
-        <p className="text-sm text-white/30">—</p>
+        <p className="text-sm text-muted-foreground/70">—</p>
       </div>
     );
   }
@@ -339,10 +339,10 @@ function Field({
 
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-white/40">
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground/80">
         {label}
       </p>
-      <p className="text-sm text-white/85">{inner}</p>
+      <p className="text-sm text-foreground/90">{inner}</p>
     </div>
   );
 }

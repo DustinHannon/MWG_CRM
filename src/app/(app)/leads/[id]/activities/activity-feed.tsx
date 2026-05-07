@@ -13,7 +13,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 const KIND_PALETTE: Record<string, string> = {
-  note: "border-white/10 bg-white/5 text-white/70",
+  note: "border-border bg-muted/40 text-foreground/80",
   call: "border-cyan-300/30 bg-cyan-500/10 text-cyan-100",
   task: "border-emerald-300/30 bg-emerald-500/10 text-emerald-100",
   email: "border-blue-300/30 bg-blue-500/10 text-blue-100",
@@ -32,7 +32,7 @@ export async function ActivityFeed({
 
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-white/40">
+      <p className="text-sm text-muted-foreground/80">
         No activities yet. Add a note, call, email, or meeting above.
       </p>
     );
@@ -48,7 +48,7 @@ export async function ActivityFeed({
         return (
           <li
             key={r.id}
-            className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md"
+            className="rounded-xl border border-border bg-muted/40 p-4 backdrop-blur-md"
           >
             <header className="flex items-start justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -60,26 +60,26 @@ export async function ActivityFeed({
                   {KIND_LABEL[r.kind] ?? r.kind}
                 </span>
                 {r.subject ? (
-                  <p className="text-sm font-medium text-white">{r.subject}</p>
+                  <p className="text-sm font-medium text-foreground">{r.subject}</p>
                 ) : null}
               </div>
               <div className="text-right">
                 <p
-                  className="text-xs text-white/40"
+                  className="text-xs text-muted-foreground/80"
                   title={tooltip}
                   suppressHydrationWarning
                 >
                   {relative}
                 </p>
                 {r.userDisplayName ? (
-                  <p className="text-xs text-white/40">{r.userDisplayName}</p>
+                  <p className="text-xs text-muted-foreground/80">{r.userDisplayName}</p>
                 ) : null}
               </div>
             </header>
 
             {r.outcome ? (
-              <p className="mt-2 text-xs text-white/50">
-                Outcome: <span className="text-white/80">{r.outcome}</span>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Outcome: <span className="text-foreground/90">{r.outcome}</span>
                 {r.durationMinutes
                   ? ` · ${r.durationMinutes} min`
                   : ""}
@@ -87,7 +87,7 @@ export async function ActivityFeed({
             ) : null}
 
             {r.body ? (
-              <p className="mt-3 whitespace-pre-wrap text-sm text-white/85">
+              <p className="mt-3 whitespace-pre-wrap text-sm text-foreground/90">
                 {r.body}
               </p>
             ) : null}
@@ -100,7 +100,7 @@ export async function ActivityFeed({
                       href={a.blobUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/70 hover:bg-white/10"
+                      className="rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-foreground/80 hover:bg-muted"
                     >
                       📎 {a.filename}
                     </a>
@@ -121,7 +121,7 @@ export async function ActivityFeed({
                 <input type="hidden" name="leadId" value={leadId} />
                 <button
                   type="submit"
-                  className="text-[11px] text-white/40 underline-offset-4 hover:text-white/70 hover:underline"
+                  className="text-[11px] text-muted-foreground/80 underline-offset-4 hover:text-foreground/80 hover:underline"
                 >
                   Delete
                 </button>

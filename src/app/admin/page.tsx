@@ -26,7 +26,7 @@ export default async function AdminOverviewPage() {
   return (
     <div className="px-10 py-10">
       <h1 className="text-2xl font-semibold">Admin overview</h1>
-      <p className="mt-2 text-sm text-white/60">
+      <p className="mt-2 text-sm text-muted-foreground">
         High-level state of the CRM. Everything here is read-only.
       </p>
 
@@ -43,8 +43,8 @@ export default async function AdminOverviewPage() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
-      <p className="text-xs uppercase tracking-wide text-white/40">{label}</p>
+    <div className="rounded-2xl border border-border bg-muted/40 p-5 backdrop-blur-xl">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground/80">{label}</p>
       <p className="mt-3 text-3xl font-semibold tabular-nums">{value}</p>
     </div>
   );

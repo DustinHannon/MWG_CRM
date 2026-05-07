@@ -150,7 +150,7 @@ export default async function DashboardPage() {
     // error, lets the user navigate elsewhere.
     return (
       <div className="px-10 py-10">
-        <p className="text-xs uppercase tracking-[0.3em] text-white/40">
+        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
           Welcome back
         </p>
         <h1 className="mt-1 text-2xl font-semibold">{user.displayName}</h1>
@@ -158,14 +158,14 @@ export default async function DashboardPage() {
           <h2 className="text-lg font-semibold text-rose-100">
             Dashboard temporarily unavailable
           </h2>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-2 text-sm text-muted-foreground">
             We couldn&apos;t load metrics. Try refreshing, or jump straight
             to your leads.
           </p>
           <div className="mt-5 flex justify-center gap-2">
             <Link
               href="/leads"
-              className="rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-white"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
               Go to leads
             </Link>
@@ -181,7 +181,7 @@ export default async function DashboardPage() {
   if (totalLeads === 0) {
     return (
       <div className="px-10 py-10">
-        <p className="text-xs uppercase tracking-[0.3em] text-white/40">
+        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
           Welcome back
         </p>
         <h1 className="mt-1 text-2xl font-semibold">{user.displayName}</h1>
@@ -240,7 +240,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="px-10 py-10">
-      <p className="text-xs uppercase tracking-[0.3em] text-white/40">
+      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
         Welcome back
       </p>
       <h1 className="mt-1 text-2xl font-semibold">{user.displayName}</h1>
@@ -344,23 +344,23 @@ async function RecentActivity({
   }
 
   if (recent.length === 0) {
-    return <p className="text-xs text-white/40">No recent activity.</p>;
+    return <p className="text-xs text-muted-foreground/80">No recent activity.</p>;
   }
   return (
-    <ul className="divide-y divide-white/5 text-sm">
+    <ul className="divide-y divide-border/60 text-sm">
       {recent.map((r) => (
         <li key={r.id} className="flex items-center justify-between py-2">
           <Link
             href={`/leads/${r.lead_id}`}
-            className="truncate text-white hover:underline"
+            className="truncate text-foreground hover:underline"
           >
-            <span className="text-[10px] uppercase tracking-wide text-white/40">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80">
               {r.kind}
             </span>{" "}
-            <span className="text-white/70">
+            <span className="text-foreground/80">
               {r.subject ?? "(no subject)"}
             </span>{" "}
-            <span className="text-white/40">
+            <span className="text-muted-foreground/80">
               ·{" "}
               {formatPersonNameRow({
                 first_name: r.lead_first,
@@ -368,7 +368,7 @@ async function RecentActivity({
               })}
             </span>
           </Link>
-          <span className="ml-3 shrink-0 text-xs text-white/40">
+          <span className="ml-3 shrink-0 text-xs text-muted-foreground/80">
             <UserTime value={r.occurred_at as unknown as Date} mode="date" />
           </span>
         </li>

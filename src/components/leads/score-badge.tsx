@@ -29,7 +29,7 @@ export function ScoreBadge({
     hot: "bg-red-500/15 text-red-300 border-red-400/30",
     warm: "bg-amber-500/15 text-amber-200 border-amber-400/30",
     cool: "bg-sky-500/15 text-sky-200 border-sky-400/30",
-    cold: "bg-slate-500/15 text-slate-300 border-slate-400/30",
+    cold: "bg-slate-500/15 text-muted-foreground border-slate-400/30",
   };
   const icons: Record<string, string> = {
     hot: "🔥",
