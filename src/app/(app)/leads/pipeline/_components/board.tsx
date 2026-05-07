@@ -12,13 +12,14 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { formatPersonName } from "@/lib/format/person-name";
 import { updateLeadStatusAction } from "../actions";
 
 interface Card {
   id: string;
   status: string;
   firstName: string;
-  lastName: string;
+  lastName: string | null;
   companyName: string | null;
   rating: string;
   ownerName: string | null;
@@ -171,7 +172,7 @@ function Card({ card }: { card: Card }) {
         className="block"
       >
         <p className="font-medium text-foreground">
-          {card.firstName} {card.lastName}
+          {formatPersonName(card)}
         </p>
         {card.companyName ? (
           <p className="mt-0.5 truncate text-xs text-muted-foreground">

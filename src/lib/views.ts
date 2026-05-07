@@ -372,7 +372,7 @@ export interface RunViewResult {
 export interface LeadRow {
   id: string;
   firstName: string;
-  lastName: string;
+  lastName: string | null;
   companyName: string | null;
   email: string | null;
   phone: string | null;

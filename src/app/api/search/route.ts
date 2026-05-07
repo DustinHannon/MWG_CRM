@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { logger } from "@/lib/logger";
+import { formatPersonNameRow } from "@/lib/format/person-name";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -90,7 +91,7 @@ export async function GET(req: Request) {
       hits.push({
         type: "lead",
         id: r.id,
-        label: `${r.first_name} ${r.last_name}`,
+        label: formatPersonNameRow(r),
         sublabel: r.company_name ?? r.email ?? null,
         link: `/leads/${r.id}`,
       });
@@ -155,7 +156,7 @@ export async function GET(req: Request) {
       hits.push({
         type: "contact",
         id: r.id,
-        label: `${r.first_name} ${r.last_name}`,
+        label: formatPersonNameRow(r),
         sublabel: r.email ?? null,
         link: `/contacts/${r.id}`,
       });

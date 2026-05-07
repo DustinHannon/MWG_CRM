@@ -63,7 +63,16 @@ export type LeadFilters = z.infer<typeof leadFiltersSchema>;
 const leadCreateSchemaBase = z.object({
   salutation: z.string().max(20).optional().nullable(),
   firstName: z.string().trim().min(1, "First name required").max(120),
-  lastName: z.string().trim().min(1, "Last name required").max(120),
+  // Phase 6A — last_name is now nullable. Manual create form still
+  // marks the field required via HTML/UI, but the schema accepts empty
+  // so the import path can carry NULL through.
+  lastName: z
+    .string()
+    .trim()
+    .max(120)
+    .or(z.literal(""))
+    .optional()
+    .nullable(),
   jobTitle: z.string().max(200).optional().nullable(),
   companyName: z.string().max(200).optional().nullable(),
   industry: z.string().max(100).optional().nullable(),
@@ -79,6 +88,8 @@ const leadCreateSchemaBase = z.object({
   postalCode: z.string().max(20).optional().nullable(),
   country: z.string().max(100).optional().nullable(),
   description: z.string().max(20_000).optional().nullable(),
+  // Phase 6A — leads.subject (the "Topic:" line in legacy D365 dumps).
+  subject: z.string().max(1000).optional().nullable(),
   status: z.enum(LEAD_STATUSES).default("new"),
   rating: z.enum(LEAD_RATINGS).default("warm"),
   source: z.enum(LEAD_SOURCES).default("other"),
@@ -159,7 +170,7 @@ export interface LeadListResult {
   rows: Array<{
     id: string;
     firstName: string;
-    lastName: string;
+    lastName: string | null;
     companyName: string | null;
     email: string | null;
     phone: string | null;
@@ -313,7 +324,7 @@ export async function createLead(
       source: input.source,
       salutation: input.salutation ?? null,
       firstName: input.firstName,
-      lastName: input.lastName,
+      lastName: input.lastName ?? null,
       jobTitle: input.jobTitle ?? null,
       companyName: input.companyName ?? null,
       industry: input.industry ?? null,
@@ -329,6 +340,7 @@ export async function createLead(
       postalCode: input.postalCode ?? null,
       country: input.country ?? null,
       description: input.description ?? null,
+      subject: input.subject ?? null,
       doNotContact: input.doNotContact,
       doNotEmail: input.doNotEmail,
       doNotCall: input.doNotCall,

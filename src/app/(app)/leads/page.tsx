@@ -332,13 +332,15 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
         </Link>
       );
     case "lastName":
-      return (
+      return lead.lastName ? (
         <Link
           href={`/leads/${lead.id}`}
           className="font-medium text-white hover:underline"
         >
           {lead.lastName}
         </Link>
+      ) : (
+        <span className="text-white/40">—</span>
       );
     case "companyName":
       return <span className="text-white/70">{lead.companyName ?? "—"}</span>;

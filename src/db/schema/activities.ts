@@ -49,6 +49,15 @@ export const activities = pgTable(
     graphMessageId: text("graph_message_id"),
     graphEventId: text("graph_event_id"),
     graphInternetMessageId: text("graph_internet_message_id"),
+    // Phase 6A — Snapshot of "By: Name" from imported D365 activity
+    // bodies when the name doesn't resolve to a CRM user. When set,
+    // userId/createdById will be NULL and the UI renders this with an
+    // " (imported)" italic hint.
+    importedByName: text("imported_by_name"),
+    // Phase 6A — sha256(lead_id||kind||occurred_at_iso||body_first_200).
+    // Set on import only; manually-created activities leave this NULL.
+    // The activities_import_dedup_idx index makes re-imports idempotent.
+    importDedupKey: text("import_dedup_key"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -60,6 +69,12 @@ export const activities = pgTable(
     index("activities_lead_occurred_idx").on(t.leadId, t.occurredAt.desc()),
     index("activities_user_idx").on(t.userId),
     index("activities_kind_idx").on(t.kind),
+    // Phase 6A — partial index on (lead_id, import_dedup_key) for the
+    // re-import dedup lookup. Only indexes rows where dedup_key is set,
+    // i.e., imported activities.
+    index("activities_import_dedup_idx")
+      .on(t.leadId, t.importDedupKey)
+      .where(sql`import_dedup_key IS NOT NULL`),
     // Partial unique indexes prevent duplicate Graph imports.
     uniqueIndex("activities_graph_message_uniq")
       .on(t.graphMessageId)

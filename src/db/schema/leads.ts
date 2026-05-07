@@ -36,7 +36,10 @@ export const leads = pgTable(
     source: leadSourceEnum("source").notNull().default("other"),
     salutation: text("salutation"),
     firstName: text("first_name").notNull(),
-    lastName: text("last_name").notNull(),
+    // Phase 6A — last_name nullable. Real CRM data routinely has incomplete
+    // name records (e.g., "Amy", "Mr.", "Unknown"). The leads_last_name_len
+    // CHECK still validates length when non-NULL.
+    lastName: text("last_name"),
     jobTitle: text("job_title"),
     companyName: text("company_name"),
     industry: text("industry"),
@@ -54,6 +57,12 @@ export const leads = pgTable(
     estimatedValue: numeric("estimated_value", { precision: 14, scale: 2 }),
     estimatedCloseDate: date("estimated_close_date"),
     description: text("description"),
+    // Phase 6A — Subject line ("Topic" in legacy D365 dumps). Stored
+    // separately from description so it can be searched and indexed
+    // independently. CHECK constraint caps at 1000 chars (intentional —
+    // some D365 Topic values are essentially the customer's full inbound
+    // message). Indexed via leads_subject_trgm_idx and the FTS index.
+    subject: text("subject"),
     doNotContact: boolean("do_not_contact").notNull().default(false),
     doNotEmail: boolean("do_not_email").notNull().default(false),
     doNotCall: boolean("do_not_call").notNull().default(false),

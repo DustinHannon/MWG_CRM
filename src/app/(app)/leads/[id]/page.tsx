@@ -12,6 +12,7 @@ import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { env } from "@/lib/env";
 import { getLeadById } from "@/lib/leads";
+import { formatPersonName } from "@/lib/format/person-name";
 import { deleteLeadAction } from "../actions";
 import { ConvertModal } from "./convert/_components/convert-modal";
 import { ActivityComposer } from "./activities/activity-composer";
@@ -71,9 +72,10 @@ export default async function LeadDetailPage({
       </Link>
       <div className="mt-3 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">
-            {lead.firstName} {lead.lastName}
-          </h1>
+          <h1 className="text-2xl font-semibold">{formatPersonName(lead)}</h1>
+          {lead.subject ? (
+            <p className="mt-1 text-sm italic text-white/55">{lead.subject}</p>
+          ) : null}
           <p className="mt-1 text-sm text-white/60">
             {lead.jobTitle ? `${lead.jobTitle} · ` : ""}
             {lead.companyName ?? "No company"}
@@ -208,7 +210,7 @@ export default async function LeadDetailPage({
             <GraphActionPanel
               leadId={lead.id}
               defaultEmail={lead.email}
-              defaultName={`${lead.firstName} ${lead.lastName}`.trim()}
+              defaultName={formatPersonName(lead)}
               defaultTimeZone={env.DEFAULT_TIMEZONE}
             />
           </div>

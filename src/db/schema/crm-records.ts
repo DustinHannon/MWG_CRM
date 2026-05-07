@@ -73,7 +73,9 @@ export const contacts = pgTable(
       onDelete: "set null",
     }),
     firstName: text("first_name").notNull(),
-    lastName: text("last_name").notNull(),
+    // Phase 6A — last_name nullable on contacts to mirror leads. The
+    // contacts_last_len CHECK still validates length when non-NULL.
+    lastName: text("last_name"),
     jobTitle: text("job_title"),
     email: text("email"),
     phone: text("phone"),

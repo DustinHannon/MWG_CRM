@@ -17,7 +17,7 @@ type LeadFormValues = {
   id?: string;
   salutation?: string | null;
   firstName: string;
-  lastName: string;
+  lastName?: string | null;
   jobTitle?: string | null;
   companyName?: string | null;
   industry?: string | null;
@@ -80,7 +80,7 @@ export function LeadForm({
       <Section title="Contact">
         <Row>
           <Input name="firstName" label="First name *" defaultValue={v.firstName} required />
-          <Input name="lastName" label="Last name *" defaultValue={v.lastName} required />
+          <Input name="lastName" label="Last name" defaultValue={v.lastName ?? ""} />
         </Row>
         <Input name="jobTitle" label="Job title" defaultValue={v.jobTitle ?? ""} />
         <Row>

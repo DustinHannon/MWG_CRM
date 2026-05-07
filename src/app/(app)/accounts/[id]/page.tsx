@@ -6,6 +6,7 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { formatPersonName } from "@/lib/format/person-name";
 
 export const dynamic = "force-dynamic";
 
@@ -104,7 +105,7 @@ export default async function AccountDetailPage({
                     href={`/contacts/${c.id}`}
                     className="hover:underline"
                   >
-                    {c.firstName} {c.lastName}
+                    {formatPersonName(c)}
                   </Link>
                   {c.jobTitle ? (
                     <span className="ml-2 text-xs text-muted-foreground">

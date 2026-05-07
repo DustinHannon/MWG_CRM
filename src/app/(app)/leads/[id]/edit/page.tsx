@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
+import { formatPersonName } from "@/lib/format/person-name";
 import { LeadForm } from "../../lead-form";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,7 @@ export default async function EditLeadPage({
   return (
     <div className="px-10 py-10">
       <p className="text-xs uppercase tracking-[0.3em] text-white/40">Edit</p>
-      <h1 className="mt-1 text-2xl font-semibold">
-        {lead.firstName} {lead.lastName}
-      </h1>
+      <h1 className="mt-1 text-2xl font-semibold">{formatPersonName(lead)}</h1>
 
       <LeadForm
         mode="edit"

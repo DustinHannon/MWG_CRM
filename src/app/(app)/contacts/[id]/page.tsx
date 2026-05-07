@@ -6,6 +6,7 @@ import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { formatPersonName } from "@/lib/format/person-name";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,7 @@ export default async function ContactDetailPage({
         ← Back to contacts
       </Link>
       <h1 className="mt-3 text-2xl font-semibold">
-        {contact.firstName} {contact.lastName}
+        {formatPersonName(contact)}
       </h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {contact.jobTitle ? `${contact.jobTitle} · ` : ""}

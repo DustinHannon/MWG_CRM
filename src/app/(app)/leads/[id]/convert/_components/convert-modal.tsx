@@ -8,7 +8,7 @@ interface ConvertModalProps {
   leadId: string;
   defaultCompany: string | null;
   defaultFirstName: string;
-  defaultLastName: string;
+  defaultLastName: string | null;
   defaultJobTitle: string | null;
   defaultEmail: string | null;
   defaultPhone: string | null;
@@ -25,7 +25,7 @@ export function ConvertModal(props: ConvertModalProps) {
 
   const [accountName, setAccountName] = useState(props.defaultCompany ?? "");
   const [contactFirst, setContactFirst] = useState(props.defaultFirstName);
-  const [contactLast, setContactLast] = useState(props.defaultLastName);
+  const [contactLast, setContactLast] = useState(props.defaultLastName ?? "");
   const [contactEmail, setContactEmail] = useState(props.defaultEmail ?? "");
   const [oppName, setOppName] = useState(
     `${props.defaultCompany ?? "Lead"} - ${new Date().toLocaleDateString()}`,

@@ -21,7 +21,7 @@ interface CardRow {
   id: string;
   status: string;
   firstName: string;
-  lastName: string;
+  lastName: string | null;
   companyName: string | null;
   rating: string;
   ownerName: string | null;

@@ -5,6 +5,7 @@ import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { eq } from "drizzle-orm";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { formatPersonName } from "@/lib/format/person-name";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -83,7 +84,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     matches: filtered.map((r) => ({
       id: r.id,
-      name: `${r.firstName} ${r.lastName}`,
+      name: formatPersonName(r),
       companyName: r.companyName,
       email: r.email,
       phone: r.phone,

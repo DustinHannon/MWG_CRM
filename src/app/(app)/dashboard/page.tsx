@@ -5,6 +5,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { logger } from "@/lib/logger";
+import { formatPersonNameRow } from "@/lib/format/person-name";
 import {
   CreatedOverTime,
   type CreatedOverTimePoint,
@@ -321,7 +322,7 @@ async function RecentActivity({
     subject: string | null;
     occurred_at: Date;
     lead_first: string;
-    lead_last: string;
+    lead_last: string | null;
   } & RowMap;
 
   let recent: RecentRow[] = [];
@@ -360,7 +361,11 @@ async function RecentActivity({
               {r.subject ?? "(no subject)"}
             </span>{" "}
             <span className="text-white/40">
-              · {r.lead_first} {r.lead_last}
+              ·{" "}
+              {formatPersonNameRow({
+                first_name: r.lead_first,
+                last_name: r.lead_last,
+              })}
             </span>
           </Link>
           <span className="ml-3 shrink-0 text-xs text-white/40">

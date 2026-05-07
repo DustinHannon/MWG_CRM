@@ -8,6 +8,7 @@ import { savedSearchSubscriptions } from "@/db/schema/saved-search-subscriptions
 import { users } from "@/db/schema/users";
 import { createNotification } from "@/lib/notifications";
 import { ReauthRequiredError, sendDigestEmail } from "@/lib/digest-email";
+import { formatPersonName } from "@/lib/format/person-name";
 import { permissions } from "@/db/schema/users";
 
 type SubRow = {
@@ -169,7 +170,7 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
             viewName: sub.viewName,
             records: matches.map((r) => ({
               id: r.id,
-              name: `${r.firstName} ${r.lastName}`,
+              name: formatPersonName(r),
               company: r.companyName,
               ownerName: r.ownerName,
               link: `/leads/${r.id}`,

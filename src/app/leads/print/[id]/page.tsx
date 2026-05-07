@@ -12,6 +12,7 @@ import {
 import { formatUserTime } from "@/lib/format-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
+import { formatPersonName } from "@/lib/format/person-name";
 import "./print.css";
 
 export const dynamic = "force-dynamic";
@@ -91,7 +92,7 @@ export default async function LeadPrintPage({
       </button>
 
       <h1>
-        {lead.firstName} {lead.lastName}
+        {formatPersonName(lead)}
       </h1>
       <div className="meta">
         {lead.companyName ? `${lead.companyName} · ` : ""}

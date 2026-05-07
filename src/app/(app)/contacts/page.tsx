@@ -5,6 +5,7 @@ import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { formatPersonName } from "@/lib/format/person-name";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,7 @@ export default async function ContactsPage() {
                       href={`/contacts/${r.id}`}
                       className="font-medium hover:underline"
                     >
-                      {r.firstName} {r.lastName}
+                      {formatPersonName(r)}
                     </Link>
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
