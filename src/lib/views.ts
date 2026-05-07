@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { savedViews, userPreferences } from "@/db/schema/views";
+import { expectAffected } from "@/lib/db/concurrent-update";
 import type { SessionUser } from "@/lib/auth-helpers";
 import {
   LEAD_RATINGS,
@@ -36,6 +37,8 @@ export interface ViewDefinition {
   filters: ViewFilters;
   columns: ColumnKey[];
   sort: { field: SortField; direction: "asc" | "desc" };
+  /** Phase 6B — present on saved views only. */
+  version?: number;
 }
 
 export type SortField =
@@ -224,19 +227,32 @@ export async function createSavedView(
 export async function updateSavedView(
   userId: string,
   id: string,
+  expectedVersion: number,
   input: Partial<SavedViewInput>,
-): Promise<void> {
-  const set: Record<string, unknown> = { updatedAt: sql`now()` };
+): Promise<{ id: string; version: number }> {
+  const set: Record<string, unknown> = {
+    updatedAt: sql`now()`,
+    version: sql`${savedViews.version} + 1`,
+  };
   if (input.name !== undefined) set.name = input.name;
   if (input.isPinned !== undefined) set.isPinned = input.isPinned;
   if (input.scope !== undefined) set.scope = input.scope;
   if (input.filters !== undefined) set.filters = input.filters;
   if (input.columns !== undefined) set.columns = input.columns;
   if (input.sort !== undefined) set.sort = input.sort;
-  await db
+  const rows = await db
     .update(savedViews)
     .set(set)
-    .where(and(eq(savedViews.id, id), eq(savedViews.userId, userId)));
+    .where(
+      and(
+        eq(savedViews.id, id),
+        eq(savedViews.userId, userId),
+        eq(savedViews.version, expectedVersion),
+      ),
+    )
+    .returning({ id: savedViews.id, version: savedViews.version });
+  expectAffected(rows, { table: savedViews, id, entityLabel: "view" });
+  return rows[0];
 }
 
 export async function deleteSavedView(
@@ -268,6 +284,7 @@ function savedViewRowToDefinition(
     filters,
     columns: columns.length > 0 ? columns : DEFAULT_COLUMNS,
     sort,
+    version: row.version,
   };
 }
 

@@ -29,6 +29,7 @@ export default async function EditLeadPage({
         mode="edit"
         lead={{
           id: lead.id,
+          version: lead.version,
           salutation: lead.salutation,
           firstName: lead.firstName,
           lastName: lead.lastName,

@@ -6,6 +6,7 @@ import { leads } from "@/db/schema/leads";
 import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import { expectAffected } from "@/lib/db/concurrent-update";
 
 export const taskCreateSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -30,6 +31,9 @@ export type TaskUpdateInput = z.infer<typeof taskUpdateSchema>;
 
 export interface TaskRow {
   id: string;
+  // Phase 6B — version exposed on every list/detail row so the client
+  // has the right value to send back on toggle/edit.
+  version: number;
   title: string;
   description: string | null;
   status: string;
@@ -47,6 +51,7 @@ export interface TaskRow {
 
 const baseSelect = {
   id: tasks.id,
+  version: tasks.version,
   title: tasks.title,
   description: tasks.description,
   status: sql<string>`${tasks.status}::text`,
@@ -163,16 +168,26 @@ export async function createTask(
 
 export async function updateTask(
   id: string,
+  expectedVersion: number,
   patch: TaskUpdateInput,
   actorId: string,
-): Promise<void> {
-  const set: Record<string, unknown> = { ...patch, updatedAt: sql`now()` };
+): Promise<{ id: string; version: number }> {
+  const set: Record<string, unknown> = {
+    ...patch,
+    updatedAt: sql`now()`,
+    version: sql`${tasks.version} + 1`,
+  };
   if (patch.status === "completed") {
     set.completedAt = sql`now()`;
   } else if (patch.status === "open" || patch.status === "in_progress") {
     set.completedAt = null;
   }
-  await db.update(tasks).set(set).where(eq(tasks.id, id));
+  const rows = await db
+    .update(tasks)
+    .set(set)
+    .where(and(eq(tasks.id, id), eq(tasks.version, expectedVersion)))
+    .returning({ id: tasks.id, version: tasks.version });
+  expectAffected(rows, { table: tasks, id, entityLabel: "task" });
   await writeAudit({
     actorId,
     action: "task.update",
@@ -180,6 +195,7 @@ export async function updateTask(
     targetId: id,
     after: patch as Record<string, unknown>,
   });
+  return rows[0];
 }
 
 export async function deleteTask(id: string, actorId: string): Promise<void> {

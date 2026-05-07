@@ -1,11 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/ui/glass-card";
 import { updatePreferencesAction, type PreferencesPatch } from "../actions";
 
 interface PrefsRow {
+  version?: number | null;
   notifyTasksDue: boolean;
   notifyTasksAssigned: boolean;
   notifyMentions: boolean;
@@ -15,12 +16,21 @@ interface PrefsRow {
 
 export function NotificationsSection({ prefs }: { prefs: PrefsRow | null }) {
   const [pending, startTransition] = useTransition();
+  // Phase 6B — version travels with every save and is updated from
+  // the server's reply so subsequent toggles use the latest value.
+  const [version, setVersion] = useState<number | undefined>(
+    prefs?.version ?? undefined,
+  );
 
   function save(patch: PreferencesPatch) {
     startTransition(async () => {
-      const res = await updatePreferencesAction(patch);
-      if (res.ok) toast.success("Saved");
-      else toast.error(res.error);
+      const res = await updatePreferencesAction({ ...patch, version });
+      if (res.ok) {
+        setVersion(res.version);
+        toast.success("Saved");
+      } else {
+        toast.error(res.error, { duration: Infinity, dismissible: true });
+      }
     });
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ThemeControl } from "@/components/theme/theme-control";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -10,6 +10,7 @@ import {
 } from "../actions";
 
 interface PrefsRow {
+  version?: number | null;
   theme: string;
   defaultLandingPage: string;
   customLandingPath: string | null;
@@ -47,14 +48,18 @@ const LANDING_OPTIONS = [
 
 export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProps) {
   const [pending, startTransition] = useTransition();
+  const [version, setVersion] = useState<number | undefined>(
+    prefs?.version ?? undefined,
+  );
 
   function save(patch: PreferencesPatch) {
     startTransition(async () => {
-      const res = await updatePreferencesAction(patch);
+      const res = await updatePreferencesAction({ ...patch, version });
       if (res.ok) {
+        setVersion(res.version);
         toast.success("Saved");
       } else {
-        toast.error(res.error);
+        toast.error(res.error, { duration: Infinity, dismissible: true });
       }
     });
   }
@@ -78,7 +83,20 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
 
         <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
           <Field label="Theme">
-            <ThemeControl initial={theme as "system" | "light" | "dark"} />
+            <ThemeControl
+              initial={theme as "system" | "light" | "dark"}
+              onSave={async (next) => {
+                const res = await updatePreferencesAction({
+                  theme: next,
+                  version,
+                });
+                if (res.ok) {
+                  setVersion(res.version);
+                  return { ok: true };
+                }
+                return { ok: false, error: res.error };
+              }}
+            />
           </Field>
 
           <Field label="Default landing page">

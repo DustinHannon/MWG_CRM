@@ -8,6 +8,7 @@ import { accounts, users } from "@/db/schema/users";
 import { userPreferences } from "@/db/schema/views";
 import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
+import { ConflictError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 
 /**
@@ -53,11 +54,20 @@ const updatePreferencesSchema = z.object({
 export type PreferencesPatch = z.infer<typeof updatePreferencesSchema>;
 
 export async function updatePreferencesAction(
-  patch: PreferencesPatch,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  patch: PreferencesPatch & { version?: number },
+): Promise<
+  { ok: true; version: number } | { ok: false; error: string }
+> {
   const session = await requireSession();
 
-  const parsed = updatePreferencesSchema.safeParse(patch);
+  // Phase 6B — extract version from the patch before Zod validates the
+  // pref slice. Optional: a brand-new prefs row has no version yet, so
+  // first-save can omit it.
+  const expectedVersion = patch.version;
+  const cleanPatch: Record<string, unknown> = { ...patch };
+  delete cleanPatch.version;
+
+  const parsed = updatePreferencesSchema.safeParse(cleanPatch);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
   }
@@ -66,11 +76,31 @@ export async function updatePreferencesAction(
     const set: Record<string, unknown> = {
       ...parsed.data,
       updatedAt: sql`now()`,
+      version: sql`${userPreferences.version} + 1`,
     };
-    await db
+    // INSERT new prefs row OR conditionally UPDATE existing one. The
+    // ON CONFLICT DO UPDATE ... WHERE filters out conflicting writes:
+    // when expected version is provided, the update only fires if
+    // version matches. Empty rows = no row matched = conflict.
+    const rows = await db
       .insert(userPreferences)
-      .values({ userId: session.id, ...set })
-      .onConflictDoUpdate({ target: userPreferences.userId, set });
+      .values({ userId: session.id, ...parsed.data })
+      .onConflictDoUpdate({
+        target: userPreferences.userId,
+        set,
+        setWhere:
+          expectedVersion !== undefined
+            ? eq(userPreferences.version, expectedVersion)
+            : undefined,
+      })
+      .returning({ version: userPreferences.version });
+
+    if (rows.length === 0) {
+      throw new ConflictError(
+        "Your preferences were modified in another tab. Refresh to see the latest, then try again.",
+        { userId: session.id, expectedVersion },
+      );
+    }
 
     await writeAudit({
       actorId: session.id,
@@ -81,8 +111,11 @@ export async function updatePreferencesAction(
     });
 
     revalidatePath("/settings");
-    return { ok: true };
+    return { ok: true, version: rows[0].version };
   } catch (err) {
+    if (err instanceof ConflictError) {
+      return { ok: false, error: err.publicMessage };
+    }
     logger.error("settings.update_preferences_failed", {
       userId: session.id,
       errorMessage: err instanceof Error ? err.message : String(err),

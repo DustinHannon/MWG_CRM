@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { AVAILABLE_COLUMNS, type ColumnKey } from "@/lib/view-constants";
 import {
   createViewAction,
@@ -18,6 +19,8 @@ export interface ViewSummary {
   source: "builtin" | "saved";
   scope: "mine" | "all";
   isPinned?: boolean;
+  // Phase 6B — present on saved views; required when posting Save changes.
+  version?: number;
 }
 
 export interface ViewToolbarProps {
@@ -125,11 +128,22 @@ export function ViewToolbar({
           type="button"
           onClick={() => {
             const id = savedDirtyId.slice("saved:".length);
+            const view = views.find((v) => v.id === savedDirtyId);
             const fd = new FormData();
             fd.set("id", id);
+            // Phase 6B — version round-trips through the form so OCC
+            // can refuse stale writes.
+            fd.set("version", String(view?.version ?? 1));
             fd.set("payload", JSON.stringify({ columns: activeColumns }));
             startTransition(async () => {
-              await updateViewAction(fd);
+              const res = await updateViewAction(fd);
+              if (!res.ok) {
+                toast.error(res.error, {
+                  duration: Infinity,
+                  dismissible: true,
+                });
+                return;
+              }
               router.refresh();
             });
           }}

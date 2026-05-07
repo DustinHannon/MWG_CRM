@@ -12,6 +12,7 @@ import {
   type TaskCreateInput,
   type TaskUpdateInput,
 } from "@/lib/tasks";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { createNotification } from "@/lib/notifications";
 import { logger } from "@/lib/logger";
 import { db } from "@/db";
@@ -72,11 +73,15 @@ export async function createTaskAction(
 
 const updateActionSchema = taskUpdateSchema.extend({
   id: z.string().uuid(),
+  // Phase 6B — required so concurrentUpdate can reject stale writes.
+  version: z.coerce.number().int().positive(),
 });
 
 export async function updateTaskAction(
   raw: z.infer<typeof updateActionSchema>,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; version: number } | { ok: false; error: string }
+> {
   const session = await requireSession();
   const parsed = updateActionSchema.safeParse(raw);
   if (!parsed.success) {
@@ -84,11 +89,19 @@ export async function updateTaskAction(
   }
 
   try {
-    const { id, ...patch } = parsed.data;
-    await updateTask(id, patch as TaskUpdateInput, session.id);
+    const { id, version, ...patch } = parsed.data;
+    const result = await updateTask(
+      id,
+      version,
+      patch as TaskUpdateInput,
+      session.id,
+    );
     revalidatePath("/tasks");
-    return { ok: true };
+    return { ok: true, version: result.version };
   } catch (err) {
+    if (err instanceof ConflictError || err instanceof NotFoundError) {
+      return { ok: false, error: err.publicMessage };
+    }
     logger.error("task.update_failed", {
       taskId: parsed.data.id,
       errorMessage: err instanceof Error ? err.message : String(err),
@@ -116,18 +129,25 @@ export async function deleteTaskAction(
 
 export async function toggleTaskCompleteAction(
   id: string,
+  expectedVersion: number,
   completed: boolean,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; version: number } | { ok: false; error: string }
+> {
   const session = await requireSession();
   try {
-    await updateTask(
+    const result = await updateTask(
       id,
+      expectedVersion,
       { status: completed ? "completed" : "open" },
       session.id,
     );
     revalidatePath("/tasks");
-    return { ok: true };
+    return { ok: true, version: result.version };
   } catch (err) {
+    if (err instanceof ConflictError || err instanceof NotFoundError) {
+      return { ok: false, error: err.publicMessage };
+    }
     logger.error("task.toggle_complete_failed", {
       taskId: id,
       errorMessage: err instanceof Error ? err.message : String(err),

@@ -150,6 +150,7 @@ export default async function LeadsPage({
       name: v.name,
       source: v.source,
       scope: v.scope,
+      version: v.version,
     })),
   ];
 

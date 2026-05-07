@@ -10,6 +10,7 @@ import {
   requireLeadEditAccess,
   requireSession,
 } from "@/lib/auth-helpers";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import {
   createLead,
@@ -85,6 +86,14 @@ export async function updateLeadAction(
   const user = await requireSession();
 
   const id = z.string().uuid().parse(formData.get("id"));
+  // Phase 6B — version travels through the form as a hidden input. The
+  // server action requires it so concurrentUpdate can refuse stale writes.
+  const version = z.coerce
+    .number()
+    .int()
+    .positive()
+    .parse(formData.get("version"));
+
   // Verify edit permission AND access to this specific lead. Closes
   // horizontal priv-esc where a forged form could submit another user's
   // lead id.
@@ -119,7 +128,14 @@ export async function updateLeadAction(
     .where(eq(leads.id, id))
     .limit(1);
 
-  await updateLead(user, id, parsed.data);
+  try {
+    await updateLead(user, id, version, parsed.data);
+  } catch (err) {
+    if (err instanceof ConflictError || err instanceof NotFoundError) {
+      return { ok: false, error: err.publicMessage };
+    }
+    throw err;
+  }
 
   await writeAudit({
     actorId: user.id,

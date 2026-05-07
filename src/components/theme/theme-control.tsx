@@ -9,6 +9,10 @@ type ThemeChoice = "system" | "light" | "dark";
 
 interface ThemeControlProps {
   initial: ThemeChoice;
+  // Phase 6B — when provided, the parent (PreferencesSection) handles
+  // persistence so we share the version round-trip with other prefs.
+  // The standalone path falls back to writing directly.
+  onSave?: (theme: ThemeChoice) => Promise<{ ok: boolean; error?: string }>;
 }
 
 /**
@@ -18,7 +22,7 @@ interface ThemeControlProps {
  * the toggle. On save failure we revert both the visual state AND the
  * radio so the UI stays consistent with the DB.
  */
-export function ThemeControl({ initial }: ThemeControlProps) {
+export function ThemeControl({ initial, onSave }: ThemeControlProps) {
   const { setTheme } = useTheme();
   const [pending, startTransition] = useTransition();
   const [value, setValue] = useState<ThemeChoice>(initial);
@@ -29,11 +33,16 @@ export function ThemeControl({ initial }: ThemeControlProps) {
     setValue(next);
     setTheme(next);
     startTransition(async () => {
-      const res = await updatePreferencesAction({ theme: next });
+      const res = onSave
+        ? await onSave(next)
+        : await updatePreferencesAction({ theme: next });
       if (!res.ok) {
         setValue(prev);
         setTheme(prev);
-        toast.error(res.error);
+        toast.error(res.error ?? "Save failed.", {
+          duration: Infinity,
+          dismissible: true,
+        });
       } else {
         toast.success("Saved");
       }

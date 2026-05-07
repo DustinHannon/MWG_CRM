@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { COLUMN_KEYS, type ColumnKey } from "@/lib/view-constants";
 import {
   createSavedView,
@@ -82,6 +83,12 @@ export async function updateViewAction(
 ): Promise<ViewActionResult> {
   const user = await requireSession();
   const id = z.string().uuid().parse(formData.get("id"));
+  // Phase 6B — version stamps every saved-view edit.
+  const version = z.coerce
+    .number()
+    .int()
+    .positive()
+    .parse(formData.get("version"));
   const raw = formData.get("payload");
   if (typeof raw !== "string") return { ok: false, error: "Missing payload." };
   let parsed: unknown;
@@ -97,7 +104,14 @@ export async function updateViewAction(
       error: "Validation failed.",
     };
   }
-  await updateSavedView(user.id, id, result.data);
+  try {
+    await updateSavedView(user.id, id, version, result.data);
+  } catch (err) {
+    if (err instanceof ConflictError || err instanceof NotFoundError) {
+      return { ok: false, error: err.publicMessage };
+    }
+    throw err;
+  }
   await writeAudit({
     actorId: user.id,
     action: "view.update",

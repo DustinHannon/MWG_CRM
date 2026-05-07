@@ -14,6 +14,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
+import { expectAffected } from "@/lib/db/concurrent-update";
 import type { SessionUser } from "@/lib/auth-helpers";
 import {
   LEAD_RATINGS,
@@ -358,19 +359,37 @@ export async function createLead(
   return { id: inserted[0].id };
 }
 
+/**
+ * Phase 6B — OCC backend wiring. Update path is now version-checked:
+ * the caller passes the `expectedVersion` it loaded with the row, the
+ * UPDATE only fires when the on-disk version still matches, and we
+ * bump version + updated_at in the same statement.
+ *
+ * Throws ConflictError when another writer moved the row between the
+ * caller's read and this update; throws NotFoundError when the id is
+ * gone. Both carry user-facing public messages.
+ */
 export async function updateLead(
   user: SessionUser,
   id: string,
+  expectedVersion: number,
   input: Partial<LeadCreateInput>,
-): Promise<void> {
+): Promise<{ id: string; version: number }> {
   const update: Record<string, unknown> = {
     updatedById: user.id,
     updatedAt: sql`now()`,
+    version: sql`${leads.version} + 1`,
   };
   for (const key of Object.keys(input) as Array<keyof LeadCreateInput>) {
     update[key] = input[key];
   }
-  await db.update(leads).set(update).where(eq(leads.id, id));
+  const rows = await db
+    .update(leads)
+    .set(update)
+    .where(and(eq(leads.id, id), eq(leads.version, expectedVersion)))
+    .returning({ id: leads.id, version: leads.version });
+  expectAffected(rows, { table: leads, id, entityLabel: "lead" });
+  return rows[0];
 }
 
 /**

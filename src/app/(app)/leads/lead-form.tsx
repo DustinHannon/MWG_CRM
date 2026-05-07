@@ -15,6 +15,7 @@ import {
 
 type LeadFormValues = {
   id?: string;
+  version?: number;
   salutation?: string | null;
   firstName: string;
   lastName?: string | null;
@@ -74,7 +75,12 @@ export function LeadForm({
   return (
     <form action={formAction} className="mt-8 grid gap-6 lg:grid-cols-2">
       {mode === "edit" && lead?.id ? (
-        <input type="hidden" name="id" value={lead.id} />
+        <>
+          <input type="hidden" name="id" value={lead.id} />
+          {/* Phase 6B — version round-trips through the form so the
+              server action can refuse stale concurrent writes. */}
+          <input type="hidden" name="version" value={lead.version ?? 1} />
+        </>
       ) : null}
 
       <Section title="Contact">

@@ -24,13 +24,20 @@ export function TaskListClient({ buckets, prefs }: TaskListClientProps) {
   const [pending, startTransition] = useTransition();
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
 
-  function toggle(id: string, completed: boolean) {
+  // Phase 6B — local version map updated optimistically and rolled
+  // back on conflict, so subsequent toggles use the latest known
+  // version after each successful save.
+  const [versions, setVersions] = useState<Record<string, number>>({});
+
+  function toggle(id: string, version: number, completed: boolean) {
     setOptimistic((o) => ({ ...o, [id]: completed }));
     startTransition(async () => {
-      const res = await toggleTaskCompleteAction(id, completed);
+      const res = await toggleTaskCompleteAction(id, version, completed);
       if (!res.ok) {
-        toast.error(res.error);
+        toast.error(res.error, { duration: Infinity, dismissible: true });
         setOptimistic((o) => ({ ...o, [id]: !completed }));
+      } else {
+        setVersions((m) => ({ ...m, [id]: res.version }));
       }
     });
   }
@@ -81,7 +88,9 @@ export function TaskListClient({ buckets, prefs }: TaskListClientProps) {
                         type="checkbox"
                         checked={done}
                         disabled={pending}
-                        onChange={(e) => toggle(t.id, e.target.checked)}
+                        onChange={(e) =>
+                          toggle(t.id, versions[t.id] ?? t.version, e.target.checked)
+                        }
                         className="h-4 w-4 cursor-pointer rounded border-glass-border bg-input/60"
                         aria-label={`Mark ${t.title} ${done ? "open" : "completed"}`}
                       />
