@@ -52,6 +52,14 @@ export default async function DashboardPage() {
             following phases. For now this is the post-sign-in landing pad
             that proves auth + DB are wired end-to-end.
           </p>
+          {user.isAdmin ? (
+            <a
+              href="/admin"
+              className="mt-6 inline-block rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:bg-white/10"
+            >
+              Open admin →
+            </a>
+          ) : null}
         </section>
       </div>
     </div>
