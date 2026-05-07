@@ -1,8 +1,11 @@
 import "server-only";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
-import { leadScoringRules } from "@/db/schema/lead-scoring";
+import {
+  leadScoringRules,
+  leadScoringSettings,
+} from "@/db/schema/lead-scoring";
 import { leads } from "@/db/schema/leads";
 import { logger } from "@/lib/logger";
 
@@ -13,15 +16,29 @@ import { logger } from "@/lib/logger";
  * UI to build rules. Each rule has a `predicate` (JSONB), a `points` value
  * (can be negative), and an `is_active` flag. The engine sums `points` for
  * every active rule whose predicate matches a lead, then maps the total to
- * a band (`hot` ≥ 70, `warm` 40–69, `cool` 15–39, `cold` < 15).
+ * a band defined in `lead_scoring_settings` (defaults: hot ≥ 70, warm
+ * 40–69, cool 15–39, cold < 15).
+ *
+ * Phase 5B —
+ *   - Thresholds now read from `lead_scoring_settings` (single-row),
+ *     cached for 60s in-process to keep the rescore loop fast.
+ *   - Activity aggregation is restricted to counting kinds (note, call,
+ *     email, meeting, task) explicitly. Imports + lead-create no longer
+ *     touch `leads.last_activity_at`, so freshly-imported leads have
+ *     `activity_count=0` and don't match recency rules.
+ *   - New pseudo-field `has_no_activity` for explicit "no activity ever"
+ *     rules.
  *
  * Supported operators:
  *   eq, neq, lt, lte, gt, gte, in, not_in, contains (string),
  *   is_null, is_not_null
  *
  * Pseudo-fields (joined data):
- *   last_activity_within_days (number) — true if any activity within N days
- *   activity_count (number)            — total activity count
+ *   last_activity_within_days (number | null) — days since last counting
+ *     activity. `null` when no counting activities; `<=` / `>=` clauses
+ *     against null return false.
+ *   activity_count (number)  — total counting-activity count.
+ *   has_no_activity (boolean) — true iff `activity_count === 0`.
  */
 
 type Op =
@@ -52,12 +69,54 @@ interface LeadFact {
   [k: string]: unknown;
   activity_count: number;
   last_activity_within_days: number | null;
+  has_no_activity: boolean;
 }
 
-function bandFor(score: number): "hot" | "warm" | "cool" | "cold" {
-  if (score >= 70) return "hot";
-  if (score >= 40) return "warm";
-  if (score >= 15) return "cool";
+interface Thresholds {
+  hot: number;
+  warm: number;
+  cool: number;
+}
+
+const DEFAULT_THRESHOLDS: Thresholds = { hot: 70, warm: 40, cool: 15 };
+
+let thresholdCache: { value: Thresholds; loadedAt: number } | null = null;
+const THRESHOLD_TTL_MS = 60_000;
+
+async function getThresholds(): Promise<Thresholds> {
+  const now = Date.now();
+  if (thresholdCache && now - thresholdCache.loadedAt < THRESHOLD_TTL_MS) {
+    return thresholdCache.value;
+  }
+  const rows = await db
+    .select({
+      hot: leadScoringSettings.hotThreshold,
+      warm: leadScoringSettings.warmThreshold,
+      cool: leadScoringSettings.coolThreshold,
+    })
+    .from(leadScoringSettings)
+    .limit(1);
+  const value = rows[0] ?? DEFAULT_THRESHOLDS;
+  thresholdCache = { value, loadedAt: now };
+  return value;
+}
+
+/**
+ * Force the threshold cache to reload on the next read. Called from the
+ * /admin/scoring server action after the sliders are saved so a manual
+ * recompute uses the just-saved values without waiting for the TTL.
+ */
+export function invalidateThresholdCache(): void {
+  thresholdCache = null;
+}
+
+function bandFor(
+  score: number,
+  t: Thresholds,
+): "hot" | "warm" | "cool" | "cold" {
+  if (score >= t.hot) return "hot";
+  if (score >= t.warm) return "warm";
+  if (score >= t.cool) return "cool";
   return "cold";
 }
 
@@ -112,26 +171,40 @@ function predicateMatches(p: Predicate, fact: LeadFact): boolean {
 export async function evaluateLead(leadId: string): Promise<
   { score: number; band: ReturnType<typeof bandFor> } | null
 > {
-  // Pull lead + lightweight activity aggregates.
   const [lead] = await db.select().from(leads).where(eq(leads.id, leadId)).limit(1);
   if (!lead) return null;
 
+  // Counting kinds are explicit so future non-counting kinds (e.g.
+  // 'system') don't silently leak into the engagement signal.
   const [agg] = await db
     .select({
       n: sql<number>`count(*)::int`,
       lastAt: sql<Date | null>`max(${activities.occurredAt})`,
     })
     .from(activities)
-    .where(eq(activities.leadId, leadId));
+    .where(
+      and(
+        eq(activities.leadId, leadId),
+        inArray(activities.kind, [
+          "note",
+          "call",
+          "email",
+          "meeting",
+          "task",
+        ]),
+      ),
+    );
 
+  const activity_count = agg?.n ?? 0;
   const lastAtMs = agg?.lastAt ? new Date(agg.lastAt).getTime() : null;
   const last_activity_within_days =
     lastAtMs == null ? null : Math.floor((Date.now() - lastAtMs) / 86_400_000);
 
   const fact: LeadFact = {
     ...(lead as Record<string, unknown>),
-    activity_count: agg?.n ?? 0,
+    activity_count,
     last_activity_within_days,
+    has_no_activity: activity_count === 0,
   };
 
   const rules = await db
@@ -154,7 +227,8 @@ export async function evaluateLead(leadId: string): Promise<
     }
   }
 
-  const band = bandFor(total);
+  const thresholds = await getThresholds();
+  const band = bandFor(total, thresholds);
   await db
     .update(leads)
     .set({ score: total, scoreBand: band, scoredAt: sql`now()` })

@@ -337,7 +337,10 @@ export async function createLead(
       tags: input.tags ?? null,
       createdById: user.id,
       updatedById: user.id,
-      lastActivityAt: sql`now()`,
+      // Phase 5B — `last_activity_at` left NULL on creation so scoring
+      // recency rules don't treat just-imported / just-created leads as
+      // engaged. It bumps when the first counting activity (note / call /
+      // email / meeting / task) is logged.
     })
     .returning({ id: leads.id });
   return { id: inserted[0].id };

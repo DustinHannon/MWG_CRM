@@ -340,7 +340,9 @@ export async function importLeadsFromBuffer(
         doNotCall: d.doNotCall,
         createdById: importerUserId,
         updatedById: importerUserId,
-        lastActivityAt: sql`now()`,
+        // Phase 5B — `last_activity_at` left NULL on import. Imports do
+        // NOT count as engagement signal; the column populates only when
+        // a real counting activity is logged.
         // Provenance — Phase 2D.
         createdVia: "imported",
         importJobId: importJobIdForRows,

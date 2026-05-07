@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   uuid,
@@ -38,3 +39,23 @@ export const leadScoringRules = pgTable(
   },
   (t) => [index("lead_scoring_rules_active_idx").on(t.isActive)],
 );
+
+/**
+ * Phase 5B — single-row settings table holding the score band thresholds.
+ * Constrained server-side via CHECK to enforce hot > warm > cool ordering.
+ * The engine reads this table on every evaluation; admins edit via the
+ * /admin/scoring sliders.
+ */
+export const leadScoringSettings = pgTable("lead_scoring_settings", {
+  id: smallint("id").primaryKey().default(1),
+  hotThreshold: integer("hot_threshold").notNull().default(70),
+  warmThreshold: integer("warm_threshold").notNull().default(40),
+  coolThreshold: integer("cool_threshold").notNull().default(15),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  updatedById: uuid("updated_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  version: integer("version").notNull().default(1),
+});

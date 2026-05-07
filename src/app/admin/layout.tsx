@@ -26,6 +26,7 @@ export default async function AdminLayout({
           <SidebarLink href="/admin" label="Overview" />
           <SidebarLink href="/admin/users" label="Users" />
           <SidebarLink href="/admin/tags" label="Tags" />
+          <SidebarLink href="/admin/scoring" label="Scoring" />
           <SidebarLink href="/admin/audit" label="Audit log" />
           <SidebarLink href="/admin/data" label="Data tools" />
           <SidebarLink href="/admin/settings" label="Settings" />
