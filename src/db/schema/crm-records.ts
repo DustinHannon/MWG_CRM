@@ -127,9 +127,11 @@ export const opportunities = pgTable(
   "opportunities",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    accountId: uuid("account_id")
-      .notNull()
-      .references(() => crmAccounts.id, { onDelete: "cascade" }),
+    // Phase 6E — accountId is nullable so imports can create lead-only
+    // opportunities. When a lead is later converted, accountId gets set.
+    accountId: uuid("account_id").references(() => crmAccounts.id, {
+      onDelete: "cascade",
+    }),
     primaryContactId: uuid("primary_contact_id").references(() => contacts.id, {
       onDelete: "set null",
     }),

@@ -6,18 +6,36 @@ import { db } from "@/db";
 import { importJobs } from "@/db/schema/imports";
 import { writeAudit } from "@/lib/audit";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
-import { importLeadsFromBuffer, type ImportResult } from "@/lib/xlsx-import";
+import { commitImport, type CommitResult } from "@/lib/import/commit";
+import { parseWorkbookBuffer } from "@/lib/import/parse-workbook";
+import { buildImportPreview, type ImportPreview } from "@/lib/import/preview";
+import { deleteJob, getJob, putJob } from "@/lib/import/job-cache";
+import { logger } from "@/lib/logger";
 
-export interface ImportActionResult {
+export interface PreviewActionResult {
   ok: boolean;
   error?: string;
-  result?: ImportResult;
+  jobId?: string;
+  fileName?: string;
+  smartDetect?: boolean;
+  preview?: ImportPreview;
+}
+
+export interface CommitActionResult {
+  ok: boolean;
+  error?: string;
+  result?: CommitResult;
   jobId?: string;
 }
 
-export async function importLeadsAction(
+/**
+ * Phase 6E + 6F — preview step. Parse the upload, build the aggregate
+ * counts/warnings/errors, cache the parsed rows under a job id. The
+ * user then reviews and clicks Commit.
+ */
+export async function previewImportAction(
   formData: FormData,
-): Promise<ImportActionResult> {
+): Promise<PreviewActionResult> {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
   if (!user.isAdmin && !perms.canImport) {
@@ -35,6 +53,8 @@ export async function importLeadsAction(
     return { ok: false, error: "Only .xlsx files are supported." };
   }
 
+  const smartDetect = formData.get("smartDetect") === "on";
+
   const job = await db
     .insert(importJobs)
     .values({
@@ -48,38 +68,44 @@ export async function importLeadsAction(
 
   try {
     const buf = await file.arrayBuffer();
-    // Pass jobId so each inserted lead carries created_via='imported' and
-    // import_job_id, surfaced on the lead detail page (Phase 2F.3).
-    const result = await importLeadsFromBuffer(buf, user.id, jobId);
+    const parsed = await parseWorkbookBuffer({ buffer: buf, smartDetect });
+    const preview = await buildImportPreview({
+      parseRows: parsed.rows,
+      smartDetect,
+      unknownHeaders: parsed.unknownHeaders,
+      missingRequiredHeaders: parsed.missingRequiredHeaders,
+    });
+
+    putJob({
+      jobId,
+      userId: user.id,
+      fileName: file.name,
+      smartDetect,
+      parseRows: parsed.rows,
+      unknownHeaders: parsed.unknownHeaders,
+      missingRequiredHeaders: parsed.missingRequiredHeaders,
+    });
 
     await db
       .update(importJobs)
       .set({
-        totalRows: result.totalRows,
-        successfulRows: result.successful,
-        failedRows: result.failed,
-        needsReviewRows: result.needsReview,
-        errors: result.errors as unknown as object,
-        status: "completed",
-        completedAt: sql`now()`,
+        totalRows: parsed.totalRows,
+        status: "preview",
       })
       .where(sql`id = ${jobId}::uuid`);
 
-    await writeAudit({
-      actorId: user.id,
-      action: "leads.import",
-      targetType: "import_job",
-      targetId: jobId,
-      after: {
-        totalRows: result.totalRows,
-        successful: result.successful,
-        failed: result.failed,
-      },
-    });
-
-    revalidatePath("/leads");
-    return { ok: true, result, jobId };
+    return {
+      ok: true,
+      jobId,
+      fileName: file.name,
+      smartDetect,
+      preview,
+    };
   } catch (err) {
+    logger.error("import.preview_failed", {
+      jobId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     await db
       .update(importJobs)
       .set({
@@ -90,8 +116,109 @@ export async function importLeadsAction(
       .where(sql`id = ${jobId}::uuid`);
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Import failed",
+      error: err instanceof Error ? err.message : "Preview failed",
       jobId,
     };
   }
+}
+
+/**
+ * Phase 6E + 6F — commit step. Reads the cached job, runs the chunked
+ * write pipeline, audit-logs the snapshot.
+ */
+export async function commitImportAction(
+  jobId: string,
+): Promise<CommitActionResult> {
+  const user = await requireSession();
+  const perms = await getPermissions(user.id);
+  if (!user.isAdmin && !perms.canImport) {
+    return { ok: false, error: "You don't have permission to import." };
+  }
+
+  const cached = getJob(jobId, user.id);
+  if (!cached) {
+    return {
+      ok: false,
+      error:
+        "Preview expired or not found. Please re-upload the file and try again.",
+    };
+  }
+
+  try {
+    // Filter to OK rows only — failed rows already surfaced in the
+    // preview's errors list and are recorded in the audit log.
+    const okRows = cached.parseRows.filter(
+      (r): r is Extract<typeof r, { ok: true }> => r.ok,
+    );
+    const result = await commitImport({
+      rows: okRows,
+      importerUserId: user.id,
+      importJobId: jobId,
+      importFileName: cached.fileName,
+    });
+
+    await db
+      .update(importJobs)
+      .set({
+        status: "completed",
+        completedAt: sql`now()`,
+        successfulRows: result.insertedLeadIds.length + result.updatedLeadIds.length,
+        failedRows: result.failedRows.length,
+        errors: result.failedRows as unknown as object,
+      })
+      .where(sql`id = ${jobId}::uuid`);
+
+    await writeAudit({
+      actorId: user.id,
+      action: "leads.import",
+      targetType: "import_job",
+      targetId: jobId,
+      after: {
+        fileName: cached.fileName,
+        smartDetect: cached.smartDetect,
+        inserted: result.insertedLeadIds.length,
+        updated: result.updatedLeadIds.length,
+        activitiesInserted: result.insertedActivityCount,
+        activitiesSkipped: result.skippedActivityCount,
+        opportunitiesInserted: result.insertedOpportunityIds.length,
+        failedRows: result.failedRows.length,
+      },
+    });
+
+    deleteJob(jobId);
+    revalidatePath("/leads");
+    return { ok: true, result, jobId };
+  } catch (err) {
+    logger.error("import.commit_failed", {
+      jobId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+    await db
+      .update(importJobs)
+      .set({
+        status: "failed",
+        completedAt: sql`now()`,
+        errors: [{ row: 0, field: "_fatal", message: String(err) }] as unknown as object,
+      })
+      .where(sql`id = ${jobId}::uuid`);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Commit failed",
+      jobId,
+    };
+  }
+}
+
+export async function cancelImportAction(jobId: string): Promise<{ ok: true }> {
+  const user = await requireSession();
+  const cached = getJob(jobId, user.id);
+  if (cached) deleteJob(jobId);
+  await db
+    .update(importJobs)
+    .set({
+      status: "cancelled",
+      completedAt: sql`now()`,
+    })
+    .where(sql`id = ${jobId}::uuid`);
+  return { ok: true };
 }
