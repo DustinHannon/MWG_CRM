@@ -1,36 +1,35 @@
 # MWG CRM — Roadmap
 
-Items deliberately *not* tackled in Phase 2. Re-prioritise from here when planning the next round.
+Items deliberately *not* tackled this phase. Re-prioritise from here when planning the next round.
 
-## Security debt (carried from Phase 2B)
+## Security debt
 
-- **Migrate off `xlsx`** (HIGH severity, no npm patch). Candidates: `exceljs`, the SheetJS CDN tarball (`https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`), or SheetJS Pro. Internal admin-only feature with 10 MB cap mitigates blast radius for now.
-- **Strict CSP with nonces** — replace `'unsafe-inline'` and `'unsafe-eval'` on `script-src`. Needs middleware to mint per-request nonces and threading through the Next.js app shell.
+- **Migrate off `xlsx`** (HIGH severity, no npm patch). Candidates: `exceljs`, the SheetJS CDN tarball, or SheetJS Pro. Internal admin-only feature with 10 MB cap mitigates blast radius for now.
+- **CSP `style-src 'unsafe-inline'`** — strict CSP with nonces shipped in Phase 3J, but style-src still allows `'unsafe-inline'` because shadcn/Radix and react-hook-form inject styles at runtime. Tightening would require deep framework integration.
+- **`'unsafe-eval'` on script-src** — kept for runtime libraries; can probably be removed once we audit which dependency uses eval.
 - **Upstash Redis for breakglass rate limit** — current in-memory limiter resets on Vercel cold starts. Acceptable for breakglass (rare use) but not for any future credential endpoint.
 - **WebAuthn / passkeys for breakglass** instead of password.
+- **CSP violation reporting** — point `report-uri` somewhere so we can see real-world failures.
 
-## Phase 3 candidates (from the v2 brief, deferred)
+## Phase 3 follow-ups (intentionally deferred or partial)
 
-- Visual sales pipeline (Kanban) view with drag-and-drop between status columns.
-- Tasks / follow-up reminders with due dates + email notifications.
-- Email templates for outbound CRM emails.
-- Duplicate detection on lead create (warn if email/phone matches an existing lead).
-- Tags as first-class entity with color + autocomplete.
-- Outlook add-in "Track this email" button.
-- Sent-items + calendar background sync via Vercel Cron.
-- Lead conversion → Account / Contact / Opportunity records.
-- Saved-search subscriptions + email digests.
-- `/admin/imports/<id>` detail page (the Imported badge on lead detail
-  links here, currently lands on `/admin/audit?action=leads.import`).
+- **Saved-view subscribe button on the views toolbar.** Server actions exist (`subscribeToViewAction`, `unsubscribeFromViewAction`); UI integration into `view-toolbar.tsx` and a subscriptions list section in `/settings → Notifications` is incremental work on top.
+- **Lead-detail Tasks tab + dashboard "My open tasks" widget.** `/tasks` page is live and tasks attach to leads in the schema; surfacing tasks on the lead-detail page and dashboard is incremental.
+- **Lead create/edit form — switch to TagInput.** TagInput component shipped (used in /admin/tags); the create/edit form still uses the legacy `text[]` tags field. Replace and remove `leads.tags text[]` after burn-in.
+- **Drop `leads.tags text[]`** once nothing reads it.
+- **Import phone-match dedup.** XLSX import already does email-match needs-review; phone-match extension is the same pattern.
+- **Account / Contact / Opportunity create + edit pages.** Detail pages are live; entities created via lead conversion. Standalone create/edit forms for these entities are the next surface.
+- **Opportunity tabs** (Activities / Contacts / Files / Tasks) — detail page renders a single Details card; activity composer adapter is incremental.
+- **Outlook add-in** ("Track this email" button). Deferred — non-trivial.
+- **Outlook calendar background sync.** Deferred — out of scope for Phase 3.
 
 ## Database performance (Supabase performance advisors)
 
-All currently INFO-level — non-blocking. Worth revisiting when traffic warrants:
+All currently INFO-level — non-blocking.
 
-- Add covering indexes on FK columns flagged by the linter
-  (`accounts.userId`, `attachments.activity_id`, `import_jobs.user_id`,
-  `leads.created_by_id`, `leads.updated_by_id`, `sessions.userId`,
-  `user_preferences.last_used_view_id`).
-- Drop unused indexes once the workload stabilises (`leads_email_idx`,
-  `leads_company_idx`, `leads_external_id_idx`, `leads_tags_gin_idx`,
-  several activity / audit indexes).
+- Add covering indexes on FK columns flagged by the linter.
+- Drop unused indexes once the workload stabilises.
+
+## RLS
+
+All public tables have RLS enabled with no policies. The app uses a custom Postgres role (`mwg_crm_app`) with `BYPASSRLS`. Defence-in-depth, not the primary access control. If the role is ever changed, RLS becomes a hard wall — desired.

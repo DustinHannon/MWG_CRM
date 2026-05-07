@@ -5,23 +5,37 @@ Internal CRM platform for **Morgan White Group**. Replaces ~30% of the Dynamics 
 **Live**: <https://mwg-crm.vercel.app>
 **Repo**: <https://github.com/DustinHannon/MWG_CRM>
 
-## Status (2026-05-06)
+## Status (2026-05-07)
 
-Phases 1–9 deployed and live. Phase 7 (Microsoft Graph integration — email/calendar tracking) is wired but inert until the Entra App Registration credentials are added; everything else is functional end-to-end.
+Phases 1–9 (v1) and Phase 3 (v2 features) all deployed and live.
 
 | # | Phase | Status |
 |---|---|---|
 | 1 | Provisioning (Supabase, Vercel Blob, env vars, deps) | ✅ |
 | 2 | Schema + breakglass auth | ✅ |
-| 3 | Entra OIDC provider | ✅ wired, awaits client ID/secret |
+| 3 | Entra OIDC provider | ✅ |
 | 4 | Admin foundation (users, perms, audit log writes) | ✅ |
 | 5 | Leads CRUD | ✅ |
 | 6 | Activities (notes, calls, tasks) | ✅ |
 | 7 | Microsoft Graph (email, meetings, photo cache) | ✅ |
 | 8 | Excel import / export | ✅ |
 | 9 | Admin data tools + audit viewer + settings | ✅ |
-| 10 | UI polish (fonts, glass, navy palette) | ✅ baseline |
+| 10 | UI polish (fonts, glass, navy palette) | ✅ |
 | 11 | README + ops docs | ✅ |
+| 2A | Dropdown rendering + Apply button bug fix | ✅ |
+| 2B | Security review (deps + horiz priv-esc + headers) | ✅ |
+| 2C-2E | Integrity, schema, DNC, admin promotion | ✅ |
+| 2F | Saved views, dashboard charts, lead provenance, admin user delete | ✅ |
+| 3A | Glass token system + GlassCard primitive | ✅ |
+| 3B | User panel redesign + /settings page + Entra extended profile | ✅ |
+| 3C | Tags as first-class entity | ✅ |
+| 3D | Tasks + notifications + @-mentions + due-today cron | ✅ |
+| 3E | Pipeline Kanban view (drag-drop status updates) | ✅ |
+| 3F | Duplicate detection on lead create | ✅ |
+| 3G | Lead conversion + Account/Contact/Opportunity entities | ✅ |
+| 3H | Saved-search subscriptions + email digests via Graph | ✅ |
+| 3I | Cmd+K command palette + recent_views | ✅ |
+| 3J | Strict CSP with per-request nonces | ✅ |
 
 ## Tech stack
 
@@ -60,19 +74,65 @@ Routes (App Router):
 /api/auth/[...nextauth]        Auth.js handlers
 /api/leads/import-template     XLSX template download (auth + can_import)
 /api/leads/export              filtered XLSX export (auth + can_export)
-/dashboard                     KPIs + recent leads
-/leads                         table + filters + pagination + bulk actions
-/leads/new                     create (can_create_leads)
-/leads/[id]                    detail + activity composer + feed
+/api/leads/check-duplicate     duplicate detection on lead create (Phase 3F)
+/api/search                    Cmd+K cross-entity search (Phase 3I)
+/api/cron/tasks-due-today      bearer-auth, daily 14:00 UTC (Phase 3D)
+/api/cron/saved-search-digest  bearer-auth, daily 14:00 UTC (Phase 3H)
+/dashboard                     KPIs + 4 charts
+/leads                         table + filters + saved views + pagination
+/leads/new                     create (can_create_leads) + dup warnings
+/leads/[id]                    detail + activity composer + feed + Convert
 /leads/[id]/edit               edit (can_edit_leads)
 /leads/import                  XLSX wizard (can_import)
+/leads/pipeline                Kanban by status (Phase 3E)
+/accounts, /accounts/[id]      CRM Account records (Phase 3G)
+/contacts, /contacts/[id]      Contact records (Phase 3G)
+/opportunities, /opportunities/[id]      Opportunity records (Phase 3G)
+/opportunities/pipeline        Kanban by stage (Phase 3G)
+/tasks                         my tasks (Phase 3D)
+/notifications                 full bell-icon list (Phase 3D)
+/settings                      6-section profile + prefs (Phase 3B)
 /admin                         overview (is_admin)
-/admin/users                   user list
-/admin/users/[id]              edit perms / admin / active / rotate breakglass
+/admin/users, /admin/users/[id]      user mgmt
+/admin/tags                    tag management (Phase 3C)
 /admin/audit                   searchable audit log
 /admin/data                    type-to-confirm delete-all flows
 /admin/settings                read-only env config
 ```
+
+## Phase 3 — what's new
+
+**Entities and relationships:**
+- Lead → (Convert) → Account + Contact + Opportunity (single transaction). Existing activities reassign to the new opportunity.
+- `permissions.can_view_all_leads` was renamed to `can_view_all_records` — one flag governs visibility across all four CRM record types.
+- Activities now optionally attach to any of {lead, account, contact, opportunity}. Database CHECK constraint enforces exactly-one-parent.
+- Tasks similarly, but at-most-one-parent (orphaned tasks allowed).
+
+**New cron jobs (registered in `vercel.json`):**
+- `/api/cron/tasks-due-today` — daily 14:00 UTC. Creates `task_due` notifications for assignees with `notify_tasks_due=true`.
+- `/api/cron/saved-search-digest` — daily 14:00 UTC. For each active saved-search subscription, creates in-app notifications and (optionally) sends an email digest from the user's own M365 mailbox via Graph.
+
+**Required env var added:** `CRON_SECRET` (≥20 chars). Both crons reject requests without `Authorization: Bearer $CRON_SECRET`.
+
+**UI surfaces:**
+- Bottom-left of sidebar is now a clickable user panel (avatar + name + title) with a Settings/Sign out popover. Theme toggle moved exclusively to /settings.
+- /settings has six sections: Profile (read-only Entra fields with lock icons), Preferences (theme/timezone/formats/density/landing/leads view — auto-saving), Notifications, Microsoft 365 connection, Account info, Danger zone.
+- Notifications bell at the top-right of every authenticated page. `Cmd+K` / `Ctrl+K` opens a global command palette (search across leads/contacts/accounts/opportunities/tasks/tags + recent + quick actions).
+- Pipeline Kanban for leads (`/leads/pipeline`) and opportunities (`/opportunities/pipeline`) with drag-drop status/stage updates.
+- Tags are first-class with a fixed color palette; combobox autocomplete with create-on-the-fly, /admin/tags management.
+- Duplicate detection on lead create (debounced /api/leads/check-duplicate).
+
+**Schema migrations applied (Phase 3):**
+1. `phase3_entra_profile_fields` — extended `users` profile fields synced from Graph
+2. `phase3_user_prefs_extension` — editable preferences (timezone, date/time format, density, notify_*, email_digest_frequency, leads_default_mode)
+3. `phase3_tags` — `tags` + `lead_tags` (backfilled from `leads.tags` text[])
+4. `phase3_tasks_notifs` — `tasks` + `notifications` (with `task_status` / `task_priority` enums)
+5. `phase3_records` — `crm_accounts` (collision avoidance with Auth.js `accounts`), `contacts`, `opportunities` + activities/tasks parent FKs + CHECK constraints
+6. `phase3_perms_rename` — `can_view_all_leads` → `can_view_all_records`
+7. `phase3_subscriptions` — `saved_search_subscriptions`
+8. `phase3_recent_views` — `recent_views` (Cmd+K MRU)
+
+**Security tightening:** strict CSP with per-request nonces is now generated in `src/proxy.ts` (replaces the static permissive CSP from `next.config.ts`). `style-src 'unsafe-inline'` is retained as a pragmatic compromise for shadcn/Radix runtime style injection — documented in `SECURITY-NOTES.md`.
 
 ## Environment variables
 
@@ -91,6 +151,7 @@ Set every one of these on Vercel (production scope) before the deploy works at r
 | `APP_NAME` | optional | Default `MWG CRM` |
 | `ALLOWED_EMAIL_DOMAINS` | yes | Comma-separated, lowercase |
 | `DEFAULT_TIMEZONE` | optional | Default `America/Chicago` |
+| `CRON_SECRET` | yes (Phase 3D, 3H) | ≥20 chars. Bearer-auth for `/api/cron/*` routes. Set with `vercel env add`. |
 
 `.env.example` documents these with no secrets. For local development, `.env.local` (gitignored) holds your dev values; Vercel's CLI `vercel env pull` does NOT pull values for prod-encrypted vars to local — you must populate them by hand once.
 
