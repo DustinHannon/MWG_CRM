@@ -44,7 +44,11 @@ The Phase 4 hardening pass (4A) and most features (4B / 4C / 4E backend / 4F / 4
 - **4E bulk-tag selection toolbar** — `bulkTagLeadsAction` server action is live with full IDOR + audit; the leads-table sticky selection toolbar UI is pending.
 - **4I Mobile responsiveness pass** — sidebar drawer, card-list tables, full-screen modals, real-device QA. Largest deferred item; deserves its own phase.
 - **4J Manager → CRM user linking — partial.** `users_manager_links` view + `can_view_team_records` column landed in Phase 5E. Access-gate update across leads/accounts/contacts/opps/tasks + UI surfaces (settings link to admin user page, /admin/users "Reports to" column, "My team's open leads" view, dashboard scope toggle) still pending.
-- **Optimistic-concurrency UI banners** — backend `concurrentUpdate` rejects with `ConflictError`; lead detail / opportunity edit forms still need the per-form "View their changes / Discard yours" banner. (Note: as of Phase 5B audit, the lead/account/contact/opp `updateX()` paths don't actually call `concurrentUpdate` yet — wiring them through is a prerequisite to the banner. Scoring rules + scoring settings already use the pattern.)
+- **Optimistic-concurrency UI banners** — Phase 6B wired the **backend** OCC across `updateLeadAction`, `updateTaskAction`, `updateViewAction`, `updatePreferencesAction` and the toggle-task-complete path; conflicts now fire a non-auto-dismissing toast. The polished banner with names, "View their changes," and a side-by-side diff is still deferred. Account / contact / opportunity edit-form actions don't exist as separate update flows yet (those entities are view-only); when those forms ship, route them through `concurrentUpdate` from day one.
+- **Drag-drop status changes (`updateLeadStatusAction`, `updateOpportunityStageAction`)** — single-field, no row form; OCC threading would require carrying version through the drag event. Acceptable last-write-wins for now; revisit if production data shows actual collisions.
+- **Admin "claim/remap imported_by_name to a real user" tool** — Phase 6 stores activity by-names that don't resolve to a CRM user as `activities.imported_by_name`. When the actual person later signs up, an admin needs a small UI to remap historical activities to their new user id. Not built; tracked here.
+- **Bulk re-parse legacy D365 dumps** — leads imported before smart-detect existed (or imported with smart-detect off) may still have the D365 dump in `description`. A one-shot admin tool that walks the table, re-parses, and creates the proper structured rows is the cleanest cleanup.
+- **Bidirectional Tags / Owner sync against an HR list** — out of scope here; a future integration could keep the CRM users + their owned-leads in line with an authoritative employee directory.
 - ~~**`exceljs` migration**~~ — **shipped in Phase 5G.** `pnpm audit --prod` clean of HIGH.
 
 ## Phase 5 — what shipped, what's deferred
@@ -63,3 +67,24 @@ The Phase 4 hardening pass (4A) and most features (4B / 4C / 4E backend / 4F / 4
 - **5E remainder.** Access-gate team-records check across all 5 entity types. /settings manager-as-link. /admin/users "Reports to" column. "My team's open leads" view. Dashboard "Mine / Team / Both" scope toggle.
 - **5F — Mobile responsiveness pass.** `max-md:` overrides per component; sidebar drawer; tables → card list; modals full-screen; pipeline switch-to-table banner; Cmd+K full-screen on mobile; touch target sizing; iPhone Safari + Android Chrome QA; Lighthouse mobile ≥ 90 on the four target pages; desktop visual diff.
 - **5G remainder.** JSDoc long tail (every exported `src/lib/` function, every server action, every route handler).
+
+## Phase 6 — what shipped, what's deferred
+
+### Shipped 2026-05-07
+
+- **6A** — Schema migrations: `last_name` nullable on leads + contacts (real CRM data has incomplete name records); `leads.subject` (1-1000 chars) with trgm index, surfaced as italic line under the lead name and included in FTS; `leads.linkedin_url` http/https CHECK; `activities.imported_by_name` snapshot column; `activities.import_dedup_key` partial index; `leads_external_id_unique` partial unique index. `formatPersonName` helper rolled out across every render site that displayed `firstName lastName`.
+- **6B** — OCC backend wiring on every edit-form update action: `updateLeadAction`, `updateTaskAction`, `toggleTaskCompleteAction`, `updateViewAction`, `updatePreferencesAction`. `version` round-trips through forms; `ConflictError` surfaces as a `duration: Infinity` toast. PHASE6-OCC-TEST.md documents the two-tab smoke test for each path.
+- **6C** — Multi-line activity parser (`src/lib/import/activity-parser.ts`): pure function handling calls / meetings / notes / emails with all metadata variants (Duration / Left Voicemail / Status+End+Owner+Attendees / From+To). 200-most-recent cap per cell.
+- **6D** — D365 smart-detect (`src/lib/import/d365-detect.ts`): section-aware splitter for the legacy "everything in Description" dump, including the nested `Description:` inside `Linked Opportunity:` blocks. Stage and status mapping in `src/lib/import/stage-mapping.ts`.
+- **6E + 6F** — New 39-column import structure with two-step preview-then-commit flow. `previewImportAction` parses, builds aggregate counts/warnings/errors, and stashes the parsed rows under a job id; `commitImportAction` does the chunked write (CHUNK_SIZE=100) using the OCC pattern for re-imports via External ID. Owner emails + activity By-names resolve in two batched queries; tags autocreate; activities dedup via sha256 partial index. Audit log records the full import snapshot.
+- **6G** — Downloadable `.xlsx` template with three sheets (Leads / Instructions / Allowed values) and three example rows including a rich row that demonstrates the multi-line activity column shape.
+- **6H** — Synthetic-file smoke against `scripts/import-smoke-build.ts` output covering every code path; result captured in `PHASE6-IMPORT-TEST.md`. Production smoke against `mwg-crm-leads-batch-0447.xlsx` requires the file to be placed at `./test-data/` and run by the user.
+- **6I** — `/admin/import-help` static reference page; ARCHITECTURE.md / README.md / ROADMAP.md updated.
+
+### Deferred to a follow-up phase
+
+- **OCC conflict banner UI (5C polish, still deferred).** Backend now wired (Phase 6B); the per-form banner with names + "View their changes" remains the polish item.
+- **Admin claim-and-remap tool for `activities.imported_by_name`.**
+- **Bulk re-parse of legacy D365 dumps still living in `description`.**
+- **Production import smoke against `mwg-crm-leads-batch-0447.xlsx`** — tracked in `PHASE6-IMPORT-TEST.md`. Run when the file is available.
+- **Account / Contact / Opportunity edit forms** — when those ship, route through `concurrentUpdate` from day one.

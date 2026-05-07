@@ -29,6 +29,7 @@ export default async function AdminLayout({
           <SidebarLink href="/admin/scoring" label="Scoring" />
           <SidebarLink href="/admin/audit" label="Audit log" />
           <SidebarLink href="/admin/data" label="Data tools" />
+          <SidebarLink href="/admin/import-help" label="Import help" />
           <SidebarLink href="/admin/settings" label="Settings" />
           <div className="my-3 h-px bg-white/10" />
           <SidebarLink href="/dashboard" label="← Back to dashboard" />

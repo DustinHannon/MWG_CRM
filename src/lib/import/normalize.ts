@@ -2,7 +2,7 @@
 // the only one with substantial logic; the rest are trims and
 // lowercasings that keep the schema's CHECK constraints happy.
 
-import { parsePhoneNumberFromString } from "libphonenumber-js";
+import { parsePhoneNumber } from "libphonenumber-js";
 
 export function normaliseEmail(raw: string | undefined | null): string | null {
   if (!raw) return null;
@@ -19,15 +19,16 @@ export function normaliseUrl(raw: string | undefined | null): string | null {
   return trimmed;
 }
 
-export function normalisePhone(
-  raw: string | undefined | null,
-  defaultCountry: "US" = "US",
-): string | null {
+export function normalisePhone(raw: string | undefined | null): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   if (trimmed.length === 0) return null;
-  const parsed = parsePhoneNumberFromString(trimmed, defaultCountry);
-  if (parsed && parsed.isValid()) return parsed.number; // E.164
+  try {
+    const parsed = parsePhoneNumber(trimmed, "US");
+    if (parsed && parsed.isValid()) return parsed.format("E.164");
+  } catch {
+    /* fall through */
+  }
   // Couldn't normalise — pass through trimmed so the user can fix
   // later. The 50-char CHECK guards length.
   return trimmed.slice(0, 50);

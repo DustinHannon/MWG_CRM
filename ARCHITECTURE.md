@@ -207,16 +207,28 @@ which adds `WHERE version = $expected` and bumps it in the same statement.
 Zero rows affected → either the record is gone (`NotFoundError`) or someone
 else moved the version (`ConflictError`).
 
-UI surfaces `ConflictError` as a non-dismissable banner: *"This record was
-modified by someone else. Refresh to see their changes, then try again."* Forms
-must read `version` and post it back; the banner gives the user a "View their
-changes / Discard mine" choice.
+UI surfaces `ConflictError` as a non-auto-dismissing toast (`duration:
+Infinity, dismissible: true`): *"This record was modified by someone else.
+Refresh to see their changes, then try again."* Forms must read `version`
+and post it back. A polished banner with names + "View their changes /
+Discard mine" UI is tracked in `ROADMAP.md` as deferred polish.
+
+**OCC paths wired (Phase 6B):**
+- `updateLeadAction` (`lib/leads.ts:updateLead`)
+- `updateTaskAction` + `toggleTaskCompleteAction` (`lib/tasks.ts:updateTask`)
+- `updateViewAction` (`lib/views.ts:updateSavedView`)
+- `updatePreferencesAction` (UPSERT with `setWhere: eq(version, expected)`)
 
 **Where last-write-wins is acceptable** — documented exceptions:
 - `audit_log` — append-only; never updated.
 - `notifications` — only the `is_read` flag changes, only by the owner.
 - `recent_views` — upsert with timestamp; race conditions just dedupe.
 - `lead_tags` — insert/delete only.
+- Drag-drop status changes (`updateLeadStatusAction`,
+  `updateOpportunityStageAction`) — single-field, no row form;
+  threading version through drag state was deemed not worth the
+  invasiveness given the realistic UX is "last-drag-wins by user
+  choice." Revisit if collisions show up in production.
 
 ## 8. Logging and error handling
 
@@ -249,6 +261,44 @@ contacts, opportunities, tasks, and saved_views. Each:
 Lead access predates Phase 4 and lives in `src/lib/auth-helpers.ts`
 (`requireLeadAccess`, `requireLeadEditAccess`) — same pattern, kept where it is
 to avoid churning Phase 2 call sites.
+
+## 9b. Import pipeline (Phase 6)
+
+**Two-step preview-then-commit flow** at `/leads/import`:
+
+1. **Upload + parse** (`previewImportAction`) reads the .xlsx via exceljs,
+   maps headers via `lib/import/headers.ts`, hands each row to
+   `parseImportRow`, and stashes the `ParsedRow[]` under a job id in an
+   in-process TTL cache (`lib/import/job-cache.ts`).
+2. **Preview** (`buildImportPreview`) batch-resolves owner emails +
+   activity By-name strings (two queries total), looks up existing
+   leads by `external_id`, and aggregates everything into counts +
+   warning groups + per-row errors. Renders without touching writes.
+3. **Commit** (`commitImportAction` → `commitImport`) processes in
+   chunks of 100 rows; updates existing leads (`external_id` match)
+   via the OCC pattern, inserts new ones, computes activity dedup
+   keys, creates lead-only opportunities (no `account_id` —
+   conversion adds the account later), upserts tags with autocreated
+   slugs. Failures are caught per-chunk so partial success is
+   preserved. One audit row per import describes the snapshot.
+
+**Smart-detect** is a one-shot bridge for legacy D365 dumps where
+everything (Topic, Phone Calls, Notes, Linked Opportunity, Description)
+is crammed into the Description column. Opt-in via a checkbox on the
+upload screen. `lib/import/d365-detect.ts` recognises the shape, splits
+sections, and dispatches each section to the multi-line activity
+parser. New imports should use the dedicated columns.
+
+**`import_dedup_key`** = `sha256(lead_id + kind + occurred_at_iso +
+body[0..200])`. Set on every imported activity; never set on
+manually-created activities. The `activities_import_dedup_idx` partial
+index lets re-imports of the same file skip already-present
+activities idempotently.
+
+**`imported_by_name`** snapshots a "By: Name" reference from a parsed
+activity body when the name doesn't resolve to a CRM user. Future
+admin tooling will let an admin remap historical activities to a real
+user once the person signs up.
 
 ## 10. Notable decisions
 

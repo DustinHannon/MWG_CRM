@@ -41,5 +41,8 @@ next-env.d.ts
 .playwright-mcp/
 mwg-crm-live.png
 
+# Phase 6H — local-only test workbooks
+test-data/
+
 
 .env*.local
