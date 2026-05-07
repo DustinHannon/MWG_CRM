@@ -6,6 +6,7 @@ import {
   updateLeadAction,
   type ActionResult,
 } from "./actions";
+import { DuplicateWarning } from "@/components/leads/duplicate-warning";
 import {
   LEAD_RATINGS,
   LEAD_SOURCES,
@@ -86,11 +87,12 @@ export function LeadForm({
           <Input name="companyName" label="Company" defaultValue={v.companyName ?? ""} />
           <Input name="industry" label="Industry" defaultValue={v.industry ?? ""} />
         </Row>
-        <Input name="email" label="Email" type="email" defaultValue={v.email ?? ""} />
-        <Row>
-          <Input name="phone" label="Phone" defaultValue={v.phone ?? ""} />
-          <Input name="mobilePhone" label="Mobile" defaultValue={v.mobilePhone ?? ""} />
-        </Row>
+        <DuplicateAwareContact
+          isCreate={v.id == null}
+          defaultEmail={v.email ?? ""}
+          defaultPhone={v.phone ?? ""}
+          defaultMobilePhone={v.mobilePhone ?? ""}
+        />
         <Input name="website" label="Website" defaultValue={v.website ?? ""} />
         <Input name="linkedinUrl" label="LinkedIn URL" defaultValue={v.linkedinUrl ?? ""} />
       </Section>
@@ -212,6 +214,7 @@ function Input({
   type = "text",
   required,
   step,
+  onChange,
 }: {
   name: string;
   label: string;
@@ -219,6 +222,7 @@ function Input({
   type?: string;
   required?: boolean;
   step?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
     <label className="block text-xs uppercase tracking-wide text-white/50">
@@ -226,6 +230,7 @@ function Input({
       <input
         name={name}
         type={type}
+        onChange={onChange}
         step={step}
         defaultValue={defaultValue}
         required={required}
@@ -342,5 +347,58 @@ function ContactPreferences({
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Phase 3F — wraps email + phone + mobile inputs with controlled state
+ * so the DuplicateWarning component sees real-time changes. Only fires
+ * the duplicate check on lead create (not on edit, where the active
+ * lead would always self-match).
+ */
+function DuplicateAwareContact({
+  isCreate,
+  defaultEmail,
+  defaultPhone,
+  defaultMobilePhone,
+}: {
+  isCreate: boolean;
+  defaultEmail: string;
+  defaultPhone: string;
+  defaultMobilePhone: string;
+}) {
+  const [email, setEmail] = useState(defaultEmail);
+  const [phone, setPhone] = useState(defaultPhone);
+  const [mobilePhone, setMobilePhone] = useState(defaultMobilePhone);
+
+  return (
+    <>
+      <Input
+        name="email"
+        label="Email"
+        type="email"
+        defaultValue={defaultEmail}
+        onChange={(e) => setEmail((e.target as HTMLInputElement).value)}
+      />
+      <Row>
+        <Input
+          name="phone"
+          label="Phone"
+          defaultValue={defaultPhone}
+          onChange={(e) => setPhone((e.target as HTMLInputElement).value)}
+        />
+        <Input
+          name="mobilePhone"
+          label="Mobile"
+          defaultValue={defaultMobilePhone}
+          onChange={(e) =>
+            setMobilePhone((e.target as HTMLInputElement).value)
+          }
+        />
+      </Row>
+      {isCreate ? (
+        <DuplicateWarning email={email} phone={phone || mobilePhone} />
+      ) : null}
+    </>
   );
 }
