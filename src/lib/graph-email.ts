@@ -177,7 +177,7 @@ async function persistGraphAttachments(args: {
       const buf = Buffer.from(detail.contentBytes, "base64");
       const pathname = `activities/${args.activityId}/${sanitize(meta.name)}`;
       const blob = await put(pathname, buf, {
-        access: "public",
+        access: "private",
         addRandomSuffix: false,
         contentType: meta.contentType || "application/octet-stream",
       });

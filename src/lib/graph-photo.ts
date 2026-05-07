@@ -53,7 +53,7 @@ export async function refreshUserPhotoIfStale(userId: string): Promise<void> {
 
     const buf = await res.arrayBuffer();
     const blob = await put(`users/${userId}/photo.jpg`, Buffer.from(buf), {
-      access: "public",
+      access: "private",
       addRandomSuffix: false,
       contentType: res.headers.get("content-type") ?? "image/jpeg",
     });

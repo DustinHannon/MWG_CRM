@@ -22,6 +22,11 @@ export function Avatar({ src, name, id, size = 36, className }: AvatarProps) {
   const palette = AVATAR_PALETTE[hashString(id) % AVATAR_PALETTE.length];
 
   if (src) {
+    // The Blob store is private; route image bytes through the
+    // authenticated proxy at /api/users/[id]/avatar instead of using
+    // the raw blob URL. `src` (the DB photo_blob_url value) acts as a
+    // "this user has a photo" flag here.
+    const proxySrc = `/api/users/${encodeURIComponent(id)}/avatar`;
     return (
       <span
         className={cn(
@@ -32,7 +37,7 @@ export function Avatar({ src, name, id, size = 36, className }: AvatarProps) {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={src}
+          src={proxySrc}
           alt={name}
           width={size}
           height={size}
