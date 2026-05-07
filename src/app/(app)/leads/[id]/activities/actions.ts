@@ -12,7 +12,12 @@ import {
   taskSchema,
 } from "@/lib/activities";
 import { writeAudit } from "@/lib/audit";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import {
+  ForbiddenError,
+  getPermissions,
+  requireLeadAccess,
+  requireSession,
+} from "@/lib/auth-helpers";
 
 export interface ActivityActionResult {
   ok: boolean;
@@ -41,6 +46,15 @@ export async function addNoteAction(
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
   }
+  // Lead access gate — actor must own the lead OR have canViewAllLeads.
+  try {
+    await requireLeadAccess(user, parsed.data.leadId);
+  } catch (err) {
+    if (err instanceof ForbiddenError) {
+      return { ok: false, error: err.message };
+    }
+    throw err;
+  }
   const { id } = await createNote({
     leadId: parsed.data.leadId,
     userId: user.id,
@@ -67,6 +81,14 @@ export async function addCallAction(
       error: "Validation failed.",
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
+  }
+  try {
+    await requireLeadAccess(user, parsed.data.leadId);
+  } catch (err) {
+    if (err instanceof ForbiddenError) {
+      return { ok: false, error: err.message };
+    }
+    throw err;
   }
   const { id } = await createCall({
     leadId: parsed.data.leadId,
@@ -101,6 +123,14 @@ export async function addTaskAction(
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
   }
+  try {
+    await requireLeadAccess(user, parsed.data.leadId);
+  } catch (err) {
+    if (err instanceof ForbiddenError) {
+      return { ok: false, error: err.message };
+    }
+    throw err;
+  }
   const { id } = await createTask({
     leadId: parsed.data.leadId,
     userId: user.id,
@@ -124,6 +154,9 @@ export async function deleteActivityAction(formData: FormData) {
   const user = await requireSession();
   const activityId = z.string().uuid().parse(formData.get("activityId"));
   const leadId = z.string().uuid().parse(formData.get("leadId"));
+  // Lead access gate first — without this, an attacker who knows an
+  // activity id can delete from leads they don't own.
+  await requireLeadAccess(user, leadId);
   await deleteActivity(activityId, user.id, user.isAdmin);
   await writeAudit({
     actorId: user.id,

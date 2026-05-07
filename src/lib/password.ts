@@ -1,3 +1,4 @@
+import "server-only";
 import { hash, verify } from "@node-rs/argon2";
 
 /**

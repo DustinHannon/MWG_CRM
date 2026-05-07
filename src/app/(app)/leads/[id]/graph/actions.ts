@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { writeAudit } from "@/lib/audit";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import {
+  ForbiddenError,
+  getPermissions,
+  requireLeadAccess,
+  requireSession,
+} from "@/lib/auth-helpers";
 import { sendEmailAndTrack } from "@/lib/graph-email";
 import { scheduleMeetingAndTrack } from "@/lib/graph-meeting";
 import { ReauthRequiredError } from "@/lib/graph-token";
@@ -43,6 +48,15 @@ export async function sendEmailAction(
       error: "Validation failed.",
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
+  }
+
+  try {
+    await requireLeadAccess(user, parsed.data.leadId);
+  } catch (err) {
+    if (err instanceof ForbiddenError) {
+      return { ok: false, error: err.message };
+    }
+    throw err;
   }
 
   // Attachments: pull from formData (multiple <File>s under name "attachment").
@@ -129,6 +143,15 @@ export async function scheduleMeetingAction(
       error: "Validation failed.",
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
+  }
+
+  try {
+    await requireLeadAccess(user, parsed.data.leadId);
+  } catch (err) {
+    if (err instanceof ForbiddenError) {
+      return { ok: false, error: err.message };
+    }
+    throw err;
   }
 
   try {

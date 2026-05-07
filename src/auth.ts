@@ -1,3 +1,4 @@
+import "server-only";
 import NextAuth from "next-auth";
 import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
@@ -35,6 +36,34 @@ const credentialsSchema = z.object({
   password: z.string().min(1).max(512),
 });
 
+/* ---------------------------------------------------------------------------
+ * In-memory rate limit for breakglass authorize().
+ *
+ * Per-process map of username → recent timestamps. On every authorize() we
+ * trim the bucket to the last 15 minutes and check that there are <5 entries
+ * before recording a new one. Returns false (deny) when over the cap.
+ *
+ * Intentionally simple — Vercel cold starts reset the counter, which is
+ * fine because breakglass usage is rare. For higher-volume creds endpoints
+ * upgrade to Upstash Redis with a sliding window.
+ * ------------------------------------------------------------------------- */
+const BREAKGLASS_WINDOW_MS = 15 * 60 * 1000;
+const BREAKGLASS_MAX_ATTEMPTS = 5;
+const breakglassAttempts = new Map<string, number[]>();
+
+function checkBreakglassRateLimit(username: string): boolean {
+  const now = Date.now();
+  const cutoff = now - BREAKGLASS_WINDOW_MS;
+  const prev = (breakglassAttempts.get(username) ?? []).filter((t) => t > cutoff);
+  if (prev.length >= BREAKGLASS_MAX_ATTEMPTS) {
+    breakglassAttempts.set(username, prev);
+    return false;
+  }
+  prev.push(now);
+  breakglassAttempts.set(username, prev);
+  return true;
+}
+
 const providers: Provider[] = [
   Credentials({
     id: "breakglass",
@@ -47,6 +76,18 @@ const providers: Provider[] = [
       const parsed = credentialsSchema.safeParse(rawCreds);
       if (!parsed.success) return null;
       const { username, password } = parsed.data;
+
+      // Lightweight per-username rate limit: 5 attempts / 15 minutes.
+      // Breakglass is a brute-force target — non-Entra credential. The
+      // store is in-memory and per-process, so cold starts reset the
+      // counter — this is acceptable because breakglass usage is rare.
+      // If breakglass usage spikes, swap for Upstash Redis (TODO).
+      if (!checkBreakglassRateLimit(username.toLowerCase())) {
+        console.warn(
+          `[breakglass] rate-limited username=${username.toLowerCase()}`,
+        );
+        return null;
+      }
 
       await ensureBreakglass();
 
@@ -100,7 +141,11 @@ if (entraConfigured) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
+  // 24-hour session lifetime is conservative for an internal CRM. The
+  // jwt callback re-validates against the DB on every request anyway, so
+  // a deactivated user is signed out within one request roundtrip — but a
+  // forgotten device is bounded to a day.
+  session: { strategy: "jwt", maxAge: 60 * 60 * 24 },
   trustHost: true,
   providers,
   callbacks: {

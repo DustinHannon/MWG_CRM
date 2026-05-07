@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import {
+  ForbiddenError,
+  getPermissions,
+  requireLeadAccess,
+  requireLeadEditAccess,
+  requireSession,
+} from "@/lib/auth-helpers";
 import { writeAudit } from "@/lib/audit";
 import {
   createLead,
@@ -74,12 +80,20 @@ export async function updateLeadAction(
   formData: FormData,
 ): Promise<ActionResult> {
   const user = await requireSession();
-  const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canEditLeads) {
-    return { ok: false, error: "You don't have permission to edit leads." };
-  }
 
   const id = z.string().uuid().parse(formData.get("id"));
+  // Verify edit permission AND access to this specific lead. Closes
+  // horizontal priv-esc where a forged form could submit another user's
+  // lead id.
+  try {
+    await requireLeadEditAccess(user, id);
+  } catch (err) {
+    if (err instanceof ForbiddenError) {
+      return { ok: false, error: err.message };
+    }
+    throw err;
+  }
+
   const parsed = leadCreateSchema.partial().safeParse(formToObject(formData));
   if (!parsed.success) {
     return {
@@ -125,6 +139,8 @@ export async function deleteLeadAction(formData: FormData) {
     throw new Error("You don't have permission to delete leads.");
   }
   const id = z.string().uuid().parse(formData.get("id"));
+  // Confirm access to this specific lead before deleting.
+  await requireLeadAccess(user, id);
   await deleteLeadsById([id]);
   await writeAudit({
     actorId: user.id,
