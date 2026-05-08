@@ -13,6 +13,7 @@ import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { UserAvatar } from "@/components/user-display";
 import { updateOpportunityStageAction } from "../actions";
 
 interface Card {
@@ -23,6 +24,8 @@ interface Card {
   name: string;
   accountName: string | null;
   amount: string | null;
+  // Phase 9C — owner id powers the canonical xs avatar on the card.
+  ownerId: string | null;
   ownerName: string | null;
 }
 
@@ -186,14 +189,34 @@ function Card({ card }: { card: Card }) {
           {card.accountName}
         </p>
       ) : null}
-      <p className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
-        <span>{card.ownerName ?? "—"}</span>
+      <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+        {card.ownerId ? (
+          // Phase 9C — avatar-only chip (xs/20px) for the dense card.
+          <Link
+            href={`/users/${card.ownerId}`}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-label={card.ownerName ?? "Owner"}
+            title={card.ownerName ?? undefined}
+          >
+            <UserAvatar
+              user={{
+                id: card.ownerId,
+                displayName: card.ownerName,
+                photoUrl: null,
+              }}
+              size="xs"
+            />
+          </Link>
+        ) : (
+          <span>—</span>
+        )}
         {card.amount ? (
           <span className="tabular-nums text-foreground/80">
             ${Number(card.amount).toLocaleString()}
           </span>
         ) : null}
-      </p>
+      </div>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
+import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
@@ -82,7 +83,27 @@ export default async function OpportunityDetailPage({
             href={opp.contactId ? `/contacts/${opp.contactId}` : null}
             value={opp.contactName ?? null}
           />
-          <Row label="Owner" value={opp.ownerName ?? null} />
+          {/* Phase 9C — Owner uses canonical UserChip + UserHoverCard
+              on this single-record detail page. */}
+          <div className="flex">
+            <dt className="w-40 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
+              Owner
+            </dt>
+            <dd>
+              {opp.ownerId ? (
+                <UserChip
+                  user={{
+                    id: opp.ownerId,
+                    displayName: opp.ownerName,
+                    photoUrl: null,
+                  }}
+                  hoverCard={<UserHoverCard userId={opp.ownerId} />}
+                />
+              ) : (
+                "—"
+              )}
+            </dd>
+          </div>
           <Row label="Probability" value={opp.probability ? `${opp.probability}%` : null} />
           <Row label="Description" value={opp.description ?? null} />
           {opp.sourceLeadId ? (

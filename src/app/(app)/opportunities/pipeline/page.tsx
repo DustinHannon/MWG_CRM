@@ -26,6 +26,8 @@ interface CardRow {
   name: string;
   accountName: string | null;
   amount: string | null;
+  // Phase 9C — owner id powers the canonical xs avatar on the card.
+  ownerId: string | null;
   ownerName: string | null;
 }
 
@@ -52,6 +54,7 @@ export default async function OppPipelinePage() {
       name: opportunities.name,
       accountName: crmAccounts.name,
       amount: opportunities.amount,
+      ownerId: opportunities.ownerId,
       ownerName: users.displayName,
     })
     .from(opportunities)

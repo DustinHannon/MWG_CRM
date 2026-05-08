@@ -5,6 +5,7 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
+import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,8 @@ export default async function OpportunitiesPage({
       expectedCloseDate: opportunities.expectedCloseDate,
       accountId: opportunities.accountId,
       accountName: crmAccounts.name,
+      // Phase 9C — owner id surfaced for the canonical UserChip.
+      ownerId: opportunities.ownerId,
       ownerName: users.displayName,
       contactName: sql<string | null>`CASE WHEN ${contacts.id} IS NULL THEN NULL ELSE concat_ws(' ', ${contacts.firstName}, ${contacts.lastName}) END`,
     })
@@ -178,8 +181,18 @@ export default async function OpportunitiesPage({
                   <td className="px-4 py-2.5 text-muted-foreground">
                     <UserTime value={r.expectedCloseDate} mode="date" />
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {r.ownerName ?? "—"}
+                  <td className="px-4 py-2.5">
+                    {r.ownerId ? (
+                      <UserChip
+                        user={{
+                          id: r.ownerId,
+                          displayName: r.ownerName,
+                          photoUrl: null,
+                        }}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
