@@ -63,12 +63,79 @@ export async function listNotificationsForUser(
   userId: string,
   limit = 20,
 ) {
+  // Phase 9C — verified cursor-friendly: queries the composite partial
+  // index `notifications_user_unread_idx (user_id, is_read, created_at DESC)`
+  // and is bounded by `limit`, so even a high-volume user (100k+
+  // notifications) seeks the leading rows by user_id and stops early.
+  // No cursor parameter is exposed because the bell + /notifications
+  // page UX is "show recent N"; pagination beyond the top N would
+  // need a redesign (mark-read-as-you-scroll behaviour, etc).
   return db
     .select()
     .from(notifications)
     .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
+}
+
+/**
+ * Phase 9C — cursor-paginated variant for the /notifications page so
+ * power users with 100k+ notifications can scroll past the top batch.
+ * The /notifications page calls this; the bell popover keeps the
+ * unbounded `listNotificationsForUser(userId, 10)` form because it's
+ * always capped at 10.
+ */
+export interface NotificationCursor {
+  ts: Date;
+  id: string;
+}
+export function parseNotificationCursor(raw: string | undefined): NotificationCursor | null {
+  if (!raw) return null;
+  const idx = raw.lastIndexOf(":");
+  if (idx === -1) return null;
+  const tsPart = raw.slice(0, idx);
+  const idPart = raw.slice(idx + 1);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idPart)) {
+    return null;
+  }
+  const d = new Date(tsPart);
+  if (Number.isNaN(d.getTime())) return null;
+  return { ts: d, id: idPart };
+}
+export function encodeNotificationCursor(ts: Date, id: string): string {
+  return `${ts.toISOString()}:${id}`;
+}
+
+export async function listNotificationsPage(
+  userId: string,
+  cursor: string | undefined,
+  pageSize = 50,
+): Promise<{ rows: typeof notifications.$inferSelect[]; nextCursor: string | null }> {
+  const parsed = parseNotificationCursor(cursor);
+  const wheres = [eq(notifications.userId, userId)];
+  if (parsed) {
+    wheres.push(
+      sql`(
+        ${notifications.createdAt} < ${parsed.ts.toISOString()}::timestamptz
+        OR (${notifications.createdAt} = ${parsed.ts.toISOString()}::timestamptz AND ${notifications.id} < ${parsed.id}::uuid)
+      )`,
+    );
+  }
+  const rowsRaw = await db
+    .select()
+    .from(notifications)
+    .where(and(...wheres))
+    .orderBy(desc(notifications.createdAt), desc(notifications.id))
+    .limit(pageSize + 1);
+  if (rowsRaw.length <= pageSize) {
+    return { rows: rowsRaw, nextCursor: null };
+  }
+  const rows = rowsRaw.slice(0, pageSize);
+  const last = rows[rows.length - 1];
+  return {
+    rows,
+    nextCursor: encodeNotificationCursor(last.createdAt, last.id),
+  };
 }
 
 export async function countUnread(userId: string): Promise<number> {
@@ -96,5 +163,3 @@ export async function markRead(id: string, userId: string): Promise<void> {
     .set({ isRead: true })
     .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
 }
-
-void sql;

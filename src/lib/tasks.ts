@@ -8,6 +8,34 @@ import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
 import { expectAffected } from "@/lib/db/concurrent-update";
 
+/**
+ * Phase 9C — task cursor format: `<iso8601-due_at-or-"null">:<uuid>`.
+ * The default sort is `(due_at ASC NULLS LAST, id DESC)`, so a NULL
+ * due_at puts a row in the tail block — encoded with the literal
+ * timestamp "null".
+ */
+export interface ParsedTaskCursor {
+  due: Date | null;
+  id: string;
+}
+export function parseTaskCursor(raw: string | undefined | null): ParsedTaskCursor | null {
+  if (!raw) return null;
+  const idx = raw.lastIndexOf(":");
+  if (idx === -1) return null;
+  const tsPart = raw.slice(0, idx);
+  const idPart = raw.slice(idx + 1);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idPart)) {
+    return null;
+  }
+  if (tsPart === "null" || tsPart === "") return { due: null, id: idPart };
+  const d = new Date(tsPart);
+  if (Number.isNaN(d.getTime())) return null;
+  return { due: d, id: idPart };
+}
+export function encodeTaskCursor(due: Date | null, id: string): string {
+  return `${due ? due.toISOString() : "null"}:${id}`;
+}
+
 export const taskCreateSchema = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).optional().nullable(),
@@ -68,12 +96,29 @@ const baseSelect = {
   updatedAt: tasks.updatedAt,
 };
 
+/**
+ * Phase 9C — page-size + cursor support added. Default page size is 50;
+ * pass `pageSize: 0` (or omit the cursor entirely) for the legacy
+ * unbounded fetch (only safe for callers that already constrain by
+ * leadId / scope / etc.). Cursor format documented on `parseTaskCursor`.
+ *
+ * Returns `{ rows, nextCursor }` always so callers don't have to check
+ * a flag. `nextCursor` is null when no further rows exist.
+ */
+export interface ListTasksResult {
+  rows: TaskRow[];
+  nextCursor: string | null;
+}
+
 export async function listTasksForUser(args: {
   userId: string;
   isAdmin: boolean;
   status?: ("open" | "in_progress" | "completed" | "cancelled")[];
   scope?: "me" | "all";
-}): Promise<TaskRow[]> {
+  cursor?: string | null;
+  /** 0 disables pagination (legacy callers). Defaults to 50. */
+  pageSize?: number;
+}): Promise<ListTasksResult> {
   const wheres: SQL[] = [];
   if (args.scope !== "all") {
     wheres.push(eq(tasks.assignedToId, args.userId));
@@ -95,17 +140,45 @@ export async function listTasksForUser(args: {
     );
   }
 
-  const where = wheres.length === 0 ? undefined : and(...wheres);
+  const pageSize = args.pageSize ?? 50;
+  // Phase 9C — cursor seeks via composite index
+  // `tasks_assigned_due_at_id_idx (assigned_to_id, due_at NULLS LAST, id DESC)`.
+  const cursor = pageSize > 0 ? parseTaskCursor(args.cursor) : null;
+  if (cursor) {
+    if (cursor.due === null) {
+      // Past the due-at non-null block; only id-tiebreak remains.
+      wheres.push(sql`(${tasks.dueAt} IS NULL AND ${tasks.id} < ${cursor.id})`);
+    } else {
+      wheres.push(
+        sql`(
+          ${tasks.dueAt} > ${cursor.due.toISOString()}::timestamptz
+          OR (${tasks.dueAt} = ${cursor.due.toISOString()}::timestamptz AND ${tasks.id} < ${cursor.id})
+          OR ${tasks.dueAt} IS NULL
+        )`,
+      );
+    }
+  }
 
-  const rows = await db
+  const where = wheres.length === 0 ? undefined : and(...wheres);
+  const sliceLimit = pageSize > 0 ? pageSize + 1 : undefined;
+
+  let q = db
     .select(baseSelect)
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assignedToId))
     .leftJoin(leads, eq(leads.id, tasks.leadId))
     .where(where)
-    .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
+    .orderBy(sql`${tasks.dueAt} ASC NULLS LAST`, desc(tasks.id))
+    .$dynamic();
+  if (sliceLimit) q = q.limit(sliceLimit);
+  const rowsRaw = await q;
 
-  return rows;
+  if (pageSize <= 0 || rowsRaw.length <= pageSize) {
+    return { rows: rowsRaw, nextCursor: null };
+  }
+  const rows = rowsRaw.slice(0, pageSize);
+  const last = rows[rows.length - 1];
+  return { rows, nextCursor: encodeTaskCursor(last.dueAt, last.id) };
 }
 
 export async function listTasksForLead(leadId: string): Promise<TaskRow[]> {
