@@ -254,7 +254,7 @@ function PreviewView({
           type="button"
           onClick={onCommit}
           disabled={pending}
-          className="rounded-md bg-emerald-300/90 px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? "Committing…" : "Commit import"}
         </button>
@@ -270,9 +270,9 @@ function ResultView({
 }) {
   if (!state.ok) {
     return (
-      <div className="mt-8 rounded-2xl border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 p-6 backdrop-blur-xl">
-        <h2 className="text-sm font-medium text-rose-700 dark:text-rose-100">Import failed</h2>
-        <p className="mt-2 text-sm text-rose-700 dark:text-rose-100/80">{state.error}</p>
+      <div className="mt-8 rounded-2xl border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] p-6 backdrop-blur-xl">
+        <h2 className="text-sm font-medium text-[var(--status-lost-fg)]">Import failed</h2>
+        <p className="mt-2 text-sm text-[var(--status-lost-fg)]/80">{state.error}</p>
       </div>
     );
   }
@@ -300,7 +300,7 @@ function ResultView({
 
       {r.failedRows.length > 0 ? (
         <div className="mt-6">
-          <h3 className="text-xs uppercase tracking-wide text-rose-700 dark:text-rose-200">
+          <h3 className="text-xs uppercase tracking-wide text-[var(--status-lost-fg)]">
             Failed rows
           </h3>
           <ul className="mt-2 divide-y divide-border/60 text-xs">
@@ -349,11 +349,11 @@ function Stat({
 }) {
   const ring =
     tone === "danger"
-      ? "border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 text-rose-700 dark:text-rose-100"
+      ? "border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]"
       : tone === "warn"
-        ? "border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 text-amber-700 dark:text-amber-100"
+        ? "border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] text-[var(--priority-medium-fg)]"
         : tone === "ok"
-          ? "border-emerald-500/30 dark:border-emerald-300/30 bg-emerald-500/20 dark:bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-100"
+          ? "border-[var(--status-won-fg)]/30 bg-[var(--status-won-bg)] text-[var(--status-won-fg)]"
           : "border-border bg-muted/40 text-foreground/90";
   return (
     <div className={`rounded-xl border px-4 py-3 ${ring}`}>
@@ -374,8 +374,8 @@ function CollapsibleList({
 }) {
   const ring =
     tone === "danger"
-      ? "border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 text-rose-700 dark:text-rose-100"
-      : "border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 text-amber-700 dark:text-amber-100";
+      ? "border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]"
+      : "border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] text-[var(--priority-medium-fg)]";
   return (
     <details className={`rounded-2xl border ${ring} p-4 backdrop-blur-xl`}>
       <summary className="cursor-pointer text-sm font-medium">{title}</summary>
