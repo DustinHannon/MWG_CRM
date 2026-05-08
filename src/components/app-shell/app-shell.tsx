@@ -73,9 +73,17 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
   return (
     <TooltipProvider delayDuration={300}>
       <ThemeSync theme={theme} />
-      <div data-density={density} className="flex min-h-screen text-foreground">
+      {/*
+        Phase 9B — sticky sidebar. The shell occupies the full dynamic
+        viewport (h-dvh, mobile-friendly), the sidebar fills that height
+        and never scrolls, and the right column is the only scrolling
+        region. min-w-0 on the right column keeps wide content from
+        blowing out flex sizing. No min-h-screen anywhere — body must
+        not scroll.
+      */}
+      <div data-density={density} className="flex h-dvh text-foreground">
         <Sidebar brand={brand ?? {}} nav={nav} user={user} />
-        <main className="relative flex-1 overflow-y-auto">
+        <main className="relative h-dvh min-w-0 flex-1 overflow-y-auto">
           <TopBar
             unreadCount={unreadCount}
             recent={recentNotifs}
