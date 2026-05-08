@@ -62,6 +62,10 @@ export const crmAccounts = pgTable(
   (t) => [
     index("crm_accounts_owner_idx").on(t.ownerId),
     index("crm_accounts_name_idx").on(sql`lower(${t.name})`),
+    // Phase 9C — composite cursor pagination key for /accounts list.
+    index("crm_accounts_updated_at_id_idx")
+      .on(t.updatedAt.desc(), t.id.desc())
+      .where(sql`is_deleted = false`),
   ],
 );
 
@@ -111,6 +115,10 @@ export const contacts = pgTable(
     index("contacts_account_idx").on(t.accountId),
     index("contacts_owner_idx").on(t.ownerId),
     index("contacts_email_idx").on(sql`lower(${t.email})`),
+    // Phase 9C — composite cursor pagination key for /contacts list.
+    index("contacts_updated_at_id_idx")
+      .on(t.updatedAt.desc(), t.id.desc())
+      .where(sql`is_deleted = false`),
   ],
 );
 
@@ -169,5 +177,14 @@ export const opportunities = pgTable(
     index("opportunities_account_idx").on(t.accountId),
     index("opportunities_owner_idx").on(t.ownerId),
     index("opportunities_stage_idx").on(t.stage),
+    // Phase 9C — composite cursor pagination keys. The list page sorts
+    // by expected_close_date NULLS LAST (default) but server-side
+    // updated_at sort fallbacks also exist. Partial on is_deleted=false.
+    index("opportunities_close_date_id_idx")
+      .on(sql`expected_close_date DESC NULLS LAST`, t.id.desc())
+      .where(sql`is_deleted = false`),
+    index("opportunities_updated_at_id_idx")
+      .on(t.updatedAt.desc(), t.id.desc())
+      .where(sql`is_deleted = false`),
   ],
 );

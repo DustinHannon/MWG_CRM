@@ -113,6 +113,17 @@ export const leads = pgTable(
     index("leads_company_idx").on(t.companyName),
     index("leads_external_id_idx").on(t.externalId),
     index("leads_last_activity_idx").on(t.lastActivityAt.desc()),
+    // Phase 9C — composite cursor key for /leads default sort
+    // (last_activity_at DESC NULLS LAST, id DESC), partial on is_deleted=false
+    // so cursor seeks stay index-only at 100k+ leads.
+    index("leads_last_activity_id_idx")
+      .on(sql`last_activity_at DESC NULLS LAST`, t.id.desc())
+      .where(sql`is_deleted = false`),
+    // Phase 9C — composite cursor key for sort-by-updated_at views
+    // (recently-modified, account/contact-style fallbacks).
+    index("leads_updated_at_id_idx")
+      .on(t.updatedAt.desc(), t.id.desc())
+      .where(sql`is_deleted = false`),
     // Phase 8D — `leads_tags_gin_idx` on the legacy `tags text[]` column was
     // dropped along with that column. Tag filters now use the lead_tags join.
     // Partial index — only useful when querying by import.
