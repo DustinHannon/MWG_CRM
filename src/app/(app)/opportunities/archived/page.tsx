@@ -82,7 +82,7 @@ export default async function ArchivedOpportunitiesPage() {
           No archived opportunities.
         </GlassCard>
       ) : (
-        <GlassCard className="overflow-hidden p-0">
+        <GlassCard className="data-table-cards overflow-hidden p-0">
           <table className="data-table w-full text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground/80">
               <tr>
@@ -97,14 +97,14 @@ export default async function ArchivedOpportunitiesPage() {
             <tbody className="divide-y divide-border/60">
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-accent/40">
-                  <td className="px-4 py-3 font-medium text-foreground">
+                  <td data-label="Name" className="px-4 py-3 font-medium text-foreground">
                     {r.name}
                   </td>
-                  <td className="px-4 py-3 text-foreground/80">{r.stage}</td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  <td data-label="Stage" className="px-4 py-3 text-foreground/80">{r.stage}</td>
+                  <td data-label="Archived" className="px-4 py-3 text-muted-foreground">
                     <UserTime value={r.deletedAt} mode="date" />
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label="By" className="px-4 py-3">
                     {r.deletedById ? (
                       <UserChip
                         user={{
@@ -119,7 +119,7 @@ export default async function ArchivedOpportunitiesPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{r.reason ?? "—"}</td>
+                  <td data-label="Reason" className="px-4 py-3 text-muted-foreground">{r.reason ?? "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       <form
