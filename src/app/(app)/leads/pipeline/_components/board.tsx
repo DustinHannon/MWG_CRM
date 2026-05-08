@@ -4,6 +4,7 @@ import {
   DndContext,
   type DragEndEvent,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -52,8 +53,14 @@ export function PipelineBoard({
   const [columns, setColumns] = useState(initialColumns);
   const [, startTransition] = useTransition();
 
+  // Phase 12 Sub-E — Touch sensor with a small delay so a tap on a
+  // card link still navigates; only a press-and-hold initiates a
+  // drag on mobile. Pointer sensor stays as-is for desktop mouse.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
+    }),
   );
 
   function onDragEnd(event: DragEndEvent) {
@@ -115,7 +122,13 @@ export function PipelineBoard({
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      {/* Phase 12 Sub-E — horizontal scroll with snap so columns
+          land aligned to viewport edges on a touch swipe. The
+          snap-mandatory + snap-start on each column ensures a swipe
+          doesn't leave the user mid-column. `[scrollbar-gutter:stable]`
+          keeps the bottom scroll bar from disrupting layout when it
+          appears. */}
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-gutter:stable]">
         {STATUSES.map((s) => (
           <Column key={s.id} id={s.id} label={s.label} cards={columns[s.id] ?? []} />
         ))}
@@ -142,7 +155,11 @@ function Column({
     <div
       ref={setNodeRef}
       className={
-        "flex w-[280px] shrink-0 flex-col rounded-lg border p-2 transition " +
+        // Phase 12 Sub-E — `snap-start` aligns each column to the
+        // scroll container's left edge on swipe. Width unchanged so
+        // existing desktop layouts continue to fit 4-5 columns
+        // across a 1280px viewport.
+        "flex w-[280px] shrink-0 snap-start flex-col rounded-lg border p-2 transition " +
         (isOver
           ? "border-primary/50 bg-primary/5"
           : "border-glass-border bg-input/30")

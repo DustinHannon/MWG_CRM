@@ -4,6 +4,7 @@ import {
   DndContext,
   type DragEndEvent,
   PointerSensor,
+  TouchSensor,
   useDraggable,
   useDroppable,
   useSensor,
@@ -64,8 +65,14 @@ export function OppPipelineBoard({
   const canDelete = (c: Card) =>
     isAdmin || c.ownerId === currentUserId;
 
+  // Phase 12 Sub-E — Touch sensor with 200ms delay so a tap on a
+  // card link still navigates; press-and-hold initiates drag on
+  // mobile. Pointer sensor unchanged for desktop mouse / trackpad.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
+    }),
   );
 
   function onDragEnd(event: DragEndEvent) {
@@ -135,7 +142,9 @@ export function OppPipelineBoard({
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      {/* Phase 12 Sub-E — snap-x mandatory + per-column snap-start
+          so swipes land aligned to viewport edges on touch. */}
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-gutter:stable]">
         {STAGES.map((s) => (
           <Column
             key={s.id}
@@ -194,7 +203,9 @@ function Column({
     <div
       ref={setNodeRef}
       className={
-        "flex w-[260px] shrink-0 flex-col rounded-lg border p-2 transition " +
+        // Phase 12 Sub-E — `snap-start` so each column aligns to
+        // the scroll container's left edge on touch swipe.
+        "flex w-[260px] shrink-0 snap-start flex-col rounded-lg border p-2 transition " +
         (isOver
           ? "border-primary/50 bg-primary/5"
           : "border-glass-border bg-input/30")

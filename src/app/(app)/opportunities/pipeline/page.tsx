@@ -83,7 +83,7 @@ export default async function OppPipelinePage() {
       />
       <PageRealtime entities={["opportunities"]} />
       <PagePoll entities={["opportunities"]} />
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Pipeline
