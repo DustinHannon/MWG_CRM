@@ -444,6 +444,10 @@ export interface LeadRow {
   source: string;
   ownerId: string | null;
   ownerDisplayName: string | null;
+  // Owner's profile photo URL — projected from users.photo_blob_url via
+  // the same leftJoin that gives us ownerDisplayName. Null when the
+  // owner has no photo synced from Graph yet.
+  ownerPhotoUrl: string | null;
   tags: string[] | null;
   city: string | null;
   state: string | null;
@@ -644,6 +648,7 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
         source: leads.source,
         ownerId: leads.ownerId,
         ownerDisplayName: users.displayName,
+        ownerPhotoUrl: users.photoBlobUrl,
         // Phase 8D — hydrate tag names from the relational lead_tags
         // join. Legacy `leads.tags text[]` column was dropped.
         tags: sql<string[] | null>`(

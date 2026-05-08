@@ -196,7 +196,13 @@ export async function provisionEntraUser(
 
     await tx.insert(permissions).values({
       userId: row.id,
-      canViewAllRecords: false,
+      // 2026-05-08: new Entra users default to org-wide visibility so
+      // they can see every lead in the system on first login. Existing
+      // users keep whatever flag is already on their permissions row;
+      // this only affects rows newly inserted by this provisioning
+      // path. Flip back to false here if MWG ever wants the
+      // mine-only default again.
+      canViewAllRecords: true,
       canCreateLeads: true,
       canEditLeads: true,
       canDeleteLeads: false,

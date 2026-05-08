@@ -485,14 +485,14 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
       // Phase 9C — UserChip in lieu of plain text. Skip hoverCard:
       // table can render up to 50 rows, and server-rendering 50
       // hover cards is too expensive even with the in-process cache.
-      // Initials fallback when ownerPhotoUrl isn't projected — the
-      // /users/[id] click-through still resolves the full profile.
+      // Photo URL is projected via the leftJoin on users so the
+      // avatar resolves without a per-row Graph fetch.
       return lead.ownerId ? (
         <UserChip
           user={{
             id: lead.ownerId,
             displayName: lead.ownerDisplayName,
-            photoUrl: null,
+            photoUrl: lead.ownerPhotoUrl,
           }}
         />
       ) : (
