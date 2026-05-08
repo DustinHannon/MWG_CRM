@@ -190,7 +190,7 @@ export function LeadForm({
       {!state.ok ? (
         <div
           role="alert"
-          className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-100 lg:col-span-2"
+          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-2 text-sm text-[var(--status-lost-fg)] lg:col-span-2"
         >
           {state.error}
         </div>
@@ -333,7 +333,7 @@ function ContactPreferences({
             name="doNotContact"
             checked={dnc}
             onChange={(e) => setDnc(e.target.checked)}
-            className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500"
+            className="h-4 w-4 rounded border-border bg-muted/40 text-primary focus:ring-ring"
           />
           <span className="font-medium">Do not contact</span>
         </label>
@@ -348,7 +348,7 @@ function ContactPreferences({
             checked={effectiveEmail}
             onChange={(e) => setUserEmail(e.target.checked)}
             disabled={dnc}
-            className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed"
+            className="h-4 w-4 rounded border-border bg-muted/40 text-primary focus:ring-ring disabled:cursor-not-allowed"
           />
           <span>Do not email</span>
         </label>
@@ -363,7 +363,7 @@ function ContactPreferences({
             checked={effectiveCall}
             onChange={(e) => setUserCall(e.target.checked)}
             disabled={dnc}
-            className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed"
+            className="h-4 w-4 rounded border-border bg-muted/40 text-primary focus:ring-ring disabled:cursor-not-allowed"
           />
           <span>Do not call</span>
         </label>

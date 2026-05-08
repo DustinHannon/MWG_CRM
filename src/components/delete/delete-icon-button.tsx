@@ -70,7 +70,7 @@ export function DeleteIconButton(props: DeleteIconButtonProps) {
         <button
           type="button"
           aria-label={`Archive ${props.entityKind}`}
-          className="rounded-md p-1.5 text-muted-foreground/70 transition opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-muted hover:text-rose-600 dark:hover:text-rose-300 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          className="rounded-md p-1.5 text-muted-foreground/70 transition opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-muted hover:text-destructive focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring/40"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -120,7 +120,7 @@ export function DeleteButton(props: DeleteButtonProps) {
       trigger={
         <button
           type="button"
-          className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 px-3 py-1.5 text-sm text-rose-700 dark:text-rose-100 transition hover:bg-rose-500/30"
+          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/30"
         >
           {props.label ?? "Archive"}
         </button>

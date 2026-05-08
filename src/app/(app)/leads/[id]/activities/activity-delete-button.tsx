@@ -57,7 +57,7 @@ export function ActivityDeleteButton({
         <button
           type="button"
           aria-label={`Archive activity ${activityName}`}
-          className="rounded-md p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-rose-600 dark:hover:text-rose-300"
+          className="rounded-md p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-destructive"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>

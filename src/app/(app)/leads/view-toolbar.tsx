@@ -118,7 +118,7 @@ export function ViewToolbar({
 
       {/* Modified badge + actions */}
       {columnsModified ? (
-        <span className="rounded-full border border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-100">
+        <span className="rounded-full border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--priority-medium-fg)]">
           Modified
         </span>
       ) : null}
@@ -215,7 +215,7 @@ export function ViewToolbar({
               router.push("/leads?view=builtin:my-open");
             });
           }}
-          className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-100 transition hover:bg-destructive/20"
+          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] transition hover:bg-destructive/20"
         >
           Delete view
         </button>
@@ -360,7 +360,7 @@ function ColumnChooser({
               type="checkbox"
               checked={active.includes(c.key)}
               onChange={() => onToggle(c.key)}
-              className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500"
+              className="h-4 w-4 rounded border-border bg-muted/40 text-primary focus:ring-ring"
             />
             <span>{c.label}</span>
           </label>
@@ -457,12 +457,12 @@ function SaveViewDialog({
               type="checkbox"
               checked={pin}
               onChange={(e) => setPin(e.target.checked)}
-              className="h-4 w-4 rounded border-border bg-muted/40 text-blue-500 focus:ring-blue-500"
+              className="h-4 w-4 rounded border-border bg-muted/40 text-primary focus:ring-ring"
             />
             <span>Pin to top of list</span>
           </label>
           {error ? (
-            <p className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-100">
+            <p className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-2 text-xs text-[var(--status-lost-fg)]">
               {error}
             </p>
           ) : null}

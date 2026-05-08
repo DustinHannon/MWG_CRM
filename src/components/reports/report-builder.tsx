@@ -383,7 +383,7 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
             ) : null}
           </div>
           {preview.error ? (
-            <p className="rounded-md border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-700 dark:text-rose-200">
+            <p className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)]/40 p-4 text-sm text-[var(--status-lost-fg)]">
               {preview.error}
             </p>
           ) : (
@@ -531,7 +531,7 @@ function FilterBuilder({
             <button
               type="button"
               onClick={() => remove(r.id)}
-              className="rounded p-1 text-muted-foreground hover:bg-rose-500/15 hover:text-rose-600"
+              className="rounded p-1 text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
               aria-label="Remove filter"
             >
               <X className="h-3 w-3" />
@@ -714,7 +714,7 @@ function MetricBuilder({
           <button
             type="button"
             onClick={() => remove(i)}
-            className="rounded p-1 text-muted-foreground hover:bg-rose-500/15 hover:text-rose-600"
+            className="rounded p-1 text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
             aria-label="Remove metric"
           >
             <X className="h-3 w-3" />

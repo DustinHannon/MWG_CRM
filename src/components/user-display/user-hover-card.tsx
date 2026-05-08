@@ -50,7 +50,7 @@ export async function UserHoverCard({ userId }: UserHoverCardProps) {
             </p>
           ) : null}
           {!user.isActive ? (
-            <span className="mt-1 inline-block rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-100">
+            <span className="mt-1 inline-block rounded-full border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--priority-medium-fg)]">
               Deactivated
             </span>
           ) : null}

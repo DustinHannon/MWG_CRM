@@ -145,7 +145,7 @@ export function ReportActionMenu({
           trigger={
             <button
               type="button"
-              className="rounded-md border border-rose-500/30 bg-rose-500/15 px-3 py-1.5 text-sm text-rose-700 transition hover:bg-rose-500/25 dark:text-rose-100"
+              className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/25"
             >
               Delete
             </button>

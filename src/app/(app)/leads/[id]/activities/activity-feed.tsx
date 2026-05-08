@@ -15,10 +15,10 @@ const KIND_LABEL: Record<string, string> = {
 
 const KIND_PALETTE: Record<string, string> = {
   note: "border-border bg-muted/40 text-foreground/80",
-  call: "border-cyan-500/30 dark:border-cyan-300/30 bg-cyan-500/20 dark:bg-cyan-500/15 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-100",
-  task: "border-emerald-500/30 dark:border-emerald-300/30 bg-emerald-500/20 dark:bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-100",
-  email: "border-blue-500/30 dark:border-blue-300/30 bg-blue-500/20 dark:bg-blue-500/15 dark:bg-blue-500/10 text-blue-700 dark:text-blue-100",
-  meeting: "border-violet-500/30 dark:border-violet-300/30 bg-violet-500/20 dark:bg-violet-500/15 dark:bg-violet-500/10 text-violet-700 dark:text-violet-100",
+  call: "border-[var(--status-contacted-fg)]/30 bg-[var(--status-contacted-bg)] text-[var(--status-contacted-fg)]",
+  task: "border-[var(--status-won-fg)]/30 bg-[var(--status-won-bg)] text-[var(--status-won-fg)]",
+  email: "border-[var(--status-new-fg)]/30 bg-[var(--status-new-bg)] text-[var(--status-new-fg)]",
+  meeting: "border-[var(--status-proposal-fg)]/30 bg-[var(--status-proposal-bg)] text-[var(--status-proposal-fg)]",
 };
 
 export async function ActivityFeed({

@@ -215,7 +215,7 @@ function ErrorBox({ text }: { text: string }) {
   return (
     <div
       role="alert"
-      className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-100"
+      className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-2 text-sm text-[var(--status-lost-fg)]"
     >
       {text}
     </div>

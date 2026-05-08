@@ -135,7 +135,7 @@ export default async function LeadDetailPage({
               />
             ) : null}
             {lead.createdVia === "api" ? (
-              <span className="rounded-full border border-cyan-500/30 dark:border-cyan-300/30 bg-cyan-500/20 dark:bg-cyan-500/15 dark:bg-cyan-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-cyan-700 dark:text-cyan-100">
+              <span className="rounded-full border border-[var(--status-contacted-fg)]/30 bg-[var(--status-contacted-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--status-contacted-fg)]">
                 API
               </span>
             ) : null}
@@ -287,13 +287,13 @@ function ImportedBadge({
       }`
     : "Imported from a spreadsheet";
   const className =
-    "rounded-full border border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-100";
+    "rounded-full border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--priority-medium-fg)]";
   if (isAdmin && jobId) {
     return (
       <Link
         href={`/admin/audit?action=leads.import&target=${jobId}`}
         title={tooltip}
-        className={`${className} hover:bg-amber-500/20`}
+        className={`${className} hover:bg-[var(--priority-medium-bg)]/80`}
       >
         Imported
       </Link>
