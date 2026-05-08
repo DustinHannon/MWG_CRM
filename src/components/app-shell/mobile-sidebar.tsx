@@ -47,23 +47,23 @@ export function MobileSidebar({ brand, nav, user }: MobileSidebarProps) {
         <button
           type="button"
           aria-label="Open navigation"
-          // `relative z-10` forces a new stacking context above the
-          // header's backdrop-filter layer. Without it, iOS Safari
-          // (and occasionally Chromium) routes the touch through the
-          // backdrop-filter ancestor instead of this button, which
-          // looks like "the hamburger isn't clickable" to the user.
-          // `pointer-events-auto` is the matching defensive belt-
-          // and-braces in case any ancestor sets pointer-events:none.
-          className="relative z-10 inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-glass-border bg-card/40 text-muted-foreground pointer-events-auto transition hover:bg-accent/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-glass-border bg-card/40 text-muted-foreground transition hover:bg-accent/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
         >
           <Menu size={18} aria-hidden />
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 lg:hidden" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm lg:hidden" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col overflow-hidden border-r border-glass-border bg-glass-3 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))] data-[state=open]:animate-in data-[state=open]:slide-in-from-left lg:hidden"
+          // No tailwindcss-animate `data-[state=open]:animate-in
+          // data-[state=open]:slide-in-from-left` classes here — that
+          // plugin is not installed in this project, so those classes
+          // produced no keyframes but tw-emitted the starting transform
+          // (translateX(-100%)) leaving the panel stuck off-screen.
+          // We render at the natural fixed position; CSS animation
+          // below in globals.css does the slide via plain @keyframes.
+          className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col overflow-hidden border-r border-glass-border bg-glass-3 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))] mwg-drawer-slide-in lg:hidden"
         >
           <Dialog.Title className="sr-only">Navigation</Dialog.Title>
           <div className="flex items-center justify-between pr-2 pt-safe">

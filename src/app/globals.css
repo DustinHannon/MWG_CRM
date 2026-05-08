@@ -669,3 +669,30 @@ pre {
     content: none;
   }
 }
+
+/* Phase 12 — mobile drawer slide-in. Replaces the
+   tailwindcss-animate `data-[state=open]:animate-in slide-in-from-left`
+   pair (the plugin is not installed in this project). Plain @keyframes
+   handles open; Radix unmounts the Content on close so an explicit
+   slide-out isn't required. */
+
+@keyframes mwg-drawer-slide-in {
+  from {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 0.6;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+.mwg-drawer-slide-in {
+  animation: mwg-drawer-slide-in 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mwg-drawer-slide-in {
+    animation: none;
+  }
+}
