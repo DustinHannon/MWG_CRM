@@ -59,18 +59,32 @@ export default async function AccountsPage({
 
   return (
     <div className="px-10 py-10">
-      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-        Accounts
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold font-display">Accounts</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Companies — created when leads are converted.
-      </p>
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            Accounts
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold font-display">Accounts</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Companies — created from lead conversions or directly.
+          </p>
+        </div>
+        <Link
+          href="/accounts/new"
+          className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+        >
+          + New account
+        </Link>
+      </div>
 
       <GlassCard className="mt-6 overflow-hidden p-0">
         {rows.length === 0 ? (
           <p className="p-12 text-center text-sm text-muted-foreground">
-            No accounts yet. Convert a lead to create the first one.
+            No accounts yet.{" "}
+            <Link href="/accounts/new" className="underline hover:text-foreground">
+              Add the first one
+            </Link>{" "}
+            or convert a lead.
           </p>
         ) : (
           <table className="data-table w-full text-sm">
