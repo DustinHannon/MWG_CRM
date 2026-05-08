@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Home, RotateCw } from "lucide-react";
+import { ArrowLeft, ChevronRight, Home, RotateCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState, useTransition } from "react";
@@ -17,53 +17,95 @@ import { useBreadcrumbs } from "./provider";
  *   • A loading segment shows a skeleton chip until label resolves.
  *   • Adjacent <RefreshButton> calls router.refresh() to re-render
  *     Server Components against the latest DB state.
+ *
+ * Phase 12 Sub-E — at <640px the trail collapses to a single
+ * back-arrow (linking to the immediate parent) plus the current
+ * segment label. The home icon and intermediate segments hide via
+ * `hidden sm:inline-flex`. This matches the mobile contract: trail
+ * fits a 380px viewport without elision-clipping the leaf label.
  */
 export function Breadcrumbs() {
   const crumbs = useBreadcrumbs();
+  // Parent for the mobile back arrow:
+  //  • single crumb / leaf only → back to dashboard
+  //  • otherwise → previous segment if it has an href, else dashboard
+  const last = crumbs[crumbs.length - 1];
+  const parent = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null;
+  const mobileBackHref = parent?.href ?? "/dashboard";
   return (
     <nav
       aria-label="Breadcrumb"
       className="flex min-w-0 flex-1 items-center gap-1.5 text-sm"
     >
+      {/* Mobile-only back arrow — visible at <640px when there's a
+          parent to go back to. */}
+      <Link
+        href={mobileBackHref}
+        aria-label="Back"
+        className="flex shrink-0 items-center text-muted-foreground transition-colors hover:text-foreground sm:hidden"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </Link>
+      {/* Desktop home icon — hidden at <640px so the leaf label has
+          maximum width on mobile. */}
       <Link
         href="/dashboard"
-        className="flex items-center text-muted-foreground transition-colors hover:text-foreground"
+        className="hidden items-center text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
         aria-label="Home"
       >
         <Home className="h-3.5 w-3.5" />
       </Link>
-      {crumbs.map((c, i) => {
-        const isLast = i === crumbs.length - 1;
-        return (
-          <Fragment key={`${i}-${c.href ?? c.label}`}>
-            <ChevronRight
+      {/* Mobile leaf — current segment only. */}
+      {last ? (
+        <span
+          className="truncate font-medium text-foreground sm:hidden"
+          title={last.label}
+        >
+          {last.loading ? (
+            <span
               aria-hidden="true"
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50"
+              className="inline-block h-4 w-20 animate-pulse rounded bg-muted/60"
             />
-            {c.loading ? (
-              <span
+          ) : (
+            last.label
+          )}
+        </span>
+      ) : null}
+      {/* Desktop full trail — every segment with separators. */}
+      <span className="hidden min-w-0 flex-1 items-center gap-1.5 sm:flex">
+        {crumbs.map((c, i) => {
+          const isLast = i === crumbs.length - 1;
+          return (
+            <Fragment key={`${i}-${c.href ?? c.label}`}>
+              <ChevronRight
                 aria-hidden="true"
-                className="inline-block h-4 w-20 animate-pulse rounded bg-muted/60"
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50"
               />
-            ) : c.href && !isLast ? (
-              <Link
-                href={c.href}
-                className="truncate text-muted-foreground transition-colors hover:text-foreground"
-                title={c.label}
-              >
-                {c.label}
-              </Link>
-            ) : (
-              <span
-                className="truncate font-medium text-foreground"
-                title={c.label}
-              >
-                {c.label}
-              </span>
-            )}
-          </Fragment>
-        );
-      })}
+              {c.loading ? (
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-4 w-20 animate-pulse rounded bg-muted/60"
+                />
+              ) : c.href && !isLast ? (
+                <Link
+                  href={c.href}
+                  className="truncate text-muted-foreground transition-colors hover:text-foreground"
+                  title={c.label}
+                >
+                  {c.label}
+                </Link>
+              ) : (
+                <span
+                  className="truncate font-medium text-foreground"
+                  title={c.label}
+                >
+                  {c.label}
+                </span>
+              )}
+            </Fragment>
+          );
+        })}
+      </span>
       <RefreshButton />
     </nav>
   );
