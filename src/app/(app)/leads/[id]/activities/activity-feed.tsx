@@ -1,9 +1,9 @@
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { formatUserTime } from "@/lib/format-time";
 import { listActivitiesForLead } from "@/lib/activities";
-import { deleteActivityAction } from "./actions";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { UserChip } from "@/components/user-display";
+import { ActivityDeleteButton } from "./activity-delete-button";
 
 const KIND_LABEL: Record<string, string> = {
   note: "Note",
@@ -49,8 +49,16 @@ export async function ActivityFeed({
         return (
           <li
             key={r.id}
-            className="rounded-xl border border-border bg-muted/40 p-4 backdrop-blur-md"
+            className="group/activity relative rounded-xl border border-border bg-muted/40 p-4 backdrop-blur-md"
           >
+            {canDelete ? (
+              <div className="absolute right-2 top-2 opacity-100 md:opacity-0 md:group-hover/activity:opacity-100">
+                <ActivityDeleteButton
+                  activityId={r.id}
+                  activityName={r.subject ?? `${r.kind} from ${formatUserTime(r.occurredAt, prefs, "date")}`}
+                />
+              </div>
+            ) : null}
             <header className="flex items-start justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span
@@ -121,24 +129,6 @@ export async function ActivityFeed({
               </ul>
             ) : null}
 
-            {canDelete ? (
-              <form
-                action={async (fd) => {
-                  "use server";
-                  await deleteActivityAction(fd);
-                }}
-                className="mt-3"
-              >
-                <input type="hidden" name="activityId" value={r.id} />
-                <input type="hidden" name="leadId" value={leadId} />
-                <button
-                  type="submit"
-                  className="text-[11px] text-muted-foreground/80 underline-offset-4 hover:text-foreground/80 hover:underline"
-                >
-                  Delete
-                </button>
-              </form>
-            ) : null}
           </li>
         );
       })}

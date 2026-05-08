@@ -7,8 +7,9 @@ import {
   createCall,
   createNote,
   createTask,
-  deleteActivity,
   noteSchema,
+  restoreActivity,
+  softDeleteActivity,
   taskSchema,
 } from "@/lib/activities";
 import { writeAudit } from "@/lib/audit";
@@ -18,6 +19,12 @@ import {
   requireSession,
 } from "@/lib/auth-helpers";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
+import { ForbiddenError } from "@/lib/errors";
+import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
+import { db } from "@/db";
+import { activities } from "@/db/schema/activities";
+import { eq } from "drizzle-orm";
+import { canDeleteActivity } from "@/lib/access/can-delete";
 
 function fdToObj(formData: FormData): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
@@ -101,20 +108,122 @@ export async function addTaskAction(
   });
 }
 
+/**
+ * Phase 10 — soft-delete an activity. Author OR admin only. Permission
+ * is enforced both client-gated (UI hides the trigger) and server-gated
+ * (this action re-fetches the activity and verifies userId match or
+ * admin). Returns an undo token for the toast.
+ */
+export async function softDeleteActivityAction(input: {
+  activityId: string;
+}): Promise<ActionResult<{ undoToken: string }>> {
+  return withErrorBoundary(
+    { action: "activity.archive", entityType: "activity", entityId: input.activityId },
+    async (): Promise<{ undoToken: string }> => {
+      const user = await requireSession();
+      const activityId = z.string().uuid().parse(input.activityId);
+
+      // Re-fetch — never trust the client claim.
+      const [row] = await db
+        .select({
+          id: activities.id,
+          userId: activities.userId,
+          leadId: activities.leadId,
+          subject: activities.subject,
+          kind: activities.kind,
+        })
+        .from(activities)
+        .where(eq(activities.id, activityId))
+        .limit(1);
+      if (!row) throw new ForbiddenError("Activity not found.");
+      if (!canDeleteActivity(user, row)) {
+        await writeAudit({
+          actorId: user.id,
+          action: "access.denied.activity.delete",
+          targetType: "activity",
+          targetId: activityId,
+        });
+        throw new ForbiddenError("You can't archive this activity.");
+      }
+
+      const { parentKind, parentId } = await softDeleteActivity(
+        activityId,
+        user.id,
+        user.isAdmin,
+      );
+      await writeAudit({
+        actorId: user.id,
+        action: "activity.archive",
+        targetType: "activity",
+        targetId: activityId,
+        before: { userId: row.userId, kind: row.kind, subject: row.subject, leadId: row.leadId },
+      });
+
+      if (parentKind && parentId) {
+        revalidatePath(`/${parentKind}s/${parentId}`);
+      }
+      return {
+        undoToken: signUndoToken({
+          entity: "activity",
+          id: activityId,
+          deletedAt: new Date(),
+        }),
+      };
+    },
+  );
+}
+
+export async function undoArchiveActivityAction(input: {
+  undoToken: string;
+}): Promise<ActionResult> {
+  return withErrorBoundary({ action: "activity.unarchive_undo" }, async () => {
+    const user = await requireSession();
+    const payload = verifyUndoToken(input.undoToken);
+    if (payload.entity !== "activity") throw new ForbiddenError("Token mismatch.");
+    const { parentKind, parentId } = await restoreActivity(
+      payload.id,
+      user.id,
+      user.isAdmin,
+    );
+    await writeAudit({
+      actorId: user.id,
+      action: "activity.unarchive_undo",
+      targetType: "activity",
+      targetId: payload.id,
+    });
+    if (parentKind && parentId) {
+      revalidatePath(`/${parentKind}s/${parentId}`);
+    }
+  });
+}
+
+/**
+ * Phase 10 — backwards-compat for the legacy form-action call site
+ * still rendered in the activity-feed pre-Phase-10. Redirects to the
+ * canonical soft-delete path.
+ */
 export async function deleteActivityAction(
   formData: FormData,
 ): Promise<ActionResult> {
-  return withErrorBoundary({ action: "activity.delete" }, async () => {
+  return withErrorBoundary({ action: "activity.archive" }, async () => {
     const user = await requireSession();
     const activityId = z.string().uuid().parse(formData.get("activityId"));
     const leadId = z.string().uuid().parse(formData.get("leadId"));
-    // Lead access gate first — without this, an attacker who knows an
-    // activity id can delete from leads they don't own.
     await requireLeadAccess(user, leadId);
-    await deleteActivity(activityId, user.id, user.isAdmin);
+
+    const [row] = await db
+      .select({ id: activities.id, userId: activities.userId })
+      .from(activities)
+      .where(eq(activities.id, activityId))
+      .limit(1);
+    if (!row) throw new ForbiddenError("Activity not found.");
+    if (!canDeleteActivity(user, row)) {
+      throw new ForbiddenError("You can't archive this activity.");
+    }
+    await softDeleteActivity(activityId, user.id, user.isAdmin);
     await writeAudit({
       actorId: user.id,
-      action: "activity.delete",
+      action: "activity.archive",
       targetType: "activity",
       targetId: activityId,
     });

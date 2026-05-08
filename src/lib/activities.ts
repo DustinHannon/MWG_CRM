@@ -1,6 +1,6 @@
 import "server-only";
 import { logger } from "@/lib/logger";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, max, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { activities, attachments } from "@/db/schema/activities";
@@ -76,7 +76,8 @@ export async function listActivitiesForLead(
     })
     .from(activities)
     .leftJoin(users, eq(activities.userId, users.id))
-    .where(eq(activities.leadId, leadId))
+    // Phase 10 — exclude soft-deleted activities from every UI surface.
+    .where(and(eq(activities.leadId, leadId), eq(activities.isDeleted, false)))
     .orderBy(desc(activities.occurredAt));
 
   if (rows.length === 0) return [];
@@ -215,13 +216,138 @@ export async function createTask(input: {
   return { id: inserted[0].id };
 }
 
+/**
+ * Phase 10 — soft-delete an activity. Author OR admin can call.
+ * Permission re-fetch happens here so the call is safe to make without
+ * the caller having pre-loaded the row.
+ *
+ * After archive, recomputes the parent's last_activity_at when the
+ * archived row was the most recent. Activities have an
+ * exactly-one-parent CHECK constraint so we look at whichever of
+ * {leadId, accountId, contactId, opportunityId} is set. Today only
+ * leads have a denormalized last_activity_at column; the others
+ * derive it on demand.
+ */
+export async function softDeleteActivity(
+  activityId: string,
+  actorUserId: string,
+  isAdmin: boolean,
+): Promise<{
+  parentKind: "lead" | "account" | "contact" | "opportunity" | null;
+  parentId: string | null;
+}> {
+  const [row] = await db
+    .select({
+      id: activities.id,
+      userId: activities.userId,
+      leadId: activities.leadId,
+      accountId: activities.accountId,
+      contactId: activities.contactId,
+      opportunityId: activities.opportunityId,
+    })
+    .from(activities)
+    .where(and(eq(activities.id, activityId), eq(activities.isDeleted, false)))
+    .limit(1);
+  if (!row) return { parentKind: null, parentId: null };
+  if (!isAdmin && row.userId !== actorUserId) {
+    return { parentKind: null, parentId: null };
+  }
+
+  await db
+    .update(activities)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorUserId,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(activities.id, activityId));
+
+  if (row.leadId) {
+    const [agg] = await db
+      .select({ maxAt: max(activities.occurredAt) })
+      .from(activities)
+      .where(
+        and(eq(activities.leadId, row.leadId), eq(activities.isDeleted, false)),
+      );
+    await db
+      .update(leads)
+      .set({ lastActivityAt: agg?.maxAt ?? null })
+      .where(eq(leads.id, row.leadId));
+    return { parentKind: "lead", parentId: row.leadId };
+  }
+  if (row.accountId) return { parentKind: "account", parentId: row.accountId };
+  if (row.contactId) return { parentKind: "contact", parentId: row.contactId };
+  if (row.opportunityId) return { parentKind: "opportunity", parentId: row.opportunityId };
+  return { parentKind: null, parentId: null };
+}
+
+/**
+ * Phase 10 — restore an archived activity (used by the toast Undo).
+ * Recomputes parent's last_activity_at after restore.
+ */
+export async function restoreActivity(
+  activityId: string,
+  actorUserId: string,
+  isAdmin: boolean,
+): Promise<{
+  parentKind: "lead" | "account" | "contact" | "opportunity" | null;
+  parentId: string | null;
+}> {
+  const [row] = await db
+    .select({
+      id: activities.id,
+      userId: activities.userId,
+      leadId: activities.leadId,
+      accountId: activities.accountId,
+      contactId: activities.contactId,
+      opportunityId: activities.opportunityId,
+    })
+    .from(activities)
+    .where(and(eq(activities.id, activityId), eq(activities.isDeleted, true)))
+    .limit(1);
+  if (!row) return { parentKind: null, parentId: null };
+  if (!isAdmin && row.userId !== actorUserId) {
+    return { parentKind: null, parentId: null };
+  }
+
+  await db
+    .update(activities)
+    .set({
+      isDeleted: false,
+      deletedAt: null,
+      deletedById: null,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(activities.id, activityId));
+
+  if (row.leadId) {
+    const [agg] = await db
+      .select({ maxAt: max(activities.occurredAt) })
+      .from(activities)
+      .where(
+        and(eq(activities.leadId, row.leadId), eq(activities.isDeleted, false)),
+      );
+    await db
+      .update(leads)
+      .set({ lastActivityAt: agg?.maxAt ?? null })
+      .where(eq(leads.id, row.leadId));
+    return { parentKind: "lead", parentId: row.leadId };
+  }
+  if (row.accountId) return { parentKind: "account", parentId: row.accountId };
+  if (row.contactId) return { parentKind: "contact", parentId: row.contactId };
+  if (row.opportunityId) return { parentKind: "opportunity", parentId: row.opportunityId };
+  return { parentKind: null, parentId: null };
+}
+
+/**
+ * Phase 10 — backwards-compat shim. Old call sites import deleteActivity;
+ * forward to softDeleteActivity which now archives rather than dropping.
+ */
 export async function deleteActivity(
   activityId: string,
   actorUserId: string,
   isAdmin: boolean,
 ): Promise<void> {
-  // Non-admins can only delete their own activities.
-  const wheres = [eq(activities.id, activityId)];
-  if (!isAdmin) wheres.push(eq(activities.userId, actorUserId));
-  await db.delete(activities).where(and(...wheres));
+  await softDeleteActivity(activityId, actorUserId, isAdmin);
 }
