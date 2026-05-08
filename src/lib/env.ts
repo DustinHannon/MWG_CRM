@@ -25,6 +25,16 @@ const envSchema = z.object({
   // App
   APP_NAME: z.string().default("MWG CRM"),
 
+  // Phase 12 — Supabase Realtime. URL + publishable/anon key are
+  // browser-exposed (NEXT_PUBLIC_*). JWT secret is server-only and mints
+  // user JWTs that the realtime client uses to authenticate with the
+  // Realtime broker. All three are optional during dev (a missing
+  // secret just means realtime features are inert) — production must
+  // have all three set or the JWT mint endpoint will fail.
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20).optional(),
+  SUPABASE_JWT_SECRET: z.string().min(20).optional(),
+
   // Cron / scheduled jobs (Phase 3D, 3H)
   CRON_SECRET: z.string().min(20).optional(),
   ALLOWED_EMAIL_DOMAINS: z

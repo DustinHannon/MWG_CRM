@@ -467,3 +467,19 @@ pre {
   }
 }
 
+
+/* Phase 12 — Supabase Realtime flash. The test contract attribute is
+   data-realtime-flash (used by Playwright specs). The Phase 11 attribute
+   data-row-flash="new" continues to work — both trigger the same animation. */
+
+[data-realtime-flash="true"] {
+  animation: mwg-row-flash 1200ms ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-realtime-flash="true"] {
+    animation: none;
+    background-color: var(--realtime-flash-bg, transparent);
+    transition: background-color 1.2s ease-out;
+  }
+}

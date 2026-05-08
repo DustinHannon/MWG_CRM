@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import {
@@ -182,6 +183,9 @@ export default async function LeadsPage({
   return (
     <div className="px-10 py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Leads" }]} />
+      {/* Phase 12 — Supabase Realtime is the primary push channel; the
+          Phase 11 polling layer remains as the documented fallback. */}
+      <PageRealtime entities={["leads"]} />
       <PagePoll entities={["leads"]} />
       <div className="flex items-end justify-between gap-4">
         <div>

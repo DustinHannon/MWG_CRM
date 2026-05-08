@@ -42,6 +42,11 @@ export const crmAccounts = pgTable(
     createdById: uuid("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // Phase 12 — actor stamp for realtime skip-self. Set on every UPDATE
+    // by callers via concurrentUpdate or explicit .set({ updatedById }).
+    updatedById: uuid("updated_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     sourceLeadId: uuid("source_lead_id").references(() => leads.id, {
       onDelete: "set null",
     }),
@@ -92,6 +97,11 @@ export const contacts = pgTable(
       onDelete: "set null",
     }),
     createdById: uuid("created_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Phase 12 — actor stamp for realtime skip-self. Set on every UPDATE
+    // by callers via concurrentUpdate or explicit .set({ updatedById }).
+    updatedById: uuid("updated_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
     sourceLeadId: uuid("source_lead_id").references(() => leads.id, {
@@ -153,6 +163,11 @@ export const opportunities = pgTable(
       onDelete: "set null",
     }),
     createdById: uuid("created_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Phase 12 — actor stamp for realtime skip-self. Set on every UPDATE
+    // by callers via concurrentUpdate or explicit .set({ updatedById }).
+    updatedById: uuid("updated_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
     sourceLeadId: uuid("source_lead_id").references(() => leads.id, {
