@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -35,6 +36,12 @@ type RowMap = Record<string, unknown>;
 export default async function DashboardPage() {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
+  // Phase 9C — gate /dashboard on canViewReports. Admin bypasses. The
+  // generic requirePermission helper redirects to /dashboard on miss,
+  // which would loop here, so we redirect to /leads explicitly.
+  if (!user.isAdmin && !perms.canViewReports) {
+    redirect("/leads");
+  }
   const canViewAll = user.isAdmin || perms.canViewAllRecords;
 
   // Owner-scope predicate as raw SQL.

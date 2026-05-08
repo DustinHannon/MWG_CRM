@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/app-shell/app-shell";
 import type { NavItem } from "@/components/app-shell/nav";
-import { requireSession } from "@/lib/auth-helpers";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +19,19 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireSession();
+  const perms = await getPermissions(user.id);
+
+  // Phase 9C — hide Dashboard for users without canViewReports. Admin
+  // always sees it. Keeps nav in sync with the page-level gate so users
+  // don't see a link that bounces them back to /leads.
+  const baseNav =
+    user.isAdmin || perms.canViewReports
+      ? APP_NAV
+      : APP_NAV.filter((item) => !("href" in item) || item.href !== "/dashboard");
+
   const nav: NavItem[] = user.isAdmin
-    ? [...APP_NAV, { divider: true }, { label: "Admin", href: "/admin" }]
-    : APP_NAV;
+    ? [...baseNav, { divider: true }, { label: "Admin", href: "/admin" }]
+    : baseNav;
   return (
     <AppShell user={user} nav={nav}>
       {children}
