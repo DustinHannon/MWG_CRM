@@ -1,4 +1,5 @@
 export { Breadcrumbs } from "./breadcrumbs";
+export { BreadcrumbsSetter } from "./breadcrumbs-setter";
 export {
   BreadcrumbsProvider,
   useBreadcrumbs,

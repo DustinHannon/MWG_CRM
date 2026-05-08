@@ -3,6 +3,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { PagePoll } from "@/components/realtime/page-poll";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
@@ -24,6 +26,12 @@ export default async function ArchivedLeadsPage() {
   if (!user.isAdmin) {
     return (
       <div className="px-10 py-10">
+        <BreadcrumbsSetter
+          crumbs={[
+            { label: "Leads", href: "/leads" },
+            { label: "Archived" },
+          ]}
+        />
         <p className="text-sm text-muted-foreground">Admin only.</p>
       </div>
     );
@@ -52,6 +60,13 @@ export default async function ArchivedLeadsPage() {
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Leads", href: "/leads" },
+          { label: "Archived" },
+        ]}
+      />
+      <PagePoll entities={["leads"]} />
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">

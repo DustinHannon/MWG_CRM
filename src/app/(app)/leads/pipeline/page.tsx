@@ -3,6 +3,8 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { PagePoll } from "@/components/realtime/page-poll";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { PipelineBoard } from "./_components/board";
@@ -89,6 +91,13 @@ export default async function PipelinePage() {
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Leads", href: "/leads" },
+          { label: "Pipeline" },
+        ]}
+      />
+      <PagePoll entities={["leads"]} />
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">

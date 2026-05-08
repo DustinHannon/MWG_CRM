@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { PagePoll } from "@/components/realtime/page-poll";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -168,6 +170,8 @@ export default async function DashboardPage() {
     // error, lets the user navigate elsewhere.
     return (
       <div className="px-10 py-10">
+        <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
+        <PagePoll entities={["leads", "tasks", "notifications"]} />
         <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
           Welcome back
         </p>
@@ -199,6 +203,8 @@ export default async function DashboardPage() {
   if (totalLeads === 0) {
     return (
       <div className="px-10 py-10">
+        <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
+        <PagePoll entities={["leads", "tasks", "notifications"]} />
         <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
           Welcome back
         </p>
@@ -258,6 +264,8 @@ export default async function DashboardPage() {
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
+      <PagePoll entities={["leads", "tasks", "notifications"]} />
       <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
         Welcome back
       </p>

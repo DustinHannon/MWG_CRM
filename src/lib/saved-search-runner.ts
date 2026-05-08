@@ -91,7 +91,10 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
       const cutoff =
         sub.lastSeenMaxCreatedAt ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-      const wheres = [gt(leads.createdAt, cutoff)];
+      // Phase 11 — exclude archived leads from saved-search digest. The
+      // pre-fix runner emailed users about leads that had since been
+      // archived, surfacing rows the user may have explicitly hidden.
+      const wheres = [gt(leads.createdAt, cutoff), eq(leads.isDeleted, false)];
       if (filters.status && filters.status.length > 0) {
         // status enum, raw cast
         wheres.push(

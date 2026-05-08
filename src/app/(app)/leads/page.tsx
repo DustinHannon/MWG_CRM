@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { PagePoll } from "@/components/realtime/page-poll";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import {
@@ -177,6 +179,8 @@ export default async function LeadsPage({
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter crumbs={[{ label: "Leads" }]} />
+      <PagePoll entities={["leads"]} />
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Leads</h1>

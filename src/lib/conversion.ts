@@ -67,13 +67,20 @@ export async function convertLead(
   actorId: string,
   actorOwnerId: string,
 ): Promise<ConversionResult> {
-  // Pull lead.
+  // Pull lead. Phase 11 — reject conversion of archived leads. A
+  // soft-deleted lead should not be promotable to account/contact/
+  // opportunity; the user's archive intent takes precedence.
   const leadRow = await db
     .select()
     .from(leads)
     .where(eq(leads.id, input.leadId))
     .limit(1);
   if (!leadRow[0]) throw new Error("Lead not found");
+  if (leadRow[0].isDeleted) {
+    throw new Error(
+      "This lead has been archived and cannot be converted. Restore it first.",
+    );
+  }
   const lead = leadRow[0];
 
   return db.transaction(async (tx) => {

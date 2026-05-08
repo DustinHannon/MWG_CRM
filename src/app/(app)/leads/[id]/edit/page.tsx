@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
 import { getTagsForLead } from "@/lib/tags";
@@ -28,6 +29,13 @@ export default async function EditLeadPage({
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Leads", href: "/leads" },
+          { label: formatPersonName(lead), href: `/leads/${lead.id}` },
+          { label: "Edit" },
+        ]}
+      />
       <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Edit</p>
       <h1 className="mt-1 text-2xl font-semibold">{formatPersonName(lead)}</h1>
 

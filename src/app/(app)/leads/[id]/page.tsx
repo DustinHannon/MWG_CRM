@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { importJobs } from "@/db/schema/imports";
 import { users } from "@/db/schema/users";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { PagePoll } from "@/components/realtime/page-poll";
 import {
   getCurrentUserTimePrefs,
   UserTime,
@@ -73,6 +75,13 @@ export default async function LeadDetailPage({
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Leads", href: "/leads" },
+          { label: formatPersonName(lead) },
+        ]}
+      />
+      <PagePoll entities={["leads", "activities", "tasks"]} />
       <Link href="/leads" className="text-xs text-muted-foreground/80 hover:text-foreground/80">
         ← Back to leads
       </Link>
