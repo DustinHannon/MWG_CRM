@@ -3,6 +3,8 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { PagePoll } from "@/components/realtime/page-poll";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
@@ -25,6 +27,12 @@ export default async function ArchivedAccountsPage() {
   if (!user.isAdmin) {
     return (
       <div className="px-10 py-10">
+        <BreadcrumbsSetter
+          crumbs={[
+            { label: "Accounts", href: "/accounts" },
+            { label: "Archived" },
+          ]}
+        />
         <p className="text-sm text-muted-foreground">Admin only.</p>
       </div>
     );
@@ -49,6 +57,13 @@ export default async function ArchivedAccountsPage() {
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Accounts", href: "/accounts" },
+          { label: "Archived" },
+        ]}
+      />
+      <PagePoll entities={["accounts"]} />
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">

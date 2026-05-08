@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { listAccountsForPicker } from "@/lib/accounts";
 import { ContactForm } from "./_components/contact-form";
@@ -26,6 +27,12 @@ export default async function NewContactPage({
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Contacts", href: "/contacts" },
+          { label: "New" },
+        ]}
+      />
       <Link
         href={prefilledAccountId ? `/accounts/${prefilledAccountId}` : "/contacts"}
         className="text-xs text-muted-foreground hover:text-foreground"

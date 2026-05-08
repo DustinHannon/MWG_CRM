@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { requireSession } from "@/lib/auth-helpers";
 import { AccountForm } from "./_components/account-form";
 
@@ -9,6 +10,12 @@ export default async function NewAccountPage() {
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Accounts", href: "/accounts" },
+          { label: "New" },
+        ]}
+      />
       <Link
         href="/accounts"
         className="text-xs text-muted-foreground hover:text-foreground"

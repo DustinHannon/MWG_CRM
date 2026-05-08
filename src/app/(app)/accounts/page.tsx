@@ -3,6 +3,8 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { PagePoll } from "@/components/realtime/page-poll";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
@@ -79,6 +81,8 @@ export default async function AccountsPage({
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter crumbs={[{ label: "Accounts" }]} />
+      <PagePoll entities={["accounts"]} />
       <div className="flex items-end justify-between gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
