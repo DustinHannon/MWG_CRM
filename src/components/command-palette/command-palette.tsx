@@ -61,6 +61,15 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
+  // Click-driven open from a visible affordance (top-bar Search button).
+  useEffect(() => {
+    function open() {
+      setOpen(true);
+    }
+    window.addEventListener("mwg:command-palette-open", open);
+    return () => window.removeEventListener("mwg:command-palette-open", open);
+  }, []);
+
   // Debounced search.
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);

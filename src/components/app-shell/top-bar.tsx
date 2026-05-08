@@ -1,5 +1,6 @@
 import { NotificationsBell } from "@/components/notifications/bell";
 import type { TimePrefs } from "@/lib/format-time";
+import { SearchTrigger } from "./search-trigger";
 
 interface NotificationItem {
   id: string;
@@ -18,14 +19,14 @@ interface TopBarProps {
 }
 
 /**
- * Top-right floating chrome. Today this is just the notification bell;
- * the Cmd+K trigger lives in the global CommandPalette and isn't a
- * visible button. If a future phase adds a visible palette button it
- * goes here next to the bell.
+ * Top-right floating chrome. Visible Search affordance + notification
+ * bell. The Search button dispatches `mwg:command-palette-open`; the
+ * global CommandPalette listens for it. Cmd+K still works.
  */
 export function TopBar({ unreadCount, recent, prefs }: TopBarProps) {
   return (
-    <div className="absolute right-6 top-6 z-10">
+    <div className="absolute right-6 top-6 z-10 flex items-center gap-2">
+      <SearchTrigger />
       <NotificationsBell unreadCount={unreadCount} recent={recent} prefs={prefs} />
     </div>
   );
