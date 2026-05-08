@@ -28,7 +28,7 @@ export default async function UsersListPage() {
 
   return (
     <div className="px-10 py-10">
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Users</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -36,6 +36,12 @@ export default async function UsersListPage() {
             to manage permissions and admin flags.
           </p>
         </div>
+        <Link
+          href="/admin/users/help"
+          className="shrink-0 rounded-md border border-glass-border bg-input/60 px-3 py-1.5 text-xs text-foreground/80 transition hover:bg-accent/40"
+        >
+          Permission help
+        </Link>
       </div>
 
       <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
