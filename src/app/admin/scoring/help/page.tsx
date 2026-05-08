@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { requireAdmin } from "@/lib/auth-helpers";
 
@@ -8,6 +9,13 @@ export default async function ScoringHelpPage() {
   await requireAdmin();
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Admin", href: "/admin" },
+          { label: "Lead Scoring", href: "/admin/scoring" },
+          { label: "Help" },
+        ]}
+      />
       <Link
         href="/admin/scoring"
         className="text-xs text-muted-foreground hover:text-foreground"

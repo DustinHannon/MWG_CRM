@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { requireAdmin } from "@/lib/auth-helpers";
 
@@ -19,6 +20,13 @@ export default async function UsersHelpPage() {
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Admin", href: "/admin" },
+          { label: "Users", href: "/admin/users" },
+          { label: "Help" },
+        ]}
+      />
       <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
         <Link href="/admin/users" className="hover:underline">
           Users

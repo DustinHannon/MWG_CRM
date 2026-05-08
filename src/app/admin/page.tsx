@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { leads } from "@/db/schema/leads";
 import { activities } from "@/db/schema/activities";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function AdminOverviewPage() {
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter crumbs={[{ label: "Admin" }]} />
       <h1 className="text-2xl font-semibold">Admin overview</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         High-level state of the CRM. Everything here is read-only.

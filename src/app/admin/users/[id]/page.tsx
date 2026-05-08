@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { permissions, users } from "@/db/schema/users";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { DeleteUserButton } from "./delete-user";
 import { UserActions } from "./user-actions";
@@ -50,6 +51,13 @@ export default async function UserDetailPage({
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Admin", href: "/admin" },
+          { label: "Users", href: "/admin/users" },
+          { label: u.displayName },
+        ]}
+      />
       <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">User</p>
       <h1 className="mt-1 text-2xl font-semibold">{u.displayName}</h1>
       <p className="mt-1 text-sm text-muted-foreground">

@@ -2,6 +2,7 @@ import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { users } from "@/db/schema/users";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
 import { encodeCursor, parseCursor } from "@/lib/leads";
@@ -79,6 +80,12 @@ export default async function AuditLogPage({
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Admin", href: "/admin" },
+          { label: "Audit Log" },
+        ]}
+      />
       <h1 className="text-2xl font-semibold">Audit log</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         {/* Phase 9C — cursor pagination skips the COUNT query. The

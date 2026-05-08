@@ -3,6 +3,7 @@
 // when smart-detect is enabled.
 
 import Link from "next/link";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { TEMPLATE_HEADERS } from "@/lib/import/headers";
 import { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES } from "@/lib/lead-constants";
@@ -12,6 +13,12 @@ export const dynamic = "force-dynamic";
 export default function ImportHelpPage() {
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Admin", href: "/admin" },
+          { label: "Import help" },
+        ]}
+      />
       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground/80">
         Admin
       </p>

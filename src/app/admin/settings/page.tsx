@@ -1,3 +1,4 @@
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { entraConfigured, env, MWG_TENANT_ID } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -5,6 +6,12 @@ export const dynamic = "force-dynamic";
 export default function AdminSettingsPage() {
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Admin", href: "/admin" },
+          { label: "Settings" },
+        ]}
+      />
       <h1 className="text-2xl font-semibold">Settings</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Read-only view of the deployed configuration. Edit via Vercel

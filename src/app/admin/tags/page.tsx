@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leadTags, tags } from "@/db/schema/tags";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { requireAdmin } from "@/lib/auth-helpers";
@@ -35,6 +36,12 @@ export default async function AdminTagsPage() {
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Admin", href: "/admin" },
+          { label: "Tags" },
+        ]}
+      />
       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
         Admin
       </p>

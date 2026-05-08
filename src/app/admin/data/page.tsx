@@ -1,3 +1,4 @@
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { DangerSection } from "./danger-section";
 
 export const dynamic = "force-dynamic";
@@ -5,6 +6,12 @@ export const dynamic = "force-dynamic";
 export default function DataToolsPage() {
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Admin", href: "/admin" },
+          { label: "Data" },
+        ]}
+      />
       <h1 className="text-2xl font-semibold">Data tools</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         Destructive operations. Each one requires you to type the exact

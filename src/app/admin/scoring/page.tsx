@@ -1,6 +1,7 @@
 import { desc } from "drizzle-orm";
 import Link from "next/link";
 import { db } from "@/db";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import {
@@ -47,6 +48,12 @@ export default async function AdminScoringPage() {
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Admin", href: "/admin" },
+          { label: "Lead Scoring" },
+        ]}
+      />
       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
         Admin
       </p>
