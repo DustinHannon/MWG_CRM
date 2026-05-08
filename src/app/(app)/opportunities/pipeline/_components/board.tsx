@@ -278,7 +278,7 @@ function Card({
                 type="button"
                 onClick={(e) => e.stopPropagation()}
                 aria-label={`Archive ${card.name}`}
-                className="rounded-md p-1 text-muted-foreground/70 hover:bg-muted hover:text-rose-600 dark:hover:text-rose-300"
+                className="rounded-md p-1 text-muted-foreground/70 hover:bg-muted hover:text-destructive"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>

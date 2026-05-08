@@ -228,8 +228,8 @@ function Card({ card }: { card: Card }) {
             (card.rating === "hot"
               ? "bg-destructive"
               : card.rating === "warm"
-                ? "bg-amber-400"
-                : "bg-blue-400")
+                ? "bg-[var(--priority-medium-fg)]"
+                : "bg-[var(--status-contacted-fg)]")
           }
         />
         {card.ownerId ? (
