@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell/app-shell";
 import type { NavItem } from "@/components/app-shell/nav";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { RealtimeProvider } from "@/components/realtime/realtime-provider";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 
@@ -35,6 +36,15 @@ export default async function AppLayout({
     : baseNav;
   return (
     <RealtimeProvider userId={user.id}>
+      {/*
+        Phase 12 — layout-level notifications subscription so the topbar
+        bell updates everywhere without each page re-mounting it. Filter
+        scopes to the current user; RLS doubly enforces that.
+      */}
+      <PageRealtime
+        entities={["notifications"]}
+        filter={`user_id=eq.${user.id}`}
+      />
       <AppShell user={user} nav={nav}>
         {children}
       </AppShell>

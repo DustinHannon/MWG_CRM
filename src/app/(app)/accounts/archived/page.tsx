@@ -5,6 +5,7 @@ import { crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
@@ -63,6 +64,7 @@ export default async function ArchivedAccountsPage() {
           { label: "Archived" },
         ]}
       />
+      <PageRealtime entities={["accounts"]} />
       <PagePoll entities={["accounts"]} />
       <div className="mb-6 flex items-center justify-between">
         <div>

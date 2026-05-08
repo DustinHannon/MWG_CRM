@@ -5,6 +5,7 @@ import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -71,6 +72,7 @@ export default async function ContactsPage({
   return (
     <div className="px-10 py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Contacts" }]} />
+      <PageRealtime entities={["contacts"]} />
       <PagePoll entities={["contacts"]} />
       <div className="flex items-end justify-between gap-4">
         <div>

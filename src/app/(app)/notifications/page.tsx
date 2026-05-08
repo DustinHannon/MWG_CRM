@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
@@ -24,6 +25,10 @@ export default async function NotificationsPage({
   return (
     <div className="px-10 py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Notifications" }]} />
+      <PageRealtime
+        entities={["notifications"]}
+        filter={`user_id=eq.${session.id}`}
+      />
       <PagePoll entities={["notifications"]} />
       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
         Notifications

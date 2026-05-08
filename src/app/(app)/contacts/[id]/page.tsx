@@ -6,6 +6,8 @@ import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
+import { RowRealtime } from "@/components/realtime/row-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -64,6 +66,12 @@ export default async function ContactDetailPage({
           { label: "Contacts", href: "/contacts" },
           { label: formatPersonName(contact) },
         ]}
+      />
+      {/* Phase 12 — Supabase Realtime: focal record + filtered activities. */}
+      <RowRealtime entity="contacts" id={contact.id} />
+      <PageRealtime
+        entities={["activities"]}
+        filter={`contact_id=eq.${contact.id}`}
       />
       <PagePoll entities={["contacts"]} />
       <Link

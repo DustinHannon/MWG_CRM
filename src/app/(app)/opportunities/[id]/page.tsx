@@ -6,6 +6,8 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
+import { RowRealtime } from "@/components/realtime/row-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { UserTime } from "@/components/ui/user-time";
@@ -68,6 +70,13 @@ export default async function OpportunityDetailPage({
           { label: opp.name },
         ]}
       />
+      {/* Phase 12 — Supabase Realtime: focal record + filtered children. */}
+      <RowRealtime entity="opportunities" id={opp.id} />
+      <PageRealtime
+        entities={["activities"]}
+        filter={`opportunity_id=eq.${opp.id}`}
+      />
+      <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["opportunities", "activities", "tasks"]} />
       <Link
         href="/opportunities"

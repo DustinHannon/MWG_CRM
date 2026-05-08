@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
@@ -58,6 +60,8 @@ export default async function ArchivedTasksPage() {
           { label: "Archived" },
         ]}
       />
+      <PageRealtime entities={["tasks"]} />
+      <PagePoll entities={["tasks"]} />
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">

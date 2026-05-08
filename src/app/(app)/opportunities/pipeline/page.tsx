@@ -5,6 +5,7 @@ import { crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { OppPipelineBoard } from "./_components/board";
@@ -80,6 +81,7 @@ export default async function OppPipelinePage() {
           { label: "Pipeline" },
         ]}
       />
+      <PageRealtime entities={["opportunities"]} />
       <PagePoll entities={["opportunities"]} />
       <div className="flex items-center justify-between gap-4">
         <div>

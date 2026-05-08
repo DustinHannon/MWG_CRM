@@ -5,6 +5,7 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
@@ -103,6 +104,7 @@ export default async function OpportunitiesPage({
   return (
     <div className="px-10 py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Opportunities" }]} />
+      <PageRealtime entities={["opportunities"]} />
       <PagePoll entities={["opportunities"]} />
       <div className="flex items-end justify-between gap-4">
         <div>

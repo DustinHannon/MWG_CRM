@@ -5,6 +5,7 @@ import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { PipelineBoard } from "./_components/board";
@@ -97,6 +98,7 @@ export default async function PipelinePage() {
           { label: "Pipeline" },
         ]}
       />
+      <PageRealtime entities={["leads"]} />
       <PagePoll entities={["leads"]} />
       <div className="flex items-center justify-between gap-4">
         <div>

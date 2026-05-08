@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { ReportActionMenu } from "@/components/reports/report-action-menu";
@@ -58,6 +59,7 @@ export default async function ReportRunPage({
           { label: report.name },
         ]}
       />
+      <PageRealtime entities={[ENTITY_TO_REALTIME[entityType]]} />
       <PagePoll entities={[ENTITY_TO_REALTIME[entityType]]} />
 
       <div className="flex items-start justify-between gap-4">

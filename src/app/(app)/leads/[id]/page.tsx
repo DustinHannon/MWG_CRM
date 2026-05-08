@@ -6,6 +6,8 @@ import { importJobs } from "@/db/schema/imports";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
+import { RowRealtime } from "@/components/realtime/row-realtime";
 import { StatusPill } from "@/components/ui/status-pill";
 import { PriorityPill } from "@/components/ui/priority-pill";
 import {
@@ -83,6 +85,13 @@ export default async function LeadDetailPage({
           { label: formatPersonName(lead) },
         ]}
       />
+      {/* Phase 12 — Supabase Realtime: focal record + filtered child tables. */}
+      <RowRealtime entity="leads" id={lead.id} />
+      <PageRealtime
+        entities={["activities"]}
+        filter={`lead_id=eq.${lead.id}`}
+      />
+      <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["leads", "activities", "tasks"]} />
       <Link href="/leads" className="text-xs text-muted-foreground/80 hover:text-foreground/80">
         ← Back to leads

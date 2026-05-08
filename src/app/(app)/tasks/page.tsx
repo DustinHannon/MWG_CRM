@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
@@ -45,6 +46,7 @@ export default async function TasksPage({
   return (
     <div className="px-10 py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Tasks" }]} />
+      <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["tasks"]} />
       <div className="flex items-end justify-between gap-4">
         <div>
