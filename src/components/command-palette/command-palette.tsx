@@ -138,21 +138,31 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
   // `open` is false on first render (SSR + initial hydration), so the
   // early return guarantees we never call createPortal until the user
   // opens the palette — by which point `document` is guaranteed to
-  // exist. Mounting via portal is what fixes the original bug: an
-  // ancestor in the shell tree (transform / filter / backdrop-filter
-  // / contain) would create a containing block and silently turn the
-  // palette's `position: fixed` into `absolute`, causing it to render
-  // "way at the bottom" of long pages. The portal escapes that tree.
+  // exist.
   if (!open) return null;
 
+  // The portal mounts on document.body, but globals.css has
+  //
+  //   body > * { position: relative; z-index: 1; }
+  //
+  // (a sibling rule for the `body::before` noise overlay). That
+  // selector overrides our `position: fixed`, which is why the
+  // palette flowed to the bottom of the document. Wrap the modal in
+  // a passthrough div: the wrapper absorbs the `body > *` rule
+  // (position: relative; z-index: 1 — harmless), and the inner
+  // backdrop is no longer a body child so its `position: fixed`
+  // wins. `position: relative` on a parent does NOT create a
+  // containing block for fixed descendants, so the inner element
+  // stays anchored to the viewport as intended.
   return createPortal(
-    <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 p-4 pt-[12vh]"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Command palette"
-      onClick={() => setOpen(false)}
-    >
+    <div data-command-palette-root>
+      <div
+        className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 p-4 pt-[12vh]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        onClick={() => setOpen(false)}
+      >
       <div
         onClick={(e) => e.stopPropagation()}
         className="glass-surface glass-surface--3 w-full max-w-xl overflow-hidden rounded-xl shadow-2xl"
@@ -270,6 +280,7 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
             <kbd className="rounded bg-input/60 px-1.5 py-0.5">Enter</kbd> to go
           </div>
         </Command>
+      </div>
       </div>
     </div>,
     document.body,
