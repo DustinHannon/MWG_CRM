@@ -56,7 +56,13 @@ export function MobileSidebar({ brand, nav, user }: MobileSidebarProps) {
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 lg:hidden" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col overflow-hidden border-r border-glass-border bg-glass-3 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))] data-[state=open]:animate-in data-[state=open]:slide-in-from-left data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left lg:hidden"
+          // The Content uses a plain keyframe (.mwg-drawer-anim, defined
+          // in globals.css) that doesn't rely on tw-animate-css's
+          // variable-based scheme. The variable approach was causing
+          // the panel to render off-screen on this Tailwind v4 + glass
+          // backdrop-filter + Radix portal stack — root cause never
+          // pinned but the in-house keyframe is reliable.
+          className="mwg-drawer-anim fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col overflow-hidden border-r border-glass-border bg-glass-3 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))] lg:hidden"
         >
           <Dialog.Title className="sr-only">Navigation</Dialog.Title>
           <div className="flex items-center justify-between pr-2 pt-safe">

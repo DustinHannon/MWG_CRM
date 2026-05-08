@@ -679,3 +679,32 @@ pre {
   }
 }
 
+
+/* Phase 12 — mobile drawer slide. Plain @keyframes that the
+   tw-animate-css variable scheme couldn't reliably drive in this
+   stack (glass backdrop-filter + Radix portal + Tailwind v4). The
+   fade overlay still uses the plugin; only the panel uses this. */
+
+@keyframes mwg-drawer-in {
+  from { transform: translate3d(-100%, 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes mwg-drawer-out {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-100%, 0, 0); }
+}
+
+.mwg-drawer-anim[data-state="open"] {
+  animation: mwg-drawer-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mwg-drawer-anim[data-state="closed"] {
+  animation: mwg-drawer-out 180ms ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mwg-drawer-anim[data-state="open"],
+  .mwg-drawer-anim[data-state="closed"] {
+    animation: none;
+  }
+}
