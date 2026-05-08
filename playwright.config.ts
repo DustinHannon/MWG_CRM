@@ -4,8 +4,10 @@ import { defineConfig, devices } from "@playwright/test";
  * Phase 12 — production-only Playwright suite.
  *
  * The CRM has one environment: https://mwg-crm.vercel.app. Tests run
- * against it with the real `REDACTED-EMAIL` account (no MFA per
- * user direction). Auth state is captured once per ~6h in
+ * against it with a real Entra account (configured without MFA per
+ * user direction); credentials live in env vars
+ * PLAYWRIGHT_LOGIN_EMAIL / PLAYWRIGHT_LOGIN_PASSWORD only — never in
+ * source. Auth state is captured once per ~6h in
  * `tests/e2e/.auth/croom.json` by global-setup so individual specs
  * don't re-trigger Entra SSO.
  *

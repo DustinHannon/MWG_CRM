@@ -13,8 +13,8 @@ const STATE_TTL_HOURS = 6;
  * ~6 hours and persist storage state.
  *
  * Credentials are env-only (.env.test.local + Vercel CI secret); never
- * commit them. The test account `REDACTED-EMAIL` is configured
- * in Entra without MFA per the user's direction; this setup fails
+ * commit them. The test account is configured in Entra without MFA
+ * per the user's direction; this setup fails
  * loudly if MFA appears so a future tightening of conditional access
  * is surfaced rather than silently broken.
  */

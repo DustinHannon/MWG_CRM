@@ -17,7 +17,7 @@ interface SidebarProps {
  */
 export function Sidebar({ brand, nav, user }: SidebarProps) {
   return (
-    <aside className="relative flex h-dvh w-60 shrink-0 flex-col overflow-hidden border-r border-glass-border bg-glass-1 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))]">
+    <aside className="relative hidden h-dvh w-60 shrink-0 flex-col overflow-hidden border-r border-glass-border bg-glass-1 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))] lg:flex">
       <Brand subtitle={brand.subtitle} />
       <nav className="flex flex-1 flex-col gap-1 px-3">
         {nav.map((item, i) => {

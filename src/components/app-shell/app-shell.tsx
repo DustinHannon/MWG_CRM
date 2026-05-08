@@ -12,6 +12,7 @@ import {
   listNotificationsForUser,
 } from "@/lib/notifications";
 import { listRecentForUser } from "@/lib/recent-views";
+import { MobileSidebar } from "./mobile-sidebar";
 import type { NavItem } from "./nav";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
@@ -82,6 +83,9 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
               unreadCount={unreadCount}
               recent={recentNotifs}
               prefs={timePrefs}
+              mobileNavTrigger={
+                <MobileSidebar brand={brand ?? {}} nav={nav} user={user} />
+              }
             />
             <div className="flex-1 overflow-y-auto">{children}</div>
           </main>

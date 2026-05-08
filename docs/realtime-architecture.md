@@ -93,8 +93,8 @@ appropriate actor column on every UPDATE.
 
 ### Test escape hatch
 
-In Playwright runs the lone test account (`REDACTED-EMAIL`) acts
-in two contexts at once. Skip-self would filter both. The hook honors
+In Playwright runs the lone test account acts in two contexts at once.
+Skip-self would filter both. The hook honors
 `localStorage._e2eDisableSkipSelf === "true"` to bypass the check.
 Sub-C's `realtime.spec.ts` sets this flag before subscribing.
 

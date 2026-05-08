@@ -201,9 +201,14 @@ single-account smoke covers the most important flows.
 Locally:
 ```bash
 # .env.test.local (gitignored)
-PLAYWRIGHT_LOGIN_EMAIL=REDACTED-EMAIL
-PLAYWRIGHT_LOGIN_PASSWORD=REDACTED-PASSWORD
+PLAYWRIGHT_LOGIN_EMAIL=<rotate-and-store-out-of-band>
+PLAYWRIGHT_LOGIN_PASSWORD=<rotate-and-store-out-of-band>
 ```
+
+**Note:** the original test credentials referenced earlier in this phase
+were leaked to a public commit (71a09af, since rewritten — see commit
+log) and MUST be rotated by MWG IT before any further E2E run. Treat
+the previous password as compromised; assume an attacker has it.
 
 Then `pnpm exec playwright test --project=desktop-chromium`. If/when
 CI is wired, mark these as **CI-scope** Vercel secrets only — never

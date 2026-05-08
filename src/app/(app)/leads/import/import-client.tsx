@@ -150,7 +150,7 @@ function UploadForm({
       </button>
 
       {uploadError ? (
-        <p className="text-sm text-rose-700 dark:text-rose-200">{uploadError}</p>
+        <p className="text-sm text-[var(--status-lost-fg)]">{uploadError}</p>
       ) : null}
     </form>
   );
@@ -182,7 +182,7 @@ function PreviewView({
           <span className="text-muted-foreground">({preview.totalRows} rows)</span>
         </h2>
         {smartDetect ? (
-          <p className="mt-2 text-xs text-amber-700 dark:text-amber-100/80">
+          <p className="mt-2 text-xs text-[var(--status-qualification-fg)]">
             ☑ Legacy D365 Description column detection is enabled.
           </p>
         ) : null}
