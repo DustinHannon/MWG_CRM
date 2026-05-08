@@ -74,14 +74,14 @@ export default async function ContactsPage({
       <BreadcrumbsSetter crumbs={[{ label: "Contacts" }]} />
       <PageRealtime entities={["contacts"]} />
       <PagePoll entities={["contacts"]} />
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Contacts
           </p>
           <h1 className="mt-1 text-2xl font-semibold font-display">Contacts</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {session.isAdmin ? (
             <Link
               href="/contacts/archived"
@@ -99,7 +99,7 @@ export default async function ContactsPage({
         </div>
       </div>
 
-      <GlassCard className="mt-6 overflow-hidden p-0">
+      <GlassCard className="data-table-cards mt-6 overflow-hidden p-0">
         {rows.length === 0 ? (
           <p className="p-12 text-center text-sm text-muted-foreground">
             No contacts yet.{" "}
@@ -123,7 +123,7 @@ export default async function ContactsPage({
             <tbody className="divide-y divide-glass-border">
               {rows.map((r) => (
                 <tr key={r.id} className="group">
-                  <td className="px-4 py-2.5">
+                  <td data-label="Name" className="px-4 py-2.5">
                     <Link
                       href={`/contacts/${r.id}`}
                       className="font-medium hover:underline"
@@ -131,13 +131,13 @@ export default async function ContactsPage({
                       {formatPersonName(r)}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td data-label="Title" className="px-4 py-2.5 text-muted-foreground">
                     {r.jobTitle ?? "—"}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td data-label="Email" className="px-4 py-2.5 text-muted-foreground">
                     {r.email ?? "—"}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td data-label="Account" className="px-4 py-2.5">
                     {r.accountId ? (
                       <Link
                         href={`/accounts/${r.accountId}`}
@@ -149,7 +149,7 @@ export default async function ContactsPage({
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td data-label="Owner" className="px-4 py-2.5">
                     {r.ownerId ? (
                       <UserChip
                         user={{

@@ -106,7 +106,7 @@ export default async function OpportunitiesPage({
       <BreadcrumbsSetter crumbs={[{ label: "Opportunities" }]} />
       <PageRealtime entities={["opportunities"]} />
       <PagePoll entities={["opportunities"]} />
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Opportunities
@@ -144,7 +144,7 @@ export default async function OpportunitiesPage({
         </div>
       </div>
 
-      <GlassCard className="mt-6 overflow-hidden p-0">
+      <GlassCard className="data-table-cards mt-6 overflow-hidden p-0">
         {rows.length === 0 ? (
           <p className="p-12 text-center text-sm text-muted-foreground">
             No opportunities yet.{" "}
@@ -172,7 +172,7 @@ export default async function OpportunitiesPage({
             <tbody className="divide-y divide-glass-border">
               {rows.map((r) => (
                 <tr key={r.id} className="group">
-                  <td className="px-4 py-2.5">
+                  <td data-label="Name" className="px-4 py-2.5">
                     <Link
                       href={`/opportunities/${r.id}`}
                       className="font-medium hover:underline"
@@ -180,13 +180,13 @@ export default async function OpportunitiesPage({
                       {r.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td data-label="Stage" className="px-4 py-2.5">
                     <StatusPill status={r.stage} />
                   </td>
-                  <td className="px-4 py-2.5 tabular-nums text-foreground/80">
+                  <td data-label="Amount" className="px-4 py-2.5 tabular-nums text-foreground/80">
                     {r.amount ? `$${Number(r.amount).toLocaleString()}` : "—"}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td data-label="Account" className="px-4 py-2.5">
                     {r.accountId ? (
                       <Link
                         href={`/accounts/${r.accountId}`}
@@ -196,10 +196,10 @@ export default async function OpportunitiesPage({
                       </Link>
                     ) : null}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td data-label="Close date" className="px-4 py-2.5 text-muted-foreground">
                     <UserTime value={r.expectedCloseDate} mode="date" />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td data-label="Owner" className="px-4 py-2.5">
                     {r.ownerId ? (
                       <UserChip
                         user={{

@@ -85,7 +85,7 @@ export default async function AccountsPage({
       <BreadcrumbsSetter crumbs={[{ label: "Accounts" }]} />
       <PageRealtime entities={["accounts"]} />
       <PagePoll entities={["accounts"]} />
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Accounts
@@ -95,7 +95,7 @@ export default async function AccountsPage({
             Companies — created from lead conversions or directly.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {session.isAdmin ? (
             <Link
               href="/accounts/archived"
@@ -113,7 +113,7 @@ export default async function AccountsPage({
         </div>
       </div>
 
-      <GlassCard className="mt-6 overflow-hidden p-0">
+      <GlassCard className="data-table-cards mt-6 overflow-hidden p-0">
         {rows.length === 0 ? (
           <p className="p-12 text-center text-sm text-muted-foreground">
             No accounts yet.{" "}
@@ -138,7 +138,7 @@ export default async function AccountsPage({
             <tbody className="divide-y divide-glass-border">
               {rows.map((r) => (
                 <tr key={r.id} className="group">
-                  <td className="px-4 py-2.5">
+                  <td data-label="Name" className="px-4 py-2.5">
                     <Link
                       href={`/accounts/${r.id}`}
                       className="font-medium hover:underline"
@@ -146,10 +146,10 @@ export default async function AccountsPage({
                       {r.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td data-label="Industry" className="px-4 py-2.5 text-muted-foreground">
                     {r.industry ?? "—"}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td data-label="Owner" className="px-4 py-2.5">
                     {/* Phase 9C — UserChip; hoverCard omitted on this
                         50-row table per the perf rule. */}
                     {r.ownerId ? (
@@ -164,10 +164,10 @@ export default async function AccountsPage({
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-foreground/80">
+                  <td data-label="Won deals" className="px-4 py-2.5 text-right tabular-nums text-foreground/80">
                     {r.wonDeals > 0 ? r.wonDeals : "—"}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td data-label="Created" className="px-4 py-2.5 text-muted-foreground">
                     <UserTime value={r.createdAt} mode="date" />
                   </td>
                   <td className="w-10 px-2 py-2.5 align-middle">
