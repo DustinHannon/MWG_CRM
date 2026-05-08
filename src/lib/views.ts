@@ -40,6 +40,19 @@ export interface ViewDefinition {
   sort: { field: SortField; direction: "asc" | "desc" };
   /** Phase 6B — present on saved views only. */
   version?: number;
+  /**
+   * Phase 9C (workflow) — implicit status exclusion applied when the
+   * caller hasn't explicitly filtered by status. Built-in default views
+   * (`all-mine`, `all`, `recent`, `imported`, `hot`) hide converted (and
+   * for `hot`, also lost/unqualified) so default lists feel like a "live
+   * pipeline" instead of an audit log. Saved views never carry this —
+   * users opt in via explicit status filters.
+   *
+   * When the user explicitly selects any status filter via Apply, the
+   * implicit exclusion is dropped. The "All including converted" view
+   * (`builtin:all-incl-converted`) is the explicit escape hatch.
+   */
+  defaultExcludeStatuses?: readonly string[];
 }
 
 export type SortField =
@@ -64,6 +77,15 @@ export interface ViewFilters {
   updatedSinceDays?: number;
 }
 
+/**
+ * Phase 9C (workflow) — implicit status exclusions for default views.
+ * `my-open` is unchanged because it already pins status explicitly.
+ * `all-incl-converted` is the explicit escape hatch when admins / power
+ * users need to see the entire history.
+ */
+const DEFAULT_EXCLUDE_BASE = ["converted"] as const;
+const DEFAULT_EXCLUDE_HOT = ["converted", "lost", "unqualified"] as const;
+
 export const BUILTIN_VIEWS: ViewDefinition[] = [
   {
     source: "builtin",
@@ -80,6 +102,7 @@ export const BUILTIN_VIEWS: ViewDefinition[] = [
     name: "All My Leads",
     scope: "mine",
     filters: {},
+    defaultExcludeStatuses: DEFAULT_EXCLUDE_BASE,
     columns: DEFAULT_COLUMNS,
     sort: { field: "lastActivityAt", direction: "desc" },
   },
@@ -87,6 +110,17 @@ export const BUILTIN_VIEWS: ViewDefinition[] = [
     source: "builtin",
     id: "builtin:all",
     name: "All Leads",
+    scope: "all",
+    requiresAllLeads: true,
+    filters: {},
+    defaultExcludeStatuses: DEFAULT_EXCLUDE_BASE,
+    columns: DEFAULT_COLUMNS,
+    sort: { field: "lastActivityAt", direction: "desc" },
+  },
+  {
+    source: "builtin",
+    id: "builtin:all-incl-converted",
+    name: "All Leads (incl. converted)",
     scope: "all",
     requiresAllLeads: true,
     filters: {},
@@ -99,6 +133,7 @@ export const BUILTIN_VIEWS: ViewDefinition[] = [
     name: "Recently Modified",
     scope: "mine",
     filters: { updatedSinceDays: 30 },
+    defaultExcludeStatuses: DEFAULT_EXCLUDE_BASE,
     columns: DEFAULT_COLUMNS,
     sort: { field: "updatedAt", direction: "desc" },
   },
@@ -107,11 +142,8 @@ export const BUILTIN_VIEWS: ViewDefinition[] = [
     id: "builtin:hot",
     name: "Hot Leads",
     scope: "mine",
-    filters: {
-      rating: ["hot"],
-      // status NOT IN ('converted','lost','unqualified') — handled below.
-      // We mark this via a magic key checked in buildLeadQuery.
-    },
+    filters: { rating: ["hot"] },
+    defaultExcludeStatuses: DEFAULT_EXCLUDE_HOT,
     columns: DEFAULT_COLUMNS,
     sort: { field: "lastActivityAt", direction: "desc" },
   },
@@ -121,6 +153,7 @@ export const BUILTIN_VIEWS: ViewDefinition[] = [
     name: "Recently Imported",
     scope: "mine",
     filters: { createdSinceDays: 7 },
+    defaultExcludeStatuses: DEFAULT_EXCLUDE_BASE,
     columns: [
       "firstName",
       "lastName",
@@ -509,11 +542,19 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
     );
   }
 
-  // Hot Leads carve-out — exclude terminal/unqualified statuses unless the
-  // user explicitly filtered status separately.
-  if (view.id === "builtin:hot" && !merged.status?.length) {
+  // Phase 9C (workflow) — default-view status exclusion. Built-in
+  // views that declare `defaultExcludeStatuses` get an implicit
+  // NOT-IN filter when the caller hasn't explicitly chosen a status
+  // (so converted leads stop polluting "All", "Hot", etc.). Saved
+  // views never carry this — user-saved views are explicit by design.
+  // The `builtin:all-incl-converted` view is the documented escape
+  // hatch for admins who need history.
+  if (view.defaultExcludeStatuses?.length && !merged.status?.length) {
     wheres.push(
-      sql`${leads.status} NOT IN ('converted', 'lost', 'unqualified')`,
+      sql`${leads.status} NOT IN (${sql.join(
+        view.defaultExcludeStatuses.map((s) => sql`${s}`),
+        sql`, `,
+      )})`,
     );
   }
 
