@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
+import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 
@@ -79,7 +80,27 @@ export default async function ContactDetailPage({
           <Row label="Email" value={contact.email} mailto />
           <Row label="Phone" value={contact.phone} />
           <Row label="Mobile" value={contact.mobilePhone} />
-          <Row label="Owner" value={contact.ownerName} />
+          {/* Phase 9C — Owner row uses the canonical UserChip with a
+              hover card on this single-record detail page. */}
+          <div className="flex">
+            <dt className="w-32 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
+              Owner
+            </dt>
+            <dd>
+              {contact.ownerId ? (
+                <UserChip
+                  user={{
+                    id: contact.ownerId,
+                    displayName: contact.ownerName,
+                    photoUrl: null,
+                  }}
+                  hoverCard={<UserHoverCard userId={contact.ownerId} />}
+                />
+              ) : (
+                "—"
+              )}
+            </dd>
+          </div>
           <Row
             label="Preferences"
             value={[

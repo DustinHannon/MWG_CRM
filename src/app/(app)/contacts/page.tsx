@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
+import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 import { encodeCursor, parseCursor } from "@/lib/leads";
@@ -45,6 +46,8 @@ export default async function ContactsPage({
       jobTitle: contacts.jobTitle,
       accountId: contacts.accountId,
       accountName: crmAccounts.name,
+      // Phase 9C — owner id surfaced for the canonical UserChip.
+      ownerId: contacts.ownerId,
       ownerName: users.displayName,
       createdAt: contacts.createdAt,
       updatedAt: contacts.updatedAt,
@@ -127,8 +130,18 @@ export default async function ContactsPage({
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {r.ownerName ?? "—"}
+                  <td className="px-4 py-2.5">
+                    {r.ownerId ? (
+                      <UserChip
+                        user={{
+                          id: r.ownerId,
+                          displayName: r.ownerName,
+                          photoUrl: null,
+                        }}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
