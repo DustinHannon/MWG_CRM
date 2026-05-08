@@ -53,7 +53,50 @@ export const leadFiltersSchema = z.object({
     z.enum(["lastActivity", "created", "name", "company", "value"]),
   ).default("lastActivity"),
   dir: emptyToUndef(z.enum(["asc", "desc"])).default("desc"),
+  // Phase 9C — cursor pagination. Cursor format is `<iso8601>:<uuid>`
+  // where the timestamp matches the active sort column and the uuid
+  // is the row's id. When present, callers SHOULD NOT also pass `page`
+  // (cursor wins; offset is ignored).
+  cursor: emptyToUndef(z.string().trim().max(80)).optional(),
 });
+
+/**
+ * Phase 9C — cursor codec. Pagination cursors are stable strings of the
+ * form `<iso8601>:<uuid>`. The leading timestamp is whichever column
+ * drives the active sort (last_activity_at, updated_at, etc.); the
+ * trailing uuid is the row's id, used as a tiebreaker so cursor seeks
+ * stay deterministic across rows that share a timestamp.
+ *
+ * NULL timestamps are encoded as the literal string "null" so the
+ * `(updated_at, id) < (cursorTs, cursorId)` semantics translate to
+ * the SQL-level NULLS LAST ordering used by every list view.
+ */
+export interface ParsedCursor {
+  ts: Date | null;
+  id: string;
+}
+
+export function parseCursor(raw: string | undefined | null): ParsedCursor | null {
+  if (!raw) return null;
+  const idx = raw.lastIndexOf(":");
+  if (idx === -1) return null;
+  const tsPart = raw.slice(0, idx);
+  const idPart = raw.slice(idx + 1);
+  // basic uuid sanity (avoids letting users inject arbitrary text into
+  // the where clause; the parameterised binding in `sql` handles the
+  // rest, but parse-time validation lets us drop bad cursors silently).
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idPart)) {
+    return null;
+  }
+  if (tsPart === "null" || tsPart === "") return { ts: null, id: idPart };
+  const d = new Date(tsPart);
+  if (Number.isNaN(d.getTime())) return null;
+  return { ts: d, id: idPart };
+}
+
+export function encodeCursor(ts: Date | null, id: string): string {
+  return `${ts ? ts.toISOString() : "null"}:${id}`;
+}
 
 export type LeadFilters = z.infer<typeof leadFiltersSchema>;
 
@@ -172,12 +215,19 @@ export interface LeadListResult {
     ownerDisplayName: string | null;
     estimatedValue: string | null;
     lastActivityAt: Date | null;
+    updatedAt: Date;
     createdAt: Date;
     tags: string[] | null;
   }>;
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * Phase 9C — opaque cursor that callers pass back via `?cursor=…` to
+   * load the next page. Null when there are no more rows. Always set
+   * when cursor pagination is active (ignored on offset paths).
+   */
+  nextCursor: string | null;
 }
 
 export async function listLeads(
@@ -251,9 +301,43 @@ export async function listLeads(
   })();
   const order = filters.dir === "asc" ? asc(sortColumn) : desc(sortColumn);
 
-  const offset = (filters.page - 1) * filters.pageSize;
+  // ------------------------------------------------------------------
+  // Phase 9C — cursor pagination on the default sort
+  // (last_activity_at DESC, id DESC). Fast path: when the sort is the
+  // default and a cursor is provided, append a tuple-style WHERE clause
+  // and skip the OFFSET. Slow path (custom sort field, or paginated by
+  // ?page=N for the existing UI) falls back to OFFSET. The export route
+  // pulls 10k rows in a single page=1 request and never sets a cursor,
+  // so it stays on the offset path unchanged.
+  // ------------------------------------------------------------------
+  const useCursor =
+    !!filters.cursor && filters.sort === "lastActivity" && filters.dir === "desc";
+  const cursor = useCursor ? parseCursor(filters.cursor) : null;
+  const cursorWhere = (() => {
+    if (!useCursor || !cursor) return undefined;
+    // (last_activity_at, id) < (cursorTs, cursorId) with NULLS LAST.
+    // PG row-comparison would treat NULL specially, so we expand it.
+    if (cursor.ts === null) {
+      // NULL last_activity_at means we're already past the
+      // non-null block; only id-tiebreak remains.
+      return sql`(${leads.lastActivityAt} IS NULL AND ${leads.id} < ${cursor.id})`;
+    }
+    return sql`(
+      ${leads.lastActivityAt} < ${cursor.ts.toISOString()}::timestamptz
+      OR (${leads.lastActivityAt} = ${cursor.ts.toISOString()}::timestamptz AND ${leads.id} < ${cursor.id})
+    )`;
+  })();
+  const finalWhere = cursorWhere
+    ? whereExpr
+      ? and(whereExpr, cursorWhere)
+      : cursorWhere
+    : whereExpr;
 
-  const [rows, totalRow] = await Promise.all([
+  const offset = useCursor ? 0 : (filters.page - 1) * filters.pageSize;
+  // pageSize+1 lets us detect "more available" cheaply without a count.
+  const sliceLimit = useCursor ? filters.pageSize + 1 : filters.pageSize;
+
+  const [rowsRaw, totalRow] = await Promise.all([
     db
       .select({
         id: leads.id,
@@ -269,6 +353,7 @@ export async function listLeads(
         ownerDisplayName: users.displayName,
         estimatedValue: leads.estimatedValue,
         lastActivityAt: leads.lastActivityAt,
+        updatedAt: leads.updatedAt,
         createdAt: leads.createdAt,
         // Phase 8D — hydrate tag names from the relational lead_tags
         // join. Returns NULL when the lead has no tags so existing UI
@@ -282,21 +367,35 @@ export async function listLeads(
       })
       .from(leads)
       .leftJoin(users, eq(leads.ownerId, users.id))
-      .where(whereExpr)
-      .orderBy(order, desc(leads.createdAt))
-      .limit(filters.pageSize)
+      .where(finalWhere)
+      .orderBy(order, desc(leads.id))
+      .limit(sliceLimit)
       .offset(offset),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(leads)
-      .where(whereExpr),
+    // Phase 9C — total count is only required for offset pagination
+    // (footer "Page X of Y"). Cursor mode skips it; the +1 row trick
+    // tells us whether another page exists, which is what the UI needs.
+    useCursor
+      ? Promise.resolve([{ count: 0 }])
+      : db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(leads)
+          .where(whereExpr),
   ]);
+
+  let nextCursor: string | null = null;
+  let rows = rowsRaw;
+  if (useCursor && rowsRaw.length > filters.pageSize) {
+    rows = rowsRaw.slice(0, filters.pageSize);
+    const last = rows[rows.length - 1];
+    nextCursor = encodeCursor(last.lastActivityAt, last.id);
+  }
 
   return {
     rows,
     total: totalRow[0]?.count ?? 0,
     page: filters.page,
     pageSize: filters.pageSize,
+    nextCursor,
   };
 }
 

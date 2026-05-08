@@ -12,6 +12,7 @@ import {
   LEAD_SOURCES,
   LEAD_STATUSES,
 } from "@/lib/lead-constants";
+import { encodeCursor, parseCursor } from "@/lib/leads";
 import {
   AVAILABLE_COLUMNS,
   type ColumnKey,
@@ -377,6 +378,14 @@ export interface RunViewOptions {
   sort?: { field: SortField; direction: "asc" | "desc" };
   /** Allow the user to widen / narrow filters on top of the view base. */
   extraFilters?: ViewFilters;
+  /**
+   * Phase 9C — cursor pagination. Cursor format is
+   * `<iso8601-or-"null">:<uuid>`. When set on the default sort
+   * (lastActivityAt DESC), runView seeks via the composite index
+   * `leads_last_activity_id_idx` instead of OFFSET. For non-default
+   * sorts the cursor is ignored and offset paging is used.
+   */
+  cursor?: string | null;
 }
 
 export interface RunViewResult {
@@ -384,6 +393,8 @@ export interface RunViewResult {
   total: number;
   columns: ColumnKey[];
   sort: { field: SortField; direction: "asc" | "desc" };
+  /** Phase 9C — null when no further rows; otherwise the next cursor. */
+  nextCursor: string | null;
 }
 
 export interface LeadRow {
@@ -510,8 +521,6 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
   void isNull;
   void ne;
 
-  const whereExpr = wheres.length > 0 ? and(...wheres) : undefined;
-
   const sort = opts.sort ?? view.sort;
   const sortColumn = (() => {
     switch (sort.field) {
@@ -533,7 +542,35 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
   })();
   const order = sort.direction === "asc" ? asc(sortColumn) : desc(sortColumn);
 
-  const offset = (page - 1) * pageSize;
+  // Phase 9C — cursor pagination on the default sort
+  // (lastActivityAt DESC). Custom sorts fall back to OFFSET because
+  // we don't have composite (col, id) indexes for every column.
+  // Pre-cursor `whereExpr` powers the COUNT query (cursor mode skips
+  // the count); the cursor predicate joins via `finalWhere`.
+  const whereExpr = wheres.length > 0 ? and(...wheres) : undefined;
+  const useCursor =
+    !!opts.cursor && sort.field === "lastActivityAt" && sort.direction === "desc";
+  const cursorParsed = useCursor ? parseCursor(opts.cursor!) : null;
+  const cursorWhere = (() => {
+    if (!useCursor || !cursorParsed) return null;
+    if (cursorParsed.ts === null) {
+      // NULL last_activity_at sorts last under NULLS LAST; only the
+      // id-tiebreak block remains after a NULL cursor.
+      return sql`(${leads.lastActivityAt} IS NULL AND ${leads.id} < ${cursorParsed.id})`;
+    }
+    return sql`(
+      ${leads.lastActivityAt} < ${cursorParsed.ts.toISOString()}::timestamptz
+      OR (${leads.lastActivityAt} = ${cursorParsed.ts.toISOString()}::timestamptz AND ${leads.id} < ${cursorParsed.id})
+    )`;
+  })();
+  const finalWhere = cursorWhere
+    ? whereExpr
+      ? and(whereExpr, cursorWhere)
+      : cursorWhere
+    : whereExpr;
+
+  const offset = useCursor ? 0 : (page - 1) * pageSize;
+  const sliceLimit = useCursor ? pageSize + 1 : pageSize;
 
   const [rowsRaw, totalRow] = await Promise.all([
     db
@@ -572,19 +609,33 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
       })
       .from(leads)
       .leftJoin(users, eq(leads.ownerId, users.id))
-      .where(whereExpr)
-      .orderBy(order, desc(leads.createdAt))
-      .limit(pageSize)
+      .where(finalWhere)
+      // Phase 9C — `id DESC` tiebreak matches the composite index
+      // `leads_last_activity_id_idx (last_activity_at DESC NULLS LAST, id DESC)`.
+      .orderBy(order, desc(leads.id))
+      .limit(sliceLimit)
       .offset(offset),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(leads)
-      .where(whereExpr),
+    // Phase 9C — skip the COUNT in cursor mode. The +1 row trick on
+    // sliceLimit gives the UI everything it needs to show "Load more".
+    useCursor
+      ? Promise.resolve([{ count: 0 }])
+      : db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(leads)
+          .where(whereExpr),
   ]);
+
+  let trimmedRows = rowsRaw;
+  let nextCursor: string | null = null;
+  if (useCursor && rowsRaw.length > pageSize) {
+    trimmedRows = rowsRaw.slice(0, pageSize);
+    const last = trimmedRows[trimmedRows.length - 1];
+    nextCursor = encodeCursor(last.lastActivityAt, last.id);
+  }
 
   // Hydrate created-by display names in a follow-up query (avoids N+1).
   const creatorIds = Array.from(
-    new Set(rowsRaw.map((r) => r.createdById).filter((id): id is string => Boolean(id))),
+    new Set(trimmedRows.map((r) => r.createdById).filter((id): id is string => Boolean(id))),
   );
   const creators = creatorIds.length
     ? await db
@@ -594,7 +645,7 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
     : [];
   const creatorById = new Map(creators.map((c) => [c.id, c.displayName]));
 
-  const rows: LeadRow[] = rowsRaw.map((r) => ({
+  const rows: LeadRow[] = trimmedRows.map((r) => ({
     ...r,
     createdByDisplayName: r.createdById
       ? creatorById.get(r.createdById) ?? null
@@ -608,5 +659,6 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
     total: totalRow[0]?.count ?? 0,
     columns,
     sort,
+    nextCursor,
   };
 }
