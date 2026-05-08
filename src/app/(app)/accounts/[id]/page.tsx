@@ -6,6 +6,7 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
+import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 
@@ -96,9 +97,26 @@ export default async function AccountDetailPage({
       <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{account.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {account.industry ?? "—"} · Owner {account.ownerName ?? "Unassigned"}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>{account.industry ?? "—"}</span>
+            <span>·</span>
+            <span>Owner</span>
+            {/* Phase 9C — single low-cardinality chip on a detail page;
+                include the server-rendered hover card. */}
+            {account.ownerId ? (
+              <UserChip
+                size="md"
+                user={{
+                  id: account.ownerId,
+                  displayName: account.ownerName,
+                  photoUrl: null,
+                }}
+                hoverCard={<UserHoverCard userId={account.ownerId} />}
+              />
+            ) : (
+              <span>Unassigned</span>
+            )}
+          </div>
           {customerSince ? (
             <p className="mt-1 text-xs text-muted-foreground">
               Customer since{" "}

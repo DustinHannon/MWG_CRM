@@ -5,6 +5,7 @@ import { crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
+import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { encodeCursor, parseCursor } from "@/lib/leads";
 
@@ -56,6 +57,8 @@ export default async function AccountsPage({
       id: crmAccounts.id,
       name: crmAccounts.name,
       industry: crmAccounts.industry,
+      // Phase 9C — owner id surfaced for the canonical UserChip.
+      ownerId: crmAccounts.ownerId,
       ownerName: users.displayName,
       createdAt: crmAccounts.createdAt,
       updatedAt: crmAccounts.updatedAt,
@@ -126,8 +129,20 @@ export default async function AccountsPage({
                   <td className="px-4 py-2.5 text-muted-foreground">
                     {r.industry ?? "—"}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {r.ownerName ?? "—"}
+                  <td className="px-4 py-2.5">
+                    {/* Phase 9C — UserChip; hoverCard omitted on this
+                        50-row table per the perf rule. */}
+                    {r.ownerId ? (
+                      <UserChip
+                        user={{
+                          id: r.ownerId,
+                          displayName: r.ownerName,
+                          photoUrl: null,
+                        }}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-foreground/80">
                     {r.wonDeals > 0 ? r.wonDeals : "—"}
