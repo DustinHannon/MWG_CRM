@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { UserPanel } from "@/components/user-panel/user-panel";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { Brand } from "./brand";
@@ -30,13 +30,16 @@ interface MobileSidebarProps {
 export function MobileSidebar({ brand, nav, user }: MobileSidebarProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-
-  // Close drawer on route change. Pathname is the cheapest signal
-  // that the user navigated; closing prevents the drawer from
-  // sticking open under the new page.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  // Derived state — close on route change. We track the last pathname
+  // as state and compare against the current; if they diverge we reset
+  // `open` to false in the same render. This pattern is the React-19
+  // / react-compiler-friendly alternative to a useEffect that calls
+  // setState (which would trigger a second render flash).
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
+    if (open) setOpen(false);
+  }
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>

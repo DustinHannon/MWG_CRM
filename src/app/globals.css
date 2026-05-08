@@ -545,6 +545,51 @@ pre {
 }
 
 /* -----------------------------------------------------------------------------
+ * Phase 12 Sub-E — Mobile sheet pattern for AlertDialog / Dialog.
+ *
+ * Apply class `mwg-mobile-sheet` to the Radix Content node. At <640px
+ * the dialog becomes a bottom sheet: full-bleed horizontally,
+ * pinned to the bottom edge, action footer respects iOS home
+ * indicator via env(safe-area-inset-bottom). Desktop ≥640px keeps
+ * its centered modal placement.
+ *
+ * The sheet uses translate utilities the original Radix dialog
+ * already sets, so we override only the position + size at <640px.
+ * --------------------------------------------------------------------------- */
+@media (max-width: 639.98px) {
+  .mwg-mobile-sheet {
+    /* Pin to bottom edge; full width minus a hairline gutter. */
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    /* Cap height so the sheet never shoves the bottom controls
+     * off-screen on short viewports; child content scrolls. */
+    max-height: 90dvh;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0));
+  }
+  /* Sticky action footer inside the sheet. Pages opt-in by adding
+   * `mwg-mobile-sheet-actions` to the row of cancel/confirm buttons. */
+  .mwg-mobile-sheet .mwg-mobile-sheet-actions {
+    position: sticky;
+    bottom: 0;
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+    padding: 0.875rem 1.5rem max(0.875rem, env(safe-area-inset-bottom, 0));
+    background: var(--background);
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* -----------------------------------------------------------------------------
  * Phase 12 Sub-E — Data-table to card responsive mode.
  *
  * Apply class `data-table-cards` to the wrapping element of any

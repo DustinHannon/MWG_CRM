@@ -65,7 +65,10 @@ export function ConfirmDeleteDialog({
       <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0" />
-        <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-background p-6 shadow-xl">
+        {/* Phase 12 Sub-E — `mwg-mobile-sheet` collapses the centered
+            modal to a full-bleed bottom sheet at <640px; desktop
+            ≥640px keeps the centered placement. */}
+        <AlertDialog.Content className="mwg-mobile-sheet fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-background p-6 shadow-xl">
           <AlertDialog.Title className="text-base font-semibold text-foreground">
             Archive this {label}?
           </AlertDialog.Title>
@@ -97,7 +100,7 @@ export function ConfirmDeleteDialog({
             </label>
           ) : null}
 
-          <div className="mt-5 flex justify-end gap-2">
+          <div className="mwg-mobile-sheet-actions mt-5 flex justify-end gap-2">
             <AlertDialog.Cancel asChild>
               <button
                 type="button"
@@ -153,7 +156,7 @@ export function ConfirmHardDeleteDialog({
       <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
-        <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-rose-500/30 dark:border-rose-300/30 bg-background p-6 shadow-xl">
+        <AlertDialog.Content className="mwg-mobile-sheet fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-rose-500/30 dark:border-rose-300/30 bg-background p-6 shadow-xl">
           <AlertDialog.Title className="text-base font-semibold text-rose-700 dark:text-rose-300">
             Permanently delete this {label}?
           </AlertDialog.Title>
@@ -168,7 +171,7 @@ export function ConfirmHardDeleteDialog({
               </p>
             </div>
           </AlertDialog.Description>
-          <div className="mt-5 flex justify-end gap-2">
+          <div className="mwg-mobile-sheet-actions mt-5 flex justify-end gap-2">
             <AlertDialog.Cancel asChild>
               <button
                 type="button"
