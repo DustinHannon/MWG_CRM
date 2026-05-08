@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { UserChip } from "@/components/user-display";
+// Phase 9C — import the client primitive directly (not the barrel) so
+// the bundler doesn't pull UserHoverCard's server-only deps into the
+// client graph.
+import { UserChip } from "@/components/user-display/user-chip";
 
 interface DuplicateMatch {
   id: string;

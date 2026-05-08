@@ -13,7 +13,9 @@ import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { UserAvatar } from "@/components/user-display";
+// Phase 9C — direct import (not the barrel) keeps the server-only
+// UserHoverCard out of the client bundle.
+import { UserAvatar } from "@/components/user-display/user-avatar";
 import { updateOpportunityStageAction } from "../actions";
 
 interface Card {

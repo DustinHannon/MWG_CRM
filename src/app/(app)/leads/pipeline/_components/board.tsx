@@ -13,7 +13,9 @@ import { toast } from "sonner";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { formatPersonName } from "@/lib/format/person-name";
-import { UserAvatar } from "@/components/user-display";
+// Phase 9C — direct import (not the barrel) keeps the server-only
+// UserHoverCard out of the client bundle.
+import { UserAvatar } from "@/components/user-display/user-avatar";
 import { updateLeadStatusAction } from "../actions";
 
 interface Card {

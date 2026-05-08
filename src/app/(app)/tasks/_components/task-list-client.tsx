@@ -13,7 +13,9 @@ import {
   formatUserTime,
   type TimePrefs,
 } from "@/lib/format-time";
-import { UserChip } from "@/components/user-display";
+// Phase 9C — direct import (not the barrel) keeps the server-only
+// UserHoverCard out of the client bundle.
+import { UserChip } from "@/components/user-display/user-chip";
 
 interface TaskListClientProps {
   buckets: { label: string; tasks: TaskRow[] }[];
