@@ -82,11 +82,11 @@ export function ConvertModal(props: ConvertModalProps) {
 
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:p-4"
           onClick={() => setOpen(false)}
         >
           <div
-            className="glass-surface glass-surface--3 w-full max-w-xl rounded-xl p-6"
+            className="glass-surface glass-surface--3 max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-t-xl px-5 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0))] sm:rounded-xl sm:p-6 sm:pb-6"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-semibold">Convert lead</h2>

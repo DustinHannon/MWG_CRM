@@ -219,6 +219,16 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_1fr]">
+      {/* Phase 12 Sub-E — desktop-first banner. The builder is
+          authored against >=1024px viewports; below lg the grid
+          collapses to a single column but the side-by-side preview
+          loses its value. The banner sets expectations rather than
+          re-architecting the editor for narrow widths. */}
+      <p className="rounded-md border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)]/60 px-3 py-2 text-xs text-[var(--priority-medium-fg)] lg:col-span-2 lg:hidden">
+        Report builder is best on a desktop or tablet at 1024px or
+        wider. The form below still works, but the side-by-side
+        preview sits below the editor instead of beside it.
+      </p>
       <div className="space-y-4">
         <Section title="Entity">
           <select
