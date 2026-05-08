@@ -63,15 +63,29 @@ export default async function ContactsPage({
 
   return (
     <div className="px-10 py-10">
-      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-        Contacts
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold font-display">Contacts</h1>
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            Contacts
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold font-display">Contacts</h1>
+        </div>
+        <Link
+          href="/contacts/new"
+          className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+        >
+          + New contact
+        </Link>
+      </div>
 
       <GlassCard className="mt-6 overflow-hidden p-0">
         {rows.length === 0 ? (
           <p className="p-12 text-center text-sm text-muted-foreground">
-            No contacts yet.
+            No contacts yet.{" "}
+            <Link href="/contacts/new" className="underline hover:text-foreground">
+              Add the first one
+            </Link>
+            .
           </p>
         ) : (
           <table className="data-table w-full text-sm">

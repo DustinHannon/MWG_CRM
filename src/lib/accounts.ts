@@ -1,4 +1,5 @@
 import "server-only";
+import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
@@ -69,4 +70,26 @@ export async function createAccount(
   });
 
   return { id: inserted[0].id };
+}
+
+/**
+ * Phase 9C (workflow) — pickable account list for the New Contact /
+ * New Opportunity forms. Returns up to 500 accounts visible to the
+ * caller, sorted alphabetically. The brief calls out autocomplete as
+ * a future polish; today we render a plain `<select>` and 500 is
+ * comfortable for that. Owner-scope mirrors the listing pages.
+ */
+export async function listAccountsForPicker(
+  actorId: string,
+  canViewAll: boolean,
+): Promise<Array<{ id: string; name: string }>> {
+  const wheres = [eq(crmAccounts.isDeleted, false)];
+  if (!canViewAll) wheres.push(eq(crmAccounts.ownerId, actorId));
+  const rows = await db
+    .select({ id: crmAccounts.id, name: crmAccounts.name })
+    .from(crmAccounts)
+    .where(and(...wheres))
+    .orderBy(asc(crmAccounts.name))
+    .limit(500);
+  return rows;
 }
