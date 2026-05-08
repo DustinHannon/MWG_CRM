@@ -73,18 +73,18 @@ The Phase 4 hardening pass (4A) and most features (4B / 4C / 4E backend / 4F / 4
 ### Shipped 2026-05-07
 
 - **6A** — Schema migrations: `last_name` nullable on leads + contacts (real CRM data has incomplete name records); `leads.subject` (1-1000 chars) with trgm index, surfaced as italic line under the lead name and included in FTS; `leads.linkedin_url` http/https CHECK; `activities.imported_by_name` snapshot column; `activities.import_dedup_key` partial index; `leads_external_id_unique` partial unique index. `formatPersonName` helper rolled out across every render site that displayed `firstName lastName`.
-- **6B** — OCC backend wiring on every edit-form update action: `updateLeadAction`, `updateTaskAction`, `toggleTaskCompleteAction`, `updateViewAction`, `updatePreferencesAction`. `version` round-trips through forms; `ConflictError` surfaces as a `duration: Infinity` toast. PHASE6-OCC-TEST.md documents the two-tab smoke test for each path.
+- **6B** — OCC backend wiring on every edit-form update action: `updateLeadAction`, `updateTaskAction`, `toggleTaskCompleteAction`, `updateViewAction`, `updatePreferencesAction`. `version` round-trips through forms; `ConflictError` surfaces as a `duration: Infinity` toast. `docs/phases/reports/PHASE6-OCC-TEST.md` documents the two-tab smoke test for each path.
 - **6C** — Multi-line activity parser (`src/lib/import/activity-parser.ts`): pure function handling calls / meetings / notes / emails with all metadata variants (Duration / Left Voicemail / Status+End+Owner+Attendees / From+To). 200-most-recent cap per cell.
 - **6D** — D365 smart-detect (`src/lib/import/d365-detect.ts`): section-aware splitter for the legacy "everything in Description" dump, including the nested `Description:` inside `Linked Opportunity:` blocks. Stage and status mapping in `src/lib/import/stage-mapping.ts`.
 - **6E + 6F** — New 39-column import structure with two-step preview-then-commit flow. `previewImportAction` parses, builds aggregate counts/warnings/errors, and stashes the parsed rows under a job id; `commitImportAction` does the chunked write (CHUNK_SIZE=100) using the OCC pattern for re-imports via External ID. Owner emails + activity By-names resolve in two batched queries; tags autocreate; activities dedup via sha256 partial index. Audit log records the full import snapshot.
 - **6G** — Downloadable `.xlsx` template with three sheets (Leads / Instructions / Allowed values) and three example rows including a rich row that demonstrates the multi-line activity column shape.
-- **6H** — Synthetic-file smoke against `scripts/import-smoke-build.ts` output covering every code path; result captured in `PHASE6-IMPORT-TEST.md`. Production smoke against `mwg-crm-leads-batch-0447.xlsx` requires the file to be placed at `./test-data/` and run by the user.
-- **6I** — `/admin/import-help` static reference page; ARCHITECTURE.md / README.md / ROADMAP.md updated.
+- **6H** — Synthetic-file smoke against `scripts/import-smoke-build.ts` output covering every code path; result captured in `docs/phases/reports/PHASE6-IMPORT-TEST.md`. Production smoke against `mwg-crm-leads-batch-0447.xlsx` requires the file to be placed at `./test-data/` and run by the user.
+- **6I** — `/admin/import-help` static reference page; `docs/architecture/ARCHITECTURE.md` / README.md / ROADMAP.md updated.
 
 ### Deferred to a follow-up phase
 
 - **OCC conflict banner UI (5C polish, still deferred).** Backend now wired (Phase 6B); the per-form banner with names + "View their changes" remains the polish item.
 - **Admin claim-and-remap tool for `activities.imported_by_name`.**
 - **Bulk re-parse of legacy D365 dumps still living in `description`.**
-- **Production import smoke against `mwg-crm-leads-batch-0447.xlsx`** — tracked in `PHASE6-IMPORT-TEST.md`. Run when the file is available.
+- **Production import smoke against `mwg-crm-leads-batch-0447.xlsx`** — tracked in `docs/phases/reports/PHASE6-IMPORT-TEST.md`. Run when the file is available.
 - **Account / Contact / Opportunity edit forms** — when those ship, route through `concurrentUpdate` from day one.

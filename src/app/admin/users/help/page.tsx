@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * list header so admins can answer "what does this toggle do?" without
  * spelunking through code.
  *
- * Source of truth: PHASE9-PERMISSIONS-AUDIT.md (Sub-agent C task list,
+ * Source of truth: docs/phases/reports/PHASE9-PERMISSIONS-AUDIT.md (Sub-agent C task list,
  * item 3 table). When new flags are added, update both this page AND
  * the audit doc.
  */

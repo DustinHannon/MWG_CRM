@@ -55,7 +55,7 @@ function buildCspHeader(nonce: string): string {
   // style-src 'unsafe-inline': pragmatic compromise. shadcn/Radix and
   // react-hook-form inject styles at runtime; nonce-tagging every one
   // would require deep framework integration. Documented in
-  // SECURITY-NOTES.md.
+  // docs/architecture/SECURITY-NOTES.md.
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval'`,
