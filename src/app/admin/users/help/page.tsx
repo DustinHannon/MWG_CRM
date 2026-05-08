@@ -178,7 +178,7 @@ export default async function UsersHelpPage() {
             <tr className="text-sm">
               <td className="px-5 py-3 align-top">
                 <span className="font-mono text-xs text-foreground">isAdmin</span>
-                <span className="ml-2 inline-block rounded-full border border-blue-500/30 bg-blue-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-blue-700 dark:border-blue-300/30 dark:text-blue-100">
+                <span className="ml-2 inline-block rounded-full border border-[var(--status-new-fg)]/30 bg-[var(--status-new-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--status-new-fg)]">
                   separate field
                 </span>
               </td>
@@ -235,7 +235,7 @@ function FlagRow({
         <span
           className={
             defaultValue === "ON"
-              ? "inline-block rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-700 dark:border-emerald-300/30 dark:text-emerald-100"
+              ? "inline-block rounded-full border border-[var(--status-won-fg)]/30 bg-[var(--status-won-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--status-won-fg)]"
               : "inline-block rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
           }
         >

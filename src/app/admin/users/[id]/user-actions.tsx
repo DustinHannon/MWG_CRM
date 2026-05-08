@@ -134,7 +134,7 @@ export function UserActions({
                   }
                 });
               }}
-              className="rounded-md border border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-100 transition hover:bg-amber-500/20 disabled:opacity-50"
+              className="rounded-md border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] px-3 py-2 text-sm text-[var(--priority-medium-fg)] transition hover:bg-[var(--priority-medium-bg)]/80 disabled:opacity-50"
             >
               Rotate breakglass password
             </button>
@@ -144,21 +144,21 @@ export function UserActions({
         {error ? (
           <div
             role="alert"
-            className="mt-4 rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-100"
+            className="mt-4 rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-2 text-sm text-[var(--status-lost-fg)]"
           >
             {error}
           </div>
         ) : null}
 
         {rotated !== null ? (
-          <div className="mt-4 rounded-md border border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 p-4 text-sm">
-            <p className="font-medium text-amber-50">
+          <div className="mt-4 rounded-md border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] p-4 text-sm">
+            <p className="font-medium text-[var(--priority-medium-fg)]">
               New breakglass password (shown once):
             </p>
             <code className="mt-2 block break-all rounded bg-black/30 px-3 py-2 font-mono text-xs text-foreground">
               {rotated}
             </code>
-            <p className="mt-2 text-xs text-amber-700 dark:text-amber-100/80">
+            <p className="mt-2 text-xs text-[var(--priority-medium-fg)]/80">
               Store it in your password manager now. We won&apos;t show it again.
             </p>
           </div>
@@ -218,7 +218,7 @@ function Toggle({
       disabled={disabled}
       onClick={() => onChange(!value)}
       className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${
-        value ? "bg-emerald-500/80" : "bg-muted"
+        value ? "bg-[var(--status-won-fg)]" : "bg-muted"
       }`}
     >
       <span
