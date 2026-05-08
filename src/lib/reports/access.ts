@@ -1,10 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, gt, lte, lt, ilike, sql, type SQL } from "drizzle-orm";
-import { db } from "@/db";
-import { activities } from "@/db/schema/activities";
-import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
-import { leads } from "@/db/schema/leads";
-import { tasks } from "@/db/schema/tasks";
+import { sqlClient } from "@/db";
 import {
   type ReportEntityType,
   type ReportMetric,
@@ -13,7 +8,6 @@ import {
 import { ForbiddenError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { getPermissions } from "@/lib/auth-helpers";
-import { combine, withActive } from "@/lib/db/query-helpers";
 import { isValidField, REPORT_ENTITIES } from "./schemas";
 
 /**
@@ -30,6 +24,14 @@ import { isValidField, REPORT_ENTITIES } from "./schemas";
  *      their own pipeline.
  *
  * Returns either a flat array (no group_by) or aggregated rows.
+ *
+ * Implementation note (post-smoke fix): the dynamic-columns nature of
+ * a report builder doesn't fit Drizzle's typed query builder, and
+ * Drizzle's `sql` template tag misbehaves when mixing `sql.raw` for
+ * identifier substitution with parameterized child fragments. So this
+ * file goes through the raw postgres-js tag instead. Identifiers are
+ * pre-validated against the report schema whitelist (`isValidField`)
+ * and re-escaped (`escapeIdent`) before string interpolation.
  */
 
 export type ReportFilters = Record<string, unknown>;
@@ -44,6 +46,22 @@ export interface ExecutedReport {
 const MAX_ROWS = 5000;
 const PREVIEW_ROWS = 100;
 
+/* ---------------------------------------------------------------------- */
+/* Identifier safety                                                      */
+/* ---------------------------------------------------------------------- */
+
+function escapeIdent(s: string): string {
+  return s.replace(/[^A-Za-z0-9_]/g, "");
+}
+
+function quote(ident: string): string {
+  return `"${escapeIdent(ident)}"`;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Public API                                                             */
+/* ---------------------------------------------------------------------- */
+
 export async function executeReport(
   report: SavedReport,
   viewer: SessionUser,
@@ -57,19 +75,38 @@ export async function executeReport(
   }
 
   const limit = options?.preview ? PREVIEW_ROWS : MAX_ROWS;
-  const scopeFrag = await buildViewerScope(entityType, viewer);
-  const filterFrag = buildFilterFrag(entityType, report.filters as ReportFilters);
-  const softDeleteFrag = buildSoftDeleteFrag(entityType);
-  const where = combine(scopeFrag, filterFrag, softDeleteFrag);
+  const params: unknown[] = [];
+  const conditions: string[] = [];
+
+  // 1. soft-delete (always present for these entities)
+  conditions.push(`${quote(REPORT_ENTITIES[entityType].softDeleteColumn ?? "is_deleted")} = false`);
+
+  // 2. viewer scope
+  const scope = await buildViewerScope(entityType, viewer);
+  if (scope) {
+    const placeholder = `$${params.length + 1}`;
+    params.push(scope.value);
+    conditions.push(`${quote(scope.column)} = ${placeholder}`);
+  }
+
+  // 3. user-defined filters
+  const userFilters = buildFilterClauses(
+    entityType,
+    (report.filters as ReportFilters) ?? {},
+    params,
+  );
+  for (const c of userFilters) conditions.push(c);
+
+  const whereSql = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
 
   const groupBy = (report.groupBy as string[]) ?? [];
   const metrics = (report.metrics as ReportMetric[]) ?? [];
   const fields = (report.fields as string[]) ?? [];
 
   if (groupBy.length === 0 && metrics.length === 0) {
-    return runFlatQuery(entityType, fields, where, limit);
+    return runFlatQuery(entityType, fields, whereSql, params, limit);
   }
-  return runAggregateQuery(entityType, fields, groupBy, metrics, where, limit);
+  return runAggregateQuery(entityType, groupBy, metrics, whereSql, params, limit);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -113,48 +150,29 @@ export async function assertCanDeleteReport(
 }
 
 /* ---------------------------------------------------------------------- */
-/* Query construction                                                     */
+/* Where-clause builders                                                  */
 /* ---------------------------------------------------------------------- */
 
 async function buildViewerScope(
   entityType: ReportEntityType,
   viewer: SessionUser,
-): Promise<SQL | undefined> {
+): Promise<{ column: string; value: string } | undefined> {
   if (viewer.isAdmin) return undefined;
   const perms = await getPermissions(viewer.id);
   if (perms.canViewAllRecords) return undefined;
   switch (entityType) {
     case "lead":
-      return eq(leads.ownerId, viewer.id);
+      return { column: "owner_id", value: viewer.id };
     case "account":
-      return eq(crmAccounts.ownerId, viewer.id);
+      return { column: "owner_id", value: viewer.id };
     case "contact":
-      return eq(contacts.ownerId, viewer.id);
+      return { column: "owner_id", value: viewer.id };
     case "opportunity":
-      return eq(opportunities.ownerId, viewer.id);
+      return { column: "owner_id", value: viewer.id };
     case "task":
-      // Task scope: assignee. Owner-of-related-record is also valid in
-      // the read-policy but not exposed here yet.
-      return eq(tasks.assignedToId, viewer.id);
+      return { column: "assigned_to_id", value: viewer.id };
     case "activity":
-      return eq(activities.userId, viewer.id);
-  }
-}
-
-function buildSoftDeleteFrag(entityType: ReportEntityType): SQL | undefined {
-  switch (entityType) {
-    case "lead":
-      return withActive(leads.isDeleted);
-    case "account":
-      return withActive(crmAccounts.isDeleted);
-    case "contact":
-      return withActive(contacts.isDeleted);
-    case "opportunity":
-      return withActive(opportunities.isDeleted);
-    case "task":
-      return withActive(tasks.isDeleted);
-    case "activity":
-      return withActive(activities.isDeleted);
+      return { column: "user_id", value: viewer.id };
   }
 }
 
@@ -164,55 +182,56 @@ function buildSoftDeleteFrag(entityType: ReportEntityType): SQL | undefined {
  *   { status: { in: ["new", "contacted"] }, amount: { gte: 1000 } }
  *
  * Each filter key must be a whitelisted column on the entity. Values
- * are validated against the column's `kind`. Anything unknown is
- * silently dropped — better than crashing on a stale filter.
+ * are pushed onto the shared `params` array; the returned strings
+ * include `$N` placeholders pointing at those slots.
  */
-function buildFilterFrag(
+function buildFilterClauses(
   entityType: ReportEntityType,
   filters: ReportFilters,
-): SQL | undefined {
-  if (!filters || typeof filters !== "object") return undefined;
-  const frags: SQL[] = [];
+  params: unknown[],
+): string[] {
+  if (!filters || typeof filters !== "object") return [];
+  const out: string[] = [];
   for (const [field, raw] of Object.entries(filters)) {
     if (!isValidField(entityType, field)) continue;
     if (!raw || typeof raw !== "object") continue;
     const op = raw as Record<string, unknown>;
-    // Cast to text on the column side so enum-typed columns (lead.status,
-    // opportunity.stage, task.status, task.priority, etc.) compare cleanly
-    // against the JSON-encoded string filter values without per-enum type
-    // knowledge. text-typed columns are unaffected by the cast.
-    const colSql = sql.raw(`"${escapeIdent(field)}"::text`);
+    // Cast on the column side so enum-typed columns (lead.status,
+    // opportunity.stage, task.status, task.priority, etc.) compare
+    // cleanly against the JSON-encoded string filter values without
+    // per-enum type knowledge. Plain text columns are unaffected.
+    const colExpr = `${quote(field)}::text`;
     if ("eq" in op && op.eq !== undefined && op.eq !== null) {
-      frags.push(sql`${colSql} = ${String(op.eq)}`);
+      params.push(String(op.eq));
+      out.push(`${colExpr} = $${params.length}`);
     }
     if ("ilike" in op && typeof op.ilike === "string") {
-      frags.push(sql`${colSql} ILIKE ${`%${op.ilike}%`}`);
+      params.push(`%${op.ilike}%`);
+      out.push(`${colExpr} ILIKE $${params.length}`);
     }
     if ("gte" in op && op.gte !== undefined) {
-      frags.push(sql`${colSql} >= ${op.gte}`);
+      params.push(op.gte);
+      out.push(`${colExpr} >= $${params.length}`);
     }
     if ("lte" in op && op.lte !== undefined) {
-      frags.push(sql`${colSql} <= ${op.lte}`);
+      params.push(op.lte);
+      out.push(`${colExpr} <= $${params.length}`);
     }
     if ("gt" in op && op.gt !== undefined) {
-      frags.push(sql`${colSql} > ${op.gt}`);
+      params.push(op.gt);
+      out.push(`${colExpr} > $${params.length}`);
     }
     if ("lt" in op && op.lt !== undefined) {
-      frags.push(sql`${colSql} < ${op.lt}`);
+      params.push(op.lt);
+      out.push(`${colExpr} < $${params.length}`);
     }
     if ("in" in op && Array.isArray(op.in) && op.in.length > 0) {
-      // = ANY($1::text[]) avoids per-enum-type cast knowledge.
       const stringValues = op.in.map((v) => String(v));
-      frags.push(sql`${colSql} = ANY(${stringValues}::text[])`);
+      params.push(stringValues);
+      out.push(`${colExpr} = ANY($${params.length}::text[])`);
     }
   }
-  if (frags.length === 0) return undefined;
-  if (frags.length === 1) return frags[0];
-  return and(...frags);
-}
-
-function escapeIdent(s: string): string {
-  return s.replace(/[^A-Za-z0-9_]/g, "");
+  return out;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -222,7 +241,8 @@ function escapeIdent(s: string): string {
 async function runFlatQuery(
   entityType: ReportEntityType,
   fields: string[],
-  where: SQL | undefined,
+  whereSql: string,
+  params: unknown[],
   limit: number,
 ): Promise<ExecutedReport> {
   const columns = fields.length > 0 ? fields : defaultFields(entityType);
@@ -234,19 +254,17 @@ async function runFlatQuery(
     return { rows: [], totalCount: 0, columns: [] };
   }
 
-  const table = REPORT_ENTITIES[entityType].table;
-  const cols = safeColumns.map((c) => `"${c}"`).join(", ");
-  const whereSql = where ? sql` WHERE ${where}` : sql``;
-  const orderSql = sql.raw(
-    isValidField(entityType, "updated_at")
-      ? ' ORDER BY "updated_at" DESC NULLS LAST'
-      : "",
-  );
-  const limitSql = sql.raw(` LIMIT ${limit}`);
+  const meta = REPORT_ENTITIES[entityType];
+  const cols = safeColumns.map(quote).join(", ");
+  const orderClause = isValidField(entityType, "updated_at")
+    ? ' ORDER BY "updated_at" DESC NULLS LAST'
+    : "";
+  const sqlText = `SELECT ${cols} FROM ${quote(meta.table)}${whereSql}${orderClause} LIMIT ${Number(limit) | 0}`;
 
-  const rows: Record<string, unknown>[] = await db.execute(
-    sql`SELECT ${sql.raw(cols)} FROM ${sql.raw(`"${escapeIdent(table)}"`)}${whereSql}${orderSql}${limitSql}`,
-  );
+  const rows = (await sqlClient.unsafe(sqlText, params as never[])) as Record<
+    string,
+    unknown
+  >[];
 
   return { rows, totalCount: rows.length, columns: safeColumns };
 }
@@ -257,10 +275,10 @@ async function runFlatQuery(
 
 async function runAggregateQuery(
   entityType: ReportEntityType,
-  _fields: string[],
   groupBy: string[],
   metrics: ReportMetric[],
-  where: SQL | undefined,
+  whereSql: string,
+  params: unknown[],
   limit: number,
 ): Promise<ExecutedReport> {
   const safeGroups = groupBy
@@ -269,38 +287,42 @@ async function runAggregateQuery(
   if (safeGroups.length === 0) {
     return { rows: [], totalCount: 0, columns: [] };
   }
-  const table = REPORT_ENTITIES[entityType].table;
-  const groupCols = safeGroups.map((c) => `"${c}"`).join(", ");
+  const meta = REPORT_ENTITIES[entityType];
+  const groupCols = safeGroups.map(quote).join(", ");
   const metricSelects: string[] = [];
+  const aliasOut: string[] = [];
   for (const m of metrics) {
     const alias = escapeIdent(m.alias || `${m.fn}_${m.field || "all"}`);
     if (m.fn === "count") {
       metricSelects.push(`count(*) AS "${alias}"`);
+      aliasOut.push(alias);
     } else if (m.field && isValidField(entityType, m.field)) {
       const safeField = escapeIdent(m.field);
       const fn = m.fn;
       if (fn === "sum" || fn === "avg" || fn === "min" || fn === "max") {
-        metricSelects.push(`${fn}("${safeField}") AS "${alias}"`);
+        metricSelects.push(`${fn}(${quote(safeField)}) AS "${alias}"`);
+        aliasOut.push(alias);
       }
     }
   }
-  if (metricSelects.length === 0) metricSelects.push('count(*) AS "count"');
+  if (metricSelects.length === 0) {
+    metricSelects.push('count(*) AS "count"');
+    aliasOut.push("count");
+  }
 
-  const whereSql = where ? sql` WHERE ${where}` : sql``;
   const select = `${groupCols}, ${metricSelects.join(", ")}`;
-  const orderSql = sql.raw(` ORDER BY ${groupCols}`);
-  const limitSql = sql.raw(` LIMIT ${limit}`);
+  const sqlText = `SELECT ${select} FROM ${quote(meta.table)}${whereSql} GROUP BY ${groupCols} ORDER BY ${groupCols} LIMIT ${Number(limit) | 0}`;
 
-  const rows: Record<string, unknown>[] = await db.execute(
-    sql`SELECT ${sql.raw(select)} FROM ${sql.raw(`"${escapeIdent(table)}"`)}${whereSql} GROUP BY ${sql.raw(groupCols)}${orderSql}${limitSql}`,
-  );
+  const rows = (await sqlClient.unsafe(sqlText, params as never[])) as Record<
+    string,
+    unknown
+  >[];
 
-  const columns = [
-    ...safeGroups,
-    ...metrics.map((m) => escapeIdent(m.alias || `${m.fn}_${m.field || "all"}`)),
-  ];
-
-  return { rows, totalCount: rows.length, columns };
+  return {
+    rows,
+    totalCount: rows.length,
+    columns: [...safeGroups, ...aliasOut],
+  };
 }
 
 function defaultFields(entityType: ReportEntityType): string[] {
@@ -319,14 +341,3 @@ function defaultFields(entityType: ReportEntityType): string[] {
       return ["kind", "subject", "occurred_at", "user_id"];
   }
 }
-
-// Silence unused-import lint until the helpers are referenced from a
-// future filter expression that needs them directly.
-void asc;
-void desc;
-void count;
-void gte;
-void gt;
-void lte;
-void lt;
-void ilike;

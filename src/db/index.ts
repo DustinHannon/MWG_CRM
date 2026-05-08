@@ -51,3 +51,13 @@ const client = postgres(env.POSTGRES_URL, {
 
 export const db = drizzle(client, { schema });
 export type DB = typeof db;
+
+/**
+ * Phase 11 — raw postgres-js tag for callers that need to compose SQL
+ * with dynamically-validated identifiers (e.g., the Reports feature's
+ * executeReport, which can't use Drizzle's typed query builder because
+ * the column list is determined at runtime). Use sparingly: every
+ * caller MUST validate identifiers against an allowlist before
+ * interpolation. For typed queries, prefer `db`.
+ */
+export { client as sqlClient };
