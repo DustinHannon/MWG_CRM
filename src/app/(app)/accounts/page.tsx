@@ -8,6 +8,8 @@ import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { encodeCursor, parseCursor } from "@/lib/leads";
+import { canDeleteAccount } from "@/lib/access/can-delete";
+import { AccountRowActions } from "./_components/account-row-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -87,12 +89,22 @@ export default async function AccountsPage({
             Companies — created from lead conversions or directly.
           </p>
         </div>
-        <Link
-          href="/accounts/new"
-          className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-        >
-          + New account
-        </Link>
+        <div className="flex gap-2">
+          {session.isAdmin ? (
+            <Link
+              href="/accounts/archived"
+              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted"
+            >
+              Archived
+            </Link>
+          ) : null}
+          <Link
+            href="/accounts/new"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+          >
+            + New account
+          </Link>
+        </div>
       </div>
 
       <GlassCard className="mt-6 overflow-hidden p-0">
@@ -113,11 +125,13 @@ export default async function AccountsPage({
                 <th className="px-4 py-3">Owner</th>
                 <th className="px-4 py-3 text-right">Won deals</th>
                 <th className="px-4 py-3">Created</th>
+                {/* Phase 10 — fixed-width trailing actions cell. */}
+                <th className="w-10 px-2 py-3" aria-label="actions" />
               </tr>
             </thead>
             <tbody className="divide-y divide-glass-border">
               {rows.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className="group">
                   <td className="px-4 py-2.5">
                     <Link
                       href={`/accounts/${r.id}`}
@@ -149,6 +163,13 @@ export default async function AccountsPage({
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
                     <UserTime value={r.createdAt} mode="date" />
+                  </td>
+                  <td className="w-10 px-2 py-2.5 align-middle">
+                    <AccountRowActions
+                      accountId={r.id}
+                      accountName={r.name}
+                      canDelete={canDeleteAccount(session, { ownerId: r.ownerId })}
+                    />
                   </td>
                 </tr>
               ))}

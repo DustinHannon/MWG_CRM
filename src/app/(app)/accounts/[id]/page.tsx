@@ -9,6 +9,8 @@ import { UserTime } from "@/components/ui/user-time";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
+import { canDeleteAccount } from "@/lib/access/can-delete";
+import { AccountDetailDelete } from "../_components/account-detail-delete";
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +139,12 @@ export default async function AccountDetailPage({
           >
             + New opportunity
           </Link>
+          {canDeleteAccount(session, { ownerId: account.ownerId }) ? (
+            <AccountDetailDelete
+              accountId={account.id}
+              accountName={account.name}
+            />
+          ) : null}
         </div>
       </div>
 

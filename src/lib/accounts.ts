@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
@@ -92,4 +92,63 @@ export async function listAccountsForPicker(
     .orderBy(asc(crmAccounts.name))
     .limit(500);
   return rows;
+}
+
+/**
+ * Phase 10 — soft delete (archive). Sets `is_deleted=true` and the
+ * deletion-attribution columns on a batch of accounts.
+ *
+ * @actor account owner or admin (caller enforces)
+ */
+export async function archiveAccountsById(
+  ids: string[],
+  actorId: string,
+  reason?: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(crmAccounts)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorId,
+      deleteReason: reason ?? null,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(crmAccounts.id, ids));
+}
+
+/**
+ * Phase 10 — restore archived accounts.
+ *
+ * @actor admin only (caller enforces)
+ */
+export async function restoreAccountsById(
+  ids: string[],
+  actorId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(crmAccounts)
+    .set({
+      isDeleted: false,
+      deletedAt: null,
+      deletedById: null,
+      deleteReason: null,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(crmAccounts.id, ids));
+  void actorId;
+}
+
+/**
+ * Phase 10 — admin hard-delete. Cascades through opportunities and
+ * contacts via FK ON DELETE SET NULL / CASCADE depending on the link.
+ * Use only from admin flows.
+ *
+ * @actor admin only (caller enforces)
+ */
+export async function deleteAccountsById(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.delete(crmAccounts).where(inArray(crmAccounts.id, ids));
 }

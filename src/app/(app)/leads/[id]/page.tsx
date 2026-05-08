@@ -13,7 +13,10 @@ import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { env } from "@/lib/env";
 import { getLeadById } from "@/lib/leads";
 import { formatPersonName } from "@/lib/format/person-name";
-import { deleteLeadAction } from "../actions";
+import { LeadDetailDelete } from "./_components/lead-detail-delete";
+import { canDeleteLead } from "@/lib/access/can-delete";
+import { formatPersonName as _fpn } from "@/lib/format/person-name";
+void _fpn;
 import { ConvertModal } from "./convert/_components/convert-modal";
 import { ActivityComposer } from "./activities/activity-composer";
 import { ActivityFeed } from "./activities/activity-feed";
@@ -38,7 +41,9 @@ export default async function LeadDetailPage({
   void (await import("@/lib/recent-views")).trackView(user.id, "lead", lead.id);
 
   const canEdit = user.isAdmin || perms.canEditLeads;
-  const canDelete = user.isAdmin || perms.canDeleteLeads;
+  // Phase 10 — strict ownership-or-admin per the matrix. The legacy
+  // canDeleteLeads permission flag is no longer the gate.
+  const canDelete = canDeleteLead(user, { ownerId: lead.ownerId });
 
   // Provenance — created-by display name + import job filename. Two
   // small lookups; the joins live here rather than on getLeadById so
@@ -165,20 +170,10 @@ export default async function LeadDetailPage({
             Print / PDF
           </a>
           {canDelete ? (
-            <form
-              action={async (fd) => {
-                "use server";
-                await deleteLeadAction(fd);
-              }}
-            >
-              <input type="hidden" name="id" value={lead.id} />
-              <button
-                type="submit"
-                className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-3 py-1.5 text-sm text-rose-700 dark:text-rose-100 transition hover:bg-destructive/20"
-              >
-                Archive
-              </button>
-            </form>
+            <LeadDetailDelete
+              leadId={lead.id}
+              leadName={formatPersonName(lead)}
+            />
           ) : null}
         </div>
       </div>

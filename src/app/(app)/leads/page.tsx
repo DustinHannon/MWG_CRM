@@ -2,8 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import {
+  getPermissions,
+  requireSession,
+  type SessionUser,
+} from "@/lib/auth-helpers";
+import { canDeleteLead } from "@/lib/access/can-delete";
 import { UserChip } from "@/components/user-display";
+import { LeadRowActions } from "./_components/lead-row-actions";
 import {
   AVAILABLE_COLUMNS,
   type ColumnKey,
@@ -289,13 +295,15 @@ export default async function LeadsPage({
                   {AVAILABLE_COLUMNS.find((col) => col.key === c)?.label ?? c}
                 </th>
               ))}
+              {/* Phase 10 — fixed-width trailing actions cell. */}
+              <th className="w-10 px-2 py-3" aria-label="actions" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
             {result.rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={activeColumns.length}
+                  colSpan={activeColumns.length + 1}
                   className="px-5 py-12 text-center text-muted-foreground"
                 >
                   No leads match this view.
@@ -303,12 +311,22 @@ export default async function LeadsPage({
               </tr>
             ) : null}
             {result.rows.map((l) => (
-              <tr key={l.id} className="transition hover:bg-muted/40">
+              // Phase 10 — `group` enables hover-revealed trash icon
+              // on desktop. The trailing cell stays in the layout
+              // regardless so column widths don't shift on hover.
+              <tr key={l.id} className="group transition hover:bg-muted/40">
                 {activeColumns.map((c) => (
                   <td key={c} className="px-5 py-3 align-top">
                     {renderCell(l, c, timePrefs)}
                   </td>
                 ))}
+                <td className="w-10 px-2 py-3 align-top">
+                  <LeadRowActions
+                    leadId={l.id}
+                    leadName={leadDisplayName(l)}
+                    canDelete={canDeleteLead(user as SessionUser, { ownerId: l.ownerId })}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -374,6 +392,11 @@ function CursorNav({
       </div>
     </nav>
   );
+}
+
+function leadDisplayName(l: LeadRow): string {
+  const name = `${l.firstName ?? ""} ${l.lastName ?? ""}`.trim();
+  return name || l.companyName || l.email || "this lead";
 }
 
 function buildExportHref(sp: SearchParams): string {

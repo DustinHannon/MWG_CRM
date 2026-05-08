@@ -27,6 +27,8 @@ import { leads } from "@/db/schema/leads";
 import { cleanupBlobsForLeads, gatherBlobsForLeads } from "@/lib/blob-cleanup";
 import { logger } from "@/lib/logger";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
+import { canDeleteLead } from "@/lib/access/can-delete";
+import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
 
 function formToObject(formData: FormData): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
@@ -182,6 +184,9 @@ export async function updateLeadAction(
  * the row is preserved for 30 days, then `cron/purge-archived` hard-deletes.
  * Admins can hard-delete from /leads/archived.
  *
+ * Phase 10 — kept for backwards compatibility on the existing detail-page
+ * form action. New callers should prefer `softDeleteLeadAction`.
+ *
  * @actor signed-in user with delete permission and lead access
  */
 export async function deleteLeadAction(
@@ -209,6 +214,104 @@ export async function deleteLeadAction(
       });
       revalidatePath("/leads");
       redirect("/leads");
+    },
+  );
+}
+
+/**
+ * Phase 10 — JSON-input variant for the new client UI. Returns an
+ * `undoToken` that the toast Undo button can replay. Permission gate
+ * is strict ownership-or-admin per the Phase 10 matrix.
+ *
+ * @actor lead owner or admin
+ */
+export async function softDeleteLeadAction(input: {
+  id: string;
+  reason?: string;
+}): Promise<ActionResult<{ undoToken: string }>> {
+  return withErrorBoundary(
+    { action: "lead.archive", entityType: "lead", entityId: input.id },
+    async () => {
+      const user = await requireSession();
+      const id = z.string().uuid().parse(input.id);
+      const reason = input.reason?.trim() || undefined;
+
+      // Re-fetch — never trust the client's claim of ownership.
+      const [row] = await db
+        .select({ id: leads.id, ownerId: leads.ownerId, firstName: leads.firstName, lastName: leads.lastName })
+        .from(leads)
+        .where(eq(leads.id, id))
+        .limit(1);
+      if (!row) throw new ForbiddenError("Lead not found.");
+      if (!canDeleteLead(user, row)) {
+        await writeAudit({
+          actorId: user.id,
+          action: "access.denied.lead.delete",
+          targetType: "lead",
+          targetId: id,
+        });
+        throw new ForbiddenError("You can't archive this lead.");
+      }
+
+      await archiveLeadsById([id], user.id, reason);
+      await writeAudit({
+        actorId: user.id,
+        action: "lead.archive",
+        targetType: "lead",
+        targetId: id,
+        before: { firstName: row.firstName, lastName: row.lastName, ownerId: row.ownerId },
+        after: { reason: reason ?? null },
+      });
+
+      const undoToken = signUndoToken({
+        entity: "lead",
+        id,
+        deletedAt: new Date(),
+      });
+
+      revalidatePath("/leads");
+      revalidatePath(`/leads/${id}`);
+      return { undoToken };
+    },
+  );
+}
+
+/**
+ * Phase 10 — toast-Undo replay. Re-checks the HMAC, then restores. Same
+ * ownership/admin check applies (the user must still be allowed to act
+ * on this lead, even if 2 seconds ago they were).
+ *
+ * @actor original archiver, owner, or admin
+ */
+export async function undoArchiveLeadAction(input: {
+  undoToken: string;
+}): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "lead.unarchive_undo" },
+    async () => {
+      const user = await requireSession();
+      const payload = verifyUndoToken(input.undoToken);
+      if (payload.entity !== "lead") {
+        throw new ForbiddenError("Token mismatch.");
+      }
+      const [row] = await db
+        .select({ id: leads.id, ownerId: leads.ownerId })
+        .from(leads)
+        .where(eq(leads.id, payload.id))
+        .limit(1);
+      if (!row) throw new ForbiddenError("Lead not found.");
+      if (!canDeleteLead(user, row)) {
+        throw new ForbiddenError("You can't restore this lead.");
+      }
+      await restoreLeadsById([payload.id], user.id);
+      await writeAudit({
+        actorId: user.id,
+        action: "lead.unarchive_undo",
+        targetType: "lead",
+        targetId: payload.id,
+      });
+      revalidatePath("/leads");
+      revalidatePath("/leads/archived");
     },
   );
 }
