@@ -47,7 +47,14 @@ export function MobileSidebar({ brand, nav, user }: MobileSidebarProps) {
         <button
           type="button"
           aria-label="Open navigation"
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-glass-border bg-card/40 text-muted-foreground transition hover:bg-accent/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+          // `relative z-10` forces a new stacking context above the
+          // header's backdrop-filter layer. Without it, iOS Safari
+          // (and occasionally Chromium) routes the touch through the
+          // backdrop-filter ancestor instead of this button, which
+          // looks like "the hamburger isn't clickable" to the user.
+          // `pointer-events-auto` is the matching defensive belt-
+          // and-braces in case any ancestor sets pointer-events:none.
+          className="relative z-10 inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-glass-border bg-card/40 text-muted-foreground pointer-events-auto transition hover:bg-accent/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
         >
           <Menu size={18} aria-hidden />
         </button>
