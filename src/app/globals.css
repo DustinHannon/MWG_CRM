@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Phase 12 — `tw-animate-css` is the Tailwind v4-compatible successor
+ * to `tailwindcss-animate`. Provides `animate-in` / `animate-out`,
+ * `slide-in-from-*`, `fade-in-*`, `zoom-in-*` etc. utilities used by
+ * Radix Dialog / Popover / Tooltip / AlertDialog throughout the app.
+ * Without this import those classes silently dropped to no-ops while
+ * still emitting the enter-state transform — leaving e.g. the mobile
+ * drawer stuck at translateX(-100%) (off-screen). */
+@import "tw-animate-css";
+
 /* Tailwind v4 dark-mode variant — uses the `.dark` class on <html> that
  * next-themes toggles. Required for the `dark:foo` modifier syntax. */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -670,29 +679,3 @@ pre {
   }
 }
 
-/* Phase 12 — mobile drawer slide-in. Replaces the
-   tailwindcss-animate `data-[state=open]:animate-in slide-in-from-left`
-   pair (the plugin is not installed in this project). Plain @keyframes
-   handles open; Radix unmounts the Content on close so an explicit
-   slide-out isn't required. */
-
-@keyframes mwg-drawer-slide-in {
-  from {
-    transform: translate3d(-100%, 0, 0);
-    opacity: 0.6;
-  }
-  to {
-    transform: translate3d(0, 0, 0);
-    opacity: 1;
-  }
-}
-
-.mwg-drawer-slide-in {
-  animation: mwg-drawer-slide-in 200ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mwg-drawer-slide-in {
-    animation: none;
-  }
-}
