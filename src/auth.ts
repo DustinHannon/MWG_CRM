@@ -152,6 +152,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
   callbacks: {
     /**
+     * Phase 11 — explicit open-redirect guard. Auth.js v5's default
+     * redirect callback already validates same-origin, but having this
+     * be implicit means a future custom `redirect` could silently widen
+     * the policy. Centralising the rule here (and in
+     * `lib/auth-redirect.ts`) protects against that drift.
+     */
+    async redirect({ url, baseUrl }) {
+      const { safeRedirect } = await import("@/lib/auth-redirect");
+      return safeRedirect(url, baseUrl);
+    },
+    /**
      * Cheap pre-check only. Heavy work runs in jwt(). Returning a path here
      * triggers a redirect to that URL — useful for surfacing a friendly
      * error param. Returning false produces Auth.js's generic AccessDenied.
