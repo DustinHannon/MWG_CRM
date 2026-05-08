@@ -300,6 +300,72 @@ activity body when the name doesn't resolve to a CRM user. Future
 admin tooling will let an admin remap historical activities to a real
 user once the person signs up.
 
+## 9.5. Phase 9 — scale prep
+
+The Phase 9C work assumes the production target is **100k+ leads,
+1M+ activities, 40–80 concurrent users** (40 active in business
+hours, peak ~80 during cross-team cadence calls). No new tables, no
+schema redesign — pagination + indexes only.
+
+### Pagination strategy
+
+Every list page that touches a high-volume table moved from offset
+to **cursor pagination** at page size 50 (audit: 100). Cursors are
+plaintext `<sort-key-value>:<uuid>` strings — opaque to the client,
+trivially diffable in URLs. The codec lives in `src/lib/leads.ts`
+(`parseCursor` / `encodeCursor`), with thin variants in `lib/tasks.ts`
+and `lib/notifications.ts` for sort columns of different types.
+
+| Surface | Module | Sort key | Page size |
+|---|---|---|---|
+| `/leads` (default sort) | `runView` in `lib/views.ts` | `(last_activity_at DESC NULLS LAST, id DESC)` | 50 |
+| `/leads` (custom sort) | `runView` in `lib/views.ts` | offset fallback | 50 |
+| `/accounts` | inline in `app/(app)/accounts/page.tsx` | `(updated_at DESC, id DESC)` | 50 |
+| `/contacts` | inline in `app/(app)/contacts/page.tsx` | `(updated_at DESC, id DESC)` | 50 |
+| `/opportunities` | inline in `app/(app)/opportunities/page.tsx` | `(expected_close_date DESC NULLS LAST, id DESC)` | 50 |
+| `/tasks` | `listTasksForUser` in `lib/tasks.ts` | `(assigned_to_id, due_at ASC NULLS LAST, id DESC)` | 50 |
+| `/notifications` | `listNotificationsPage` in `lib/notifications.ts` | `(user_id, created_at DESC, id DESC)` | 50 |
+| `/admin/audit` | inline in `app/admin/audit/page.tsx` | `(created_at DESC, id DESC)` | 100 |
+| `listLeads` (export) | `lib/leads.ts` | offset (`pageSize=10000`) | n/a |
+
+The `pageSize + 1` row trick replaces a separate `COUNT(*)` query —
+the page-fetch grabs one extra row, slices it off if present, and
+emits a `nextCursor` from the last surviving row. UI surfaces
+"Load more" / "Back to start" links instead of "Page X of Y".
+
+`listLeads` keeps the offset path for the leads-export route (a
+single-shot 10k-row download) — the COUNT it skips on the cursor
+path is still cheap at that pageSize and the caller doesn't need
+incremental pagination.
+
+### Composite indexes for cursor seeks
+
+Eight composite indexes added (Phase 9C migrations
+`phase9_idx_*`); see `PHASE9-INDEX-AUDIT.md` §2 for the full table.
+Pattern: `(sort_col DESC[, NULLS LAST], id DESC) WHERE is_deleted = false`.
+Partial-on-`is_deleted=false` shrinks the index to live rows only,
+which matters once archive data accumulates. The `id DESC` tail
+makes cursor seeks deterministic when many rows share a timestamp
+to the millisecond (bulk imports, audit bursts).
+
+### Connection pool
+
+No changes from Phase 1: postgres-js with `max: 1`, `prepare: false`,
+`idle_timeout: 20`, `connect_timeout: 10`. Supavisor IS the pool;
+each Lambda just needs one connection through it. See
+`drizzle_supavisor_max1` memory.
+
+### `statement_timeout` convention
+
+Cursor-paginated list queries are index-scan-then-LIMIT — they exit
+fast and don't need a per-statement timeout. The single in-app
+`SET LOCAL statement_timeout = '5s'` lives in `app/admin/audit/page.tsx`
+when a free-text `q=` filter is applied; the audit log has no FTS /
+trigram index across `target_id` (text-not-uuid) so an unbounded ILIKE
+at 1M+ rows is the actual risk. Use `SET LOCAL` (transaction-scoped)
+not `SET` so timeouts don't leak across pooled callers. Document each
+new timeout in `PHASE9-INDEX-AUDIT.md` §5.
+
 ## 10. Notable decisions
 
 - **Why no DrizzleAdapter for Auth.js**: its expected user-table shape
