@@ -181,13 +181,18 @@ export default async function LeadsPage({
   const savedDirtyId = activeView.source === "saved" ? activeView.id : null;
 
   return (
-    <div className="px-10 py-10">
+    // Phase 12 Sub-E — responsive padding. 16px gutter on mobile up
+    // through tablet, 40px on desktop ≥1280px.
+    <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Leads" }]} />
       {/* Phase 12 — Supabase Realtime is the primary push channel; the
           Phase 11 polling layer remains as the documented fallback. */}
       <PageRealtime entities={["leads"]} />
       <PagePoll entities={["leads"]} />
-      <div className="flex items-end justify-between gap-4">
+      {/* Phase 12 Sub-E — header row stacks on mobile, returns to
+          horizontal layout at >=640px so the +Add lead / Import /
+          Export pills don't collide with the title block. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Leads</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -200,7 +205,9 @@ export default async function LeadsPage({
             {sp.q ? ` matching "${sp.q}"` : ""} · view {activeView.name}
           </p>
         </div>
-        <div className="flex gap-2">
+        {/* Phase 12 Sub-E — flex-wrap on mobile so action pills land
+            on additional rows instead of forcing horizontal overflow. */}
+        <div className="flex flex-wrap gap-2">
           <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
             <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
               Table
@@ -253,14 +260,18 @@ export default async function LeadsPage({
       <form
         action="/leads"
         method="get"
-        className="mt-5 flex flex-wrap items-end gap-3"
+        className="mt-5 flex flex-wrap items-end gap-2 sm:gap-3"
       >
         <input type="hidden" name="view" value={activeViewParam} />
+        {/* Phase 12 Sub-E — search field grows to fill its row on
+            mobile (full width) and shares the row with filters from
+            sm: upward. The 16px font-size override at <640px (set
+            globally) suppresses iOS auto-zoom. */}
         <input
           name="q"
           defaultValue={sp.q ?? ""}
           placeholder="Search name / email / company / phone…"
-          className="min-w-[240px] flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          className="w-full flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 sm:w-auto sm:min-w-[240px]"
         />
         <FilterSelect
           name="status"
@@ -296,7 +307,11 @@ export default async function LeadsPage({
         ) : null}
       </form>
 
-      <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
+      {/* Phase 12 Sub-E — `data-table-cards` reflows the table to a
+          stack of cards at <768px. The Phase 11 desktop table layout
+          is preserved at >=768px. Per-cell `data-label` powers the
+          card-mode field labels via CSS `content: attr(data-label)`. */}
+      <div className="data-table-cards mt-6 overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
         <table className="data-table min-w-full divide-y divide-border/60 text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -325,11 +340,22 @@ export default async function LeadsPage({
               // on desktop. The trailing cell stays in the layout
               // regardless so column widths don't shift on hover.
               <tr key={l.id} className="group transition hover:bg-muted/40">
-                {activeColumns.map((c) => (
-                  <td key={c} className="px-5 py-3 align-top">
-                    {renderCell(l, c, timePrefs)}
-                  </td>
-                ))}
+                {activeColumns.map((c) => {
+                  const colLabel =
+                    AVAILABLE_COLUMNS.find((col) => col.key === c)?.label ?? c;
+                  return (
+                    <td
+                      key={c}
+                      data-label={colLabel}
+                      className="px-5 py-3 align-top"
+                    >
+                      {renderCell(l, c, timePrefs)}
+                    </td>
+                  );
+                })}
+                {/* Trailing actions cell deliberately has no
+                    data-label; the card-mode CSS positions it in
+                    the top-right corner of the stacked card. */}
                 <td className="w-10 px-2 py-3 align-top">
                   <LeadRowActions
                     leadId={l.id}
