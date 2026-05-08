@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   index,
   integer,
   jsonb,
@@ -58,6 +59,14 @@ export const activities = pgTable(
     // Set on import only; manually-created activities leave this NULL.
     // The activities_import_dedup_idx index makes re-imports idempotent.
     importDedupKey: text("import_dedup_key"),
+    // Phase 10 — soft-delete columns. listActivitiesFor* must filter
+    // is_deleted=false; deleteActivity now archives instead of dropping.
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedById: uuid("deleted_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    deleteReason: text("delete_reason"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -69,6 +78,23 @@ export const activities = pgTable(
     index("activities_lead_occurred_idx").on(t.leadId, t.occurredAt.desc()),
     index("activities_user_idx").on(t.userId),
     index("activities_kind_idx").on(t.kind),
+    // Phase 10 — partial active indexes per parent type. The hot path
+    // is "list activities for {parent}" which always filters is_deleted=false.
+    index("activities_active_lead_idx")
+      .on(t.leadId, t.occurredAt.desc())
+      .where(sql`is_deleted = false AND lead_id IS NOT NULL`),
+    index("activities_active_account_idx")
+      .on(t.accountId, t.occurredAt.desc())
+      .where(sql`is_deleted = false AND account_id IS NOT NULL`),
+    index("activities_active_contact_idx")
+      .on(t.contactId, t.occurredAt.desc())
+      .where(sql`is_deleted = false AND contact_id IS NOT NULL`),
+    index("activities_active_opportunity_idx")
+      .on(t.opportunityId, t.occurredAt.desc())
+      .where(sql`is_deleted = false AND opportunity_id IS NOT NULL`),
+    index("activities_deleted_by_id_idx")
+      .on(t.deletedById)
+      .where(sql`deleted_by_id IS NOT NULL`),
     // Phase 6A — partial index on (lead_id, import_dedup_key) for the
     // re-import dedup lookup. Only indexes rows where dedup_key is set,
     // i.e., imported activities.
