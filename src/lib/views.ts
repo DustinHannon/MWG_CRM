@@ -460,7 +460,17 @@ export interface LeadRow {
 
 export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
   const { view, user, canViewAll, page, pageSize } = opts;
-  const merged = { ...view.filters, ...(opts.extraFilters ?? {}) };
+  // Phase 9C — merge only DEFINED keys from extraFilters. Callers
+  // (e.g. /leads/page.tsx) build extraFilters with always-present keys
+  // set to undefined when missing, so a naive spread overwrites the
+  // view's defaults (status / rating / source / tags). That broke
+  // My Open Leads — the view's status filter was clobbered by
+  // `extraFilters.status = undefined` and converted leads leaked in.
+  const merged: typeof view.filters = { ...view.filters };
+  const ef = (opts.extraFilters ?? {}) as Record<string, unknown>;
+  for (const [k, v] of Object.entries(ef)) {
+    if (v !== undefined) (merged as Record<string, unknown>)[k] = v;
+  }
 
   const wheres = [];
 
