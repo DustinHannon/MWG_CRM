@@ -172,7 +172,7 @@ export function TaskListClient({
                               type="button"
                               aria-label={`Archive ${t.title}`}
                               disabled={pending}
-                              className="rounded-md p-1.5 text-muted-foreground/70 transition opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-muted hover:text-rose-600 dark:hover:text-rose-300 focus:opacity-100 disabled:opacity-50"
+                              className="rounded-md p-1.5 text-muted-foreground/70 transition opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-muted hover:text-destructive focus:opacity-100 disabled:opacity-50"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>

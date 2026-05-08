@@ -72,7 +72,7 @@ export default async function UserProfilePage({
       </Link>
 
       {!user.isActive ? (
-        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 text-xs text-amber-700 dark:text-amber-100">
+        <div className="mt-4 rounded-lg border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] p-3 text-xs text-[var(--priority-medium-fg)]">
           This user is deactivated and cannot sign in. Their historical
           records remain visible.
         </div>

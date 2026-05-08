@@ -145,7 +145,7 @@ export default async function ArchivedTasksPage() {
                         <input type="hidden" name="id" value={r.id} />
                         <button
                           type="submit"
-                          className="rounded-md border border-rose-500/30 dark:border-rose-400/30 bg-rose-500/20 dark:bg-rose-500/15 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-300 hover:bg-rose-500/30"
+                          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] hover:bg-destructive/30"
                         >
                           Delete permanently
                         </button>

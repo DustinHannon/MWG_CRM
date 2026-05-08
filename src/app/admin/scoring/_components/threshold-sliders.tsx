@@ -40,7 +40,7 @@ export function ThresholdSliders({
     <div className="mt-4 space-y-3">
       <Slider
         label="Hot"
-        color="text-rose-700 dark:text-rose-300"
+        color="text-[var(--priority-very-high-fg)]"
         value={hot}
         min={cool + 2}
         max={500}
@@ -48,7 +48,7 @@ export function ThresholdSliders({
       />
       <Slider
         label="Warm"
-        color="text-amber-700 dark:text-amber-300"
+        color="text-[var(--priority-medium-fg)]"
         value={warm}
         min={cool + 1}
         max={hot - 1}
@@ -56,7 +56,7 @@ export function ThresholdSliders({
       />
       <Slider
         label="Cool"
-        color="text-sky-700 dark:text-sky-300"
+        color="text-[var(--status-contacted-fg)]"
         value={cool}
         min={-100}
         max={warm - 1}

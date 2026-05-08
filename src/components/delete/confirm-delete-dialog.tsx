@@ -114,7 +114,7 @@ export function ConfirmDeleteDialog({
               type="button"
               onClick={handleConfirm}
               disabled={pending}
-              className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 px-3 py-1.5 text-sm text-rose-700 dark:text-rose-100 transition hover:bg-rose-500/30 disabled:opacity-50"
+              className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/30 disabled:opacity-50"
             >
               {pending ? "Archiving…" : "Archive"}
             </button>
@@ -156,8 +156,8 @@ export function ConfirmHardDeleteDialog({
       <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
-        <AlertDialog.Content className="mwg-mobile-sheet fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-rose-500/30 dark:border-rose-300/30 bg-background p-6 shadow-xl">
-          <AlertDialog.Title className="text-base font-semibold text-rose-700 dark:text-rose-300">
+        <AlertDialog.Content className="mwg-mobile-sheet fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--status-lost-fg)]/30 bg-background p-6 shadow-xl">
+          <AlertDialog.Title className="text-base font-semibold text-[var(--status-lost-fg)]">
             Permanently delete this {label}?
           </AlertDialog.Title>
           <AlertDialog.Description asChild>
@@ -185,7 +185,7 @@ export function ConfirmHardDeleteDialog({
               type="button"
               onClick={handleConfirm}
               disabled={pending}
-              className="rounded-md border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/30 px-3 py-1.5 text-sm text-rose-700 dark:text-rose-100 transition hover:bg-rose-500/40 disabled:opacity-50"
+              className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/40 disabled:opacity-50"
             >
               {pending ? "Deleting…" : "Delete forever"}
             </button>

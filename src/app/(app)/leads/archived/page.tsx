@@ -157,7 +157,7 @@ export default async function ArchivedLeadsPage() {
                         <input type="hidden" name="id" value={r.id} />
                         <button
                           type="submit"
-                          className="rounded-md border border-red-500/30 dark:border-red-400/30 bg-red-500/20 dark:bg-red-500/15 dark:bg-red-500/10 px-3 py-1.5 text-xs text-red-700 dark:text-red-300 hover:bg-red-500/20"
+                          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] hover:bg-destructive/30"
                         >
                           Delete permanently
                         </button>

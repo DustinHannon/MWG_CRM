@@ -27,7 +27,7 @@ export function SigninForm({
       {topError ? (
         <div
           role="alert"
-          className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)]/40 px-3 py-2 text-sm text-[var(--status-lost-fg)]"
         >
           {topError}
         </div>
@@ -87,7 +87,7 @@ export function SigninForm({
           {!state.ok && state.error ? (
             <div
               role="alert"
-              className="rounded-md border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+              className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)]/40 px-3 py-2 text-sm text-[var(--status-lost-fg)]"
             >
               {state.error}
             </div>
