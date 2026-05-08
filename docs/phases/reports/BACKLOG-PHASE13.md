@@ -69,3 +69,31 @@ once at the action layer with one targetId. Bulk archive (none in
 production today, but admin tools could) would lose per-row audit
 attribution. Defer until bulk-archive UI exists.
 
+
+## P13-001a — Pre-auth pages still hold 6 raw palette literals
+
+**Source:** Sub-D follow-up (Phase 12D, 2026-05-08).
+
+Phase 12 Sub-D took the `P13-001` baseline from 114 raw palette
+literals down to 6, all clustered in pre-authentication chrome:
+
+- `src/app/auth/disabled/page.tsx:3` — `bg-slate-950` page bg
+- `src/app/auth/signin/page.tsx:47` — `bg-slate-950` page bg
+- `src/app/auth/signin/page.tsx:49` — `bg-blue-500/20` decorative blob
+- `src/app/auth/signin/page.tsx:50` — `bg-indigo-500/15` decorative blob
+- `src/app/auth/signin/microsoft-button.tsx:22` — `bg-white/95 text-slate-900`
+- `src/app/auth/signin/signin-form.tsx:99` — `bg-white/90 text-slate-900`
+
+These render before next-themes mounts and are intentionally
+locked to a dark glass aesthetic regardless of the user's theme
+preference. Tokenizing them would require either:
+  1. Two new "auth-only" semantic tokens (e.g.
+     `--auth-page-bg`, `--auth-cta-fg`) that ignore the `.dark`
+     toggle — clean but adds tokens for ≤2 surfaces.
+  2. Locking the `<body>` of `(auth)` routes to `class="dark"`
+     unconditionally and re-using `bg-background` etc. — needs a
+     route-segment layout audit.
+
+**Recommendation:** option 2 in Phase 13. Until then the 6 hits
+stay literal — they will not drift because the auth pages own
+their own visual language.
