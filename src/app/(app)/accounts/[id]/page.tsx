@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
+import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 
@@ -49,16 +50,40 @@ export default async function AccountDetailPage({
     account.id,
   );
 
-  const [accountContacts, accountOpps] = await Promise.all([
+  // Phase 9C (workflow) — "Customer since" derives from the earliest
+  // closed_won opportunity on this account. Cheap aggregate query
+  // (one row, single index seek on opportunities_account_idx + filter
+  // on stage); we deliberately keep this on the detail page only —
+  // the listing page uses a per-row count column instead.
+  const [accountContacts, accountOpps, customerSinceRow] = await Promise.all([
     db
       .select()
       .from(contacts)
-      .where(eq(contacts.accountId, id)),
+      .where(and(eq(contacts.accountId, id), eq(contacts.isDeleted, false))),
     db
       .select()
       .from(opportunities)
-      .where(eq(opportunities.accountId, id)),
+      .where(
+        and(
+          eq(opportunities.accountId, id),
+          eq(opportunities.isDeleted, false),
+        ),
+      ),
+    db
+      .select({
+        firstWonAt: sql<Date | null>`min(${opportunities.closedAt})`,
+      })
+      .from(opportunities)
+      .where(
+        and(
+          eq(opportunities.accountId, id),
+          eq(opportunities.stage, "closed_won"),
+          eq(opportunities.isDeleted, false),
+        ),
+      ),
   ]);
+
+  const customerSince = customerSinceRow[0]?.firstWonAt ?? null;
 
   return (
     <div className="px-10 py-10">
@@ -68,10 +93,34 @@ export default async function AccountDetailPage({
       >
         ← Back to accounts
       </Link>
-      <h1 className="mt-3 text-2xl font-semibold">{account.name}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {account.industry ?? "—"} · Owner {account.ownerName ?? "Unassigned"}
-      </p>
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">{account.name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {account.industry ?? "—"} · Owner {account.ownerName ?? "Unassigned"}
+          </p>
+          {customerSince ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Customer since{" "}
+              <UserTime value={customerSince} mode="date" />
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/contacts/new?accountId=${account.id}`}
+            className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted"
+          >
+            + New contact
+          </Link>
+          <Link
+            href={`/opportunities/new?accountId=${account.id}`}
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+          >
+            + New opportunity
+          </Link>
+        </div>
+      </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <GlassCard className="p-5">
