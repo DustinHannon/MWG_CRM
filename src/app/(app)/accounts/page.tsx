@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { crmAccounts } from "@/db/schema/crm-records";
+import { crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
@@ -37,6 +37,20 @@ export default async function AccountsPage({
     );
   }
 
+  // Phase 9C (workflow) — Won deals column. Correlated subquery on
+  // opportunities filtered by stage='closed_won'. The composite index
+  // `opportunities_account_idx` plus the partial `is_deleted=false`
+  // predicate lets Postgres index-only-scan this for typical account
+  // row counts. We deliberately don't grouped-join because that would
+  // either fan out the row count or require a CTE; the subquery
+  // keeps the listing query plan simple.
+  const wonDealsExpr = sql<number>`(
+    SELECT COUNT(*)::int FROM ${opportunities}
+    WHERE ${opportunities.accountId} = ${crmAccounts.id}
+      AND ${opportunities.stage} = 'closed_won'
+      AND ${opportunities.isDeleted} = false
+  )`;
+
   const rowsRaw = await db
     .select({
       id: crmAccounts.id,
@@ -45,6 +59,7 @@ export default async function AccountsPage({
       ownerName: users.displayName,
       createdAt: crmAccounts.createdAt,
       updatedAt: crmAccounts.updatedAt,
+      wonDeals: wonDealsExpr,
     })
     .from(crmAccounts)
     .leftJoin(users, eq(users.id, crmAccounts.ownerId))
@@ -93,6 +108,7 @@ export default async function AccountsPage({
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Industry</th>
                 <th className="px-4 py-3">Owner</th>
+                <th className="px-4 py-3 text-right">Won deals</th>
                 <th className="px-4 py-3">Created</th>
               </tr>
             </thead>
@@ -112,6 +128,9 @@ export default async function AccountsPage({
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
                     {r.ownerName ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-foreground/80">
+                    {r.wonDeals > 0 ? r.wonDeals : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
                     <UserTime value={r.createdAt} mode="date" />
