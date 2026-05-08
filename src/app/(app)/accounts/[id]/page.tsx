@@ -39,7 +39,7 @@ export default async function AccountDetailPage({
     })
     .from(crmAccounts)
     .leftJoin(users, eq(users.id, crmAccounts.ownerId))
-    .where(eq(crmAccounts.id, id))
+    .where(and(eq(crmAccounts.id, id), eq(crmAccounts.isDeleted, false)))
     .limit(1);
 
   if (!account) notFound();

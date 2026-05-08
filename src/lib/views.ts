@@ -464,6 +464,11 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
 
   const wheres = [];
 
+  // Phase 9C — exclude soft-deleted leads from every list view by
+  // default. Archived leads are reachable only via /leads/archived,
+  // which queries directly without runView.
+  wheres.push(eq(leads.isDeleted, false));
+
   // Owner scope. Built-in 'mine' OR no canViewAll → owned by actor only.
   if (!canViewAll && !user.isAdmin) {
     wheres.push(eq(leads.ownerId, user.id));

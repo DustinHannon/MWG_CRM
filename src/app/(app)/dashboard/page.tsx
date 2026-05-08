@@ -85,38 +85,46 @@ export default async function DashboardPage() {
         db.execute<KpiRow>(sql`
           SELECT
             (SELECT count(*)::int FROM leads
-             WHERE status IN ('new','contacted','qualified')
+             WHERE is_deleted = false
+               AND status IN ('new','contacted','qualified')
                AND ${ownerScope}) AS open_leads,
             (SELECT count(*)::int FROM leads
-             WHERE created_at >= now() - interval '7 days'
+             WHERE is_deleted = false
+               AND created_at >= now() - interval '7 days'
                AND ${ownerScope}) AS new_this_week,
             (SELECT count(*)::int FROM activities a
              WHERE a.occurred_at >= now() - interval '7 days'
                AND EXISTS (
                  SELECT 1 FROM leads l
-                 WHERE l.id = a.lead_id AND ${ownerScopeForActivities}
+                 WHERE l.id = a.lead_id
+                   AND l.is_deleted = false
+                   AND ${ownerScopeForActivities}
                )) AS activities_this_week,
             (SELECT count(*)::int FROM leads
-             WHERE status = 'converted'
+             WHERE is_deleted = false
+               AND status = 'converted'
                AND created_at >= now() - interval '90 days'
                AND ${ownerScope}) AS converted_90d,
             (SELECT count(*)::int FROM leads
-             WHERE status IN ('converted','lost','unqualified')
+             WHERE is_deleted = false
+               AND status IN ('converted','lost','unqualified')
                AND created_at >= now() - interval '90 days'
                AND ${ownerScope}) AS closed_90d,
-            (SELECT count(*)::int FROM leads WHERE ${ownerScope}) AS total_leads
+            (SELECT count(*)::int FROM leads
+             WHERE is_deleted = false
+               AND ${ownerScope}) AS total_leads
         `),
         db.execute<StatusRow>(sql`
           SELECT status::text AS status, count(*)::int AS count
           FROM leads
-          WHERE ${ownerScope}
+          WHERE is_deleted = false AND ${ownerScope}
           GROUP BY status
           ORDER BY count DESC
         `),
         db.execute<SourceRow>(sql`
           SELECT source::text AS source, count(*)::int AS count
           FROM leads
-          WHERE ${ownerScope}
+          WHERE is_deleted = false AND ${ownerScope}
           GROUP BY source
           ORDER BY count DESC
         `),
@@ -128,10 +136,12 @@ export default async function DashboardPage() {
           SELECT
             to_char(days.d, 'YYYY-MM-DD') AS d,
             COALESCE((SELECT count(*)::int FROM leads
-                      WHERE ${ownerScope}
+                      WHERE is_deleted = false
+                        AND ${ownerScope}
                         AND created_at::date = days.d), 0) AS created,
             COALESCE((SELECT count(*)::int FROM leads
-                      WHERE ${ownerScope}
+                      WHERE is_deleted = false
+                        AND ${ownerScope}
                         AND status = 'converted'
                         AND COALESCE(converted_at::date, updated_at::date) = days.d), 0) AS converted
           FROM days
@@ -142,7 +152,8 @@ export default async function DashboardPage() {
               SELECT u.display_name AS owner, count(l.id)::int AS open_count
               FROM leads l
               INNER JOIN users u ON u.id = l.owner_id
-              WHERE l.status IN ('new','contacted','qualified')
+              WHERE l.is_deleted = false
+                AND l.status IN ('new','contacted','qualified')
               GROUP BY u.display_name
               ORDER BY open_count DESC
               LIMIT 5

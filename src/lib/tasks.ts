@@ -120,6 +120,8 @@ export async function listTasksForUser(args: {
   pageSize?: number;
 }): Promise<ListTasksResult> {
   const wheres: SQL[] = [];
+  // Phase 9C — exclude soft-deleted tasks from every listing.
+  wheres.push(eq(tasks.isDeleted, false));
   if (args.scope !== "all") {
     wheres.push(eq(tasks.assignedToId, args.userId));
   } else if (!args.isAdmin) {
@@ -187,7 +189,7 @@ export async function listTasksForLead(leadId: string): Promise<TaskRow[]> {
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assignedToId))
     .leftJoin(leads, eq(leads.id, tasks.leadId))
-    .where(eq(tasks.leadId, leadId))
+    .where(and(eq(tasks.leadId, leadId), eq(tasks.isDeleted, false)))
     .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
 }
 
@@ -202,6 +204,7 @@ export async function listOpenTasksForUser(
     .leftJoin(leads, eq(leads.id, tasks.leadId))
     .where(
       and(
+        eq(tasks.isDeleted, false),
         eq(tasks.assignedToId, userId),
         or(eq(tasks.status, "open"), eq(tasks.status, "in_progress"))!,
       ),

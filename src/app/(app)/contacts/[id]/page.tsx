@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
@@ -41,7 +41,7 @@ export default async function ContactDetailPage({
     .from(contacts)
     .leftJoin(crmAccounts, eq(crmAccounts.id, contacts.accountId))
     .leftJoin(users, eq(users.id, contacts.ownerId))
-    .where(eq(contacts.id, id))
+    .where(and(eq(contacts.id, id), eq(contacts.isDeleted, false)))
     .limit(1);
 
   if (!contact) notFound();

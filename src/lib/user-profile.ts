@@ -237,7 +237,7 @@ export async function listOwnedLeads(
       updatedAt: leads.updatedAt,
     })
     .from(leads)
-    .where(and(eq(leads.ownerId, userId), isNull(leads.deletedAt)))
+    .where(and(eq(leads.ownerId, userId), eq(leads.isDeleted, false)))
     .orderBy(desc(leads.updatedAt), desc(leads.id))
     .limit(pageSize);
   return rows;
@@ -271,7 +271,9 @@ export async function listOwnedOpportunities(
     })
     .from(opportunities)
     .leftJoin(crmAccounts, eq(crmAccounts.id, opportunities.accountId))
-    .where(eq(opportunities.ownerId, userId))
+    .where(
+      and(eq(opportunities.ownerId, userId), eq(opportunities.isDeleted, false)),
+    )
     .orderBy(desc(opportunities.updatedAt), desc(opportunities.id))
     .limit(pageSize);
   return rows;
