@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
+import { encodeCursor, parseCursor } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +12,14 @@ const PAGE_SIZE = 100;
 export default async function AuditLogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; action?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; action?: string; cursor?: string }>;
 }) {
   const sp = await searchParams;
-  const page = Math.max(1, Number(sp.page ?? "1"));
-  const offset = (page - 1) * PAGE_SIZE;
 
+  // Phase 9C — cursor pagination on (created_at DESC, id DESC). The
+  // composite index `audit_log_created_at_id_idx` supports millisecond-
+  // bursting writes (e.g. bulk admin actions) without losing ordering.
+  const cursor = parseCursor(sp.cursor);
   const wheres = [];
   if (sp.q && sp.q.trim()) {
     const pattern = `%${sp.q.trim()}%`;
@@ -31,9 +34,25 @@ export default async function AuditLogPage({
     );
   }
   if (sp.action) wheres.push(eq(auditLog.action, sp.action));
+  if (cursor && cursor.ts) {
+    wheres.push(
+      sql`(
+        ${auditLog.createdAt} < ${cursor.ts.toISOString()}::timestamptz
+        OR (${auditLog.createdAt} = ${cursor.ts.toISOString()}::timestamptz AND ${auditLog.id} < ${cursor.id}::uuid)
+      )`,
+    );
+  }
   const where = wheres.length > 0 ? and(...wheres) : undefined;
 
-  const rows = await db
+  // Phase 9C — guard slow searches: ILIKE %q% scans across multiple
+  // text columns can be expensive on a 1M-row audit log. 5s cap is
+  // generous enough for normal browsing and forces a quick fail when
+  // the table grows past the trigram-less threshold.
+  if (sp.q && sp.q.trim()) {
+    await db.execute(sql`SET LOCAL statement_timeout = '5s'`);
+  }
+
+  const rowsRaw = await db
     .select({
       id: auditLog.id,
       actorId: auditLog.actorId,
@@ -50,23 +69,21 @@ export default async function AuditLogPage({
     .from(auditLog)
     .leftJoin(users, eq(auditLog.actorId, users.id))
     .where(where)
-    .orderBy(desc(auditLog.createdAt))
-    .limit(PAGE_SIZE)
-    .offset(offset);
+    .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+    .limit(PAGE_SIZE + 1);
 
-  const totalRow = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(auditLog)
-    .leftJoin(users, eq(auditLog.actorId, users.id))
-    .where(where);
-  const total = totalRow[0]?.count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasMore = rowsRaw.length > PAGE_SIZE;
+  const rows = hasMore ? rowsRaw.slice(0, PAGE_SIZE) : rowsRaw;
+  const last = rows[rows.length - 1];
+  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
 
   return (
     <div className="px-10 py-10">
       <h1 className="text-2xl font-semibold">Audit log</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {total} {total === 1 ? "event" : "events"} recorded. Append-only.
+        {/* Phase 9C — cursor pagination skips the COUNT query. The
+            "Append-only" claim still applies. */}
+        Showing {rows.length}{nextCursor ? "+" : ""} {rows.length === 1 ? "event" : "events"}. Append-only.
       </p>
 
       <form className="mt-6 flex flex-wrap gap-3">
@@ -165,17 +182,19 @@ export default async function AuditLogPage({
         </table>
       </div>
 
-      {totalPages > 1 ? (
+      {nextCursor || sp.cursor ? (
         <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Page {page} of {totalPages}
-          </span>
+          <span>{sp.cursor ? "Showing more results" : "Showing first 100"}</span>
           <div className="flex gap-2">
-            {page > 1 ? (
-              <PageLink sp={sp} target={page - 1}>← Previous</PageLink>
+            {sp.cursor ? (
+              <CursorLink sp={sp} cursor={null}>
+                ← Back to start
+              </CursorLink>
             ) : null}
-            {page < totalPages ? (
-              <PageLink sp={sp} target={page + 1}>Next →</PageLink>
+            {nextCursor ? (
+              <CursorLink sp={sp} cursor={nextCursor}>
+                Load more →
+              </CursorLink>
             ) : null}
           </div>
         </nav>
@@ -184,19 +203,19 @@ export default async function AuditLogPage({
   );
 }
 
-function PageLink({
+function CursorLink({
   sp,
-  target,
+  cursor,
   children,
 }: {
   sp: { q?: string; action?: string };
-  target: number;
+  cursor: string | null;
   children: React.ReactNode;
 }) {
   const params = new URLSearchParams();
   if (sp.q) params.set("q", sp.q);
   if (sp.action) params.set("action", sp.action);
-  params.set("page", String(target));
+  if (cursor) params.set("cursor", cursor);
   return (
     <a
       href={`/admin/audit?${params.toString()}`}
