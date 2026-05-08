@@ -58,7 +58,7 @@ export function ContactForm({
         </label>
         <p className="text-xs text-muted-foreground">
           Up to 500 accounts shown. Edit the account from the contact
-          detail page if the right one isn't listed.
+          detail page if the right one isn&apos;t listed.
         </p>
       </Section>
 

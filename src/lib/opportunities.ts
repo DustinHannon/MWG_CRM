@@ -4,6 +4,11 @@ import { z } from "zod";
 import { db } from "@/db";
 import { contacts, opportunities } from "@/db/schema/crm-records";
 import { writeAudit } from "@/lib/audit";
+import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
+
+// Re-export for server-side callers that previously imported the
+// constant from this module.
+export { OPPORTUNITY_STAGES };
 
 /**
  * Phase 9C (workflow) — direct Opportunity creation, separate from
@@ -17,15 +22,6 @@ import { writeAudit } from "@/lib/audit";
  * existing stage-transition path (in opportunities edit / pipeline)
  * stamps it when the row first hits closed_won/closed_lost.
  */
-export const OPPORTUNITY_STAGES = [
-  "prospecting",
-  "qualification",
-  "proposal",
-  "negotiation",
-  "closed_won",
-  "closed_lost",
-] as const;
-
 export const opportunityCreateSchema = z.object({
   accountId: z.string().uuid("Account is required"),
   primaryContactId: z.string().uuid().optional().nullable(),

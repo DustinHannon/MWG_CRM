@@ -21,7 +21,7 @@ export default async function NewAccountPage() {
       <h1 className="mt-1 text-2xl font-semibold">Add account</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Create an account directly. Lead conversion is the usual path —
-        use this when you're starting from a known customer.
+        use this when you&apos;re starting from a known customer.
       </p>
 
       <AccountForm />

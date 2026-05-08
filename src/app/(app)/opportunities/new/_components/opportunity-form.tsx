@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { createOpportunityAction } from "../actions";
 import type { ActionResult } from "@/lib/server-action";
-import { OPPORTUNITY_STAGES } from "@/lib/opportunities";
+import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 
 interface AccountOption {
   id: string;
