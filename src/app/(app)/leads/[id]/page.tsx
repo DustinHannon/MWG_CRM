@@ -124,6 +124,7 @@ export default async function LeadDetailPage({
           {canEdit && lead.status !== "converted" ? (
             <ConvertModal
               leadId={lead.id}
+              leadDisplayName={formatPersonName(lead)}
               defaultCompany={lead.companyName}
               defaultFirstName={lead.firstName}
               defaultLastName={lead.lastName}

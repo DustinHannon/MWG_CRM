@@ -6,6 +6,11 @@ import { convertLeadAction } from "../actions";
 
 interface ConvertModalProps {
   leadId: string;
+  /**
+   * Phase 9C (workflow) — display name used in the modal intro line.
+   * Falls back to "this lead" when blank so the copy still reads.
+   */
+  leadDisplayName: string | null;
   defaultCompany: string | null;
   defaultFirstName: string;
   defaultLastName: string | null;
@@ -86,9 +91,12 @@ export function ConvertModal(props: ConvertModalProps) {
           >
             <h2 className="text-lg font-semibold">Convert lead</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Creates an Account from the lead&apos;s company info, plus
-              optional Contact and Opportunity records. Activities reassign
-              to the new opportunity.
+              This will convert{" "}
+              <span className="font-medium text-foreground">
+                {props.leadDisplayName?.trim() || "this lead"}
+              </span>{" "}
+              into an Account, Contact, and Opportunity. The lead will be
+              marked as qualified and removed from the active leads view.
             </p>
 
             <div className="mt-5 space-y-4 text-sm">
