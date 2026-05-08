@@ -95,7 +95,11 @@ export default async function OppPipelinePage() {
       </div>
 
       <GlassCard className="mt-6 p-3">
-        <OppPipelineBoard initialColumns={grouped} />
+        <OppPipelineBoard
+          initialColumns={grouped}
+          currentUserId={session.id}
+          isAdmin={session.isAdmin}
+        />
       </GlassCard>
     </div>
   );

@@ -7,6 +7,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { canDeleteOpportunity } from "@/lib/access/can-delete";
+import { OpportunityRowActions } from "./_components/opportunity-row-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +120,14 @@ export default async function OpportunitiesPage({
               Pipeline
             </Link>
           </div>
+          {session.isAdmin ? (
+            <Link
+              href="/opportunities/archived"
+              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted"
+            >
+              Archived
+            </Link>
+          ) : null}
           <Link
             href="/opportunities/new"
             className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
@@ -149,11 +159,12 @@ export default async function OpportunitiesPage({
                 <th className="px-4 py-3">Account</th>
                 <th className="px-4 py-3">Close date</th>
                 <th className="px-4 py-3">Owner</th>
+                <th className="w-10 px-2 py-3" aria-label="actions" />
               </tr>
             </thead>
             <tbody className="divide-y divide-glass-border">
               {rows.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className="group">
                   <td className="px-4 py-2.5">
                     <Link
                       href={`/opportunities/${r.id}`}
@@ -193,6 +204,13 @@ export default async function OpportunitiesPage({
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
+                  </td>
+                  <td className="w-10 px-2 py-2.5 align-middle">
+                    <OpportunityRowActions
+                      opportunityId={r.id}
+                      opportunityName={r.name}
+                      canDelete={canDeleteOpportunity(session, { ownerId: r.ownerId })}
+                    />
                   </td>
                 </tr>
               ))}

@@ -8,6 +8,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
+import { canDeleteContact } from "@/lib/access/can-delete";
+import { ContactDetailDelete } from "../_components/contact-detail-delete";
 
 export const dynamic = "force-dynamic";
 
@@ -61,19 +63,29 @@ export default async function ContactDetailPage({
       >
         ← Back to contacts
       </Link>
-      <h1 className="mt-3 text-2xl font-semibold">
-        {formatPersonName(contact)}
-      </h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {contact.jobTitle ? `${contact.jobTitle} · ` : ""}
-        {contact.accountName ? (
-          <Link href={`/accounts/${contact.accountId}`} className="hover:underline">
-            {contact.accountName}
-          </Link>
-        ) : (
-          "No account"
-        )}
-      </p>
+      <div className="mt-3 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">
+            {formatPersonName(contact)}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {contact.jobTitle ? `${contact.jobTitle} · ` : ""}
+            {contact.accountName ? (
+              <Link href={`/accounts/${contact.accountId}`} className="hover:underline">
+                {contact.accountName}
+              </Link>
+            ) : (
+              "No account"
+            )}
+          </p>
+        </div>
+        {canDeleteContact(session, { ownerId: contact.ownerId }) ? (
+          <ContactDetailDelete
+            contactId={contact.id}
+            contactName={formatPersonName(contact)}
+          />
+        ) : null}
+      </div>
 
       <GlassCard className="mt-6 p-5">
         <dl className="space-y-2 text-sm">

@@ -1,4 +1,5 @@
 import "server-only";
+import { inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { contacts } from "@/db/schema/crm-records";
@@ -68,4 +69,48 @@ export async function createContact(
   });
 
   return { id: inserted[0].id };
+}
+
+/** Phase 10 — soft-delete contacts. */
+export async function archiveContactsById(
+  ids: string[],
+  actorId: string,
+  reason?: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(contacts)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorId,
+      deleteReason: reason ?? null,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(contacts.id, ids));
+}
+
+/** Phase 10 — restore archived contacts. */
+export async function restoreContactsById(
+  ids: string[],
+  actorId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(contacts)
+    .set({
+      isDeleted: false,
+      deletedAt: null,
+      deletedById: null,
+      deleteReason: null,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(contacts.id, ids));
+  void actorId;
+}
+
+/** Phase 10 — admin hard-delete. */
+export async function deleteContactsById(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.delete(contacts).where(inArray(contacts.id, ids));
 }

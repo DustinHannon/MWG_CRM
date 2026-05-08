@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
@@ -274,14 +274,53 @@ export async function updateTask(
   return rows[0];
 }
 
-export async function deleteTask(id: string, actorId: string): Promise<void> {
-  await db.delete(tasks).where(eq(tasks.id, id));
-  await writeAudit({
-    actorId,
-    action: "task.delete",
-    targetType: "tasks",
-    targetId: id,
-  });
+/**
+ * Phase 10 — soft-delete (archive) tasks. Sets is_deleted=true and the
+ * deletion-attribution columns. Reversible via restoreTasksById().
+ *
+ * @actor task creator, assignee, or admin (caller enforces)
+ */
+export async function archiveTasksById(
+  ids: string[],
+  actorId: string,
+  reason?: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(tasks)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorId,
+      deleteReason: reason ?? null,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(tasks.id, ids));
+}
+
+/** Phase 10 — restore archived tasks. */
+export async function restoreTasksById(
+  ids: string[],
+  actorId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(tasks)
+    .set({
+      isDeleted: false,
+      deletedAt: null,
+      deletedById: null,
+      deleteReason: null,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(tasks.id, ids));
+  void actorId;
+}
+
+/** Phase 10 — admin hard-delete. Use only from admin flows. */
+export async function deleteTasksById(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.delete(tasks).where(inArray(tasks.id, ids));
 }
 
 /**

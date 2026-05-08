@@ -8,6 +8,8 @@ import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 import { encodeCursor, parseCursor } from "@/lib/leads";
+import { canDeleteContact } from "@/lib/access/can-delete";
+import { ContactRowActions } from "./_components/contact-row-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -73,12 +75,22 @@ export default async function ContactsPage({
           </p>
           <h1 className="mt-1 text-2xl font-semibold font-display">Contacts</h1>
         </div>
-        <Link
-          href="/contacts/new"
-          className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-        >
-          + New contact
-        </Link>
+        <div className="flex gap-2">
+          {session.isAdmin ? (
+            <Link
+              href="/contacts/archived"
+              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted"
+            >
+              Archived
+            </Link>
+          ) : null}
+          <Link
+            href="/contacts/new"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+          >
+            + New contact
+          </Link>
+        </div>
       </div>
 
       <GlassCard className="mt-6 overflow-hidden p-0">
@@ -99,11 +111,12 @@ export default async function ContactsPage({
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Account</th>
                 <th className="px-4 py-3">Owner</th>
+                <th className="w-10 px-2 py-3" aria-label="actions" />
               </tr>
             </thead>
             <tbody className="divide-y divide-glass-border">
               {rows.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className="group">
                   <td className="px-4 py-2.5">
                     <Link
                       href={`/contacts/${r.id}`}
@@ -142,6 +155,13 @@ export default async function ContactsPage({
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
+                  </td>
+                  <td className="w-10 px-2 py-2.5 align-middle">
+                    <ContactRowActions
+                      contactId={r.id}
+                      contactName={formatPersonName(r)}
+                      canDelete={canDeleteContact(session, { ownerId: r.ownerId })}
+                    />
                   </td>
                 </tr>
               ))}

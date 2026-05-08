@@ -8,6 +8,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { canDeleteOpportunity } from "@/lib/access/can-delete";
+import { OpportunityDetailDelete } from "../_components/opportunity-detail-delete";
 
 export const dynamic = "force-dynamic";
 
@@ -63,13 +65,23 @@ export default async function OpportunityDetailPage({
       >
         ← Back to opportunities
       </Link>
-      <h1 className="mt-3 text-2xl font-semibold">{opp.name}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Stage: {opp.stage} ·{" "}
-        {opp.amount ? `$${Number(opp.amount).toLocaleString()}` : "—"} ·
-        Expected close{" "}
-        <UserTime value={opp.expectedCloseDate} mode="date" />
-      </p>
+      <div className="mt-3 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">{opp.name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Stage: {opp.stage} ·{" "}
+            {opp.amount ? `$${Number(opp.amount).toLocaleString()}` : "—"} ·
+            Expected close{" "}
+            <UserTime value={opp.expectedCloseDate} mode="date" />
+          </p>
+        </div>
+        {canDeleteOpportunity(session, { ownerId: opp.ownerId }) ? (
+          <OpportunityDetailDelete
+            opportunityId={opp.id}
+            opportunityName={opp.name}
+          />
+        ) : null}
+      </div>
 
       <GlassCard className="mt-6 p-5">
         <dl className="space-y-2 text-sm">

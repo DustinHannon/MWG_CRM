@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { contacts, opportunities } from "@/db/schema/crm-records";
@@ -106,4 +106,48 @@ export async function listContactsForAccountPicker(
     .orderBy(asc(contacts.firstName), asc(contacts.lastName))
     .limit(200);
   return rows;
+}
+
+/** Phase 10 — soft-delete opportunities. */
+export async function archiveOpportunitiesById(
+  ids: string[],
+  actorId: string,
+  reason?: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(opportunities)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorId,
+      deleteReason: reason ?? null,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(opportunities.id, ids));
+}
+
+/** Phase 10 — restore archived opportunities. */
+export async function restoreOpportunitiesById(
+  ids: string[],
+  actorId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(opportunities)
+    .set({
+      isDeleted: false,
+      deletedAt: null,
+      deletedById: null,
+      deleteReason: null,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(opportunities.id, ids));
+  void actorId;
+}
+
+/** Phase 10 — admin hard-delete. */
+export async function deleteOpportunitiesById(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.delete(opportunities).where(inArray(opportunities.id, ids));
 }

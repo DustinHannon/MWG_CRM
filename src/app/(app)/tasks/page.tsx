@@ -42,16 +42,33 @@ export default async function TasksPage({
 
   return (
     <div className="px-10 py-10">
-      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-        Tasks
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold font-display">My tasks</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Things to do. Mark complete with the checkbox. Group by due date.
-      </p>
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            Tasks
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold font-display">My tasks</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Things to do. Mark complete with the checkbox. Group by due date.
+          </p>
+        </div>
+        {session.isAdmin ? (
+          <Link
+            href="/tasks/archived"
+            className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted"
+          >
+            Archived
+          </Link>
+        ) : null}
+      </div>
 
       <GlassCard className="mt-6 p-4">
-        <TaskListClient buckets={buckets} userId={session.id} prefs={prefs} />
+        <TaskListClient
+          buckets={buckets}
+          userId={session.id}
+          isAdmin={session.isAdmin}
+          prefs={prefs}
+        />
       </GlassCard>
 
       {nextCursor || sp.cursor ? (

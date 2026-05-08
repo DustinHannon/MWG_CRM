@@ -11,12 +11,19 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
 // Phase 9C — direct import (not the barrel) keeps the server-only
 // UserHoverCard out of the client bundle.
 import { UserAvatar } from "@/components/user-display/user-avatar";
 import { updateOpportunityStageAction } from "../actions";
+import {
+  softDeleteOpportunityAction,
+  undoArchiveOpportunityAction,
+} from "../../actions";
+import { ConfirmDeleteDialog, showUndoToast } from "@/components/delete";
 
 interface Card {
   id: string;
@@ -44,11 +51,18 @@ type StageId = (typeof STAGES)[number]["id"];
 
 export function OppPipelineBoard({
   initialColumns,
+  currentUserId,
+  isAdmin,
 }: {
   initialColumns: Record<string, Card[]>;
+  currentUserId: string;
+  isAdmin: boolean;
 }) {
   const [columns, setColumns] = useState(initialColumns);
   const [, startTransition] = useTransition();
+  const router = useRouter();
+  const canDelete = (c: Card) =>
+    isAdmin || c.ownerId === currentUserId;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -106,6 +120,19 @@ export function OppPipelineBoard({
     });
   }
 
+  function removeCard(cardId: string, fromStage: string) {
+    setColumns((prev) => ({
+      ...prev,
+      [fromStage]: prev[fromStage].filter((c) => c.id !== cardId),
+    }));
+  }
+  function reinsertCard(card: Card) {
+    setColumns((prev) => ({
+      ...prev,
+      [card.stage]: [card, ...(prev[card.stage] ?? [])],
+    }));
+  }
+
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       <div className="flex gap-3 overflow-x-auto pb-2">
@@ -115,6 +142,31 @@ export function OppPipelineBoard({
             id={s.id}
             label={s.label}
             cards={columns[s.id] ?? []}
+            canDelete={canDelete}
+            onArchive={async (card) => {
+              const original = card;
+              removeCard(card.id, card.stage);
+              const res = await softDeleteOpportunityAction({ id: card.id });
+              if (!res.ok) {
+                reinsertCard(original);
+                toast.error(res.error);
+                return;
+              }
+              const undoToken = res.data.undoToken;
+              showUndoToast({
+                entityKind: "opportunity",
+                entityName: card.name,
+                onUndo: async () => {
+                  const u = await undoArchiveOpportunityAction({ undoToken });
+                  if (u.ok) {
+                    reinsertCard(original);
+                    return { ok: true };
+                  }
+                  return { ok: false, error: u.error };
+                },
+              });
+              router.refresh();
+            }}
           />
         ))}
       </div>
@@ -126,10 +178,14 @@ function Column({
   id,
   label,
   cards,
+  canDelete,
+  onArchive,
 }: {
   id: StageId;
   label: string;
   cards: Card[];
+  canDelete: (c: Card) => boolean;
+  onArchive: (c: Card) => Promise<void>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const total = cards.reduce((sum, c) => sum + Number(c.amount ?? 0), 0);
@@ -157,14 +213,27 @@ function Column({
       </div>
       <div className="flex flex-col gap-2">
         {cards.map((c) => (
-          <Card key={c.id} card={c} />
+          <Card
+            key={c.id}
+            card={c}
+            canDelete={canDelete(c)}
+            onArchive={onArchive}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function Card({ card }: { card: Card }) {
+function Card({
+  card,
+  canDelete,
+  onArchive,
+}: {
+  card: Card;
+  canDelete: boolean;
+  onArchive: (c: Card) => Promise<void>;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: card.id });
   const style = {
@@ -177,12 +246,39 @@ function Card({ card }: { card: Card }) {
       style={style}
       {...listeners}
       {...attributes}
-      className="cursor-grab rounded-md border border-glass-border bg-card p-3 text-sm shadow-sm active:cursor-grabbing"
+      className="group/card relative cursor-grab rounded-md border border-glass-border bg-card p-3 text-sm shadow-sm active:cursor-grabbing"
     >
+      {canDelete ? (
+        // Phase 10 — hover-revealed trash icon, top-right of card.
+        // Wrapped in a div that stops drag propagation so clicking
+        // the icon doesn't initiate a drag.
+        <div
+          className="absolute right-1 top-1 opacity-100 md:opacity-0 md:group-hover/card:opacity-100"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <ConfirmDeleteDialog
+            entityKind="opportunity"
+            entityName={card.name}
+            onConfirm={async () => {
+              await onArchive(card);
+            }}
+            trigger={
+              <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Archive ${card.name}`}
+                className="rounded-md p-1 text-muted-foreground/70 hover:bg-muted hover:text-rose-600 dark:hover:text-rose-300"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            }
+          />
+        </div>
+      ) : null}
       <Link
         href={`/opportunities/${card.id}`}
         onClick={(e) => e.stopPropagation()}
-        className="block font-medium hover:underline"
+        className="block pr-6 font-medium hover:underline"
       >
         {card.name}
       </Link>

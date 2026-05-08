@@ -7,6 +7,7 @@ import {
   createTaskAction,
   deleteTaskAction,
   toggleTaskCompleteAction,
+  undoArchiveTaskAction,
 } from "../actions";
 import type { TaskRow } from "@/lib/tasks";
 import {
@@ -16,14 +17,22 @@ import {
 // Phase 9C — direct import (not the barrel) keeps the server-only
 // UserHoverCard out of the client bundle.
 import { UserChip } from "@/components/user-display/user-chip";
+import { ConfirmDeleteDialog, showUndoToast } from "@/components/delete";
+import { Trash2 } from "lucide-react";
 
 interface TaskListClientProps {
   buckets: { label: string; tasks: TaskRow[] }[];
   userId: string;
+  isAdmin: boolean;
   prefs: TimePrefs;
 }
 
-export function TaskListClient({ buckets, userId, prefs }: TaskListClientProps) {
+export function TaskListClient({
+  buckets,
+  userId,
+  isAdmin,
+  prefs,
+}: TaskListClientProps) {
   const [pending, startTransition] = useTransition();
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
 
@@ -45,13 +54,9 @@ export function TaskListClient({ buckets, userId, prefs }: TaskListClientProps) 
     });
   }
 
-  function remove(id: string) {
-    if (!confirm("Delete this task?")) return;
-    startTransition(async () => {
-      const res = await deleteTaskAction(id);
-      if (!res.ok) toast.error(res.error);
-      else toast.success("Task deleted");
-    });
+  function canDelete(t: TaskRow): boolean {
+    if (isAdmin) return true;
+    return t.createdById === userId || t.assignedToId === userId;
   }
 
   return (
@@ -85,7 +90,7 @@ export function TaskListClient({ buckets, userId, prefs }: TaskListClientProps) 
                   return (
                     <li
                       key={t.id}
-                      className="flex items-center gap-3 py-2.5"
+                      className="group flex items-center gap-3 py-2.5"
                     >
                       <input
                         type="checkbox"
@@ -126,11 +131,7 @@ export function TaskListClient({ buckets, userId, prefs }: TaskListClientProps) 
                             </Link>
                           ) : null}
                           {/* Phase 9C — assignee avatar/name when the
-                              task isn't assigned to the viewer. The
-                              "/tasks" page defaults to scope=me, so
-                              hiding self-assignments keeps the line
-                              compact. Skipping hoverCard on this list
-                              since pages can hold up to 50 tasks. */}
+                              task isn't assigned to the viewer. */}
                           {t.assignedToId && t.assignedToId !== userId ? (
                             <UserChip
                               user={{
@@ -142,14 +143,39 @@ export function TaskListClient({ buckets, userId, prefs }: TaskListClientProps) 
                           ) : null}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => remove(t.id)}
-                        disabled={pending}
-                        className="text-xs text-muted-foreground hover:text-destructive disabled:opacity-60"
-                      >
-                        Delete
-                      </button>
+                      {canDelete(t) ? (
+                        <ConfirmDeleteDialog
+                          entityKind="task"
+                          entityName={t.title}
+                          onConfirm={async () => {
+                            const res = await deleteTaskAction(t.id);
+                            if (!res.ok) {
+                              toast.error(res.error);
+                              return;
+                            }
+                            const undoToken = res.data.undoToken;
+                            showUndoToast({
+                              entityKind: "task",
+                              entityName: t.title,
+                              onUndo: async () => {
+                                const u = await undoArchiveTaskAction({ undoToken });
+                                if (u.ok) return { ok: true };
+                                return { ok: false, error: u.error };
+                              },
+                            });
+                          }}
+                          trigger={
+                            <button
+                              type="button"
+                              aria-label={`Archive ${t.title}`}
+                              disabled={pending}
+                              className="rounded-md p-1.5 text-muted-foreground/70 transition opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-muted hover:text-rose-600 dark:hover:text-rose-300 focus:opacity-100 disabled:opacity-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          }
+                        />
+                      ) : null}
                     </li>
                   );
                 })}
