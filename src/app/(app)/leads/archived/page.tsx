@@ -5,6 +5,7 @@ import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
+import { UserChip } from "@/components/user-display";
 import { requireSession } from "@/lib/auth-helpers";
 import {
   hardDeleteLeadAction,
@@ -36,6 +37,10 @@ export default async function ArchivedLeadsPage() {
       company: leads.companyName,
       deletedAt: leads.deletedAt,
       reason: leads.deleteReason,
+      // Phase 9C — surface the deleted-by id so the cell can render a
+      // canonical UserChip; email retained only as a fallback when the
+      // user record predates display-name backfill (rare).
+      deletedById: leads.deletedById,
       deletedByEmail: users.email,
       deletedByName: users.displayName,
     })
@@ -91,8 +96,23 @@ export default async function ArchivedLeadsPage() {
                   <td className="px-4 py-3 text-muted-foreground">
                     <UserTime value={r.deletedAt} mode="date" />
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {r.deletedByName ?? r.deletedByEmail ?? "—"}
+                  <td className="px-4 py-3">
+                    {/* Phase 9C — UserChip for the actor; falls back to
+                        email then dash when neither id+name are known.
+                        Hover card omitted (page caps at 200 rows). */}
+                    {r.deletedById ? (
+                      <UserChip
+                        user={{
+                          id: r.deletedById,
+                          displayName: r.deletedByName,
+                          photoUrl: null,
+                        }}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {r.deletedByEmail ?? "—"}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{r.reason ?? "—"}</td>
                   <td className="px-4 py-3">

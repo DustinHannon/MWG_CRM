@@ -3,6 +3,7 @@ import { formatUserTime } from "@/lib/format-time";
 import { listActivitiesForLead } from "@/lib/activities";
 import { deleteActivityAction } from "./actions";
 import type { SessionUser } from "@/lib/auth-helpers";
+import { UserChip } from "@/components/user-display";
 
 const KIND_LABEL: Record<string, string> = {
   note: "Note",
@@ -71,8 +72,19 @@ export async function ActivityFeed({
                 >
                   {relative}
                 </p>
-                {r.userDisplayName ? (
-                  <p className="text-xs text-muted-foreground/80">{r.userDisplayName}</p>
+                {/* Phase 9C — author surface uses the canonical
+                    UserChip. Hover card omitted because a noisy lead
+                    can have many activities. */}
+                {r.userId ? (
+                  <div className="mt-0.5 flex justify-end">
+                    <UserChip
+                      user={{
+                        id: r.userId,
+                        displayName: r.userDisplayName,
+                        photoUrl: null,
+                      }}
+                    />
+                  </div>
                 ) : null}
               </div>
             </header>

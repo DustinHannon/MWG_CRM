@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { UserChip } from "@/components/user-display";
 
 interface DuplicateMatch {
   id: string;
@@ -11,6 +12,7 @@ interface DuplicateMatch {
   email: string | null;
   phone: string | null;
   status: string;
+  ownerId: string | null;
   ownerName: string | null;
 }
 
@@ -120,10 +122,26 @@ export function DuplicateWarning({ email, phone }: DuplicateWarningProps) {
                       · {m.companyName}
                     </span>
                   ) : null}
-                  <p className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-200/70">
-                    {m.email ? `${m.email} · ` : ""}
-                    {m.status} · owner {m.ownerName ?? "Unassigned"}
-                  </p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-200/70">
+                    {m.email ? <span>{m.email} ·</span> : null}
+                    <span>{m.status}</span>
+                    <span>· owner</span>
+                    {/* Phase 9C — canonical UserChip in lieu of plain
+                        owner name. Hover card omitted: this surface
+                        renders inline during typing. */}
+                    {m.ownerId ? (
+                      <UserChip
+                        size="xs"
+                        user={{
+                          id: m.ownerId,
+                          displayName: m.ownerName,
+                          photoUrl: null,
+                        }}
+                      />
+                    ) : (
+                      <span>Unassigned</span>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

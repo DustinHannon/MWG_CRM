@@ -18,6 +18,7 @@ import { ConvertModal } from "./convert/_components/convert-modal";
 import { ActivityComposer } from "./activities/activity-composer";
 import { ActivityFeed } from "./activities/activity-feed";
 import { GraphActionPanel } from "./graph/graph-actions";
+import { UserChip, UserHoverCard } from "@/components/user-display";
 
 export const dynamic = "force-dynamic";
 
@@ -81,11 +82,22 @@ export default async function LeadDetailPage({
             {lead.companyName ?? "No company"}
           </p>
           <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/80">
-            <span>
-              Created by{" "}
-              <span className="text-foreground/80">
-                {creator?.displayName ?? "Deleted user"}
-              </span>{" "}
+            <span className="inline-flex flex-wrap items-center gap-1.5">
+              Created by
+              {/* Phase 9C — canonical UserChip with hover card on this
+                  single-record detail surface. */}
+              {creator ? (
+                <UserChip
+                  user={{
+                    id: creator.id,
+                    displayName: creator.displayName,
+                    photoUrl: null,
+                  }}
+                  hoverCard={<UserHoverCard userId={creator.id} />}
+                />
+              ) : (
+                <span className="text-foreground/80">Deleted user</span>
+              )}
               on <UserTime value={lead.createdAt} mode="date" />
             </span>
             {lead.createdVia === "imported" ? (

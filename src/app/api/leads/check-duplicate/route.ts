@@ -89,6 +89,9 @@ export async function GET(req: Request) {
       email: r.email,
       phone: r.phone,
       status: r.status,
+      // Phase 9C — surface ownerId so the warning UI can render the
+      // canonical user chip instead of plain text.
+      ownerId: r.ownerId,
       ownerName: r.ownerName,
     })),
   });
