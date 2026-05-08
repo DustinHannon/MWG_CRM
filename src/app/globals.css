@@ -84,6 +84,41 @@
   --tag-rose: oklch(0.88 0.09 15);      --tag-rose-foreground: oklch(0.35 0.15 15);
   --tag-violet: oklch(0.88 0.08 290);   --tag-violet-foreground: oklch(0.35 0.15 290);
   --tag-gray: oklch(0.93 0 0);          --tag-gray-foreground: oklch(0.30 0 0);
+
+  /* Phase 11 — status palette (light). Used by <StatusPill>. Hue spread:
+   * blue → yellow → pink → purple → deeper purple → green → red. */
+  --status-default-bg:        oklch(0.93 0.005 250);
+  --status-default-fg:        oklch(0.40 0.03 250);
+  --status-new-bg:            oklch(0.93 0.06 250);
+  --status-new-fg:            oklch(0.32 0.14 250);
+  --status-contacted-bg:      oklch(0.92 0.07 220);
+  --status-contacted-fg:      oklch(0.32 0.15 220);
+  --status-qualification-bg:  oklch(0.94 0.10 95);
+  --status-qualification-fg:  oklch(0.38 0.15 75);
+  --status-evaluation-bg:     oklch(0.92 0.08 350);
+  --status-evaluation-fg:     oklch(0.38 0.18 350);
+  --status-proposal-bg:       oklch(0.92 0.08 290);
+  --status-proposal-fg:       oklch(0.36 0.18 290);
+  --status-negotiation-bg:    oklch(0.88 0.10 310);
+  --status-negotiation-fg:    oklch(0.34 0.20 310);
+  --status-won-bg:            oklch(0.92 0.10 145);
+  --status-won-fg:            oklch(0.36 0.18 145);
+  --status-lost-bg:           oklch(0.92 0.05 25);
+  --status-lost-fg:           oklch(0.42 0.12 25);
+
+  /* Phase 11 — priority palette (light). Used by <PriorityPill>. */
+  --priority-default-bg:      oklch(0.93 0.005 250);
+  --priority-default-fg:      oklch(0.40 0.03 250);
+  --priority-very-low-bg:     oklch(0.93 0.08 145);
+  --priority-very-low-fg:     oklch(0.36 0.16 145);
+  --priority-low-bg:          oklch(0.93 0.07 130);
+  --priority-low-fg:          oklch(0.36 0.15 130);
+  --priority-medium-bg:       oklch(0.93 0.10 85);
+  --priority-medium-fg:       oklch(0.38 0.18 70);
+  --priority-high-bg:         oklch(0.91 0.10 25);
+  --priority-high-fg:         oklch(0.40 0.20 25);
+  --priority-very-high-bg:    oklch(0.89 0.13 15);
+  --priority-very-high-fg:    oklch(0.38 0.22 15);
 }
 
 .dark {
@@ -142,6 +177,41 @@
   --tag-rose: oklch(0.55 0.18 15 / 0.25);      --tag-rose-foreground: oklch(0.85 0.16 15);
   --tag-violet: oklch(0.55 0.18 290 / 0.25);   --tag-violet-foreground: oklch(0.85 0.15 290);
   --tag-gray: oklch(0.40 0 0 / 0.30);          --tag-gray-foreground: oklch(0.85 0 0);
+
+  /* Phase 11 — status palette (dark). Lower L on the bg, higher L+chroma
+   * on the fg to land WCAG AA against the dark surface. */
+  --status-default-bg:        oklch(0.30 0.01 250 / 0.55);
+  --status-default-fg:        oklch(0.85 0.02 250);
+  --status-new-bg:            oklch(0.32 0.10 250 / 0.50);
+  --status-new-fg:            oklch(0.86 0.14 250);
+  --status-contacted-bg:      oklch(0.32 0.10 220 / 0.50);
+  --status-contacted-fg:      oklch(0.86 0.14 220);
+  --status-qualification-bg:  oklch(0.34 0.13 80 / 0.45);
+  --status-qualification-fg:  oklch(0.90 0.16 90);
+  --status-evaluation-bg:     oklch(0.32 0.13 350 / 0.45);
+  --status-evaluation-fg:     oklch(0.86 0.16 350);
+  --status-proposal-bg:       oklch(0.32 0.13 290 / 0.45);
+  --status-proposal-fg:       oklch(0.86 0.16 290);
+  --status-negotiation-bg:    oklch(0.30 0.15 310 / 0.45);
+  --status-negotiation-fg:    oklch(0.84 0.17 310);
+  --status-won-bg:            oklch(0.32 0.14 145 / 0.45);
+  --status-won-fg:            oklch(0.88 0.16 145);
+  --status-lost-bg:            oklch(0.32 0.10 25 / 0.45);
+  --status-lost-fg:            oklch(0.88 0.14 25);
+
+  /* Phase 11 — priority palette (dark). */
+  --priority-default-bg:      oklch(0.30 0.01 250 / 0.55);
+  --priority-default-fg:      oklch(0.85 0.02 250);
+  --priority-very-low-bg:     oklch(0.32 0.13 145 / 0.45);
+  --priority-very-low-fg:     oklch(0.88 0.14 145);
+  --priority-low-bg:          oklch(0.32 0.12 130 / 0.45);
+  --priority-low-fg:          oklch(0.88 0.13 130);
+  --priority-medium-bg:       oklch(0.34 0.14 80 / 0.45);
+  --priority-medium-fg:       oklch(0.90 0.16 80);
+  --priority-high-bg:         oklch(0.32 0.14 25 / 0.45);
+  --priority-high-fg:         oklch(0.88 0.18 25);
+  --priority-very-high-bg:    oklch(0.32 0.15 15 / 0.45);
+  --priority-very-high-fg:    oklch(0.90 0.20 15);
 }
 
 @theme inline {
@@ -341,5 +411,59 @@ pre {
   padding-bottom: 4px;
   padding-left: 12px;
   padding-right: 12px;
+}
+
+/* -----------------------------------------------------------------------------
+ * Phase 11 — row flash + accent stripe.
+ *
+ * <RowFlash> wraps rows that should announce realtime updates; the
+ * keyframe runs once when the wrapper detects the row id is new or
+ * its content hash changed. Amber background, 1s, ease-out. We
+ * deliberately don't animate text color — readability stays priority.
+ *
+ * The accent stripe is a 3px ::before vertical bar driven by a
+ * data-accent-color CSS variable so list rows can show a subtle
+ * status hue without hardcoding colors per row.
+ * --------------------------------------------------------------------------- */
+@keyframes mwg-row-flash {
+  0% {
+    background-color: oklch(0.94 0.10 85 / 0.55);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.dark @keyframes mwg-row-flash {
+  0% {
+    background-color: oklch(0.34 0.10 90 / 0.55);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+[data-row-flash="new"] {
+  animation: mwg-row-flash 1000ms ease-out 1;
+}
+
+[data-row-accent] {
+  position: relative;
+}
+[data-row-accent]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--row-accent-color, transparent);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-row-flash="new"] {
+    animation: none;
+  }
 }
 

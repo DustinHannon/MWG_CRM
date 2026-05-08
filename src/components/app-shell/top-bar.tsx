@@ -1,3 +1,4 @@
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { NotificationsBell } from "@/components/notifications/bell";
 import type { TimePrefs } from "@/lib/format-time";
 import { SearchTrigger } from "./search-trigger";
@@ -20,9 +21,8 @@ interface TopBarProps {
 
 /**
  * Top bar — sticky horizontal chrome that reserves its own vertical
- * space. Visible Search affordance + notification bell. The Search
- * button dispatches `mwg:command-palette-open`; the global
- * CommandPalette listens for it. Cmd+K still works.
+ * space. Phase 11: hosts the data-aware breadcrumb trail (left), and
+ * the existing Search affordance + notification bell (right).
  *
  * Layout: `shrink-0 h-14` so it reserves space in the parent flex
  * column. Page content lives in a sibling scroll region beneath it,
@@ -30,9 +30,12 @@ interface TopBarProps {
  */
 export function TopBar({ unreadCount, recent, prefs }: TopBarProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center justify-end gap-2 border-b border-glass-border bg-glass-1/40 px-6 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))]">
-      <SearchTrigger />
-      <NotificationsBell unreadCount={unreadCount} recent={recent} prefs={prefs} />
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-glass-border bg-glass-1/40 px-6 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))]">
+      <Breadcrumbs />
+      <div className="flex shrink-0 items-center gap-2">
+        <SearchTrigger />
+        <NotificationsBell unreadCount={unreadCount} recent={recent} prefs={prefs} />
+      </div>
     </header>
   );
 }

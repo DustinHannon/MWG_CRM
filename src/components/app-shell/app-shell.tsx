@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { Toaster } from "sonner";
+import { BreadcrumbsProvider } from "@/components/breadcrumbs";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import { ThemeSync } from "@/components/theme/theme-sync";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -73,27 +74,21 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
   return (
     <TooltipProvider delayDuration={300}>
       <ThemeSync theme={theme} />
-      {/*
-        Phase 9B — sticky sidebar. The shell occupies the full dynamic
-        viewport (h-dvh, mobile-friendly), the sidebar fills that height
-        and never scrolls, and the right column is the only scrolling
-        region. min-w-0 on the right column keeps wide content from
-        blowing out flex sizing. No min-h-screen anywhere — body must
-        not scroll.
-      */}
-      <div data-density={density} className="flex h-dvh text-foreground">
-        <Sidebar brand={brand ?? {}} nav={nav} user={user} />
-        <main className="flex h-dvh min-w-0 flex-1 flex-col">
-          <TopBar
-            unreadCount={unreadCount}
-            recent={recentNotifs}
-            prefs={timePrefs}
-          />
-          <div className="flex-1 overflow-y-auto">{children}</div>
-        </main>
-      </div>
-      <CommandPalette recent={recentViews} />
-      <Toaster theme="dark" position="bottom-right" />
+      <BreadcrumbsProvider>
+        <div data-density={density} className="flex h-dvh text-foreground">
+          <Sidebar brand={brand ?? {}} nav={nav} user={user} />
+          <main className="flex h-dvh min-w-0 flex-1 flex-col">
+            <TopBar
+              unreadCount={unreadCount}
+              recent={recentNotifs}
+              prefs={timePrefs}
+            />
+            <div className="flex-1 overflow-y-auto">{children}</div>
+          </main>
+        </div>
+        <CommandPalette recent={recentViews} />
+        <Toaster theme="dark" position="bottom-right" />
+      </BreadcrumbsProvider>
     </TooltipProvider>
   );
 }

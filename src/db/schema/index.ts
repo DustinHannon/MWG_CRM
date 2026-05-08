@@ -13,3 +13,4 @@ export * from "./crm-records";
 export * from "./saved-search-subscriptions";
 export * from "./recent-views";
 export * from "./lead-scoring";
+export * from "./saved-reports";
