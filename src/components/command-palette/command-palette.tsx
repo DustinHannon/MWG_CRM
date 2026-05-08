@@ -47,15 +47,8 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
-  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const debounceRef = useRef<number | null>(null);
-
-  // Track client mount so createPortal target (document.body) is
-  // available. Without this, SSR would crash on `document`.
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Lock body scroll while open so the page beneath can't shift.
   useEffect(() => {
@@ -142,13 +135,16 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
   };
   for (const h of hits) grouped[h.type].push(h);
 
-  if (!open || !mounted) return null;
+  // `open` is false on first render (SSR + initial hydration), so the
+  // early return guarantees we never call createPortal until the user
+  // opens the palette — by which point `document` is guaranteed to
+  // exist. Mounting via portal is what fixes the original bug: an
+  // ancestor in the shell tree (transform / filter / backdrop-filter
+  // / contain) would create a containing block and silently turn the
+  // palette's `position: fixed` into `absolute`, causing it to render
+  // "way at the bottom" of long pages. The portal escapes that tree.
+  if (!open) return null;
 
-  // Mount the modal on document.body via portal so it escapes any
-  // ancestor that might create a containing block (transform, filter,
-  // backdrop-filter, contain, etc.) and turn `position: fixed` into
-  // `position: absolute` — which was the original bug where the
-  // palette rendered "way at the bottom" of long pages.
   return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 p-4 pt-[12vh]"
