@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Building2, MailIcon, MapPin, UserRound } from "lucide-react";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserAvatar } from "@/components/user-display";
@@ -60,6 +61,9 @@ export default async function UserProfilePage({
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[{ label: "Users" }, { label: user.displayName }]}
+      />
       <Link
         href="/leads"
         className="text-xs text-muted-foreground hover:text-foreground"

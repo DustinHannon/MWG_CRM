@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { listAccountsForPicker } from "@/lib/accounts";
 import { listContactsForAccountPicker } from "@/lib/opportunities";
@@ -34,6 +35,12 @@ export default async function NewOpportunityPage({
 
   return (
     <div className="px-10 py-10">
+      <BreadcrumbsSetter
+        crumbs={[
+          { label: "Opportunities", href: "/opportunities" },
+          { label: "New" },
+        ]}
+      />
       <Link
         href={prefilledAccountId ? `/accounts/${prefilledAccountId}` : "/opportunities"}
         className="text-xs text-muted-foreground hover:text-foreground"

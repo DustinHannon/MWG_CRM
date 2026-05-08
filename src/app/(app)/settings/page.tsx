@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { savedViews, userPreferences } from "@/db/schema/views";
 import { users } from "@/db/schema/users";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { requireSession } from "@/lib/auth-helpers";
 import { ProfileSection } from "./_components/profile-section";
@@ -68,6 +69,7 @@ export default async function SettingsPage() {
   if (!profile) {
     return (
       <div className="px-10 py-10">
+        <BreadcrumbsSetter crumbs={[{ label: "Settings" }]} />
         <p className="text-sm text-destructive">User profile not found.</p>
       </div>
     );
@@ -75,6 +77,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="mx-auto flex max-w-7xl gap-8 px-10 py-10">
+      <BreadcrumbsSetter crumbs={[{ label: "Settings" }]} />
       {/* Left rail */}
       <aside className="sticky top-10 hidden h-[calc(100vh-5rem)] w-48 shrink-0 lg:block">
         <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
