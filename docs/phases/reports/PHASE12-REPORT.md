@@ -71,12 +71,21 @@ OCC. Each finding fed into the bug ledger.
 
 ## 5. Mobile coverage
 
-**Deferred to a follow-up session.** Sub-B was not dispatched in this
-session — the worktree-isolation harness wasn't available, and the
-mobile pass would have conflicted with Sub-A's realtime wiring across
-the same files. Scope per `PLAN-PHASE12.md §"Sub-B mobile pass scope"`
-remains valid and unchanged. Recommended next step: dispatch Sub-B in a
-fresh session now that Sub-A's work is merged.
+**Sub-E completed in a follow-up wave** (commits `95710a1` through
+`6450a4c`, 9 atomic commits + final report `3e3f826`). 28/28
+authenticated routes covered at 380/414/768/1024 px, light + dark.
+Top fixes: `data-table-cards` global pattern reflows TanStack tables
+to stacked cards at <768px (9 list/archived pages); `mwg-mobile-sheet`
+modal pattern collapses Radix Dialog/AlertDialog to full-bleed bottom
+sheets at <640px with safe-area-bottom action footers; Kanban
+`@dnd-kit/core` `TouchSensor` + snap-x scrolling on both pipeline
+boards. Full inventory in `docs/phases/reports/PHASE12-SUBE-REPORT.md`.
+
+Deferred (BUG-010..020): searchable-select bottom sheets (no custom
+primitive — codebase uses native selects), reports/builder full
+mobile rebuild (desktop-first per scope), activity emoji-picker
+overflow, reports/[id] chart overflow audit, and two-window mobile
+Playwright smoke (Sub-C's domain).
 
 ## 6. Playwright results
 
@@ -104,19 +113,31 @@ wired).
 
 ## 7. Theme drift summary
 
-Sub-A's pass found 127 raw Tailwind palette literals across 40 files.
-Replacement with semantic tokens is filed as **P13-001** in
-`BACKLOG-PHASE13.md` — too large for the 50-line per-finding cap.
-Phase 11B's StatusPill/PriorityPill effort already addressed the
-highest-traffic surfaces.
+**Sub-D completed in a follow-up wave.** Reduced raw Tailwind palette
+literals from **114 → 6 (-94.7%)** across 35 files using existing
+`--status-*`, `--priority-*`, `--primary`, `--destructive`, `--muted`
+tokens (no new tokens added to globals.css). Five commits: `85b8cbe`,
+`ea435e5`, `06de67e`, `f57c467`, `a02eb40` + final report `500b296`.
+Pattern set by the prior `85b8cbe` Pill refactor in `/leads`.
+
+The remaining 6 literals (P13-001a) are all in pre-authentication
+surfaces (`auth/disabled/page.tsx`, `auth/signin/{page,microsoft-button,signin-form}.tsx`)
+where the dark glass aesthetic is theme-independent. Sub-D's
+recommendation: pin `<html class="dark">` on the `(auth)` segment in
+Phase 13 rather than tokenize.
 
 ## 8. Sub-agent results
 
+> Note: SHAs below are the post-rewrite history (after the credential
+> scrub). Original SHAs are gone; the work is preserved on the same
+> linear timeline.
+
 | Sub-agent | Outcome |
 |---|---|
-| **Sub-A — review + concurrency + realtime wiring** | 4 commits to master (`a9d3596`, `dc9aa6e`, `9bd11fb`, `7734e42`). 19/19 pages wired (100%). 11 actor-stamping fixes across 6 files. 9 ledger entries (3 fixed in-phase, 3 accepted after audit, 3 deferred). Wall-clock ~18 min. Final report `PHASE12-SUBA-REPORT.md`. |
-| **Sub-B — mobile UI pass** | Deferred to next session. |
-| **Sub-C — Playwright catalog** | Foundation only (Phase 12B). Full catalog deferred to next session. |
+| **Sub-A — review + concurrency + realtime wiring** | 4 commits. 19/19 pages wired (100%). 11 actor-stamping fixes across 6 files. 9 ledger entries (3 fixed in-phase, 3 accepted after audit, 3 deferred). Final report `PHASE12-SUBA-REPORT.md`. |
+| **Sub-D — theme drift sweep** | 5 atomic commits + final report. 114 → 6 raw Tailwind literals (-94.7%) across 35 files. No new tokens added. Final report `PHASE12-SUBD-REPORT.md`. Quality gates clean throughout. |
+| **Sub-E — mobile UI pass** | 9 atomic commits + final report. 28/28 authenticated routes covered at 380/414/768/1024 px. Three reusable patterns introduced: `data-table-cards` (cell-stacked tables), `mwg-mobile-sheet` (bottom-sheet modal collapse), Kanban `TouchSensor`. 11 ledger entries (BUG-010..020). Final report `PHASE12-SUBE-REPORT.md`. |
+| **Sub-C — Playwright catalog** | Foundation only (Phase 12B). Full catalog deferred to next session — needs `PLAYWRIGHT_LOGIN_*` env vars and a 2nd test identity for cross-actor specs. |
 
 ## 9. Realtime architecture doc
 
@@ -223,10 +244,14 @@ exclusion, or carve out the test account.
 
 ## 13. Wall-clock time
 
-Approximately **35 minutes** of lead-agent work + **18 minutes** of
-parallel Sub-A work = **~50 minutes elapsed wall-clock**, with Sub-A
-running concurrent to lead agent's report drafting and env-var
-plumbing.
+- Lead agent: ~50 min (Phase 12A inventory through 12F report drafting + env-var plumbing + JWT-secret retrieval coordination)
+- Sub-A (realtime wiring): ~18 min parallel
+- Sub-D (theme drift): ~23 min parallel (in resume wave)
+- Sub-E (mobile UI pass): ~30 min parallel (in resume wave)
+- Security incident response (credential leak scrub + force-push + history rewrite): ~10 min serial
+
+Total elapsed: **~115 minutes** wall-clock with significant parallel
+overlap. Bare commits (excluding security/redeploy/report): 22.
 
 ## 14. What's deferred to Phase 13
 
@@ -242,6 +267,50 @@ plumbing.
 
 ---
 
-**Phase 12 status: complete.** Realtime architecture is deployed,
-verified at the deployment level, and pending only a user-driven
-two-window smoke per §12.1.
+**Phase 12 status: complete** (with the credential-rotation follow-up
+in §15). Realtime architecture deployed, mobile pass shipped on every
+route, theme drift reduced to 6 pre-auth literals.
+
+## 15. Security incident: leaked test credentials
+
+During §11.2 the lead agent inadvertently echoed the literal test
+account email + password into `PHASE12-REPORT.md` (commit `71a09af`,
+since rewritten). The user caught it. Response:
+
+1. Stopped both running sub-agents to prevent rebase conflicts.
+2. Replaced credentials with placeholders in 4 files (this report,
+   `playwright.config.ts`, `tests/e2e/global-setup.ts`,
+   `docs/realtime-architecture.md`).
+3. `git filter-branch --tree-filter` rewrote every commit in every
+   ref to substitute `<REDACTED-EMAIL>` / `<REDACTED-PASSWORD>` for
+   the leaked strings, then `git push --force origin master`. The
+   old commit SHAs (`71a09af`, `7c089d1`, `3d37839`, etc.) are now
+   unreachable. Local reflog expired and `git gc --prune=now`.
+
+**The leaked password is still compromised.** Force-push only stops
+new clones from seeing it; existing clones, forks, GitHub Code Search
+indexes, and Vercel rollback artifacts may still retain it. Required
+follow-up actions for MWG IT:
+
+- **Rotate the test account password immediately.** Treat the prior
+  value as exposed to the public internet during the leak window
+  (~14 min between push and force-push).
+- **Audit Entra sign-in logs** for that account during the leak
+  window for any anomalous activity.
+- **Contact GitHub Support** at https://support.github.com → "I
+  have leaked credentials in a public repo" and give them the leak
+  SHA `71a09afe740b12e4aa20498638507db09792cc7e` so they can purge
+  cached refs.
+- **Check forks** at https://github.com/DustinHannon/MWG_CRM/network/members
+  — forks retain old commits even after force-push.
+- (Optional) Delete the Vercel rollback deployments `dpl_8XqXuZttht...`
+  (the redeployed leak commit) from the project's deployment list, in
+  case markdown docs were ever bundled into the build output. (They
+  weren't in this build, but a rollback dashboard could still expose
+  the old source bundle.)
+
+This incident is documented to make future agents aware of the
+risk of echoing user-pasted credentials back into committed
+artifacts. The fix in this codebase is the explicit
+NEVER-write-credentials rule now embedded in every sub-agent
+prompt template.
