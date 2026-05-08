@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
+import { UserAvatar } from "@/components/user-display";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,9 @@ export default async function UsersListPage() {
       isActive: users.isActive,
       lastLoginAt: users.lastLoginAt,
       createdAt: users.createdAt,
+      // Phase 9C — surface the user's photo so the new avatar column
+      // can render a real headshot when present (initials fallback otherwise).
+      photoUrl: users.photoBlobUrl,
       // Owned-lead count — drives the "delete vs reassign" UX flag in 2F.4.
       leadCount: sql<number>`(SELECT count(*)::int FROM ${leads} WHERE owner_id = ${users.id})`,
     })
@@ -48,6 +52,9 @@ export default async function UsersListPage() {
         <table className="data-table min-w-full divide-y divide-border/60">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+              {/* Phase 9C — avatar column at the front. Email column
+                  stays per the audit-driven exception (admins need it). */}
+              <th className="px-5 py-3 font-medium w-12"></th>
               <th className="px-5 py-3 font-medium">Name</th>
               <th className="px-5 py-3 font-medium">Email</th>
               <th className="px-5 py-3 font-medium">Role</th>
@@ -62,6 +69,21 @@ export default async function UsersListPage() {
                 key={u.id}
                 className="text-sm transition hover:bg-muted/40"
               >
+                <td className="px-5 py-3">
+                  <Link
+                    href={`/admin/users/${u.id}`}
+                    aria-label={u.displayName}
+                  >
+                    <UserAvatar
+                      user={{
+                        id: u.id,
+                        displayName: u.displayName,
+                        photoUrl: u.photoUrl,
+                      }}
+                      size="sm"
+                    />
+                  </Link>
+                </td>
                 <td className="px-5 py-3">
                   <Link
                     href={`/admin/users/${u.id}`}

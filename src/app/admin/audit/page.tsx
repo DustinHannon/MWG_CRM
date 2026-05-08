@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
+import { UserChip } from "@/components/user-display";
 import { encodeCursor, parseCursor } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +58,6 @@ export default async function AuditLogPage({
       id: auditLog.id,
       actorId: auditLog.actorId,
       actorDisplayName: users.displayName,
-      actorEmail: users.email,
       action: auditLog.action,
       targetType: auditLog.targetType,
       targetId: auditLog.targetId,
@@ -132,11 +132,17 @@ export default async function AuditLogPage({
                   <UserTime value={r.createdAt} />
                 </td>
                 <td className="px-5 py-3">
-                  {r.actorDisplayName ? (
-                    <>
-                      <span className="text-foreground">{r.actorDisplayName}</span>
-                      <div className="text-[10px] text-muted-foreground/80">{r.actorEmail}</div>
-                    </>
+                  {/* Phase 9C — UserChip; email subline dropped per the
+                      "names only on actor surfaces" directive. Hover card
+                      omitted — page renders up to 100 rows. */}
+                  {r.actorId ? (
+                    <UserChip
+                      user={{
+                        id: r.actorId,
+                        displayName: r.actorDisplayName,
+                        photoUrl: null,
+                      }}
+                    />
                   ) : (
                     <span className="text-muted-foreground/80">system</span>
                   )}
