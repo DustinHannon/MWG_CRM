@@ -83,13 +83,13 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
       */}
       <div data-density={density} className="flex h-dvh text-foreground">
         <Sidebar brand={brand ?? {}} nav={nav} user={user} />
-        <main className="relative h-dvh min-w-0 flex-1 overflow-y-auto">
+        <main className="flex h-dvh min-w-0 flex-1 flex-col">
           <TopBar
             unreadCount={unreadCount}
             recent={recentNotifs}
             prefs={timePrefs}
           />
-          {children}
+          <div className="flex-1 overflow-y-auto">{children}</div>
         </main>
       </div>
       <CommandPalette recent={recentViews} />

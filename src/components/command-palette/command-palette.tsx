@@ -2,6 +2,7 @@
 
 import { Command } from "cmdk";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Building2, FileText, Folder, Search, Tag, Trophy, User } from "lucide-react";
 
@@ -46,8 +47,38 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const debounceRef = useRef<number | null>(null);
+
+  // Track client mount so createPortal target (document.body) is
+  // available. Without this, SSR would crash on `document`.
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock body scroll while open so the page beneath can't shift.
+  useEffect(() => {
+    if (!open) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [open]);
+
+  // Esc to close.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
 
   // Global shortcut.
   useEffect(() => {
@@ -111,11 +142,19 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
   };
   for (const h of hits) grouped[h.type].push(h);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  // Mount the modal on document.body via portal so it escapes any
+  // ancestor that might create a containing block (transform, filter,
+  // backdrop-filter, contain, etc.) and turn `position: fixed` into
+  // `position: absolute` — which was the original bug where the
+  // palette rendered "way at the bottom" of long pages.
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 p-4 pt-[12vh]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
       onClick={() => setOpen(false)}
     >
       <div
@@ -236,6 +275,7 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
           </div>
         </Command>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
