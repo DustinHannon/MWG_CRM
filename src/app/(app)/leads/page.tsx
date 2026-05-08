@@ -538,34 +538,48 @@ function Pill({
   kind: "status" | "rating" | "source" | "provenance";
   value: string;
 }) {
+  // Phase 12 (Sub-D) — palette uses semantic --status-*/--priority-* tokens
+  // from globals.css so light/dark theme drift can't reintroduce raw
+  // Tailwind palette literals. Borders share the foreground token at low
+  // alpha so the pill outline reads against either surface.
   const palette: Record<string, Record<string, string>> = {
     status: {
-      new: "border-blue-500/30 dark:border-blue-300/30 bg-blue-500/20 dark:bg-blue-500/15 dark:bg-blue-500/10 text-blue-700 dark:text-blue-100",
-      contacted: "border-cyan-500/30 dark:border-cyan-300/30 bg-cyan-500/20 dark:bg-cyan-500/15 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-100",
-      qualified: "border-emerald-500/30 dark:border-emerald-300/30 bg-emerald-500/20 dark:bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-100",
-      unqualified: "border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 text-rose-700 dark:text-rose-100",
-      converted: "border-violet-500/30 dark:border-violet-300/30 bg-violet-500/20 dark:bg-violet-500/15 dark:bg-violet-500/10 text-violet-700 dark:text-violet-100",
+      new: "border-[var(--status-new-fg)]/30 bg-[var(--status-new-bg)] text-[var(--status-new-fg)]",
+      contacted:
+        "border-[var(--status-contacted-fg)]/30 bg-[var(--status-contacted-bg)] text-[var(--status-contacted-fg)]",
+      qualified:
+        "border-[var(--status-won-fg)]/30 bg-[var(--status-won-bg)] text-[var(--status-won-fg)]",
+      unqualified:
+        "border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]",
+      converted:
+        "border-[var(--status-proposal-fg)]/30 bg-[var(--status-proposal-bg)] text-[var(--status-proposal-fg)]",
       lost: "border-border bg-muted/40 text-muted-foreground/80",
     },
     rating: {
-      hot: "border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 text-rose-700 dark:text-rose-100",
-      warm: "border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 text-amber-700 dark:text-amber-100",
-      cold: "border-sky-500/30 dark:border-sky-300/30 bg-sky-500/20 dark:bg-sky-500/15 dark:bg-sky-500/10 text-sky-700 dark:text-sky-100",
+      hot: "border-[var(--priority-very-high-fg)]/30 bg-[var(--priority-very-high-bg)] text-[var(--priority-very-high-fg)]",
+      warm: "border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] text-[var(--priority-medium-fg)]",
+      cold: "border-[var(--priority-very-low-fg)]/30 bg-[var(--priority-very-low-bg)] text-[var(--priority-very-low-fg)]",
     },
     source: {
-      web: "border-emerald-500/30 dark:border-emerald-300/30 bg-emerald-500/20 dark:bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-100",
-      referral: "border-violet-500/30 dark:border-violet-300/30 bg-violet-500/20 dark:bg-violet-500/15 dark:bg-violet-500/10 text-violet-700 dark:text-violet-100",
-      event: "border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 text-amber-700 dark:text-amber-100",
-      cold_call: "border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 text-rose-700 dark:text-rose-100",
-      partner: "border-cyan-500/30 dark:border-cyan-300/30 bg-cyan-500/20 dark:bg-cyan-500/15 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-100",
-      marketing: "border-blue-500/30 dark:border-blue-300/30 bg-blue-500/20 dark:bg-blue-500/15 dark:bg-blue-500/10 text-blue-700 dark:text-blue-100",
+      web: "border-[var(--status-won-fg)]/30 bg-[var(--status-won-bg)] text-[var(--status-won-fg)]",
+      referral:
+        "border-[var(--status-proposal-fg)]/30 bg-[var(--status-proposal-bg)] text-[var(--status-proposal-fg)]",
+      event:
+        "border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] text-[var(--priority-medium-fg)]",
+      cold_call:
+        "border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]",
+      partner:
+        "border-[var(--status-contacted-fg)]/30 bg-[var(--status-contacted-bg)] text-[var(--status-contacted-fg)]",
+      marketing:
+        "border-[var(--status-new-fg)]/30 bg-[var(--status-new-bg)] text-[var(--status-new-fg)]",
       import: "border-border bg-muted/40 text-muted-foreground",
       other: "border-border bg-muted/40 text-muted-foreground",
     },
     provenance: {
       manual: "border-border bg-muted/40 text-muted-foreground",
-      imported: "border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 text-amber-700 dark:text-amber-100",
-      api: "border-cyan-500/30 dark:border-cyan-300/30 bg-cyan-500/20 dark:bg-cyan-500/15 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-100",
+      imported:
+        "border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] text-[var(--priority-medium-fg)]",
+      api: "border-[var(--status-contacted-fg)]/30 bg-[var(--status-contacted-bg)] text-[var(--status-contacted-fg)]",
     },
   };
   const cls = palette[kind]?.[value] ?? "border-border bg-muted/40 text-muted-foreground/80";
