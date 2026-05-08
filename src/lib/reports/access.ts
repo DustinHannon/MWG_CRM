@@ -177,9 +177,13 @@ function buildFilterFrag(
     if (!isValidField(entityType, field)) continue;
     if (!raw || typeof raw !== "object") continue;
     const op = raw as Record<string, unknown>;
-    const colSql = sql.raw(`"${escapeIdent(field)}"`);
+    // Cast to text on the column side so enum-typed columns (lead.status,
+    // opportunity.stage, task.status, task.priority, etc.) compare cleanly
+    // against the JSON-encoded string filter values without per-enum type
+    // knowledge. text-typed columns are unaffected by the cast.
+    const colSql = sql.raw(`"${escapeIdent(field)}"::text`);
     if ("eq" in op && op.eq !== undefined && op.eq !== null) {
-      frags.push(sql`${colSql} = ${op.eq}`);
+      frags.push(sql`${colSql} = ${String(op.eq)}`);
     }
     if ("ilike" in op && typeof op.ilike === "string") {
       frags.push(sql`${colSql} ILIKE ${`%${op.ilike}%`}`);
@@ -197,10 +201,9 @@ function buildFilterFrag(
       frags.push(sql`${colSql} < ${op.lt}`);
     }
     if ("in" in op && Array.isArray(op.in) && op.in.length > 0) {
-      // Build a parameterised IN list — drizzle's sql tag handles it.
-      const placeholders = op.in.map(() => sql`?`);
-      frags.push(sql`${colSql} = ANY(${op.in})`);
-      void placeholders; // satisfy linter; we used ANY()
+      // = ANY($1::text[]) avoids per-enum-type cast knowledge.
+      const stringValues = op.in.map((v) => String(v));
+      frags.push(sql`${colSql} = ANY(${stringValues}::text[])`);
     }
   }
   if (frags.length === 0) return undefined;
