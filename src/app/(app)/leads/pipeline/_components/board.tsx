@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { formatPersonName } from "@/lib/format/person-name";
+import { UserAvatar } from "@/components/user-display";
 import { updateLeadStatusAction } from "../actions";
 
 interface Card {
@@ -24,6 +25,8 @@ interface Card {
   lastName: string | null;
   companyName: string | null;
   rating: string;
+  // Phase 9C — owner id powers the canonical xs avatar on the card.
+  ownerId: string | null;
   ownerName: string | null;
   estimatedValue: string | null;
   lastActivityAt: Date | null;
@@ -210,7 +213,28 @@ function Card({ card }: { card: Card }) {
                 : "bg-blue-400")
           }
         />
-        {card.ownerName ? <span>{card.ownerName}</span> : null}
+        {card.ownerId ? (
+          // Phase 9C — avatar-only chip (xs/20px) for the dense card.
+          // Wrapping <Link> intercepts the click so the parent draggable
+          // doesn't treat it as a drag start; the card body link still
+          // reaches /leads/[id] when clicked anywhere else.
+          <Link
+            href={`/users/${card.ownerId}`}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-label={card.ownerName ?? "Owner"}
+            title={card.ownerName ?? undefined}
+          >
+            <UserAvatar
+              user={{
+                id: card.ownerId,
+                displayName: card.ownerName,
+                photoUrl: null,
+              }}
+              size="xs"
+            />
+          </Link>
+        ) : null}
         {card.estimatedValue ? (
           <span className="ml-auto tabular-nums text-foreground/80">
             ${Number(card.estimatedValue).toLocaleString()}

@@ -25,6 +25,9 @@ interface CardRow {
   lastName: string | null;
   companyName: string | null;
   rating: string;
+  // Phase 9C — owner id surfaced for the UserAvatar chip on Kanban
+  // cards (avatars only, no hover card; high-cardinality surface).
+  ownerId: string | null;
   ownerName: string | null;
   estimatedValue: string | null;
   lastActivityAt: Date | null;
@@ -52,6 +55,7 @@ export default async function PipelinePage() {
       lastName: leads.lastName,
       companyName: leads.companyName,
       rating: sql<string>`${leads.rating}::text`,
+      ownerId: leads.ownerId,
       ownerName: users.displayName,
       estimatedValue: leads.estimatedValue,
       lastActivityAt: leads.lastActivityAt,

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { UserChip } from "@/components/user-display";
 import {
   AVAILABLE_COLUMNS,
   type ColumnKey,
@@ -422,10 +423,21 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
     case "source":
       return <Pill kind="source" value={lead.source} />;
     case "owner":
-      return (
-        <span className="text-muted-foreground">
-          {lead.ownerDisplayName ?? "Unassigned"}
-        </span>
+      // Phase 9C — UserChip in lieu of plain text. Skip hoverCard:
+      // table can render up to 50 rows, and server-rendering 50
+      // hover cards is too expensive even with the in-process cache.
+      // Initials fallback when ownerPhotoUrl isn't projected — the
+      // /users/[id] click-through still resolves the full profile.
+      return lead.ownerId ? (
+        <UserChip
+          user={{
+            id: lead.ownerId,
+            displayName: lead.ownerDisplayName,
+            photoUrl: null,
+          }}
+        />
+      ) : (
+        <span className="text-muted-foreground">Unassigned</span>
       );
     case "tags":
       return (
@@ -450,10 +462,16 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
         </span>
       );
     case "createdBy":
-      return (
-        <span className="text-muted-foreground">
-          {lead.createdByDisplayName ?? "—"}
-        </span>
+      return lead.createdById ? (
+        <UserChip
+          user={{
+            id: lead.createdById,
+            displayName: lead.createdByDisplayName,
+            photoUrl: null,
+          }}
+        />
+      ) : (
+        <span className="text-muted-foreground">—</span>
       );
     case "createdVia":
       return <Pill kind="provenance" value={lead.createdVia} />;
