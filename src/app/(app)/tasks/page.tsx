@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
@@ -10,11 +11,16 @@ export const dynamic = "force-dynamic";
  * /tasks — primary task list. Filters: status (Open default), assignee
  * (Me default), due window (Overdue / Today / This Week / Later / No Date).
  * Group by due bucket. Inline-create at top.
+ *
+ * Phase 9C — cursor pagination on (due_at NULLS LAST, id DESC) at
+ * pageSize 50. Bucketing happens client-side over a single page; users
+ * can "Load more" to extend the list. At 1M+ tasks this keeps the
+ * server-side scan bounded by the composite index.
  */
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; cursor?: string }>;
 }) {
   const session = await requireSession();
   const sp = await searchParams;
@@ -22,11 +28,13 @@ export default async function TasksPage({
     | ("open" | "in_progress" | "completed" | "cancelled")[]
     | undefined;
 
-  const tasks = await listTasksForUser({
+  const { rows: tasks, nextCursor } = await listTasksForUser({
     userId: session.id,
     isAdmin: session.isAdmin,
     scope: "me",
     status: statusFilter ?? ["open", "in_progress"],
+    cursor: sp.cursor,
+    pageSize: 50,
   });
 
   const buckets = bucketTasks(tasks);
@@ -45,6 +53,30 @@ export default async function TasksPage({
       <GlassCard className="mt-6 p-4">
         <TaskListClient buckets={buckets} userId={session.id} prefs={prefs} />
       </GlassCard>
+
+      {nextCursor || sp.cursor ? (
+        <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
+          <span>{sp.cursor ? "Showing more results" : "Showing first 50"}</span>
+          <div className="flex gap-2">
+            {sp.cursor ? (
+              <Link
+                href="/tasks"
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                ← Back to start
+              </Link>
+            ) : null}
+            {nextCursor ? (
+              <Link
+                href={`/tasks?cursor=${encodeURIComponent(nextCursor)}${sp.status ? `&status=${encodeURIComponent(sp.status)}` : ""}`}
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                Load more →
+              </Link>
+            ) : null}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

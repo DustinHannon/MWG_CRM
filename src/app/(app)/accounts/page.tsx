@@ -1,38 +1,61 @@
 import Link from "next/link";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { encodeCursor, parseCursor } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
 
-export default async function AccountsPage() {
+const PAGE_SIZE = 50;
+
+export default async function AccountsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cursor?: string }>;
+}) {
   const session = await requireSession();
+  const sp = await searchParams;
   const perms = await getPermissions(session.id);
   const canViewAll = session.isAdmin || perms.canViewAllRecords;
 
-  const where = canViewAll
-    ? undefined
-    : eq(crmAccounts.ownerId, session.id);
+  // Phase 9C — cursor pagination on (updated_at DESC, id DESC).
+  // Composite partial index `crm_accounts_updated_at_id_idx` supports
+  // these seeks at scale (100k+ accounts).
+  const cursor = parseCursor(sp.cursor);
+  const wheres = [eq(crmAccounts.isDeleted, false)];
+  if (!canViewAll) wheres.push(eq(crmAccounts.ownerId, session.id));
+  if (cursor) {
+    wheres.push(
+      sql`(
+        ${crmAccounts.updatedAt} < ${cursor.ts!.toISOString()}::timestamptz
+        OR (${crmAccounts.updatedAt} = ${cursor.ts!.toISOString()}::timestamptz AND ${crmAccounts.id} < ${cursor.id})
+      )`,
+    );
+  }
 
-  const rows = await db
+  const rowsRaw = await db
     .select({
       id: crmAccounts.id,
       name: crmAccounts.name,
       industry: crmAccounts.industry,
       ownerName: users.displayName,
       createdAt: crmAccounts.createdAt,
+      updatedAt: crmAccounts.updatedAt,
     })
     .from(crmAccounts)
     .leftJoin(users, eq(users.id, crmAccounts.ownerId))
-    .where(where)
-    .orderBy(desc(crmAccounts.updatedAt));
+    .where(and(...wheres))
+    .orderBy(desc(crmAccounts.updatedAt), desc(crmAccounts.id))
+    .limit(PAGE_SIZE + 1);
 
-  // Touch and to satisfy lint with conditional `where`.
-  void and;
+  const hasMore = rowsRaw.length > PAGE_SIZE;
+  const rows = hasMore ? rowsRaw.slice(0, PAGE_SIZE) : rowsRaw;
+  const last = rows[rows.length - 1];
+  const nextCursor = hasMore && last ? encodeCursor(last.updatedAt, last.id) : null;
 
   return (
     <div className="px-10 py-10">
@@ -85,6 +108,30 @@ export default async function AccountsPage() {
           </table>
         )}
       </GlassCard>
+
+      {nextCursor || sp.cursor ? (
+        <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
+          <span>{sp.cursor ? "Showing more results" : "Showing first 50"}</span>
+          <div className="flex gap-2">
+            {sp.cursor ? (
+              <Link
+                href="/accounts"
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                ← Back to start
+              </Link>
+            ) : null}
+            {nextCursor ? (
+              <Link
+                href={`/accounts?cursor=${encodeURIComponent(nextCursor)}`}
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                Load more →
+              </Link>
+            ) : null}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

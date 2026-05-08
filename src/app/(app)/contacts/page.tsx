@@ -1,22 +1,42 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
+import { encodeCursor, parseCursor } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
 
-export default async function ContactsPage() {
+const PAGE_SIZE = 50;
+
+export default async function ContactsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cursor?: string }>;
+}) {
   const session = await requireSession();
+  const sp = await searchParams;
   const perms = await getPermissions(session.id);
   const canViewAll = session.isAdmin || perms.canViewAllRecords;
 
-  const where = canViewAll ? undefined : eq(contacts.ownerId, session.id);
+  // Phase 9C — cursor pagination on (updated_at DESC, id DESC).
+  // Backed by composite partial index `contacts_updated_at_id_idx`.
+  const cursor = parseCursor(sp.cursor);
+  const wheres = [eq(contacts.isDeleted, false)];
+  if (!canViewAll) wheres.push(eq(contacts.ownerId, session.id));
+  if (cursor) {
+    wheres.push(
+      sql`(
+        ${contacts.updatedAt} < ${cursor.ts!.toISOString()}::timestamptz
+        OR (${contacts.updatedAt} = ${cursor.ts!.toISOString()}::timestamptz AND ${contacts.id} < ${cursor.id})
+      )`,
+    );
+  }
 
-  const rows = await db
+  const rowsRaw = await db
     .select({
       id: contacts.id,
       firstName: contacts.firstName,
@@ -27,12 +47,19 @@ export default async function ContactsPage() {
       accountName: crmAccounts.name,
       ownerName: users.displayName,
       createdAt: contacts.createdAt,
+      updatedAt: contacts.updatedAt,
     })
     .from(contacts)
     .leftJoin(crmAccounts, eq(crmAccounts.id, contacts.accountId))
     .leftJoin(users, eq(users.id, contacts.ownerId))
-    .where(where)
-    .orderBy(desc(contacts.updatedAt));
+    .where(and(...wheres))
+    .orderBy(desc(contacts.updatedAt), desc(contacts.id))
+    .limit(PAGE_SIZE + 1);
+
+  const hasMore = rowsRaw.length > PAGE_SIZE;
+  const rows = hasMore ? rowsRaw.slice(0, PAGE_SIZE) : rowsRaw;
+  const last = rows[rows.length - 1];
+  const nextCursor = hasMore && last ? encodeCursor(last.updatedAt, last.id) : null;
 
   return (
     <div className="px-10 py-10">
@@ -95,6 +122,30 @@ export default async function ContactsPage() {
           </table>
         )}
       </GlassCard>
+
+      {nextCursor || sp.cursor ? (
+        <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
+          <span>{sp.cursor ? "Showing more results" : "Showing first 50"}</span>
+          <div className="flex gap-2">
+            {sp.cursor ? (
+              <Link
+                href="/contacts"
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                ← Back to start
+              </Link>
+            ) : null}
+            {nextCursor ? (
+              <Link
+                href={`/contacts?cursor=${encodeURIComponent(nextCursor)}`}
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                Load more →
+              </Link>
+            ) : null}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

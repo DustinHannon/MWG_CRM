@@ -2,13 +2,22 @@ import Link from "next/link";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
-import { listNotificationsForUser } from "@/lib/notifications";
+import { listNotificationsPage } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
-export default async function NotificationsPage() {
+export default async function NotificationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cursor?: string }>;
+}) {
   const session = await requireSession();
-  const list = await listNotificationsForUser(session.id, 100);
+  const sp = await searchParams;
+  // Phase 9C — cursor pagination on (created_at DESC, id DESC) with
+  // page size 50. Backed by `notifications_user_unread_idx` for the
+  // user_id leading column; the (created_at, id) tail keeps cursor
+  // seeks deterministic at high volumes.
+  const { rows: list, nextCursor } = await listNotificationsPage(session.id, sp.cursor, 50);
 
   return (
     <div className="px-10 py-10">
@@ -52,6 +61,30 @@ export default async function NotificationsPage() {
           </ul>
         )}
       </GlassCard>
+
+      {nextCursor || sp.cursor ? (
+        <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
+          <span>{sp.cursor ? "Showing more results" : "Showing first 50"}</span>
+          <div className="flex gap-2">
+            {sp.cursor ? (
+              <Link
+                href="/notifications"
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                ← Back to start
+              </Link>
+            ) : null}
+            {nextCursor ? (
+              <Link
+                href={`/notifications?cursor=${encodeURIComponent(nextCursor)}`}
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                Load more →
+              </Link>
+            ) : null}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

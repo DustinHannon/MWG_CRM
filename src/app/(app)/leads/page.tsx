@@ -37,6 +37,9 @@ interface SearchParams {
   cols?: string;
   sort?: string;
   dir?: string;
+  // Phase 9C — cursor pagination on the default sort. When present,
+  // `page=` is ignored and the next cursor is read from `result.nextCursor`.
+  cursor?: string;
 }
 
 export default async function LeadsPage({
@@ -126,6 +129,10 @@ export default async function LeadsPage({
     : undefined;
 
   // ---- Run the query -----------------------------------------------------
+  // Phase 9C — cursor wins when present and the active sort is the
+  // default (lastActivityAt DESC). Custom sorts continue using offset
+  // paging because we don't have composite (col, id) indexes for every
+  // sortable column.
   const result = await runView({
     view: activeView,
     user,
@@ -135,6 +142,7 @@ export default async function LeadsPage({
     columns: activeColumns,
     sort,
     extraFilters,
+    cursor: sp.cursor,
   });
 
   // ---- Toolbar payload ---------------------------------------------------
@@ -166,7 +174,12 @@ export default async function LeadsPage({
         <div>
           <h1 className="text-2xl font-semibold">Leads</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {result.total} {result.total === 1 ? "lead" : "leads"}
+            {/* Phase 9C — cursor pagination skips the COUNT query for
+                speed at scale. We show the row count only when the
+                offset path runs (custom sort or filtered view). */}
+            {result.total > 0
+              ? `${result.total} ${result.total === 1 ? "lead" : "leads"}`
+              : `${result.rows.length}${result.nextCursor ? "+" : ""} ${result.rows.length === 1 ? "lead" : "leads"}`}
             {sp.q ? ` matching "${sp.q}"` : ""} · view {activeView.name}
           </p>
         </div>
@@ -301,7 +314,15 @@ export default async function LeadsPage({
         </table>
       </div>
 
-      {result.total > pageSize ? (
+      {result.nextCursor || sp.cursor ? (
+        // Phase 9C — cursor pagination path (default sort). "Load more"
+        // appears whenever a nextCursor exists; "Back to start"
+        // appears once the user has advanced past the first batch.
+        <CursorNav nextCursor={result.nextCursor} sp={sp} />
+      ) : result.total > pageSize ? (
+        // Custom-sort fallback path — offset pagination keeps the
+        // existing "Page X of Y" UX for sorts that don't have a
+        // composite index yet.
         <Pagination
           page={page}
           pageSize={pageSize}
@@ -310,6 +331,47 @@ export default async function LeadsPage({
         />
       ) : null}
     </div>
+  );
+}
+
+function CursorNav({
+  nextCursor,
+  sp,
+}: {
+  nextCursor: string | null;
+  sp: SearchParams;
+}) {
+  const buildHref = (next: string | null) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) {
+      if (k === "cursor" || k === "page") continue;
+      if (typeof v === "string" && v.length > 0) params.set(k, v);
+    }
+    if (next) params.set("cursor", next);
+    return `/leads?${params.toString()}`;
+  };
+  return (
+    <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
+      <span>{sp.cursor ? "Showing more results" : "Showing first page"}</span>
+      <div className="flex gap-2">
+        {sp.cursor ? (
+          <Link
+            href={buildHref(null)}
+            className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+          >
+            ← Back to start
+          </Link>
+        ) : null}
+        {nextCursor ? (
+          <Link
+            href={buildHref(nextCursor)}
+            className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+          >
+            Load more →
+          </Link>
+        ) : null}
+      </div>
+    </nav>
   );
 }
 

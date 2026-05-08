@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
@@ -9,14 +9,65 @@ import { getPermissions, requireSession } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
-export default async function OpportunitiesPage() {
+const PAGE_SIZE = 50;
+
+/**
+ * Phase 9C — opportunities cursor uses `<yyyy-mm-dd|null>:<uuid>`. We
+ * intentionally don't reuse the leads cursor codec because
+ * `expected_close_date` is a `date` (not `timestamptz`) and NULLS LAST
+ * needs special handling on both encode and where-clause sides.
+ */
+function encodeOppCursor(date: string | null, id: string): string {
+  return `${date ?? "null"}:${id}`;
+}
+function parseOppCursor(raw: string | undefined): { date: string | null; id: string } | null {
+  if (!raw) return null;
+  const idx = raw.lastIndexOf(":");
+  if (idx === -1) return null;
+  const datePart = raw.slice(0, idx);
+  const idPart = raw.slice(idx + 1);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idPart)) {
+    return null;
+  }
+  if (datePart === "null" || datePart === "") return { date: null, id: idPart };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return null;
+  return { date: datePart, id: idPart };
+}
+
+export default async function OpportunitiesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cursor?: string }>;
+}) {
   const session = await requireSession();
+  const sp = await searchParams;
   const perms = await getPermissions(session.id);
   const canViewAll = session.isAdmin || perms.canViewAllRecords;
 
-  const where = canViewAll ? undefined : eq(opportunities.ownerId, session.id);
+  // Phase 9C — cursor pagination on (expected_close_date DESC NULLS LAST, id DESC).
+  // Backed by composite partial index `opportunities_close_date_id_idx`.
+  const cursor = parseOppCursor(sp.cursor);
+  const wheres = [eq(opportunities.isDeleted, false)];
+  if (!canViewAll) wheres.push(eq(opportunities.ownerId, session.id));
+  if (cursor) {
+    if (cursor.date === null) {
+      // Already in the NULL-block tail — only id-tiebreak remains.
+      wheres.push(
+        sql`(${opportunities.expectedCloseDate} IS NULL AND ${opportunities.id} < ${cursor.id})`,
+      );
+    } else {
+      // Either an earlier non-null date OR (same date AND smaller id) OR a NULL row.
+      wheres.push(
+        sql`(
+          ${opportunities.expectedCloseDate} < ${cursor.date}::date
+          OR (${opportunities.expectedCloseDate} = ${cursor.date}::date AND ${opportunities.id} < ${cursor.id})
+          OR ${opportunities.expectedCloseDate} IS NULL
+        )`,
+      );
+    }
+  }
 
-  const rows = await db
+  const rowsRaw = await db
     .select({
       id: opportunities.id,
       name: opportunities.name,
@@ -32,8 +83,14 @@ export default async function OpportunitiesPage() {
     .leftJoin(crmAccounts, eq(crmAccounts.id, opportunities.accountId))
     .leftJoin(contacts, eq(contacts.id, opportunities.primaryContactId))
     .leftJoin(users, eq(users.id, opportunities.ownerId))
-    .where(where)
-    .orderBy(desc(opportunities.updatedAt));
+    .where(and(...wheres))
+    .orderBy(sql`${opportunities.expectedCloseDate} DESC NULLS LAST`, desc(opportunities.id))
+    .limit(PAGE_SIZE + 1);
+
+  const hasMore = rowsRaw.length > PAGE_SIZE;
+  const rows = hasMore ? rowsRaw.slice(0, PAGE_SIZE) : rowsRaw;
+  const last = rows[rows.length - 1];
+  const nextCursor = hasMore && last ? encodeOppCursor(last.expectedCloseDate, last.id) : null;
 
   return (
     <div className="px-10 py-10">
@@ -115,6 +172,30 @@ export default async function OpportunitiesPage() {
           </table>
         )}
       </GlassCard>
+
+      {nextCursor || sp.cursor ? (
+        <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
+          <span>{sp.cursor ? "Showing more results" : "Showing first 50"}</span>
+          <div className="flex gap-2">
+            {sp.cursor ? (
+              <Link
+                href="/opportunities"
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                ← Back to start
+              </Link>
+            ) : null}
+            {nextCursor ? (
+              <Link
+                href={`/opportunities?cursor=${encodeURIComponent(nextCursor)}`}
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+              >
+                Load more →
+              </Link>
+            ) : null}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }
