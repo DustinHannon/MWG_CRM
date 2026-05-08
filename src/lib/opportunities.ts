@@ -1,0 +1,113 @@
+import "server-only";
+import { and, asc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@/db";
+import { contacts, opportunities } from "@/db/schema/crm-records";
+import { writeAudit } from "@/lib/audit";
+
+/**
+ * Phase 9C (workflow) — direct Opportunity creation, separate from
+ * the lead-conversion path (`src/lib/conversion.ts`). Conversion stays
+ * the canonical entry point; this is the "I already have an account"
+ * shortcut and powers the New Opportunity buttons on `/opportunities`
+ * and on `/accounts/[id]`.
+ *
+ * Schema enforces account_id (the brief: "Required Account picker").
+ * Stage defaults to prospecting. `closed_at` stays NULL on insert; the
+ * existing stage-transition path (in opportunities edit / pipeline)
+ * stamps it when the row first hits closed_won/closed_lost.
+ */
+export const OPPORTUNITY_STAGES = [
+  "prospecting",
+  "qualification",
+  "proposal",
+  "negotiation",
+  "closed_won",
+  "closed_lost",
+] as const;
+
+export const opportunityCreateSchema = z.object({
+  accountId: z.string().uuid("Account is required"),
+  primaryContactId: z.string().uuid().optional().nullable(),
+  name: z.string().trim().min(1, "Required").max(200),
+  stage: z.enum(OPPORTUNITY_STAGES).default("prospecting"),
+  amount: z
+    .union([z.string(), z.number()])
+    .optional()
+    .nullable()
+    .transform((v) => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) ? n.toFixed(2) : null;
+    }),
+  expectedCloseDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/u)
+    .optional()
+    .nullable()
+    .or(z.literal("").transform(() => null)),
+  description: z.string().trim().max(20_000).optional().nullable(),
+});
+
+export type OpportunityCreateInput = z.infer<typeof opportunityCreateSchema>;
+
+export async function createOpportunity(
+  input: OpportunityCreateInput,
+  actorId: string,
+): Promise<{ id: string }> {
+  const inserted = await db
+    .insert(opportunities)
+    .values({
+      accountId: input.accountId,
+      primaryContactId: input.primaryContactId || null,
+      name: input.name,
+      stage: input.stage,
+      amount: input.amount,
+      expectedCloseDate: input.expectedCloseDate ?? null,
+      description: input.description ?? null,
+      ownerId: actorId,
+      createdById: actorId,
+      // closed_at is set by stage-transition wiring; leave NULL on
+      // create even when stage=closed_won (treat that as the rare
+      // import-from-spreadsheet case and require an edit to backfill).
+    })
+    .returning({ id: opportunities.id });
+
+  await writeAudit({
+    actorId,
+    action: "opportunity.create",
+    targetType: "opportunities",
+    targetId: inserted[0].id,
+    after: {
+      name: input.name,
+      accountId: input.accountId,
+      stage: input.stage,
+    },
+  });
+
+  return { id: inserted[0].id };
+}
+
+/**
+ * Phase 9C (workflow) — contact picker support for the New Opportunity
+ * form. Returns up to 200 contacts on a given account, sorted by name.
+ * Empty list when no account selected.
+ */
+export async function listContactsForAccountPicker(
+  accountId: string | null,
+): Promise<Array<{ id: string; firstName: string; lastName: string | null }>> {
+  if (!accountId) return [];
+  const rows = await db
+    .select({
+      id: contacts.id,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+    })
+    .from(contacts)
+    .where(
+      and(eq(contacts.accountId, accountId), eq(contacts.isDeleted, false)),
+    )
+    .orderBy(asc(contacts.firstName), asc(contacts.lastName))
+    .limit(200);
+  return rows;
+}

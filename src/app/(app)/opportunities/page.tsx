@@ -103,15 +103,23 @@ export default async function OpportunitiesPage({
             Opportunities
           </h1>
         </div>
-        <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
-          <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
-            Table
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
+            <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
+              Table
+            </span>
+            <Link
+              href="/opportunities/pipeline"
+              className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Pipeline
+            </Link>
+          </div>
           <Link
-            href="/opportunities/pipeline"
-            className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            href="/opportunities/new"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
           >
-            Pipeline
+            + New opportunity
           </Link>
         </div>
       </div>
@@ -119,7 +127,14 @@ export default async function OpportunitiesPage({
       <GlassCard className="mt-6 overflow-hidden p-0">
         {rows.length === 0 ? (
           <p className="p-12 text-center text-sm text-muted-foreground">
-            No opportunities yet. Convert a lead to create one.
+            No opportunities yet.{" "}
+            <Link
+              href="/opportunities/new"
+              className="underline hover:text-foreground"
+            >
+              Add the first one
+            </Link>{" "}
+            or convert a lead.
           </p>
         ) : (
           <table className="data-table w-full text-sm">
