@@ -122,6 +122,8 @@ export async function archiveOpportunitiesById(
       deletedAt: sql`now()`,
       deletedById: actorId,
       deleteReason: reason ?? null,
+      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(opportunities.id, ids));
@@ -140,10 +142,11 @@ export async function restoreOpportunitiesById(
       deletedAt: null,
       deletedById: null,
       deleteReason: null,
+      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(opportunities.id, ids));
-  void actorId;
 }
 
 /** Phase 10 — admin hard-delete. */

@@ -113,6 +113,8 @@ export async function archiveAccountsById(
       deletedAt: sql`now()`,
       deletedById: actorId,
       deleteReason: reason ?? null,
+      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(crmAccounts.id, ids));
@@ -135,10 +137,11 @@ export async function restoreAccountsById(
       deletedAt: null,
       deletedById: null,
       deleteReason: null,
+      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(crmAccounts.id, ids));
-  void actorId;
 }
 
 /**

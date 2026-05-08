@@ -67,6 +67,8 @@ export async function updateOpportunityStageAction(
         .set({
           stage: parsed,
           closedAt,
+          // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+          updatedById: session.id,
           updatedAt: new Date(),
           version: version + 1,
         })

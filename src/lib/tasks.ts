@@ -250,6 +250,8 @@ export async function updateTask(
 ): Promise<{ id: string; version: number }> {
   const set: Record<string, unknown> = {
     ...patch,
+    // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+    updatedById: actorId,
     updatedAt: sql`now()`,
     version: sql`${tasks.version} + 1`,
   };
@@ -293,6 +295,8 @@ export async function archiveTasksById(
       deletedAt: sql`now()`,
       deletedById: actorId,
       deleteReason: reason ?? null,
+      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(tasks.id, ids));
@@ -311,10 +315,11 @@ export async function restoreTasksById(
       deletedAt: null,
       deletedById: null,
       deleteReason: null,
+      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(tasks.id, ids));
-  void actorId;
 }
 
 /** Phase 10 — admin hard-delete. Use only from admin flows. */
