@@ -6,6 +6,8 @@ import { importJobs } from "@/db/schema/imports";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { StatusPill } from "@/components/ui/status-pill";
+import { PriorityPill } from "@/components/ui/priority-pill";
 import {
   getCurrentUserTimePrefs,
   UserTime,
@@ -129,18 +131,14 @@ export default async function LeadDetailPage({
               </span>
             ) : null}
           </p>
-          <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-wide">
-            <span className="rounded-full border border-blue-500/30 dark:border-blue-300/30 bg-blue-500/20 dark:bg-blue-500/15 dark:bg-blue-500/10 px-2 py-0.5 text-blue-700 dark:text-blue-100">
-              {lead.status}
-            </span>
-            <span className="rounded-full border border-amber-500/30 dark:border-amber-300/30 bg-amber-500/20 dark:bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 text-amber-700 dark:text-amber-100">
-              {lead.rating}
-            </span>
-            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <StatusPill status={lead.status} />
+            <PriorityPill priority={lead.rating} />
+            <span className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
               {lead.source.replaceAll("_", " ")}
             </span>
             {lead.doNotContact ? (
-              <span className="rounded-full border border-rose-500/30 dark:border-rose-300/30 bg-rose-500/20 dark:bg-rose-500/15 dark:bg-rose-500/10 px-2 py-0.5 text-rose-700 dark:text-rose-100">
+              <span className="inline-flex items-center rounded-md bg-[var(--status-lost-bg)] px-2 py-0.5 text-xs font-medium text-[var(--status-lost-fg)]">
                 Do not contact
               </span>
             ) : null}

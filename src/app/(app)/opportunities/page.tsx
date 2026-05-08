@@ -8,6 +8,7 @@ import { PagePoll } from "@/components/realtime/page-poll";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
+import { StatusPill } from "@/components/ui/status-pill";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { canDeleteOpportunity } from "@/lib/access/can-delete";
 import { OpportunityRowActions } from "./_components/opportunity-row-actions";
@@ -177,8 +178,8 @@ export default async function OpportunitiesPage({
                       {r.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                    {r.stage}
+                  <td className="px-4 py-2.5">
+                    <StatusPill status={r.stage} />
                   </td>
                   <td className="px-4 py-2.5 tabular-nums text-foreground/80">
                     {r.amount ? `$${Number(r.amount).toLocaleString()}` : "—"}

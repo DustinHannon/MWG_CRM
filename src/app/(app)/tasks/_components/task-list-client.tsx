@@ -17,6 +17,8 @@ import {
 // Phase 9C — direct import (not the barrel) keeps the server-only
 // UserHoverCard out of the client bundle.
 import { UserChip } from "@/components/user-display/user-chip";
+import { PriorityPill } from "@/components/ui/priority-pill";
+import { StatusPill } from "@/components/ui/status-pill";
 import { ConfirmDeleteDialog, showUndoToast } from "@/components/delete";
 import { Trash2 } from "lucide-react";
 
@@ -118,9 +120,10 @@ export function TaskListClient({
                             <span>Due {formatUserTime(t.dueAt, prefs)}</span>
                           ) : null}
                           {t.priority !== "normal" ? (
-                            <span className="rounded-full bg-accent/40 px-1.5 py-0.5 text-[10px] uppercase">
-                              {t.priority}
-                            </span>
+                            <PriorityPill priority={t.priority} />
+                          ) : null}
+                          {t.status !== "open" ? (
+                            <StatusPill status={t.status} />
                           ) : null}
                           {t.leadId ? (
                             <Link

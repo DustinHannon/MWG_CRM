@@ -10,6 +10,8 @@ import {
   type SessionUser,
 } from "@/lib/auth-helpers";
 import { canDeleteLead } from "@/lib/access/can-delete";
+import { StatusPill } from "@/components/ui/status-pill";
+import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserChip } from "@/components/user-display";
 import { LeadRowActions } from "./_components/lead-row-actions";
 import {
@@ -444,9 +446,9 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
     case "jobTitle":
       return <span className="text-muted-foreground">{lead.jobTitle ?? "—"}</span>;
     case "status":
-      return <Pill kind="status" value={lead.status} />;
+      return <StatusPill status={lead.status} />;
     case "rating":
-      return <Pill kind="rating" value={lead.rating} />;
+      return <PriorityPill priority={lead.rating} />;
     case "source":
       return <Pill kind="source" value={lead.source} />;
     case "owner":

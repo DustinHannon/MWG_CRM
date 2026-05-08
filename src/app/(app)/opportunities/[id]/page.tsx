@@ -7,6 +7,7 @@ import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { GlassCard } from "@/components/ui/glass-card";
+import { StatusPill } from "@/components/ui/status-pill";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -77,12 +78,17 @@ export default async function OpportunityDetailPage({
       <div className="mt-3 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{opp.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Stage: {opp.stage} ·{" "}
-            {opp.amount ? `$${Number(opp.amount).toLocaleString()}` : "—"} ·
-            Expected close{" "}
-            <UserTime value={opp.expectedCloseDate} mode="date" />
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <StatusPill status={opp.stage} />
+            <span>
+              {opp.amount ? `$${Number(opp.amount).toLocaleString()}` : "—"}
+            </span>
+            <span aria-hidden>·</span>
+            <span>
+              Expected close{" "}
+              <UserTime value={opp.expectedCloseDate} mode="date" />
+            </span>
+          </div>
         </div>
         {canDeleteOpportunity(session, { ownerId: opp.ownerId }) ? (
           <OpportunityDetailDelete
