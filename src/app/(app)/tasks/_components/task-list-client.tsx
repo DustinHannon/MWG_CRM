@@ -13,6 +13,7 @@ import {
   formatUserTime,
   type TimePrefs,
 } from "@/lib/format-time";
+import { UserChip } from "@/components/user-display";
 
 interface TaskListClientProps {
   buckets: { label: string; tasks: TaskRow[] }[];
@@ -20,7 +21,7 @@ interface TaskListClientProps {
   prefs: TimePrefs;
 }
 
-export function TaskListClient({ buckets, prefs }: TaskListClientProps) {
+export function TaskListClient({ buckets, userId, prefs }: TaskListClientProps) {
   const [pending, startTransition] = useTransition();
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
 
@@ -105,7 +106,7 @@ export function TaskListClient({ buckets, prefs }: TaskListClientProps) {
                         >
                           {t.title}
                         </p>
-                        <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           {t.dueAt ? (
                             <span>Due {formatUserTime(t.dueAt, prefs)}</span>
                           ) : null}
@@ -122,7 +123,22 @@ export function TaskListClient({ buckets, prefs }: TaskListClientProps) {
                               {t.leadName ?? "Lead"}
                             </Link>
                           ) : null}
-                        </p>
+                          {/* Phase 9C — assignee avatar/name when the
+                              task isn't assigned to the viewer. The
+                              "/tasks" page defaults to scope=me, so
+                              hiding self-assignments keeps the line
+                              compact. Skipping hoverCard on this list
+                              since pages can hold up to 50 tasks. */}
+                          {t.assignedToId && t.assignedToId !== userId ? (
+                            <UserChip
+                              user={{
+                                id: t.assignedToId,
+                                displayName: t.assignedToName,
+                                photoUrl: null,
+                              }}
+                            />
+                          ) : null}
+                        </div>
                       </div>
                       <button
                         type="button"
