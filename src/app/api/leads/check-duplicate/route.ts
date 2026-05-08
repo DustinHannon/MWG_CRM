@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { ilike, or, sql } from "drizzle-orm";
+import { and, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { eq } from "drizzle-orm";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
+import { withActive } from "@/lib/db/query-helpers";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -57,7 +58,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ matches: [] });
   }
 
-  const where = or(...conditions);
+  // Phase 11 — exclude archived leads from dedup. Pre-fix the check
+  // surfaced soft-deleted rows as "duplicates" against fresh imports,
+  // which the import flow then rejected, blocking re-creation of leads
+  // whose archive was the actual user intent.
+  const where = and(or(...conditions), withActive(leads.isDeleted));
 
   const rows = await db
     .select({
