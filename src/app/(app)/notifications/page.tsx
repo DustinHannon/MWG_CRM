@@ -23,7 +23,7 @@ export default async function NotificationsPage({
   const { rows: list, nextCursor } = await listNotificationsPage(session.id, sp.cursor, 50);
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Notifications" }]} />
       <PageRealtime
         entities={["notifications"]}

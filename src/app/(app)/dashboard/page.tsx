@@ -170,7 +170,7 @@ export default async function DashboardPage() {
     // Render a minimal page instead of crashing — surfaces a friendly
     // error, lets the user navigate elsewhere.
     return (
-      <div className="px-10 py-10">
+      <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
         <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
         <PageRealtime entities={["leads", "tasks", "notifications"]} />
         <PagePoll entities={["leads", "tasks", "notifications"]} />
@@ -204,7 +204,7 @@ export default async function DashboardPage() {
 
   if (totalLeads === 0) {
     return (
-      <div className="px-10 py-10">
+      <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
         <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
         <PageRealtime entities={["leads", "tasks", "notifications"]} />
         <PagePoll entities={["leads", "tasks", "notifications"]} />
@@ -266,7 +266,7 @@ export default async function DashboardPage() {
   }));
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
       <PageRealtime entities={["leads", "tasks", "notifications"]} />
         <PagePoll entities={["leads", "tasks", "notifications"]} />

@@ -27,7 +27,7 @@ export default async function ArchivedAccountsPage() {
   const user = await requireSession();
   if (!user.isAdmin) {
     return (
-      <div className="px-10 py-10">
+      <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
         <BreadcrumbsSetter
           crumbs={[
             { label: "Accounts", href: "/accounts" },
@@ -57,7 +57,7 @@ export default async function ArchivedAccountsPage() {
     .limit(200);
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter
         crumbs={[
           { label: "Accounts", href: "/accounts" },

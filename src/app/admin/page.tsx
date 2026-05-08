@@ -25,7 +25,7 @@ export default async function AdminOverviewPage() {
   const c = counts[0];
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Admin" }]} />
       <h1 className="text-2xl font-semibold">Admin overview</h1>
       <p className="mt-2 text-sm text-muted-foreground">

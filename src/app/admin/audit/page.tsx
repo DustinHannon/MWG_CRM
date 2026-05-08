@@ -79,7 +79,7 @@ export default async function AuditLogPage({
   const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter
         crumbs={[
           { label: "Admin", href: "/admin" },

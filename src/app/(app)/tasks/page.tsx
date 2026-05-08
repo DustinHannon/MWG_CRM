@@ -44,7 +44,7 @@ export default async function TasksPage({
   const prefs = await getCurrentUserTimePrefs();
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Tasks" }]} />
       <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["tasks"]} />
