@@ -9,7 +9,7 @@ import {
   requireLeadEditAccess,
   requireSession,
 } from "@/lib/auth-helpers";
-import { ForbiddenError, ValidationError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import {
   createLead,
@@ -299,7 +299,13 @@ export async function undoArchiveLeadAction(input: {
         .from(leads)
         .where(eq(leads.id, payload.id))
         .limit(1);
-      if (!row) throw new ForbiddenError("Lead not found.");
+      // Phase 12C — BUG-003: row may have been hard-deleted by an admin
+      // between soft-delete and Undo. Surface a clear NotFound.
+      if (!row) {
+        throw new NotFoundError(
+          "lead — it was permanently deleted before Undo could run",
+        );
+      }
       if (!canDeleteLead(user, row)) {
         throw new ForbiddenError("You can't restore this lead.");
       }

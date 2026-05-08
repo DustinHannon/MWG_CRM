@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts } from "@/db/schema/crm-records";
 import { requireSession } from "@/lib/auth-helpers";
-import { ForbiddenError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
@@ -80,7 +80,13 @@ export async function undoArchiveContactAction(input: {
       .from(contacts)
       .where(eq(contacts.id, payload.id))
       .limit(1);
-    if (!row) throw new ForbiddenError("Contact not found.");
+    // Phase 12C — BUG-003: row may have been hard-deleted by an admin
+    // between soft-delete and Undo. Surface a clear NotFound.
+    if (!row) {
+      throw new NotFoundError(
+        "contact — it was permanently deleted before Undo could run",
+      );
+    }
     if (!canDeleteContact(user, row)) throw new ForbiddenError("You can't restore this contact.");
     await restoreContactsById([payload.id], user.id);
     await writeAudit({

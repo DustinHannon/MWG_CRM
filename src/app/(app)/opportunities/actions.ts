@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { opportunities } from "@/db/schema/crm-records";
 import { requireSession } from "@/lib/auth-helpers";
-import { ForbiddenError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
@@ -76,7 +76,13 @@ export async function undoArchiveOpportunityAction(input: {
       .from(opportunities)
       .where(eq(opportunities.id, payload.id))
       .limit(1);
-    if (!row) throw new ForbiddenError("Opportunity not found.");
+    // Phase 12C — BUG-003: row may have been hard-deleted by an admin
+    // between soft-delete and Undo. Surface a clear NotFound.
+    if (!row) {
+      throw new NotFoundError(
+        "opportunity — it was permanently deleted before Undo could run",
+      );
+    }
     if (!canDeleteOpportunity(user, row)) {
       throw new ForbiddenError("You can't restore this opportunity.");
     }

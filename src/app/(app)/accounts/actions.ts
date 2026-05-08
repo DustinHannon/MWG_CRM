@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
 import { requireSession } from "@/lib/auth-helpers";
-import { ForbiddenError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
@@ -78,7 +78,16 @@ export async function undoArchiveAccountAction(input: {
       .from(crmAccounts)
       .where(eq(crmAccounts.id, payload.id))
       .limit(1);
-    if (!row) throw new ForbiddenError("Account not found.");
+    // Phase 12C — BUG-003: row may have been hard-deleted by an admin
+    // between the soft-delete and the user clicking Undo. Surface a
+    // clear NotFound rather than a misleading Forbidden so the toast
+    // can show "This record was permanently deleted" without the user
+    // thinking they hit a permission wall.
+    if (!row) {
+      throw new NotFoundError(
+        "account — it was permanently deleted before Undo could run",
+      );
+    }
     if (!canDeleteAccount(user, row)) throw new ForbiddenError("You can't restore this account.");
     await restoreAccountsById([payload.id], user.id);
     await writeAudit({
