@@ -5,6 +5,7 @@ import { permissions, users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { DeleteUserButton } from "./delete-user";
+import { RecheckMailboxButton } from "./recheck-mailbox-button";
 import { UserActions } from "./user-actions";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +83,29 @@ export default async function UserDetailPage({
           value: Boolean((perms as unknown as Record<string, boolean>)[k]),
         })) : []}
       />
+
+      {/* Phase 15 — mailbox capability + admin re-check. Read-only for
+          breakglass since they have no Entra mailbox to probe. */}
+      {!u.isBreakglass ? (
+        <section className="mt-8 rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Mailbox
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground/80">
+            Cached for 24 hours and refreshed on every sign-in. Re-check
+            forces a fresh Microsoft Graph probe.
+          </p>
+          <div className="mt-4 max-w-md">
+            <RecheckMailboxButton
+              userId={u.id}
+              initialKind={u.mailboxKind}
+              initialCheckedAt={
+                u.mailboxCheckedAt ? u.mailboxCheckedAt.toISOString() : null
+              }
+            />
+          </div>
+        </section>
+      ) : null}
 
       {/* Danger zone — phase 2F.4 */}
       <section className="mt-10 rounded-2xl border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)]/40 p-6">

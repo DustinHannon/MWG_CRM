@@ -2,11 +2,17 @@ import "server-only";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications } from "@/db/schema/tasks";
+import { users } from "@/db/schema/users";
 import { logger } from "@/lib/logger";
 
 interface CreateNotificationInput {
   userId: string;
-  kind: "task_assigned" | "task_due" | "mention" | "saved_search";
+  kind:
+    | "task_assigned"
+    | "task_due"
+    | "mention"
+    | "saved_search"
+    | "new_user_jit";
   title: string;
   body?: string | null;
   link?: string | null;
@@ -162,4 +168,40 @@ export async function markRead(id: string, userId: string): Promise<void> {
     .update(notifications)
     .set({ isRead: true })
     .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
+}
+
+/**
+ * Phase 15 — fan out a "new user joined" bell notification to every active
+ * admin. Called from the JIT provisioning path AFTER the user-create
+ * transaction commits. Defensive: a query failure logs and returns
+ * silently so a notification miss never bubbles up to fail the sign-in.
+ */
+export async function notifyAdminsOfNewUser(args: {
+  userId: string;
+  displayName: string;
+  email: string;
+}): Promise<void> {
+  try {
+    const admins = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.isAdmin, true), eq(users.isActive, true)));
+
+    if (admins.length === 0) return;
+
+    await createNotifications(
+      admins.map((a) => ({
+        userId: a.id,
+        kind: "new_user_jit" as const,
+        title: `New user joined: ${args.displayName}`,
+        body: `${args.email} signed in for the first time. Standard permissions applied.`,
+        link: `/admin/users/${args.userId}`,
+      })),
+    );
+  } catch (err) {
+    logger.error("notifications.new_user_jit_failed", {
+      newUserId: args.userId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
 }

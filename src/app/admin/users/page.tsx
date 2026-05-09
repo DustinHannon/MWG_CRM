@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
@@ -9,27 +9,59 @@ import { UserAvatar } from "@/components/user-display";
 
 export const dynamic = "force-dynamic";
 
-export default async function UsersListPage() {
-  const rows = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      email: users.email,
-      displayName: users.displayName,
-      isAdmin: users.isAdmin,
-      isBreakglass: users.isBreakglass,
-      isActive: users.isActive,
-      lastLoginAt: users.lastLoginAt,
-      createdAt: users.createdAt,
-      // Phase 9C — surface the user's photo so the new avatar column
-      // can render a real headshot when present (initials fallback otherwise).
-      photoUrl: users.photoBlobUrl,
-      // Owned-lead count — drives the "delete vs reassign" UX flag in 2F.4.
-      leadCount: sql<number>`(SELECT count(*)::int FROM ${leads} WHERE owner_id = ${users.id})`,
-    })
-    .from(users)
-    .orderBy(desc(users.createdAt));
-  void eq;
+const RECENT_JIT_FILTER = "jit-7d";
+
+interface UsersListSearchParams {
+  recent?: string;
+}
+
+export default async function UsersListPage({
+  searchParams,
+}: {
+  searchParams: Promise<UsersListSearchParams>;
+}) {
+  const sp = await searchParams;
+  const isRecentFilter = sp.recent === RECENT_JIT_FILTER;
+
+  // Phase 15 — surface JIT telemetry. Default sort is `last_login_at desc
+  // nulls last` so admins see "who's actually been around lately" up
+  // top; the recent-JIT filter swaps to `jit_provisioned_at desc` and
+  // narrows to users who joined in the last 7 days.
+  const baseSelect = {
+    id: users.id,
+    username: users.username,
+    email: users.email,
+    displayName: users.displayName,
+    isAdmin: users.isAdmin,
+    isBreakglass: users.isBreakglass,
+    isActive: users.isActive,
+    lastLoginAt: users.lastLoginAt,
+    createdAt: users.createdAt,
+    jitProvisioned: users.jitProvisioned,
+    jitProvisionedAt: users.jitProvisionedAt,
+    photoUrl: users.photoBlobUrl,
+    // Owned-lead count — drives the "delete vs reassign" UX flag in 2F.4.
+    leadCount: sql<number>`(SELECT count(*)::int FROM ${leads} WHERE owner_id = ${users.id})`,
+  };
+
+  const rows = isRecentFilter
+    ? await db
+        .select(baseSelect)
+        .from(users)
+        .where(
+          and(
+            eq(users.jitProvisioned, true),
+            gt(users.jitProvisionedAt, sql`now() - interval '7 days'`),
+          ),
+        )
+        .orderBy(desc(users.jitProvisionedAt))
+    : await db
+        .select(baseSelect)
+        .from(users)
+        // Postgres orders nulls last for DESC by default — be explicit
+        // anyway so a future Drizzle change doesn't silently flip
+        // freshly-created users below long-disabled ones.
+        .orderBy(sql`${users.lastLoginAt} desc nulls last`, asc(users.displayName));
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -43,8 +75,9 @@ export default async function UsersListPage() {
         <div>
           <h1 className="text-2xl font-semibold">Users</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {rows.length} {rows.length === 1 ? "user" : "users"}. Click a row
-            to manage permissions and admin flags.
+            {rows.length} {rows.length === 1 ? "user" : "users"}
+            {isRecentFilter ? " joined in the last 7 days" : ""}. Click a
+            row to manage permissions and admin flags.
           </p>
         </div>
         <Link
@@ -55,7 +88,20 @@ export default async function UsersListPage() {
         </Link>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
+      {/* Phase 15 — recently-joined filter chips. */}
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <FilterChip href="/admin/users" active={!isRecentFilter}>
+          All users
+        </FilterChip>
+        <FilterChip
+          href={`/admin/users?recent=${RECENT_JIT_FILTER}`}
+          active={isRecentFilter}
+        >
+          Recently joined (7d)
+        </FilterChip>
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
         <table className="data-table min-w-full divide-y divide-border/60">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -66,6 +112,7 @@ export default async function UsersListPage() {
               <th className="px-5 py-3 font-medium">Email</th>
               <th className="px-5 py-3 font-medium">Role</th>
               <th className="px-5 py-3 font-medium">Active</th>
+              <th className="px-5 py-3 font-medium">Source</th>
               <th className="px-5 py-3 font-medium text-right">Leads</th>
               <th className="px-5 py-3 font-medium">Last login</th>
             </tr>
@@ -118,6 +165,12 @@ export default async function UsersListPage() {
                     <Pill tone="off">Disabled</Pill>
                   )}
                 </td>
+                <td className="px-5 py-3 text-foreground/80">
+                  <SourceLabel
+                    jit={u.jitProvisioned}
+                    jitAt={u.jitProvisionedAt}
+                  />
+                </td>
                 <td className="px-5 py-3 text-right tabular-nums text-foreground/80">
                   {u.leadCount}
                 </td>
@@ -130,6 +183,42 @@ export default async function UsersListPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+function SourceLabel({
+  jit,
+  jitAt,
+}: {
+  jit: boolean;
+  jitAt: Date | null;
+}) {
+  if (!jit) {
+    return <span className="text-muted-foreground">Manual</span>;
+  }
+  // YYYY-MM-DD in UTC — admin telemetry surface, not user-facing tz.
+  const stamp = jitAt ? jitAt.toISOString().slice(0, 10) : "—";
+  return <span>JIT ({stamp})</span>;
+}
+
+function FilterChip({
+  href,
+  active,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  const base =
+    "inline-flex items-center rounded-full border px-3 py-1 text-xs transition";
+  const palette = active
+    ? "border-foreground/30 bg-foreground text-background"
+    : "border-border bg-muted/40 text-muted-foreground hover:bg-muted";
+  return (
+    <Link href={href} className={`${base} ${palette}`}>
+      {children}
+    </Link>
   );
 }
 

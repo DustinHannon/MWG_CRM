@@ -5,6 +5,8 @@ import { db } from "@/db";
 import { permissions, users, accounts } from "@/db/schema/users";
 import { userPreferences } from "@/db/schema/views";
 import { env } from "@/lib/env";
+import { writeAudit } from "@/lib/audit";
+import { notifyAdminsOfNewUser } from "@/lib/notifications";
 import {
   graphFetchWithToken,
   GraphError,
@@ -40,6 +42,13 @@ export interface ProvisionedUser {
   isActive: boolean;
   isAdmin: boolean;
   sessionVersion: number;
+  /**
+   * Phase 15 — set on the first-ever sign-in for the user. The /welcome
+   * server component reads this column directly (not from the JWT) and
+   * redirects to /leads if it's older than 5 minutes, so we don't need
+   * to plumb a "first login" flag onto the token.
+   */
+  firstLoginAt: Date | null;
 }
 
 export async function provisionEntraUser(
@@ -113,6 +122,10 @@ export async function provisionEntraUser(
 
   if (byOid[0]) {
     const existing = byOid[0];
+    // Phase 15 — one-time backfill of first_login_at for users that
+    // pre-date the JIT telemetry columns. Only set when null; never
+    // overwritten on subsequent sign-ins.
+    const needsFirstLoginBackfill = existing.firstLoginAt === null;
     // Refresh user-derived facts. Never overwrite admin/active/perms.
     await db
       .update(users)
@@ -122,6 +135,7 @@ export async function provisionEntraUser(
         displayName,
         email,
         ...buildEntraProfilePatch(me, managerState),
+        ...(needsFirstLoginBackfill ? { firstLoginAt: sql`now()` } : {}),
         lastLoginAt: sql`now()`,
         updatedAt: sql`now()`,
       })
@@ -134,6 +148,10 @@ export async function provisionEntraUser(
       isActive: existing.isActive,
       isAdmin: existing.isAdmin,
       sessionVersion: existing.sessionVersion,
+      // If we just backfilled, surface "now" so callers don't see a stale
+      // null. Otherwise return the persisted value (may be null on legacy
+      // rows we chose not to backfill — but the branch above always does).
+      firstLoginAt: needsFirstLoginBackfill ? new Date() : existing.firstLoginAt,
     };
   }
 
@@ -146,6 +164,7 @@ export async function provisionEntraUser(
 
   if (byEmail[0]) {
     const existing = byEmail[0];
+    const needsFirstLoginBackfill = existing.firstLoginAt === null;
     await db
       .update(users)
       .set({
@@ -154,6 +173,7 @@ export async function provisionEntraUser(
         lastName,
         displayName,
         ...buildEntraProfilePatch(me, managerState),
+        ...(needsFirstLoginBackfill ? { firstLoginAt: sql`now()` } : {}),
         lastLoginAt: sql`now()`,
         updatedAt: sql`now()`,
       })
@@ -165,6 +185,7 @@ export async function provisionEntraUser(
       isActive: existing.isActive,
       isAdmin: existing.isAdmin,
       sessionVersion: existing.sessionVersion,
+      firstLoginAt: needsFirstLoginBackfill ? new Date() : existing.firstLoginAt,
     };
   }
 
@@ -184,6 +205,13 @@ export async function provisionEntraUser(
         isAdmin: false,
         isActive: true,
         ...buildEntraProfilePatch(me, managerState),
+        // Phase 15 — JIT telemetry. `jit_provisioned` flags rows created
+        // by SSO (vs manually-seeded breakglass / fixtures); the
+        // timestamps power the admin "Recently joined" filter and the
+        // /welcome page's 5-minute first-login window.
+        jitProvisioned: true,
+        jitProvisionedAt: sql`now()`,
+        firstLoginAt: sql`now()`,
         lastLoginAt: sql`now()`,
       })
       .returning({
@@ -222,6 +250,23 @@ export async function provisionEntraUser(
     return row;
   });
 
+  // Phase 15 — JIT telemetry (post-commit). Audit + admin bell notification
+  // run AFTER the transaction so a notification fan-out failure can never
+  // leave a half-provisioned user. Both helpers swallow their own errors.
+  await writeAudit({
+    actorId: created.id,
+    actorEmailSnapshot: email,
+    action: "user.create.jit",
+    targetType: "user",
+    targetId: created.id,
+    after: { upn: input.upn, email, source: "entra_sso" },
+  });
+  await notifyAdminsOfNewUser({
+    userId: created.id,
+    displayName,
+    email,
+  });
+
   return {
     id: created.id,
     email,
@@ -229,6 +274,10 @@ export async function provisionEntraUser(
     isActive: created.isActive,
     isAdmin: created.isAdmin,
     sessionVersion: created.sessionVersion,
+    // We just inserted the row; firstLoginAt is "now". The DB-side
+    // `now()` would be more precise but this is only used for a 5-minute
+    // window check, so the < 100ms drift is irrelevant.
+    firstLoginAt: new Date(),
   };
 }
 

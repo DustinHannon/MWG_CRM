@@ -17,6 +17,7 @@ import { entraConfigured, env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { refreshUserPhotoIfStale } from "@/lib/graph-photo";
+import { writeAudit } from "@/lib/audit";
 
 /**
  * Auth.js v5 surface. The MicrosoftEntraID provider registers only when
@@ -232,6 +233,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (!provisioned.isActive) {
             logger.warn("auth.entra_inactive_user", {
               userId: provisioned.id,
+            });
+            // Phase 15 — audit a disabled-user sign-in attempt so admins
+            // can correlate "I've been off-boarded but the system says
+            // login failed" reports against actual platform-level denials.
+            await writeAudit({
+              actorId: provisioned.id,
+              actorEmailSnapshot: provisioned.email,
+              action: "auth.login_disabled_attempt",
+              targetType: "user",
+              targetId: provisioned.id,
             });
             return null;
           }
