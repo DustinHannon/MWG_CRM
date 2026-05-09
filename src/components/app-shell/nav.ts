@@ -27,6 +27,7 @@ import {
   Home,
   Key,
   LayoutDashboard,
+  MailWarning,
   ScrollText,
   Settings,
   SlidersHorizontal,
@@ -58,6 +59,7 @@ export const ICON_KEYS = [
   "SlidersHorizontal",
   "Key",
   "Activity",
+  "MailWarning",
   "ArrowLeft",
 ] as const;
 
@@ -82,6 +84,7 @@ export const ICON_MAP: Record<IconKey, LucideIcon> = {
   SlidersHorizontal,
   Key,
   Activity,
+  MailWarning,
   ArrowLeft,
 };
 

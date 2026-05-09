@@ -16,6 +16,8 @@ const ADMIN_NAV: NavItem[] = [
   // Phase 13 — API Keys (Sub-A) and API Usage (Sub-C).
   { label: "API Keys", href: "/admin/api-keys", iconKey: "Key" },
   { label: "API Usage", href: "/admin/api-usage", iconKey: "Activity" },
+  // Phase 15 — operational view of failed/blocked email sends.
+  { label: "Email Failures", href: "/admin/email-failures", iconKey: "MailWarning" },
   { divider: true },
   { label: "Back to dashboard", href: "/dashboard", iconKey: "ArrowLeft" },
 ];
