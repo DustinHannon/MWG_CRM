@@ -1,4 +1,3 @@
-import { Activity, Key } from "lucide-react";
 import { AppShell } from "@/components/app-shell/app-shell";
 import type { NavItem } from "@/components/app-shell/nav";
 import { requireAdmin } from "@/lib/auth-helpers";
@@ -15,8 +14,8 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Import help", href: "/admin/import-help" },
   { label: "Settings", href: "/admin/settings" },
   // Phase 13 — API Keys (Sub-A) and API Usage (Sub-C).
-  { label: "API Keys", href: "/admin/api-keys", icon: Key },
-  { label: "API Usage", href: "/admin/api-usage", icon: Activity },
+  { label: "API Keys", href: "/admin/api-keys", iconKey: "Key" },
+  { label: "API Usage", href: "/admin/api-usage", iconKey: "Activity" },
   { divider: true },
   { label: "← Back to dashboard", href: "/dashboard" },
 ];

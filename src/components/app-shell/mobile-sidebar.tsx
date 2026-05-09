@@ -8,7 +8,7 @@ import { useState } from "react";
 import { UserPanel } from "@/components/user-panel/user-panel";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { Brand } from "./brand";
-import { isDivider, type NavItem } from "./nav";
+import { ICON_MAP, isDivider, type NavItem } from "./nav";
 
 interface MobileSidebarProps {
   brand: { subtitle?: string };
@@ -78,7 +78,7 @@ export function MobileSidebar({ brand, nav, user }: MobileSidebarProps) {
                   <div key={`div-${i}`} className="my-3 h-px bg-glass-border" />
                 );
               }
-              const Icon = item.icon;
+              const Icon = item.iconKey ? ICON_MAP[item.iconKey] : null;
               return (
                 <Link
                   key={item.href}

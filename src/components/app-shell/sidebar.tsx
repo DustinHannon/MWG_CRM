@@ -12,7 +12,7 @@ import {
 import type { SessionUser } from "@/lib/auth-helpers";
 import { cn } from "@/lib/utils";
 import { Brand } from "./brand";
-import { isDivider, type NavItem } from "./nav";
+import { ICON_MAP, isDivider, type NavItem } from "./nav";
 import { useSidebarState } from "./use-sidebar-state";
 
 interface SidebarProps {
@@ -104,13 +104,13 @@ export function Sidebar({
 }
 
 interface SidebarLinkProps {
-  item: { label: string; href: string; icon?: import("lucide-react").LucideIcon };
+  item: { label: string; href: string; iconKey?: keyof typeof ICON_MAP };
   collapsed: boolean;
   active: boolean;
 }
 
 function SidebarLink({ item, collapsed, active }: SidebarLinkProps) {
-  const Icon = item.icon;
+  const Icon = item.iconKey ? ICON_MAP[item.iconKey] : null;
   const link = (
     <Link
       href={item.href}
