@@ -1,36 +1,37 @@
-import Image from "next/image";
 import Link from "next/link";
+import { MWG_LOGO_SVG } from "./mwg-logo-svg";
 
 /**
  * Brand header at the top of the sidebar. Renders
- *   [MWG corporate logo — white + navy as designed]
+ *   [MWG corporate logo — silhouette in currentColor + navy accent]
  *   MORGAN WHITE GROUP
  *   MWG CRM[ <subtitle>]
  *
- * The logo asset (`public/brand/mwg-logo.svg`) ships its full
- * brand-identity palette: white silhouette + #00205C navy accent in
- * the center. Rendering as <Image> preserves both colors. An earlier
- * mask-image approach flattened the SVG to one color (loses the navy
- * center) and is intentionally NOT used here — the canonical brand
- * asset has its own colors and we render them as designed.
+ * The logo asset (`public/brand/mwg-logo.svg`) ships with white
+ * silhouette paths PLUS a #00205C navy accent. An `<img>` rendering
+ * only worked on dark backgrounds — on the light theme the white
+ * silhouette disappeared and only the navy circle remained visible.
  *
- * The subtitle preserves the historical "MWG CRM Admin" treatment
- * used by the admin section; defaults to no subtitle for the main app.
+ * Fix: the silhouette paths are pre-processed into `MWG_LOGO_SVG` with
+ * `fill="#FFFFFF"` swapped for `fill="currentColor"`. The container's
+ * `text-foreground` then drives the silhouette color — light text on
+ * dark theme, dark text on light theme. The `#00205C` navy accent
+ * stays hardcoded so it reads on either side. Source SVG file on disk
+ * is unchanged (matches CDN copy).
+ *
+ * The brand block is centered horizontally — the sidebar is 240 px
+ * and a left-aligned 64 px logo with a centered title underneath
+ * looks unbalanced.
  */
 export function Brand({ subtitle }: { subtitle?: string }) {
   return (
-    <div className="px-5 py-6">
+    <div className="px-5 py-6 text-center">
       <Link href="/dashboard" className="block">
-        {/* Logo intrinsic viewBox is 275.114 × 230.226 → 1.195:1.
-            64px tall keeps the row visually anchored without
-            crowding the eyebrow + title underneath. */}
-        <Image
-          src="/brand/mwg-logo.svg"
-          alt="Morgan White Group"
-          width={77}
-          height={64}
-          priority
-          className="mb-3 block h-16 w-auto"
+        <span
+          role="img"
+          aria-label="Morgan White Group"
+          className="mx-auto mb-3 inline-block h-16 text-foreground [&>svg]:mx-auto [&>svg]:h-16 [&>svg]:w-auto"
+          dangerouslySetInnerHTML={{ __html: MWG_LOGO_SVG }}
         />
         <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
           Morgan White Group
