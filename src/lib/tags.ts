@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { leadTags, tags, TAG_COLORS, type TagColor } from "@/db/schema/tags";
 import { writeAudit } from "@/lib/audit";
+import { ValidationError } from "@/lib/errors";
 
 export const tagInputSchema = z.object({
   name: z.string().trim().min(1).max(60),
@@ -40,7 +41,7 @@ export async function getOrCreateTag(
   createdById: string | null,
 ): Promise<TagRow> {
   const trimmed = name.trim();
-  if (trimmed.length === 0) throw new Error("Tag name is empty");
+  if (trimmed.length === 0) throw new ValidationError("Tag name is empty");
 
   const existing = await db
     .select()
@@ -144,7 +145,7 @@ export async function bulkTagLeads(
     return { leadsTouched: 0, tagsAdded: 0, tagsRemoved: 0 };
   }
   if (leadIds.length > 1000) {
-    throw new Error("Bulk tag operation capped at 1000 leads.");
+    throw new ValidationError("Bulk tag operation capped at 1000 leads.");
   }
   const uniqueLeads = Array.from(new Set(leadIds));
   const uniqueTags = Array.from(new Set(tagIds));

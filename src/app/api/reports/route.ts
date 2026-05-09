@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth-helpers";
 import { reportDefinitionSchema } from "@/lib/reports/request-schemas";
 import { isValidField } from "@/lib/reports/schemas";
 import { withErrorBoundary } from "@/lib/server-action";
+import { ValidationError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
       validateFieldList(input.entityType, input.groupBy);
       for (const m of input.metrics) {
         if (m.field && !isValidField(input.entityType, m.field)) {
-          throw new Error(`Unknown metric field: ${m.field}`);
+          throw new ValidationError(`Unknown metric field: ${m.field}`);
         }
       }
 
@@ -92,7 +93,7 @@ function validateFieldList(
 ) {
   for (const c of cols) {
     if (!isValidField(entityType, c)) {
-      throw new Error(`Unknown field: ${c}`);
+      throw new ValidationError(`Unknown field: ${c}`);
     }
   }
 }

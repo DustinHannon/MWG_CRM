@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { emailSendLog } from "@/db/schema/email-send-log";
 import { writeAudit } from "@/lib/audit";
+import { ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { graphAppRequest, isGraphAppConfigured } from "./graph-app-token";
 import { checkMailboxKind } from "./preflight";
@@ -132,8 +133,8 @@ export async function sendEmailAs(opts: SendOptions): Promise<SendResult> {
   const attachmentCount = opts.attachments?.length ?? 0;
   for (const a of opts.attachments ?? []) {
     if (a.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-      throw new Error(
-        `sendEmailAs: attachment ${a.filename} exceeds the 3MB Graph fileAttachment limit. Use createUploadSession for larger files.`,
+      throw new ValidationError(
+        `Attachment ${a.filename} exceeds the 3MB Microsoft Graph fileAttachment limit. Use createUploadSession for larger files.`,
       );
     }
   }

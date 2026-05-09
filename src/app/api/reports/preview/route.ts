@@ -4,6 +4,7 @@ import { executeReport } from "@/lib/reports/access";
 import { reportPreviewSchema } from "@/lib/reports/request-schemas";
 import { isValidField } from "@/lib/reports/schemas";
 import { withErrorBoundary } from "@/lib/server-action";
+import { ValidationError } from "@/lib/errors";
 import type { SavedReport } from "@/db/schema/saved-reports";
 
 export const dynamic = "force-dynamic";
@@ -38,17 +39,17 @@ export async function POST(req: Request) {
       // Field whitelist re-check.
       for (const c of input.fields) {
         if (!isValidField(input.entityType, c)) {
-          throw new Error(`Unknown field: ${c}`);
+          throw new ValidationError(`Unknown field: ${c}`);
         }
       }
       for (const c of input.groupBy) {
         if (!isValidField(input.entityType, c)) {
-          throw new Error(`Unknown field: ${c}`);
+          throw new ValidationError(`Unknown field: ${c}`);
         }
       }
       for (const m of input.metrics) {
         if (m.field && !isValidField(input.entityType, m.field)) {
-          throw new Error(`Unknown metric field: ${m.field}`);
+          throw new ValidationError(`Unknown metric field: ${m.field}`);
         }
       }
 
