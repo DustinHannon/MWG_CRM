@@ -117,7 +117,10 @@ export default async function OpportunitiesPage({
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
+          {/* Phase 12 — match /leads mobile toolbar treatment.
+              Power-user controls hide at <md; only `+ New opportunity`
+              stays as the primary action. */}
+          <div className="hidden gap-1 rounded-lg border border-glass-border bg-glass-1 p-1 md:flex">
             <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
               Table
             </span>
@@ -131,7 +134,7 @@ export default async function OpportunitiesPage({
           {session.isAdmin ? (
             <Link
               href="/opportunities/archived"
-              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted"
+              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted md:inline-flex"
             >
               Archived
             </Link>

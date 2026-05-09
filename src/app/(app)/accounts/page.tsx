@@ -100,7 +100,7 @@ export default async function AccountsPage({
           {session.isAdmin ? (
             <Link
               href="/accounts/archived"
-              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted"
+              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted md:inline-flex"
             >
               Archived
             </Link>
