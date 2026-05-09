@@ -12,6 +12,7 @@ import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { encodeCursor, parseCursor } from "@/lib/leads";
 import { canDeleteAccount } from "@/lib/access/can-delete";
+import { AccountListMobile } from "./_components/account-list-mobile";
 import { AccountRowActions } from "./_components/account-row-actions";
 
 export const dynamic = "force-dynamic";
@@ -113,7 +114,29 @@ export default async function AccountsPage({
         </div>
       </div>
 
-      <GlassCard className="data-table-cards mt-6 overflow-hidden p-0">
+      {/* Phase 12 — dense single-line list at <md, mirrors /leads. */}
+      <div className="mt-6 md:hidden">
+        <AccountListMobile
+          rows={rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            industry: r.industry ?? null,
+            wonDeals: r.wonDeals,
+            createdAt: r.createdAt,
+          }))}
+          emptyMessage={
+            <>
+              No accounts yet.{" "}
+              <Link href="/accounts/new" className="underline hover:text-foreground">
+                Add the first one
+              </Link>{" "}
+              or convert a lead.
+            </>
+          }
+        />
+      </div>
+
+      <GlassCard className="mt-6 hidden overflow-hidden p-0 md:block">
         {rows.length === 0 ? (
           <p className="p-12 text-center text-sm text-muted-foreground">
             No accounts yet.{" "}

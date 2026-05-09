@@ -12,6 +12,7 @@ import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 import { encodeCursor, parseCursor } from "@/lib/leads";
 import { canDeleteContact } from "@/lib/access/can-delete";
+import { ContactListMobile } from "./_components/contact-list-mobile";
 import { ContactRowActions } from "./_components/contact-row-actions";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +100,29 @@ export default async function ContactsPage({
         </div>
       </div>
 
-      <GlassCard className="data-table-cards mt-6 overflow-hidden p-0">
+      <div className="mt-6 md:hidden">
+        <ContactListMobile
+          rows={rows.map((r) => ({
+            id: r.id,
+            firstName: r.firstName,
+            lastName: r.lastName,
+            jobTitle: r.jobTitle ?? null,
+            email: r.email ?? null,
+            accountName: r.accountName ?? null,
+          }))}
+          emptyMessage={
+            <>
+              No contacts yet.{" "}
+              <Link href="/contacts/new" className="underline hover:text-foreground">
+                Add the first one
+              </Link>
+              .
+            </>
+          }
+        />
+      </div>
+
+      <GlassCard className="mt-6 hidden overflow-hidden p-0 md:block">
         {rows.length === 0 ? (
           <p className="p-12 text-center text-sm text-muted-foreground">
             No contacts yet.{" "}

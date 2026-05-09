@@ -12,6 +12,7 @@ import { UserChip } from "@/components/user-display";
 import { StatusPill } from "@/components/ui/status-pill";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { canDeleteOpportunity } from "@/lib/access/can-delete";
+import { OpportunityListMobile } from "./_components/opportunity-list-mobile";
 import { OpportunityRowActions } from "./_components/opportunity-row-actions";
 
 export const dynamic = "force-dynamic";
@@ -144,7 +145,32 @@ export default async function OpportunitiesPage({
         </div>
       </div>
 
-      <GlassCard className="data-table-cards mt-6 overflow-hidden p-0">
+      <div className="mt-6 md:hidden">
+        <OpportunityListMobile
+          rows={rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            stage: r.stage,
+            amount: r.amount ?? null,
+            accountName: r.accountName ?? null,
+            expectedCloseDate: r.expectedCloseDate ?? null,
+          }))}
+          emptyMessage={
+            <>
+              No opportunities yet.{" "}
+              <Link
+                href="/opportunities/new"
+                className="underline hover:text-foreground"
+              >
+                Add the first one
+              </Link>{" "}
+              or convert a lead.
+            </>
+          }
+        />
+      </div>
+
+      <GlassCard className="mt-6 hidden overflow-hidden p-0 md:block">
         {rows.length === 0 ? (
           <p className="p-12 text-center text-sm text-muted-foreground">
             No opportunities yet.{" "}
