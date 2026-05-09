@@ -1,3 +1,13 @@
+import {
+  BarChart3,
+  Building2,
+  CheckSquare,
+  Contact,
+  LayoutDashboard,
+  Settings,
+  Target,
+  Users,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell/app-shell";
 import type { NavItem } from "@/components/app-shell/nav";
 import { PageRealtime } from "@/components/realtime/page-realtime";
@@ -7,12 +17,16 @@ import { getPermissions, requireSession } from "@/lib/auth-helpers";
 export const dynamic = "force-dynamic";
 
 const APP_NAV: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Leads", href: "/leads" },
-  { label: "Accounts", href: "/accounts" },
-  { label: "Contacts", href: "/contacts" },
-  { label: "Opportunities", href: "/opportunities" },
-  { label: "Tasks", href: "/tasks" },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Leads", href: "/leads", icon: Users },
+  { label: "Accounts", href: "/accounts", icon: Building2 },
+  { label: "Contacts", href: "/contacts", icon: Contact },
+  { label: "Opportunities", href: "/opportunities", icon: Target },
+  { label: "Tasks", href: "/tasks", icon: CheckSquare },
+  // Phase 13 — Reports tab. Page-level gate enforces canViewReports;
+  // this entry is visible to every authenticated user. The page
+  // bounces non-permitted users back to /leads itself.
+  { label: "Reports", href: "/reports", icon: BarChart3 },
 ];
 
 export default async function AppLayout({
@@ -32,7 +46,11 @@ export default async function AppLayout({
       : APP_NAV.filter((item) => !("href" in item) || item.href !== "/dashboard");
 
   const nav: NavItem[] = user.isAdmin
-    ? [...baseNav, { divider: true }, { label: "Admin", href: "/admin" }]
+    ? [
+        ...baseNav,
+        { divider: true },
+        { label: "Admin", href: "/admin", icon: Settings },
+      ]
     : baseNav;
   return (
     <RealtimeProvider userId={user.id}>

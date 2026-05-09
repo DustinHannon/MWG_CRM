@@ -78,13 +78,15 @@ export function MobileSidebar({ brand, nav, user }: MobileSidebarProps) {
                   <div key={`div-${i}`} className="my-3 h-px bg-glass-border" />
                 );
               }
+              const Icon = item.icon;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="rounded-md px-3 py-2.5 text-base text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
+                  className="flex items-center gap-3 rounded-md px-3 py-2.5 text-base text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
                 >
-                  {item.label}
+                  {Icon ? <Icon size={18} aria-hidden /> : null}
+                  <span className="truncate">{item.label}</span>
                 </Link>
               );
             })}

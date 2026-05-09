@@ -49,6 +49,7 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
         timezone: userPreferences.timezone,
         dateFormat: userPreferences.dateFormat,
         timeFormat: userPreferences.timeFormat,
+        sidebarCollapsed: userPreferences.sidebarCollapsed,
       })
       .from(userPreferences)
       .where(eq(userPreferences.userId, user.id))
@@ -60,6 +61,7 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
     timezone: "America/Chicago",
     dateFormat: "MM/DD/YYYY",
     timeFormat: "12h",
+    sidebarCollapsed: false,
   };
   const theme = (prefs.theme === "light" || prefs.theme === "dark"
     ? prefs.theme
@@ -77,7 +79,12 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
       <ThemeSync theme={theme} />
       <BreadcrumbsProvider>
         <div data-density={density} className="flex h-dvh text-foreground">
-          <Sidebar brand={brand ?? {}} nav={nav} user={user} />
+          <Sidebar
+            brand={brand ?? {}}
+            nav={nav}
+            user={user}
+            initialCollapsed={prefs.sidebarCollapsed === true}
+          />
           <main className="flex h-dvh min-w-0 flex-1 flex-col">
             <TopBar
               unreadCount={unreadCount}

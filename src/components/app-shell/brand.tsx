@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { MWG_LOGO_SVG } from "./mwg-logo-svg";
 
 /**
@@ -22,23 +23,47 @@ import { MWG_LOGO_SVG } from "./mwg-logo-svg";
  * The brand block is centered horizontally — the sidebar is 240 px
  * and a left-aligned 64 px logo with a centered title underneath
  * looks unbalanced.
+ *
+ * Phase 13 — when the sidebar is collapsed (`collapsed=true`) only
+ * the logo glyph renders at a smaller size; the wordmark and subtitle
+ * are hidden so the 64px rail stays compact.
  */
-export function Brand({ subtitle }: { subtitle?: string }) {
+export function Brand({
+  subtitle,
+  collapsed = false,
+}: {
+  subtitle?: string;
+  collapsed?: boolean;
+}) {
   return (
-    <div className="px-5 py-6 text-center">
+    <div
+      className={cn(
+        "text-center",
+        collapsed ? "px-2 py-4" : "px-5 py-6",
+      )}
+    >
       <Link href="/dashboard" className="block">
         <span
           role="img"
           aria-label="Morgan White Group"
-          className="mx-auto mb-3 inline-block h-16 text-foreground [&>svg]:mx-auto [&>svg]:h-16 [&>svg]:w-auto"
+          className={cn(
+            "mx-auto inline-block text-foreground [&>svg]:mx-auto [&>svg]:w-auto",
+            collapsed
+              ? "h-9 [&>svg]:h-9"
+              : "mb-3 h-16 [&>svg]:h-16",
+          )}
           dangerouslySetInnerHTML={{ __html: MWG_LOGO_SVG }}
         />
-        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-          Morgan White Group
-        </p>
-        <p className="mt-1 text-sm font-semibold">
-          {subtitle ? `MWG CRM ${subtitle}` : "MWG CRM"}
-        </p>
+        {collapsed ? null : (
+          <>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              Morgan White Group
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {subtitle ? `MWG CRM ${subtitle}` : "MWG CRM"}
+            </p>
+          </>
+        )}
       </Link>
     </div>
   );
