@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { savedReports } from "@/db/schema/saved-reports";
+import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
 import { reportDefinitionSchema } from "@/lib/reports/request-schemas";
 import { isValidField } from "@/lib/reports/schemas";
@@ -58,6 +59,22 @@ export async function POST(req: Request) {
           isShared: input.isShared,
         })
         .returning({ id: savedReports.id });
+
+      // Phase 15 — coverage sweep. Saved reports can be shared org-wide
+      // and embed customer-data filter expressions, so the create row
+      // is recorded in the human-actor audit trail (separate from
+      // `api_usage_log`, which only tracks API-key traffic).
+      await writeAudit({
+        actorId: viewer.id,
+        action: "reports.create",
+        targetType: "report",
+        targetId: row.id,
+        after: {
+          name: input.name,
+          entityType: input.entityType,
+          isShared: input.isShared,
+        },
+      });
 
       return { id: row.id };
     },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { savedReports } from "@/db/schema/saved-reports";
+import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
 import {
   assertCanDeleteReport,
@@ -91,6 +92,27 @@ export async function PATCH(
         })
         .where(eq(savedReports.id, id));
 
+      // Phase 15 — coverage sweep. before/after capture the keys that
+      // changed (not full row dumps) to keep audit volume manageable.
+      await writeAudit({
+        actorId: viewer.id,
+        action: "reports.update",
+        targetType: "report",
+        targetId: id,
+        before: {
+          name: report.name,
+          entityType: report.entityType,
+          isShared: report.isShared,
+        },
+        after: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.entityType !== undefined
+            ? { entityType: input.entityType }
+            : {}),
+          ...(input.isShared !== undefined ? { isShared: input.isShared } : {}),
+        },
+      });
+
       return { id };
     },
   );
@@ -139,6 +161,19 @@ export async function DELETE(
           updatedAt: sql`now()`,
         })
         .where(eq(savedReports.id, id));
+
+      // Phase 15 — coverage sweep. Soft-delete on shared reports needs
+      // an actor-attributable trail in audit_log; api_usage_log only
+      // captures token-driven traffic and the report builder UI calls
+      // this endpoint with a session cookie.
+      await writeAudit({
+        actorId: viewer.id,
+        action: "reports.delete",
+        targetType: "report",
+        targetId: id,
+        before: { name: report.name, entityType: report.entityType },
+        after: { reason: reason ?? null },
+      });
 
       return { id };
     },
