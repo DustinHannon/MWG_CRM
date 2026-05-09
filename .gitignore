@@ -48,6 +48,11 @@ screenshottemp/
 # Phase 6H — local-only test workbooks
 test-data/
 
+# Local scratch — favicon render scripts, ad-hoc playwright screenshots, etc.
+.tmp/
+mwg-signin-iphone13.png
+mwg-apihelp-iphone13.png
+
 
 .env*.local
 
