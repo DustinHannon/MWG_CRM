@@ -6,6 +6,7 @@ import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
+import { ArchivedListMobile } from "@/components/archived/archived-list-mobile";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
@@ -88,7 +89,55 @@ export default async function ArchivedAccountsPage() {
           No archived accounts.
         </GlassCard>
       ) : (
-        <GlassCard className="data-table-cards overflow-hidden p-0">
+        <>
+        {/* Phase 12 — dense single-line list at <md, mirrors /leads. */}
+        <div className="md:hidden">
+          <ArchivedListMobile
+            rows={rows.map((r) => ({
+              id: r.id,
+              title: r.name,
+              subtitle: r.industry ?? null,
+              deletedAt: r.deletedAt,
+              deletedByName: r.deletedByName,
+              deletedByEmail: r.deletedByEmail,
+              reason: r.reason,
+            }))}
+            renderActions={(row) => (
+              <>
+                <form
+                  action={async (fd) => {
+                    "use server";
+                    await restoreAccountAction(fd);
+                  }}
+                >
+                  <input type="hidden" name="id" value={row.id} />
+                  <button
+                    type="submit"
+                    className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 hover:bg-muted"
+                  >
+                    Restore
+                  </button>
+                </form>
+                <form
+                  action={async (fd) => {
+                    "use server";
+                    await hardDeleteAccountAction(fd);
+                  }}
+                >
+                  <input type="hidden" name="id" value={row.id} />
+                  <button
+                    type="submit"
+                    className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] hover:bg-destructive/30"
+                  >
+                    Delete permanently
+                  </button>
+                </form>
+              </>
+            )}
+          />
+        </div>
+
+        <GlassCard className="hidden overflow-hidden p-0 md:block">
           <table className="data-table w-full text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground/80">
               <tr>
@@ -163,6 +212,7 @@ export default async function ArchivedAccountsPage() {
             </tbody>
           </table>
         </GlassCard>
+        </>
       )}
     </div>
   );
