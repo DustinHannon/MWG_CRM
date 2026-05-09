@@ -3,7 +3,7 @@ import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { cleanupBlobsForLeads, gatherBlobsForLeads } from "@/lib/blob-cleanup";
-import { env } from "@/lib/env";
+import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { writeAudit } from "@/lib/audit";
 
@@ -20,11 +20,8 @@ export const maxDuration = 300;
  *   { "path": "/api/cron/purge-archived", "schedule": "0 10 * * *" }
  */
 export async function GET(req: Request) {
-  const auth = req.headers.get("authorization") ?? "";
-  const expected = `Bearer ${env.CRON_SECRET ?? ""}`;
-  if (!env.CRON_SECRET || auth !== expected) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  const unauth = requireCronAuth(req);
+  if (unauth) return unauth;
 
   try {
     // Find archived rows older than 30 days.

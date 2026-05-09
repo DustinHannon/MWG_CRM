@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { listTasksDueTodayForCron } from "@/lib/tasks";
 import { createNotifications } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 /**
  * Phase 3D — daily cron at 14:00 UTC (~8 AM Central winter / 9 AM summer).
@@ -14,11 +15,8 @@ export const runtime = "nodejs";
  * notification.
  */
 export async function GET(req: Request) {
-  const auth = req.headers.get("authorization") ?? "";
-  const expected = `Bearer ${env.CRON_SECRET ?? ""}`;
-  if (!env.CRON_SECRET || auth !== expected) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  const unauth = requireCronAuth(req);
+  if (unauth) return unauth;
 
   try {
     const tasks = await listTasksDueTodayForCron();

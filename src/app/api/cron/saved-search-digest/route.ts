@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { runSavedSearchDigest } from "@/lib/saved-search-runner";
 
@@ -13,11 +13,8 @@ export const maxDuration = 300;
  * email digests.
  */
 export async function GET(req: Request) {
-  const auth = req.headers.get("authorization") ?? "";
-  const expected = `Bearer ${env.CRON_SECRET ?? ""}`;
-  if (!env.CRON_SECRET || auth !== expected) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  const unauth = requireCronAuth(req);
+  if (unauth) return unauth;
 
   try {
     const summary = await runSavedSearchDigest();

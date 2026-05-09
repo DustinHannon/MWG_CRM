@@ -4,9 +4,8 @@ import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { apiUsageLog } from "@/db/schema/api-keys";
 import { emailSendLog } from "@/db/schema/email-send-log";
-import { env } from "@/lib/env";
+import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
-import { writeAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,14 +32,8 @@ const API_USAGE_RETENTION_DAYS = 730;
 const EMAIL_SEND_RETENTION_DAYS = 730;
 
 export async function GET(req: Request) {
-  const auth = req.headers.get("authorization") ?? "";
-  const expected = `Bearer ${env.CRON_SECRET ?? ""}`;
-  if (!env.CRON_SECRET || auth !== expected) {
-    return NextResponse.json(
-      { ok: false, error: "Unauthorized" },
-      { status: 401 },
-    );
-  }
+  const unauth = requireCronAuth(req);
+  if (unauth) return unauth;
 
   try {
     const auditDeleted = await db.execute(sql`

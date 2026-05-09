@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { rescoreAllLeads } from "@/lib/scoring/engine";
 
@@ -12,11 +12,8 @@ export const maxDuration = 300;
  * lead so time-decay rules (e.g. `last_activity_within_days`) take effect.
  */
 export async function GET(req: Request) {
-  const auth = req.headers.get("authorization") ?? "";
-  const expected = `Bearer ${env.CRON_SECRET ?? ""}`;
-  if (!env.CRON_SECRET || auth !== expected) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  const unauth = requireCronAuth(req);
+  if (unauth) return unauth;
 
   try {
     const processed = await rescoreAllLeads();
