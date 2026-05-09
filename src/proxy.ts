@@ -68,7 +68,7 @@ function buildCspHeader(nonce: string): string {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval'`,
     `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
-    "font-src 'self' https://fonts.gstatic.com data:",
+    "font-src 'self' https://fonts.gstatic.com https://fonts.scalar.com data:",
     "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://graph.microsoft.com",
     "connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com https://*.supabase.co wss://*.supabase.co",
     "frame-ancestors 'none'",
