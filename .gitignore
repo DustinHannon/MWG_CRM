@@ -62,9 +62,10 @@ docs/
 /screenshottemp/
 /.phase8-evidence/
 
-# Phase 12 — Playwright artifacts (test runs against production)
-tests/e2e/.auth/
-tests/e2e/test-results/
+# Tests — local-only.
+# Playwright suite runs against production from a developer's machine
+# with PLAYWRIGHT_LOGIN_* env vars; not part of the GitHub repo.
+tests/
 playwright-report/
 playwright/.cache/
 .env.test
