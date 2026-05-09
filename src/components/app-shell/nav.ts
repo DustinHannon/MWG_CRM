@@ -17,18 +17,28 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  ArrowLeft,
   BarChart3,
   Building2,
   CheckSquare,
   Contact,
+  Database,
+  HelpCircle,
+  Home,
   Key,
   LayoutDashboard,
+  ScrollText,
   Settings,
+  SlidersHorizontal,
+  Star,
+  Tag,
   Target,
+  UserCog,
   Users,
 } from "lucide-react";
 
 export const ICON_KEYS = [
+  // Main app nav
   "LayoutDashboard",
   "Users",
   "Building2",
@@ -37,8 +47,18 @@ export const ICON_KEYS = [
   "CheckSquare",
   "BarChart3",
   "Settings",
+  // Admin nav
+  "Home",
+  "UserCog",
+  "Tag",
+  "Star",
+  "ScrollText",
+  "Database",
+  "HelpCircle",
+  "SlidersHorizontal",
   "Key",
   "Activity",
+  "ArrowLeft",
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -52,8 +72,17 @@ export const ICON_MAP: Record<IconKey, LucideIcon> = {
   CheckSquare,
   BarChart3,
   Settings,
+  Home,
+  UserCog,
+  Tag,
+  Star,
+  ScrollText,
+  Database,
+  HelpCircle,
+  SlidersHorizontal,
   Key,
   Activity,
+  ArrowLeft,
 };
 
 export type NavItem =
