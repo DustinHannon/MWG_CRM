@@ -6,6 +6,7 @@ import { activities } from "@/db/schema/activities";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { leads } from "@/db/schema/leads";
 import { writeAudit } from "@/lib/audit";
+import { NotFoundError, ValidationError } from "@/lib/errors";
 
 export const conversionSchema = z.object({
   leadId: z.string().uuid(),
@@ -75,9 +76,9 @@ export async function convertLead(
     .from(leads)
     .where(eq(leads.id, input.leadId))
     .limit(1);
-  if (!leadRow[0]) throw new Error("Lead not found");
+  if (!leadRow[0]) throw new NotFoundError("lead");
   if (leadRow[0].isDeleted) {
-    throw new Error(
+    throw new ValidationError(
       "This lead has been archived and cannot be converted. Restore it first.",
     );
   }
@@ -109,7 +110,9 @@ export async function convertLead(
         .returning({ id: crmAccounts.id });
       accountId = inserted[0].id;
     } else {
-      throw new Error("Must specify existingAccountId or newAccount.");
+      throw new ValidationError(
+        "Must specify existingAccountId or newAccount.",
+      );
     }
 
     // 2. Contact (optional).
