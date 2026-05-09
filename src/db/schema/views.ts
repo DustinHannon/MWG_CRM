@@ -78,6 +78,8 @@ export const userPreferences = pgTable("user_preferences", {
   dateFormat: text("date_format").notNull().default("MM/DD/YYYY"),
   timeFormat: text("time_format").notNull().default("12h"),
   tableDensity: text("table_density").notNull().default("comfortable"),
+  // Phase 13 — sidebar collapsed/expanded state.
+  sidebarCollapsed: boolean("sidebar_collapsed").notNull().default(false),
   defaultLeadsViewId: uuid("default_leads_view_id").references(
     () => savedViews.id,
     { onDelete: "set null" },

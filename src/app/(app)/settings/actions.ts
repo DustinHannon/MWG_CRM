@@ -49,6 +49,9 @@ const updatePreferencesSchema = z.object({
   dateFormat: z.enum(["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"]).optional(),
   timeFormat: z.enum(["12h", "24h"]).optional(),
   tableDensity: z.enum(["comfortable", "compact"]).optional(),
+  // Phase 13 — sidebar collapsed/expanded state. Persisted so the
+  // chrome stays consistent across sessions and devices.
+  sidebarCollapsed: z.boolean().optional(),
   notifyTasksDue: z.boolean().optional(),
   notifyTasksAssigned: z.boolean().optional(),
   notifyMentions: z.boolean().optional(),
