@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { eq } from "drizzle-orm";
-import { graphFetchAs, ReauthRequiredError } from "@/lib/graph-token";
+import { sendEmailAs } from "@/lib/email";
 
 export interface DigestRecord {
   id: string;
@@ -15,20 +15,20 @@ export interface DigestRecord {
 interface DigestArgs {
   userId: string;
   viewName: string;
+  subscriptionId?: string;
   records: DigestRecord[];
   appUrl?: string;
 }
 
 /**
- * Phase 3H — render minimal HTML digest and send via Microsoft Graph
- * /me/sendMail using the user's stored refresh token. Sent FROM the user
- * TO themselves (saveToSentItems off — they don't need to see digests
- * cluttering Sent Items).
+ * Phase 3H — render minimal HTML digest of new saved-search matches and
+ * send to the subscriber's own inbox.
  *
- * On 401/403 from Graph (token revoked / consent withdrawn):
- *   - log
- *   - throw ReauthRequiredError so the caller can create a reconnect
- *     in-app notification and skip the user.
+ * Phase 15 — migrated from delegated /me/sendMail (which silently dropped
+ * digests when refresh tokens rotated and required ReauthRequiredError
+ * recovery) to sendEmailAs (application permissions). Each delivery now
+ * gets a row in email_send_log + audit_log, gets gated on mailbox preflight,
+ * and is retry-able from /admin/email-failures.
  */
 export async function sendDigestEmail(args: DigestArgs): Promise<void> {
   const [user] = await db
@@ -45,18 +45,19 @@ export async function sendDigestEmail(args: DigestArgs): Promise<void> {
     appUrl: args.appUrl ?? "https://mwg-crm.vercel.app",
   });
 
-  const sendBody = {
-    message: {
-      subject: `${args.records.length} new lead${args.records.length === 1 ? "" : "s"} in "${args.viewName}"`,
-      body: { contentType: "HTML", content: html },
-      toRecipients: [{ emailAddress: { address: user.email } }],
-    },
-    saveToSentItems: false,
-  };
+  const subject = `${args.records.length} new lead${args.records.length === 1 ? "" : "s"} in "${args.viewName}"`;
 
-  await graphFetchAs<unknown>(args.userId, "/me/sendMail", {
-    method: "POST",
-    body: JSON.stringify(sendBody),
+  await sendEmailAs({
+    fromUserId: args.userId,
+    to: [{ email: user.email, userId: args.userId }],
+    subject,
+    html,
+    feature: "saved_search.digest",
+    featureRecordId: args.subscriptionId,
+    metadata: {
+      viewName: args.viewName,
+      recordCount: args.records.length,
+    },
   });
 }
 
@@ -118,5 +119,3 @@ function escape(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
-
-export { ReauthRequiredError };

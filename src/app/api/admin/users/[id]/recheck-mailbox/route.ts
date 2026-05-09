@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { writeAudit } from "@/lib/audit";
 import { checkMailboxKind } from "@/lib/email";
 import { logger } from "@/lib/logger";
 
@@ -22,7 +23,7 @@ export async function POST(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const { id } = await ctx.params;
 
   const [u] = await db
@@ -57,6 +58,19 @@ export async function POST(
       .from(users)
       .where(eq(users.id, id))
       .limit(1);
+
+    await writeAudit({
+      actorId: admin.id,
+      actorEmailSnapshot: admin.email,
+      action: "email.recheck_mailbox",
+      targetType: "user",
+      targetId: id,
+      after: {
+        kind: result.kind,
+        previousKind: u.mailboxKind,
+        mailboxCheckedAt: refreshed?.mailboxCheckedAt ?? null,
+      },
+    });
 
     return NextResponse.json({
       ...result,

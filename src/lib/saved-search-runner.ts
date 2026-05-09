@@ -7,7 +7,7 @@ import { savedViews, userPreferences } from "@/db/schema/views";
 import { savedSearchSubscriptions } from "@/db/schema/saved-search-subscriptions";
 import { users } from "@/db/schema/users";
 import { createNotification } from "@/lib/notifications";
-import { ReauthRequiredError, sendDigestEmail } from "@/lib/digest-email";
+import { sendDigestEmail } from "@/lib/digest-email";
 import { formatPersonName } from "@/lib/format/person-name";
 import { permissions } from "@/db/schema/users";
 
@@ -181,22 +181,16 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
           });
           summary.emailed += 1;
         } catch (err) {
-          if (err instanceof ReauthRequiredError) {
-            summary.reauth += 1;
-            await createNotification({
-              userId: sub.userId,
-              kind: "saved_search",
-              title: "Reconnect Microsoft 365 to receive digests",
-              body: "Your Microsoft 365 connection needs to be refreshed before email digests can be sent.",
-              link: "/settings#m365",
-            });
-          } else {
-            summary.errors += 1;
-            logger.error("digest.email_send_failed", {
-              userId: sub.userId,
-              errorMessage: err instanceof Error ? err.message : String(err),
-            });
-          }
+          // Phase 15 — sendEmailAs no longer throws ReauthRequiredError
+          // (app permissions bypass per-user refresh tokens). Real
+          // delivery failures are logged in email_send_log and
+          // surfaced on /admin/email-failures. This catch only fires
+          // on programming errors.
+          summary.errors += 1;
+          logger.error("digest.email_send_failed", {
+            userId: sub.userId,
+            errorMessage: err instanceof Error ? err.message : String(err),
+          });
         }
       }
     } catch (err) {
