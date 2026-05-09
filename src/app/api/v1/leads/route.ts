@@ -1,24 +1,29 @@
-import { listLeads } from "@/lib/leads";
+import { createLead, getLeadById, listLeads } from "@/lib/leads";
 import { withApi } from "@/lib/api/handler";
 import { errorResponse } from "@/lib/api/errors";
 import { registry } from "@/lib/openapi/registry";
 import {
+  LeadCreateSchema,
   LeadListQuerySchema,
   LeadListResponseSchema,
+  LeadSchema,
 } from "@/lib/api/v1/lead-schemas";
 import { ErrorBodySchema } from "@/lib/api/v1/schemas";
 import { sessionFromKey } from "@/lib/api/v1/session";
+import { serializeLead } from "@/lib/api/v1/serializers";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const LEAD_DESCRIPTION =
+  "API keys see all org-owned leads regardless of which user generated " +
+  "the key.";
 
 registry.registerPath({
   method: "get",
   path: "/leads",
   summary: "List leads",
-  description:
-    "Returns a paginated list of leads. API keys see all org-owned " +
-    "leads regardless of which user generated the key.",
+  description: "Returns a paginated list of leads. " + LEAD_DESCRIPTION,
   tags: ["Leads"],
   security: [{ BearerAuth: [] }],
   request: { query: LeadListQuerySchema },
@@ -48,78 +53,143 @@ registry.registerPath({
   },
 });
 
-export const GET = withApi({ scope: "read:leads", action: "leads.list" }, async (req, { key }) => {
-  const url = new URL(req.url);
-  const parsed = LeadListQuerySchema.safeParse(
-    Object.fromEntries(url.searchParams.entries()),
-  );
-  if (!parsed.success) {
-    return errorResponse(422, "VALIDATION_ERROR", "Invalid query parameters", {
-      details: parsed.error.errors.map((e) => ({
-        field: e.path.join("."),
-        issue: e.message,
-      })),
-    });
-  }
-
-  const user = await sessionFromKey(key);
-  const result = await listLeads(
-    user,
-    {
-      q: parsed.data.q,
-      status: parsed.data.status,
-      ownerId: parsed.data.owner_id,
-      page: parsed.data.page,
-      pageSize: parsed.data.pageSize,
+registry.registerPath({
+  method: "post",
+  path: "/leads",
+  summary: "Create lead",
+  description: "Creates a new lead and returns the persisted record.",
+  tags: ["Leads"],
+  security: [{ BearerAuth: [] }],
+  request: {
+    body: {
+      content: { "application/json": { schema: LeadCreateSchema } },
     },
-    /* canViewAll */ true,
-  );
-
-  return Response.json({
-    data: result.rows.map(serializeLead),
-    meta: {
-      page: result.page,
-      page_size: result.pageSize,
-      total: result.total,
-      total_pages: Math.max(1, Math.ceil(result.total / result.pageSize)),
+  },
+  responses: {
+    201: {
+      description: "Created",
+      content: { "application/json": { schema: LeadSchema } },
     },
-  });
+    401: {
+      description: "Unauthorized",
+      content: { "application/json": { schema: ErrorBodySchema } },
+    },
+    403: {
+      description: "Forbidden",
+      content: { "application/json": { schema: ErrorBodySchema } },
+    },
+    422: {
+      description: "Validation error",
+      content: { "application/json": { schema: ErrorBodySchema } },
+    },
+    429: {
+      description: "Rate limited",
+      content: { "application/json": { schema: ErrorBodySchema } },
+    },
+  },
 });
 
-function serializeLead(row: {
-  id: string;
-  firstName: string;
-  lastName: string | null;
-  companyName: string | null;
-  email: string | null;
-  phone: string | null;
-  status: string;
-  rating: string;
-  source: string;
-  ownerId: string | null;
-  estimatedValue: string | null;
-  lastActivityAt: Date | null;
-  updatedAt: Date;
-  createdAt: Date;
-  tags: string[] | null;
-}) {
-  return {
-    id: row.id,
-    first_name: row.firstName,
-    last_name: row.lastName,
-    company_name: row.companyName,
-    email: row.email,
-    phone: row.phone,
-    status: row.status,
-    rating: row.rating,
-    source: row.source,
-    owner_id: row.ownerId,
-    estimated_value: row.estimatedValue,
-    last_activity_at: row.lastActivityAt
-      ? row.lastActivityAt.toISOString()
-      : null,
-    updated_at: row.updatedAt.toISOString(),
-    created_at: row.createdAt.toISOString(),
-    tags: row.tags,
-  };
-}
+export const GET = withApi(
+  { scope: "read:leads", action: "leads.list" },
+  async (req, { key }) => {
+    const url = new URL(req.url);
+    const parsed = LeadListQuerySchema.safeParse(
+      Object.fromEntries(url.searchParams.entries()),
+    );
+    if (!parsed.success) {
+      return errorResponse(422, "VALIDATION_ERROR", "Invalid query parameters", {
+        details: parsed.error.errors.map((e) => ({
+          field: e.path.join("."),
+          issue: e.message,
+        })),
+      });
+    }
+
+    const user = await sessionFromKey(key);
+    const result = await listLeads(
+      user,
+      {
+        q: parsed.data.q,
+        status: parsed.data.status,
+        ownerId: parsed.data.owner_id,
+        page: parsed.data.page,
+        pageSize: parsed.data.pageSize,
+      },
+      /* canViewAll */ true,
+    );
+
+    return Response.json({
+      data: result.rows.map((r) => serializeLead(r)),
+      meta: {
+        page: result.page,
+        page_size: result.pageSize,
+        total: result.total,
+        total_pages: Math.max(1, Math.ceil(result.total / result.pageSize)),
+      },
+    });
+  },
+);
+
+export const POST = withApi(
+  { scope: "write:leads", action: "leads.create" },
+  async (req, { key }) => {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return errorResponse(422, "VALIDATION_ERROR", "Body must be valid JSON");
+    }
+    const parsed = LeadCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return errorResponse(422, "VALIDATION_ERROR", "Invalid request body", {
+        details: parsed.error.errors.map((e) => ({
+          field: e.path.join("."),
+          issue: e.message,
+        })),
+      });
+    }
+    const user = await sessionFromKey(key);
+    const created = await createLead(user, {
+      // The lib createLead path takes the camelCase shape; map the
+      // snake_case API contract over.
+      firstName: parsed.data.first_name,
+      lastName: parsed.data.last_name ?? null,
+      companyName: parsed.data.company_name ?? null,
+      email: parsed.data.email ?? null,
+      phone: parsed.data.phone ?? null,
+      jobTitle: parsed.data.job_title ?? null,
+      industry: parsed.data.industry ?? null,
+      website: parsed.data.website ?? null,
+      linkedinUrl: parsed.data.linkedin_url ?? null,
+      street1: parsed.data.street1 ?? null,
+      street2: parsed.data.street2 ?? null,
+      city: parsed.data.city ?? null,
+      state: parsed.data.state ?? null,
+      postalCode: parsed.data.postal_code ?? null,
+      country: parsed.data.country ?? null,
+      description: parsed.data.description ?? null,
+      subject: parsed.data.subject ?? null,
+      status: parsed.data.status ?? "new",
+      rating: parsed.data.rating ?? "warm",
+      source: parsed.data.source ?? "other",
+      doNotContact: parsed.data.do_not_contact ?? false,
+      doNotEmail: parsed.data.do_not_email ?? false,
+      doNotCall: parsed.data.do_not_call ?? false,
+      ownerId: parsed.data.owner_id ?? null,
+      estimatedValue:
+        parsed.data.estimated_value === undefined ||
+        parsed.data.estimated_value === null
+          ? null
+          : parsed.data.estimated_value.toFixed(2),
+      estimatedCloseDate: parsed.data.estimated_close_date ?? null,
+      // server validation wired in lib; salutation/mobilePhone unused here
+      salutation: null,
+      mobilePhone: null,
+    });
+
+    const fresh = await getLeadById(user, created.id, true);
+    return Response.json(fresh ? serializeLead(fresh) : { id: created.id }, {
+      status: 201,
+    });
+  },
+);

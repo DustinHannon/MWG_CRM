@@ -10,17 +10,33 @@ import "server-only";
  *
  * Side-effect imports only — these modules are never used by name.
  * Order does not matter; `registerPath` keys by `path + method`.
- *
- * Phase 13B foundation: only the leads-list route is imported here.
- * Phase 13C Sub-A appends imports as it adds CRUD endpoints across
- * the other entities.
  */
 
 // Shared schemas first so route schemas can reference them by ref.
 import "@/lib/api/v1/schemas";
 import "@/lib/api/v1/lead-schemas";
+import "@/lib/api/v1/account-schemas";
+import "@/lib/api/v1/contact-schemas";
+import "@/lib/api/v1/opportunity-schemas";
+import "@/lib/api/v1/task-schemas";
+import "@/lib/api/v1/activity-schemas";
+import "@/lib/api/v1/meta-schemas";
 
 // Routes (each module registers its own paths at top level).
 import "@/app/api/v1/leads/route";
+import "@/app/api/v1/leads/[id]/route";
+import "@/app/api/v1/accounts/route";
+import "@/app/api/v1/accounts/[id]/route";
+import "@/app/api/v1/contacts/route";
+import "@/app/api/v1/contacts/[id]/route";
+import "@/app/api/v1/opportunities/route";
+import "@/app/api/v1/opportunities/[id]/route";
+import "@/app/api/v1/tasks/route";
+import "@/app/api/v1/tasks/[id]/route";
+import "@/app/api/v1/activities/route";
+import "@/app/api/v1/activities/[id]/route";
+import "@/app/api/v1/me/route";
+import "@/app/api/v1/users/route";
+import "@/app/api/v1/users/[id]/route";
 
 export {};
