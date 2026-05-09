@@ -307,6 +307,16 @@ body {
 body {
   background: var(--bg-gradient);
   background-attachment: fixed;
+  /* `isolation: isolate` puts the body::before noise overlay BEHIND
+     body's children (z-index: -1 below) without needing a `body > *`
+     rule that promotes every child to position: relative + z-index: 1.
+     The previous `body > *` rule was an unlayered selector and
+     therefore beat Tailwind's @layer utilities — overriding
+     `position: fixed` on every Radix Dialog/AlertDialog portal, which
+     are direct body children. Symptom: confirm modals + the mobile
+     drawer rendered as `position: relative` at the document tail
+     instead of full-screen overlays. */
+  isolation: isolate;
 }
 
 .dark {
@@ -318,15 +328,11 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 0;
+  /* Behind body's children inside body's isolated stacking context. */
+  z-index: -1;
   opacity: 0.025;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   mix-blend-mode: overlay;
-}
-
-body > * {
-  position: relative;
-  z-index: 1;
 }
 
 /* Native <select> options inherit OS defaults — collide with our dark
@@ -680,31 +686,3 @@ pre {
 }
 
 
-/* Phase 12 — mobile drawer slide. Plain @keyframes that the
-   tw-animate-css variable scheme couldn't reliably drive in this
-   stack (glass backdrop-filter + Radix portal + Tailwind v4). The
-   fade overlay still uses the plugin; only the panel uses this. */
-
-@keyframes mwg-drawer-in {
-  from { transform: translate3d(-100%, 0, 0); }
-  to   { transform: translate3d(0, 0, 0); }
-}
-
-@keyframes mwg-drawer-out {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(-100%, 0, 0); }
-}
-
-.mwg-drawer-anim[data-state="open"] {
-  animation: mwg-drawer-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.mwg-drawer-anim[data-state="closed"] {
-  animation: mwg-drawer-out 180ms ease-in;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mwg-drawer-anim[data-state="open"],
-  .mwg-drawer-anim[data-state="closed"] {
-    animation: none;
-  }
-}
