@@ -1,9 +1,10 @@
 import "server-only";
-import { inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { contacts } from "@/db/schema/crm-records";
 import { writeAudit } from "@/lib/audit";
+import { expectAffected } from "@/lib/db/concurrent-update";
 import { nameField } from "@/lib/validation/primitives";
 
 /**
@@ -116,4 +117,108 @@ export async function restoreContactsById(
 export async function deleteContactsById(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.delete(contacts).where(inArray(contacts.id, ids));
+}
+
+/**
+ * Phase 13 — paginated contact listing for /api/v1/contacts.
+ */
+export async function listContactsForApi(args: {
+  q?: string;
+  accountId?: string;
+  ownerId?: string;
+  page: number;
+  pageSize: number;
+  ownerScope: { actorId: string; canViewAll: boolean };
+}): Promise<{
+  rows: Array<typeof contacts.$inferSelect>;
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  const wheres = [eq(contacts.isDeleted, false)];
+  if (args.q) {
+    const pat = `%${args.q}%`;
+    wheres.push(
+      or(
+        ilike(contacts.firstName, pat),
+        ilike(contacts.lastName, pat),
+        ilike(contacts.email, pat),
+      )!,
+    );
+  }
+  if (args.accountId) wheres.push(eq(contacts.accountId, args.accountId));
+  if (args.ownerId) wheres.push(eq(contacts.ownerId, args.ownerId));
+  if (!args.ownerScope.canViewAll) {
+    wheres.push(eq(contacts.ownerId, args.ownerScope.actorId));
+  }
+  const where = and(...wheres);
+  const offset = (args.page - 1) * args.pageSize;
+
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select()
+      .from(contacts)
+      .where(where)
+      .orderBy(desc(contacts.updatedAt), desc(contacts.id))
+      .limit(args.pageSize)
+      .offset(offset),
+    db.select({ n: count() }).from(contacts).where(where),
+  ]);
+
+  return {
+    rows,
+    total: totalRow[0]?.n ?? 0,
+    page: args.page,
+    pageSize: args.pageSize,
+  };
+}
+
+export async function getContactForApi(
+  id: string,
+  ownerScope: { actorId: string; canViewAll: boolean },
+): Promise<typeof contacts.$inferSelect | null> {
+  const wheres = [eq(contacts.id, id), eq(contacts.isDeleted, false)];
+  if (!ownerScope.canViewAll) {
+    wheres.push(eq(contacts.ownerId, ownerScope.actorId));
+  }
+  const [row] = await db
+    .select()
+    .from(contacts)
+    .where(and(...wheres))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function updateContactForApi(
+  id: string,
+  patch: Partial<{
+    accountId: string | null;
+    firstName: string;
+    lastName: string | null;
+    jobTitle: string | null;
+    email: string | null;
+    phone: string | null;
+    mobilePhone: string | null;
+    description: string | null;
+  }>,
+  expectedVersion: number | undefined,
+  actorId: string,
+): Promise<{ id: string; version: number }> {
+  const set: Record<string, unknown> = {
+    ...patch,
+    updatedById: actorId,
+    updatedAt: sql`now()`,
+    version: sql`${contacts.version} + 1`,
+  };
+  const wheres = [eq(contacts.id, id), eq(contacts.isDeleted, false)];
+  if (typeof expectedVersion === "number") {
+    wheres.push(eq(contacts.version, expectedVersion));
+  }
+  const rows = await db
+    .update(contacts)
+    .set(set)
+    .where(and(...wheres))
+    .returning({ id: contacts.id, version: contacts.version });
+  expectAffected(rows, { table: contacts, id, entityLabel: "contact" });
+  return rows[0];
 }

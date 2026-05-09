@@ -1,9 +1,10 @@
 import "server-only";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
 import { writeAudit } from "@/lib/audit";
+import { expectAffected } from "@/lib/db/concurrent-update";
 import { urlField } from "@/lib/validation/primitives";
 
 /**
@@ -154,4 +155,114 @@ export async function restoreAccountsById(
 export async function deleteAccountsById(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.delete(crmAccounts).where(inArray(crmAccounts.id, ids));
+}
+
+/**
+ * Phase 13 — paginated account listing for /api/v1/accounts.
+ *
+ * Mirrors the inline query on `/(app)/accounts/page.tsx` but returns
+ * the offset-pagination envelope the v1 API contract requires
+ * (page / pageSize / total). UI keeps using cursor pagination — these
+ * paths do not interfere.
+ */
+export async function listAccountsForApi(args: {
+  q?: string;
+  ownerId?: string;
+  page: number;
+  pageSize: number;
+  ownerScope: { actorId: string; canViewAll: boolean };
+}): Promise<{
+  rows: Array<typeof crmAccounts.$inferSelect>;
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  const wheres = [eq(crmAccounts.isDeleted, false)];
+  if (args.q) wheres.push(ilike(crmAccounts.name, `%${args.q}%`));
+  if (args.ownerId) wheres.push(eq(crmAccounts.ownerId, args.ownerId));
+  if (!args.ownerScope.canViewAll) {
+    wheres.push(eq(crmAccounts.ownerId, args.ownerScope.actorId));
+  }
+  const where = and(...wheres);
+  const offset = (args.page - 1) * args.pageSize;
+
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select()
+      .from(crmAccounts)
+      .where(where)
+      .orderBy(desc(crmAccounts.updatedAt), desc(crmAccounts.id))
+      .limit(args.pageSize)
+      .offset(offset),
+    db.select({ n: count() }).from(crmAccounts).where(where),
+  ]);
+
+  return {
+    rows,
+    total: totalRow[0]?.n ?? 0,
+    page: args.page,
+    pageSize: args.pageSize,
+  };
+}
+
+/** Fetch single account by id; returns null when missing or soft-deleted. */
+export async function getAccountForApi(
+  id: string,
+  ownerScope: { actorId: string; canViewAll: boolean },
+): Promise<typeof crmAccounts.$inferSelect | null> {
+  const wheres = [eq(crmAccounts.id, id), eq(crmAccounts.isDeleted, false)];
+  if (!ownerScope.canViewAll) {
+    wheres.push(eq(crmAccounts.ownerId, ownerScope.actorId));
+  }
+  const [row] = await db
+    .select()
+    .from(crmAccounts)
+    .where(and(...wheres))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Phase 13 — partial update with optional optimistic concurrency.
+ *
+ * When `expectedVersion` is provided, the UPDATE filters on it and
+ * throws `ConflictError` (via expectAffected) when it doesn't match.
+ * When omitted, last-write-wins semantics apply.
+ */
+export async function updateAccountForApi(
+  id: string,
+  patch: Partial<{
+    name: string;
+    industry: string | null;
+    website: string | null;
+    phone: string | null;
+    street1: string | null;
+    street2: string | null;
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+    country: string | null;
+    description: string | null;
+    ownerId: string | null;
+  }>,
+  expectedVersion: number | undefined,
+  actorId: string,
+): Promise<{ id: string; version: number }> {
+  const set: Record<string, unknown> = {
+    ...patch,
+    updatedById: actorId,
+    updatedAt: sql`now()`,
+    version: sql`${crmAccounts.version} + 1`,
+  };
+  const wheres = [eq(crmAccounts.id, id), eq(crmAccounts.isDeleted, false)];
+  if (typeof expectedVersion === "number") {
+    wheres.push(eq(crmAccounts.version, expectedVersion));
+  }
+  const rows = await db
+    .update(crmAccounts)
+    .set(set)
+    .where(and(...wheres))
+    .returning({ id: crmAccounts.id, version: crmAccounts.version });
+  expectAffected(rows, { table: crmAccounts, id, entityLabel: "account" });
+  return rows[0];
 }

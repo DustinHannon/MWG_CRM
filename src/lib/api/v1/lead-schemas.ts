@@ -30,9 +30,24 @@ export const LeadSchema = registry.register(
       .nullable()
       .openapi({ example: "contact@example.com" }),
     phone: z.string().nullable().openapi({ example: "+1-555-0100" }),
+    job_title: z.string().nullable().openapi({ example: "Director of HR" }),
+    industry: z.string().nullable().openapi({ example: "Insurance" }),
+    website: z.string().nullable().openapi({ example: "https://acme.example" }),
+    linkedin_url: z.string().nullable(),
+    street1: z.string().nullable(),
+    street2: z.string().nullable(),
+    city: z.string().nullable().openapi({ example: "Jackson" }),
+    state: z.string().nullable().openapi({ example: "MS" }),
+    postal_code: z.string().nullable().openapi({ example: "39201" }),
+    country: z.string().nullable().openapi({ example: "USA" }),
+    description: z.string().nullable(),
+    subject: z.string().nullable(),
     status: z.enum(LEAD_STATUSES).openapi({ example: "qualified" }),
     rating: z.enum(LEAD_RATINGS).openapi({ example: "warm" }),
     source: z.enum(LEAD_SOURCES).openapi({ example: "web" }),
+    do_not_contact: z.boolean().openapi({ example: false }),
+    do_not_email: z.boolean().openapi({ example: false }),
+    do_not_call: z.boolean().openapi({ example: false }),
     owner_id: z
       .string()
       .uuid()
@@ -42,11 +57,14 @@ export const LeadSchema = registry.register(
       .string()
       .nullable()
       .openapi({ example: "12500.00" }),
+    estimated_close_date: z.string().nullable().openapi({ example: "2026-06-30" }),
     last_activity_at: z
       .string()
       .datetime()
       .nullable()
       .openapi({ example: "2026-01-15T10:30:00Z" }),
+    converted_at: z.string().datetime().nullable().openapi({ example: null }),
+    version: z.number().int().openapi({ example: 1 }),
     updated_at: z
       .string()
       .datetime()
@@ -116,9 +134,24 @@ export const LeadCreateSchema = registry.register(
       .nullable()
       .optional()
       .openapi({ example: "+1-555-0100" }),
+    job_title: z.string().max(200).nullable().optional(),
+    industry: z.string().max(100).nullable().optional(),
+    website: z.string().url().nullable().optional(),
+    linkedin_url: z.string().url().nullable().optional(),
+    street1: z.string().max(200).nullable().optional(),
+    street2: z.string().max(200).nullable().optional(),
+    city: z.string().max(100).nullable().optional(),
+    state: z.string().max(100).nullable().optional(),
+    postal_code: z.string().max(20).nullable().optional(),
+    country: z.string().max(100).nullable().optional(),
+    description: z.string().max(20_000).nullable().optional(),
+    subject: z.string().max(1000).nullable().optional(),
     status: z.enum(LEAD_STATUSES).optional().openapi({ example: "new" }),
     rating: z.enum(LEAD_RATINGS).optional().openapi({ example: "warm" }),
     source: z.enum(LEAD_SOURCES).optional().openapi({ example: "web" }),
+    do_not_contact: z.boolean().optional(),
+    do_not_email: z.boolean().optional(),
+    do_not_call: z.boolean().optional(),
     owner_id: z
       .string()
       .uuid()
@@ -131,6 +164,12 @@ export const LeadCreateSchema = registry.register(
       .nullable()
       .optional()
       .openapi({ example: 12500 }),
+    estimated_close_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
+      .nullable()
+      .optional()
+      .openapi({ example: "2026-06-30" }),
   }),
 );
 

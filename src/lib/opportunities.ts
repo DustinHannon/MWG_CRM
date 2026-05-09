@@ -1,9 +1,10 @@
 import "server-only";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { contacts, opportunities } from "@/db/schema/crm-records";
 import { writeAudit } from "@/lib/audit";
+import { expectAffected } from "@/lib/db/concurrent-update";
 import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 
 // Re-export for server-side callers that previously imported the
@@ -153,4 +154,111 @@ export async function restoreOpportunitiesById(
 export async function deleteOpportunitiesById(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.delete(opportunities).where(inArray(opportunities.id, ids));
+}
+
+/**
+ * Phase 13 — paginated opportunity listing for /api/v1/opportunities.
+ */
+export async function listOpportunitiesForApi(args: {
+  q?: string;
+  stage?: string;
+  accountId?: string;
+  ownerId?: string;
+  page: number;
+  pageSize: number;
+  ownerScope: { actorId: string; canViewAll: boolean };
+}): Promise<{
+  rows: Array<typeof opportunities.$inferSelect>;
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  const wheres = [eq(opportunities.isDeleted, false)];
+  if (args.q) wheres.push(ilike(opportunities.name, `%${args.q}%`));
+  if (args.stage) {
+    wheres.push(
+      sql`${opportunities.stage}::text = ${args.stage}`,
+    );
+  }
+  if (args.accountId) wheres.push(eq(opportunities.accountId, args.accountId));
+  if (args.ownerId) wheres.push(eq(opportunities.ownerId, args.ownerId));
+  if (!args.ownerScope.canViewAll) {
+    wheres.push(eq(opportunities.ownerId, args.ownerScope.actorId));
+  }
+  const where = and(...wheres);
+  const offset = (args.page - 1) * args.pageSize;
+
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select()
+      .from(opportunities)
+      .where(where)
+      .orderBy(desc(opportunities.updatedAt), desc(opportunities.id))
+      .limit(args.pageSize)
+      .offset(offset),
+    db.select({ n: count() }).from(opportunities).where(where),
+  ]);
+
+  return {
+    rows,
+    total: totalRow[0]?.n ?? 0,
+    page: args.page,
+    pageSize: args.pageSize,
+  };
+}
+
+export async function getOpportunityForApi(
+  id: string,
+  ownerScope: { actorId: string; canViewAll: boolean },
+): Promise<typeof opportunities.$inferSelect | null> {
+  const wheres = [eq(opportunities.id, id), eq(opportunities.isDeleted, false)];
+  if (!ownerScope.canViewAll) {
+    wheres.push(eq(opportunities.ownerId, ownerScope.actorId));
+  }
+  const [row] = await db
+    .select()
+    .from(opportunities)
+    .where(and(...wheres))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function updateOpportunityForApi(
+  id: string,
+  patch: Partial<{
+    accountId: string;
+    primaryContactId: string | null;
+    name: string;
+    stage: (typeof OPPORTUNITY_STAGES)[number];
+    amount: string | null;
+    expectedCloseDate: string | null;
+    description: string | null;
+  }>,
+  expectedVersion: number | undefined,
+  actorId: string,
+): Promise<{ id: string; version: number }> {
+  const set: Record<string, unknown> = {
+    ...patch,
+    updatedById: actorId,
+    updatedAt: sql`now()`,
+    version: sql`${opportunities.version} + 1`,
+  };
+  const wheres = [eq(opportunities.id, id), eq(opportunities.isDeleted, false)];
+  if (typeof expectedVersion === "number") {
+    wheres.push(eq(opportunities.version, expectedVersion));
+  }
+  const rows = await db
+    .update(opportunities)
+    .set(set)
+    .where(and(...wheres))
+    .returning({
+      id: opportunities.id,
+      version: opportunities.version,
+    });
+  expectAffected(rows, {
+    table: opportunities,
+    id,
+    entityLabel: "opportunity",
+  });
+  return rows[0];
 }

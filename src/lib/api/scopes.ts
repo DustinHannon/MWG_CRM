@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * Phase 13 — API key scope catalogue. Every scope listed here is the
  * complete set; the admin UI grid renders from this; the auth middleware
@@ -8,6 +6,10 @@ import "server-only";
  * Scopes are entity-granular: `read:<entity>`, `write:<entity>`,
  * `delete:<entity>`. The `admin` super-scope grants all of the above
  * plus access to admin-gated endpoints (`/users`).
+ *
+ * Plain constants — no server-only marker because the admin UI client
+ * component renders the scope grid using ENTITIES + ALL_SCOPES + the
+ * SCOPE_PRESETS bundle. None of the values here are secrets.
  */
 
 export const ENTITIES = [

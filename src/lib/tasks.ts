@@ -367,3 +367,111 @@ export async function listTasksDueTodayForCron(): Promise<
 
 // Suppress unused import warning when isNull isn't needed.
 void isNull;
+
+/**
+ * Phase 13 — paginated task listing for /api/v1/tasks. Returns the
+ * offset-pagination envelope the v1 API contract requires.
+ */
+export async function listTasksForApi(args: {
+  status?: "open" | "in_progress" | "completed" | "cancelled";
+  assignedToId?: string;
+  leadId?: string;
+  page: number;
+  pageSize: number;
+  ownerScope: { actorId: string; canViewAll: boolean };
+}): Promise<{
+  rows: TaskRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  const wheres: SQL[] = [eq(tasks.isDeleted, false)];
+  if (args.status) wheres.push(eq(tasks.status, args.status));
+  if (args.assignedToId) wheres.push(eq(tasks.assignedToId, args.assignedToId));
+  if (args.leadId) wheres.push(eq(tasks.leadId, args.leadId));
+  if (!args.ownerScope.canViewAll) {
+    wheres.push(
+      or(
+        eq(tasks.assignedToId, args.ownerScope.actorId),
+        eq(tasks.createdById, args.ownerScope.actorId),
+      )!,
+    );
+  }
+  const where = and(...wheres);
+  const offset = (args.page - 1) * args.pageSize;
+
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select(baseSelect)
+      .from(tasks)
+      .leftJoin(users, eq(users.id, tasks.assignedToId))
+      .leftJoin(leads, eq(leads.id, tasks.leadId))
+      .where(where)
+      .orderBy(sql`${tasks.dueAt} ASC NULLS LAST`, desc(tasks.id))
+      .limit(args.pageSize)
+      .offset(offset),
+    db.select({ n: sql<number>`count(*)::int` }).from(tasks).where(where),
+  ]);
+
+  return {
+    rows,
+    total: totalRow[0]?.n ?? 0,
+    page: args.page,
+    pageSize: args.pageSize,
+  };
+}
+
+/**
+ * Phase 13 — fetch a single task and its row context (assignee, parent).
+ * Returns null when the row doesn't exist or is soft-deleted.
+ */
+export async function getTaskForApi(
+  id: string,
+  ownerScope: { actorId: string; canViewAll: boolean },
+): Promise<
+  | (typeof tasks.$inferSelect & {
+      assignedToName: string | null;
+    })
+  | null
+> {
+  const [row] = await db
+    .select({
+      id: tasks.id,
+      version: tasks.version,
+      title: tasks.title,
+      description: tasks.description,
+      status: tasks.status,
+      priority: tasks.priority,
+      dueAt: tasks.dueAt,
+      completedAt: tasks.completedAt,
+      assignedToId: tasks.assignedToId,
+      assignedToName: users.displayName,
+      createdById: tasks.createdById,
+      updatedById: tasks.updatedById,
+      leadId: tasks.leadId,
+      accountId: tasks.accountId,
+      contactId: tasks.contactId,
+      opportunityId: tasks.opportunityId,
+      createdAt: tasks.createdAt,
+      updatedAt: tasks.updatedAt,
+      isDeleted: tasks.isDeleted,
+      deletedAt: tasks.deletedAt,
+      deletedById: tasks.deletedById,
+      deleteReason: tasks.deleteReason,
+    })
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.assignedToId))
+    .where(and(eq(tasks.id, id), eq(tasks.isDeleted, false)))
+    .limit(1);
+  if (!row) return null;
+  if (
+    !ownerScope.canViewAll &&
+    row.assignedToId !== ownerScope.actorId &&
+    row.createdById !== ownerScope.actorId
+  ) {
+    return null;
+  }
+  return row as unknown as typeof tasks.$inferSelect & {
+    assignedToName: string | null;
+  };
+}
