@@ -15,3 +15,4 @@ export * from "./recent-views";
 export * from "./lead-scoring";
 export * from "./saved-reports";
 export * from "./api-keys";
+export * from "./email-send-log";

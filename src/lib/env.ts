@@ -15,6 +15,15 @@ const envSchema = z.object({
   AUTH_MICROSOFT_ENTRA_ID_SECRET: z.string().optional(),
   AUTH_MICROSOFT_ENTRA_ID_ISSUER: z.string().url().optional(),
 
+  // Phase 15 — Microsoft Graph application permissions for system-originated
+  // email (sendEmailAs / preflight). New aliases default to the existing
+  // delegated-flow values so the same Entra app works for both flows once
+  // Mail.Send + User.Read.All application permissions are admin-consented.
+  ENTRA_TENANT_ID: z.string().optional(),
+  ENTRA_CLIENT_ID: z.string().optional(),
+  ENTRA_CLIENT_SECRET: z.string().optional(),
+  EMAIL_SYSTEM_FROM_USER_ID: z.string().optional(),
+
   // Database (Supabase Postgres)
   POSTGRES_URL: z.string().url("POSTGRES_URL must be a postgres connection URL"),
   POSTGRES_URL_NON_POOLING: z.string().url().optional(),

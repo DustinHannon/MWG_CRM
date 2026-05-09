@@ -58,6 +58,14 @@ export const users = pgTable(
     managerDisplayName: text("manager_display_name"),
     managerEmail: text("manager_email"),
     entraSyncedAt: timestamp("entra_synced_at", { withTimezone: true }),
+    // Phase 15 — Mailbox capability (cached). 'exchange_online' | 'on_premises'
+    // | 'unknown' | 'not_licensed'. Re-checked at most every 24h, on every
+    // sign-in, or on-demand via admin "Re-check mailbox".
+    mailboxKind: text("mailbox_kind"),
+    mailboxCheckedAt: timestamp("mailbox_checked_at", { withTimezone: true }),
+    jitProvisioned: boolean("jit_provisioned").notNull().default(false),
+    jitProvisionedAt: timestamp("jit_provisioned_at", { withTimezone: true }),
+    firstLoginAt: timestamp("first_login_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
