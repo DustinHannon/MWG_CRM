@@ -51,12 +51,12 @@ test-data/
 
 .env*.local
 
-# Phase scratch — don't pollute the root.
-# Phase prompts that produce working notes, plans, or audit reports
-# should write them into docs/phases/{plans,reports}/ — never the root.
-/PHASE*.md
-/PLAN-PHASE*.md
-/PLAN.md
+# Markdown / documentation — local-only.
+# Only README.md is tracked. Phase plans, audits, reports, design notes,
+# and architecture docs all stay out of GitHub.
+/*.md
+!/README.md
+docs/
 /*.scratch.md
 /.scratch/
 /screenshottemp/
