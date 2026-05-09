@@ -42,9 +42,9 @@ export default async function ArchivedLeadsPage() {
   const rows = await db
     .select({
       id: leads.id,
-      first: leads.firstName,
-      last: leads.lastName,
-      company: leads.companyName,
+      firstName: leads.firstName,
+      lastName: leads.lastName,
+      companyName: leads.companyName,
       deletedAt: leads.deletedAt,
       reason: leads.deleteReason,
       // Phase 9C — surface the deleted-by id so the cell can render a
@@ -98,8 +98,10 @@ export default async function ArchivedLeadsPage() {
           <ArchivedListMobile
             rows={rows.map((r) => ({
               id: r.id,
-              title: [r.first, r.last].filter(Boolean).join(" ") || "(Unnamed lead)",
-              subtitle: r.company,
+              title:
+                [r.firstName, r.lastName].filter(Boolean).join(" ") ||
+                "(Unnamed lead)",
+              subtitle: r.companyName,
               deletedAt: r.deletedAt,
               deletedByName: r.deletedByName,
               deletedByEmail: r.deletedByEmail,
@@ -156,9 +158,9 @@ export default async function ArchivedLeadsPage() {
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-accent/40">
                   <td data-label="Name" className="px-4 py-3 font-medium text-foreground">
-                    {r.first} {r.last}
+                    {r.firstName} {r.lastName}
                   </td>
-                  <td data-label="Company" className="px-4 py-3 text-foreground/80">{r.company ?? "—"}</td>
+                  <td data-label="Company" className="px-4 py-3 text-foreground/80">{r.companyName ?? "—"}</td>
                   <td data-label="Archived" className="px-4 py-3 text-muted-foreground">
                     <UserTime value={r.deletedAt} mode="date" />
                   </td>
