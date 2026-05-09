@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts } from "@/db/schema/users";
 import { env, MWG_TENANT_ID } from "@/lib/env";
+import { fetchWithTimeout } from "@/lib/graph-fetch";
 
 /**
  * Thrown when a stored refresh_token is no longer valid (revoked, expired,
@@ -78,7 +79,7 @@ async function refreshFromMicrosoft(
     ].join(" "),
   });
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://login.microsoftonline.com/${MWG_TENANT_ID}/oauth2/v2.0/token`,
     {
       method: "POST",
@@ -156,7 +157,7 @@ export async function graphFetchAs<T>(
   init?: RequestInit,
 ): Promise<T> {
   const token = await getValidAccessTokenForUser(userId);
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+  const res = await fetchWithTimeout(`https://graph.microsoft.com/v1.0${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -180,7 +181,7 @@ export async function graphFetchBinaryAs(
   path: string,
 ): Promise<Response> {
   const token = await getValidAccessTokenForUser(userId);
-  return fetch(`https://graph.microsoft.com/v1.0${path}`, {
+  return fetchWithTimeout(`https://graph.microsoft.com/v1.0${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

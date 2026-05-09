@@ -1,4 +1,5 @@
 import "server-only";
+import { fetchWithTimeout } from "@/lib/graph-fetch";
 
 export class GraphError extends Error {
   constructor(
@@ -20,7 +21,7 @@ export async function graphFetchWithToken<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+  const res = await fetchWithTimeout(`https://graph.microsoft.com/v1.0${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,

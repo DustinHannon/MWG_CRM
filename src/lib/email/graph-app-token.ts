@@ -1,6 +1,7 @@
 import "server-only";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 import { env, MWG_TENANT_ID } from "@/lib/env";
+import { fetchWithTimeout, GraphTimeoutError } from "@/lib/graph-fetch";
 import { logger } from "@/lib/logger";
 import { EmailNotConfiguredError } from "./types";
 
@@ -102,7 +103,7 @@ export async function graphAppRequest<T>(
 
   let res: Response;
   try {
-    res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    res = await fetchWithTimeout(`https://graph.microsoft.com/v1.0${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -112,6 +113,17 @@ export async function graphAppRequest<T>(
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch (err) {
+    if (err instanceof GraphTimeoutError) {
+      logger.error("graph_app.timeout", {
+        path,
+        timeoutMs: err.timeoutMs,
+      });
+      return {
+        ok: false,
+        status: 0,
+        error: { code: "TIMEOUT", message: err.message },
+      };
+    }
     logger.error("graph_app.network_error", {
       path,
       errorMessage: err instanceof Error ? err.message : String(err),
