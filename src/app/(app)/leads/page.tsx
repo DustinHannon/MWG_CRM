@@ -14,6 +14,7 @@ import { canDeleteLead } from "@/lib/access/can-delete";
 import { StatusPill } from "@/components/ui/status-pill";
 import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserChip } from "@/components/user-display";
+import { LeadListMobile } from "./_components/lead-list-mobile";
 import { LeadRowActions } from "./_components/lead-row-actions";
 import {
   AVAILABLE_COLUMNS,
@@ -257,61 +258,71 @@ export default async function LeadsPage({
         />
       </div>
 
+      {/* Phase 12 — search + filters. Sticky to the top of the
+          authenticated scroll container at <md so the user always
+          has search-in-context while paging through a long list.
+          On md+ the bar resumes its inline position. */}
       <form
         action="/leads"
         method="get"
-        className="mt-5 flex flex-wrap items-end gap-2 sm:gap-3"
+        className="mt-5 sticky top-0 z-30 -mx-4 bg-background/85 px-4 pb-3 pt-3 backdrop-blur-md sm:-mx-6 sm:px-6 md:static md:z-auto md:mx-0 md:bg-transparent md:px-0 md:pt-0 md:pb-0 md:backdrop-blur-none"
       >
         <input type="hidden" name="view" value={activeViewParam} />
-        {/* Phase 12 Sub-E — search field grows to fill its row on
-            mobile (full width) and shares the row with filters from
-            sm: upward. The 16px font-size override at <640px (set
-            globally) suppresses iOS auto-zoom. */}
-        <input
-          name="q"
-          defaultValue={sp.q ?? ""}
-          placeholder="Search name / email / company / phone…"
-          className="w-full flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 sm:w-auto sm:min-w-[240px]"
-        />
-        <FilterSelect
-          name="status"
-          defaultValue={sp.status}
-          options={LEAD_STATUSES}
-          placeholder="Status"
-        />
-        <FilterSelect
-          name="rating"
-          defaultValue={sp.rating}
-          options={LEAD_RATINGS}
-          placeholder="Rating"
-        />
-        <FilterSelect
-          name="source"
-          defaultValue={sp.source}
-          options={LEAD_SOURCES}
-          placeholder="Source"
-        />
-        <button
-          type="submit"
-          className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
-        >
-          Apply
-        </button>
-        {sp.q || sp.status || sp.rating || sp.source || sp.tag ? (
-          <Link
-            href={`/leads?view=${encodeURIComponent(activeViewParam)}`}
-            className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground/90"
+        <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+          {/* Search field. `type="search"` adds the native iOS clear (×)
+              affordance. The global 16px font-size suppresses iOS
+              zoom on focus. */}
+          <input
+            name="q"
+            type="search"
+            defaultValue={sp.q ?? ""}
+            placeholder="Search name / email / company / phone…"
+            className="w-full flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:w-auto md:min-w-[240px]"
+          />
+          <FilterSelect
+            name="status"
+            defaultValue={sp.status}
+            options={LEAD_STATUSES}
+            placeholder="Status"
+          />
+          <FilterSelect
+            name="rating"
+            defaultValue={sp.rating}
+            options={LEAD_RATINGS}
+            placeholder="Rating"
+          />
+          <FilterSelect
+            name="source"
+            defaultValue={sp.source}
+            options={LEAD_SOURCES}
+            placeholder="Source"
+          />
+          <button
+            type="submit"
+            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
           >
-            Clear
-          </Link>
-        ) : null}
+            Apply
+          </button>
+          {sp.q || sp.status || sp.rating || sp.source || sp.tag ? (
+            <Link
+              href={`/leads?view=${encodeURIComponent(activeViewParam)}`}
+              className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground/90"
+            >
+              Clear
+            </Link>
+          ) : null}
+        </div>
       </form>
 
-      {/* Phase 12 Sub-E — `data-table-cards` reflows the table to a
-          stack of cards at <768px. The Phase 11 desktop table layout
-          is preserved at >=768px. Per-cell `data-label` powers the
-          card-mode field labels via CSS `content: attr(data-label)`. */}
-      <div className="data-table-cards mt-6 overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
+      {/* Phase 12 — dense single-line list at <768px (replaces the
+          earlier `data-table-cards` reflow which produced ~200 px
+          per row of stacked field labels — unusable at scale).
+          Hidden at md+ where the desktop table takes over. */}
+      <div className="mt-6 md:hidden">
+        <LeadListMobile rows={result.rows} />
+      </div>
+
+      <div className="mt-6 hidden overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl md:block">
         <table className="data-table min-w-full divide-y divide-border/60 text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
