@@ -1,8 +1,9 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { RetentionBanner } from "@/components/admin/retention-banner";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
 import { encodeCursor, parseCursor } from "@/lib/leads";
@@ -11,10 +12,19 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 100;
 
+interface AuditSearchParams {
+  q?: string;
+  action?: string;
+  target_type?: string;
+  created_at_gte?: string;
+  created_at_lte?: string;
+  cursor?: string;
+}
+
 export default async function AuditLogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; action?: string; cursor?: string }>;
+  searchParams: Promise<AuditSearchParams>;
 }) {
   const sp = await searchParams;
 
@@ -36,6 +46,22 @@ export default async function AuditLogPage({
     );
   }
   if (sp.action) wheres.push(eq(auditLog.action, sp.action));
+  if (sp.target_type) wheres.push(eq(auditLog.targetType, sp.target_type));
+  if (sp.created_at_gte) {
+    const d = new Date(sp.created_at_gte);
+    if (!Number.isNaN(d.getTime())) {
+      wheres.push(gte(auditLog.createdAt, d));
+    }
+  }
+  if (sp.created_at_lte) {
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(sp.created_at_lte);
+    const d = isDateOnly
+      ? new Date(`${sp.created_at_lte}T23:59:59.999Z`)
+      : new Date(sp.created_at_lte);
+    if (!Number.isNaN(d.getTime())) {
+      wheres.push(lte(auditLog.createdAt, d));
+    }
+  }
   if (cursor && cursor.ts) {
     wheres.push(
       sql`(
@@ -78,6 +104,29 @@ export default async function AuditLogPage({
   const last = rows[rows.length - 1];
   const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
 
+  // Distinct entity-type list for the dropdown. Cheap query against the
+  // `audit_target_idx` index. Cached in-page (server component) so it
+  // re-runs only on each page render.
+  const targetTypeRows = await db
+    .selectDistinct({ targetType: auditLog.targetType })
+    .from(auditLog)
+    .where(sql`${auditLog.targetType} IS NOT NULL`)
+    .orderBy(auditLog.targetType);
+  const targetTypes = targetTypeRows
+    .map((r) => r.targetType)
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+
+  // Build the filter-preserving export URL.
+  const exportParams = new URLSearchParams();
+  if (sp.q) exportParams.set("q", sp.q);
+  if (sp.action) exportParams.set("action", sp.action);
+  if (sp.target_type) exportParams.set("target_type", sp.target_type);
+  if (sp.created_at_gte) exportParams.set("created_at_gte", sp.created_at_gte);
+  if (sp.created_at_lte) exportParams.set("created_at_lte", sp.created_at_lte);
+  const exportHref = `/admin/audit/export${
+    exportParams.toString() ? `?${exportParams.toString()}` : ""
+  }`;
+
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter
@@ -93,25 +142,83 @@ export default async function AuditLogPage({
         Showing {rows.length}{nextCursor ? "+" : ""} {rows.length === 1 ? "event" : "events"}. Append-only.
       </p>
 
-      <form className="mt-6 flex flex-wrap gap-3">
-        <input
-          name="q"
-          defaultValue={sp.q ?? ""}
-          placeholder="Search action / target / actor…"
-          className="min-w-[280px] flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-        />
-        <input
-          name="action"
-          defaultValue={sp.action ?? ""}
-          placeholder="Action (e.g. lead.update)"
-          className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-        />
-        <button
-          type="submit"
-          className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
-        >
-          Apply
-        </button>
+      <div className="mt-6">
+        <RetentionBanner days={730} label="Activity logs" />
+      </div>
+
+      <form className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Search
+          <input
+            name="q"
+            defaultValue={sp.q ?? ""}
+            placeholder="action / target / actor…"
+            className="min-w-[260px] rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Action
+          <input
+            name="action"
+            defaultValue={sp.action ?? ""}
+            placeholder="lead.update"
+            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Entity type
+          <select
+            name="target_type"
+            defaultValue={sp.target_type ?? ""}
+            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          >
+            <option value="">Any</option>
+            {targetTypes.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          From
+          <input
+            type="date"
+            name="created_at_gte"
+            defaultValue={sp.created_at_gte ?? ""}
+            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          To
+          <input
+            type="date"
+            name="created_at_lte"
+            defaultValue={sp.created_at_lte ?? ""}
+            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
+          >
+            Apply
+          </button>
+          <a
+            href="/admin/audit"
+            className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+          >
+            Reset
+          </a>
+          <a
+            href={exportHref}
+            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
+            title="Download up to 50,000 matching rows as CSV"
+          >
+            Export CSV
+          </a>
+        </div>
       </form>
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
@@ -221,13 +328,16 @@ function CursorLink({
   cursor,
   children,
 }: {
-  sp: { q?: string; action?: string };
+  sp: AuditSearchParams;
   cursor: string | null;
   children: React.ReactNode;
 }) {
   const params = new URLSearchParams();
   if (sp.q) params.set("q", sp.q);
   if (sp.action) params.set("action", sp.action);
+  if (sp.target_type) params.set("target_type", sp.target_type);
+  if (sp.created_at_gte) params.set("created_at_gte", sp.created_at_gte);
+  if (sp.created_at_lte) params.set("created_at_lte", sp.created_at_lte);
   if (cursor) params.set("cursor", cursor);
   return (
     <a
