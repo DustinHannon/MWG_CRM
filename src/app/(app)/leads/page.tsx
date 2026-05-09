@@ -14,6 +14,7 @@ import { canDeleteLead } from "@/lib/access/can-delete";
 import { StatusPill } from "@/components/ui/status-pill";
 import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserChip } from "@/components/user-display";
+import { MobileFilterSelect } from "./_components/filters-mobile";
 import { LeadListMobile } from "./_components/lead-list-mobile";
 import { LeadRowActions } from "./_components/lead-row-actions";
 import {
@@ -206,10 +207,11 @@ export default async function LeadsPage({
             {sp.q ? ` matching "${sp.q}"` : ""} · view {activeView.name}
           </p>
         </div>
-        {/* Phase 12 Sub-E — flex-wrap on mobile so action pills land
-            on additional rows instead of forcing horizontal overflow. */}
+        {/* Phase 12 — at <md only `+Add lead` shows. Pipeline / Import
+            / Export / Table-Pipeline toggle are power-user controls
+            that crowded a 380 px viewport; they reappear at md+. */}
         <div className="flex flex-wrap gap-2">
-          <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
+          <div className="hidden gap-1 rounded-lg border border-glass-border bg-glass-1 p-1 md:flex">
             <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
               Table
             </span>
@@ -223,7 +225,7 @@ export default async function LeadsPage({
           {perms.canImport || user.isAdmin ? (
             <Link
               href="/leads/import"
-              className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
+              className="hidden rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
             >
               Import
             </Link>
@@ -231,7 +233,7 @@ export default async function LeadsPage({
           {perms.canExport || user.isAdmin ? (
             <a
               href={buildExportHref(sp)}
-              className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
+              className="hidden rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
             >
               Export
             </a>
@@ -247,7 +249,10 @@ export default async function LeadsPage({
         </div>
       </div>
 
-      <div className="mt-5">
+      {/* ViewToolbar is desktop-only — view selector, MODIFIED badge,
+          Save-as-new, Columns chooser are all power-user features
+          that don't fit the mobile toolbar. */}
+      <div className="mt-5 hidden md:block">
         <ViewToolbar
           views={allViews}
           activeViewId={activeViewParam}
@@ -258,59 +263,119 @@ export default async function LeadsPage({
         />
       </div>
 
-      {/* Phase 12 — search + filters. Sticky to the top of the
-          authenticated scroll container at <md so the user always
-          has search-in-context while paging through a long list.
-          On md+ the bar resumes its inline position. */}
+      {/* Phase 12 — sticky at <md so search stays in view while
+          scrolling. Two rows on mobile: a tall search bar with a
+          leading magnifier, then a horizontal-scroll chip row of
+          filters that auto-submit on change. md+ collapses to one
+          row with an explicit Apply button. */}
       <form
         action="/leads"
         method="get"
-        className="mt-5 sticky top-0 z-30 -mx-4 bg-background/85 px-4 pb-3 pt-3 backdrop-blur-md sm:-mx-6 sm:px-6 md:static md:z-auto md:mx-0 md:bg-transparent md:px-0 md:pt-0 md:pb-0 md:backdrop-blur-none"
+        className="mt-5 sticky top-0 z-30 -mx-4 space-y-2 border-b border-border/40 bg-background/85 px-4 pb-3 pt-3 backdrop-blur-md sm:-mx-6 sm:px-6 md:static md:z-auto md:mx-0 md:space-y-0 md:border-0 md:bg-transparent md:px-0 md:pt-0 md:pb-0 md:backdrop-blur-none"
       >
         <input type="hidden" name="view" value={activeViewParam} />
-        <div className="flex flex-wrap items-end gap-2 sm:gap-3">
-          {/* Search field. `type="search"` adds the native iOS clear (×)
-              affordance. The global 16px font-size suppresses iOS
-              zoom on focus. */}
+
+        {/* ROW 1 — search. Tall on mobile (h-11) with a leading
+            magnifier so it reads as a primary input, not a filter
+            among many. md+ keeps it inline with the filters. */}
+        <div className="md:hidden">
+          <label className="relative block">
+            <svg
+              aria-hidden
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+            >
+              <circle cx={9} cy={9} r={6} />
+              <path d="m17 17-3.5-3.5" strokeLinecap="round" />
+            </svg>
+            <input
+              name="q"
+              type="search"
+              defaultValue={sp.q ?? ""}
+              placeholder="Search name, email, company…"
+              className="block h-11 w-full rounded-full border border-border bg-muted/40 pl-10 pr-4 text-base text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+            />
+          </label>
+        </div>
+
+        {/* ROW 2 — filter chips at <md (auto-submit on change),
+            inline with desktop search at md+. */}
+        <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-3 md:overflow-visible md:px-0 md:pb-0">
+          {/* Desktop search — visible only at md+ to share the row. */}
           <input
             name="q"
             type="search"
             defaultValue={sp.q ?? ""}
             placeholder="Search name / email / company / phone…"
-            className="w-full flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:w-auto md:min-w-[240px]"
+            className="hidden flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:block md:min-w-[240px]"
           />
-          <FilterSelect
-            name="status"
-            defaultValue={sp.status}
-            options={LEAD_STATUSES}
-            placeholder="Status"
-          />
-          <FilterSelect
-            name="rating"
-            defaultValue={sp.rating}
-            options={LEAD_RATINGS}
-            placeholder="Rating"
-          />
-          <FilterSelect
-            name="source"
-            defaultValue={sp.source}
-            options={LEAD_SOURCES}
-            placeholder="Source"
-          />
-          <button
-            type="submit"
-            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
-          >
-            Apply
-          </button>
-          {sp.q || sp.status || sp.rating || sp.source || sp.tag ? (
-            <Link
-              href={`/leads?view=${encodeURIComponent(activeViewParam)}`}
-              className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground/90"
+          {/* Mobile chip-style auto-submitting selects (md:hidden). */}
+          <div className="contents md:hidden">
+            <MobileFilterSelect
+              name="status"
+              defaultValue={sp.status}
+              options={LEAD_STATUSES}
+              placeholder="Status"
+            />
+            <MobileFilterSelect
+              name="rating"
+              defaultValue={sp.rating}
+              options={LEAD_RATINGS}
+              placeholder="Rating"
+            />
+            <MobileFilterSelect
+              name="source"
+              defaultValue={sp.source}
+              options={LEAD_SOURCES}
+              placeholder="Source"
+            />
+            {sp.q || sp.status || sp.rating || sp.source || sp.tag ? (
+              <Link
+                href={`/leads?view=${encodeURIComponent(activeViewParam)}`}
+                className="shrink-0 rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground/90"
+              >
+                Clear
+              </Link>
+            ) : null}
+          </div>
+          {/* Desktop selects + Apply (hidden on mobile). */}
+          <div className="hidden items-center gap-2 md:flex md:gap-3">
+            <FilterSelect
+              name="status"
+              defaultValue={sp.status}
+              options={LEAD_STATUSES}
+              placeholder="Status"
+            />
+            <FilterSelect
+              name="rating"
+              defaultValue={sp.rating}
+              options={LEAD_RATINGS}
+              placeholder="Rating"
+            />
+            <FilterSelect
+              name="source"
+              defaultValue={sp.source}
+              options={LEAD_SOURCES}
+              placeholder="Source"
+            />
+            <button
+              type="submit"
+              className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
             >
-              Clear
-            </Link>
-          ) : null}
+              Apply
+            </button>
+            {sp.q || sp.status || sp.rating || sp.source || sp.tag ? (
+              <Link
+                href={`/leads?view=${encodeURIComponent(activeViewParam)}`}
+                className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground/90"
+              >
+                Clear
+              </Link>
+            ) : null}
+          </div>
         </div>
       </form>
 
