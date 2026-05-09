@@ -25,6 +25,14 @@ const PUBLIC_PATH_PREFIXES = [
   // redirect so a missing/bad bearer returns a clean 401 instead of a
   // 307 redirect to /auth/signin.
   "/api/cron/",
+  // Phase 13 — public REST API and its docs. The /api/v1/* routes
+  // authenticate via Bearer-token API key (mwg_live_*) inside the
+  // route handler; the proxy must NOT redirect missing-cookie
+  // requests away. Same goes for the OpenAPI spec endpoint and the
+  // /apihelp documentation page (both are deliberately public).
+  "/api/v1/",
+  "/api/openapi.json",
+  "/apihelp",
   "/_next/",
   "/favicon",
   "/robots.txt",
