@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
 import { headers } from "next/headers";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 
@@ -46,6 +47,7 @@ export default async function RootLayout({
     >
       <body className="antialiased font-sans">
         <ThemeProvider nonce={nonce}>{children}</ThemeProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
