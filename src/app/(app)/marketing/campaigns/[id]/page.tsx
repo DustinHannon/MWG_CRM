@@ -148,10 +148,10 @@ export default async function CampaignDetailPage({
   const canDelete = row.status === "draft" || row.status === "cancelled";
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.campaignsDetail(row.name)} />
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Campaign
@@ -212,7 +212,7 @@ export default async function CampaignDetailPage({
         />
       </div>
 
-      <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-7">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
         <Counter
           icon={<Users className="h-4 w-4" />}
           label="Recipients"
@@ -269,14 +269,15 @@ export default async function CampaignDetailPage({
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-muted/50 text-xs uppercase tracking-[0.05em] text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Email</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-left font-medium">Opened</th>
-                  <th className="px-4 py-3 text-left font-medium">Clicked</th>
-                  <th className="px-4 py-3 text-left font-medium">Bounce reason</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Email</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Opened</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Clicked</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Bounce reason</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -307,6 +308,7 @@ export default async function CampaignDetailPage({
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
         {totalPages > 1 ? (

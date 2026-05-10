@@ -117,7 +117,7 @@ export function MarketingEmailReport({
         </Link>
       </form>
 
-      <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <Kpi label="Sent" value={kpis.totalSent} />
         <Kpi label="Delivered" value={kpis.totalDelivered} />
         <Kpi
@@ -156,17 +156,18 @@ export function MarketingEmailReport({
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-sm">
               <thead className="bg-muted/50 text-xs uppercase tracking-[0.05em] text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Campaign</th>
-                  <th className="px-4 py-3 text-left font-medium">Sent</th>
-                  <th className="px-4 py-3 text-right font-medium">Recip.</th>
-                  <th className="px-4 py-3 text-right font-medium">Delivered</th>
-                  <th className="px-4 py-3 text-right font-medium">Opened</th>
-                  <th className="px-4 py-3 text-right font-medium">Clicked</th>
-                  <th className="px-4 py-3 text-right font-medium">Bounced</th>
-                  <th className="px-4 py-3 text-right font-medium">Unsub</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Campaign</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Sent</th>
+                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">Recip.</th>
+                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">Delivered</th>
+                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">Opened</th>
+                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">Clicked</th>
+                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">Bounced</th>
+                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">Unsub</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -213,6 +214,7 @@ export function MarketingEmailReport({
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </section>

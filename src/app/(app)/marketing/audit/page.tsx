@@ -38,7 +38,7 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
   // Layout already gates on `canManageMarketing`; defensive check.
   if (!user.isAdmin && !perms.canManageMarketing) {
     return (
-      <div className="p-6 text-sm text-muted-foreground">
+      <div className="px-4 py-6 text-sm text-muted-foreground sm:px-6 sm:py-8 xl:px-10 xl:py-10">
         You don&apos;t have access to the marketing audit log.
       </div>
     );
@@ -108,7 +108,7 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.auditIndex()} />
       <Link
         href="/marketing"
@@ -117,7 +117,7 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to marketing
       </Link>
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Marketing audit
@@ -132,7 +132,7 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
         </div>
         <Link
           href="/marketing/reports/email"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm font-medium text-foreground transition hover:bg-muted"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm font-medium text-foreground whitespace-nowrap transition hover:bg-muted"
         >
           <BarChart3 className="h-4 w-4" aria-hidden />
           Marketing email report
@@ -153,14 +153,15 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-[0.05em] text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Timestamp</th>
-                <th className="px-4 py-3 text-left font-medium">User</th>
-                <th className="px-4 py-3 text-left font-medium">Event</th>
-                <th className="px-4 py-3 text-left font-medium">Target</th>
-                <th className="px-4 py-3 text-left font-medium">Metadata</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Timestamp</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">User</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Event</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Target</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Metadata</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -195,6 +196,7 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

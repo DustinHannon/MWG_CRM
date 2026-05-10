@@ -42,9 +42,9 @@ export default async function CampaignsPage() {
     .limit(200);
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.campaignsIndex()} />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Campaigns</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -53,7 +53,7 @@ export default async function CampaignsPage() {
         </div>
         <Link
           href="/marketing/campaigns/new"
-          className="inline-flex h-9 items-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition hover:opacity-90"
+          className="inline-flex h-9 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background whitespace-nowrap transition hover:opacity-90 sm:w-auto"
         >
           New campaign
         </Link>
@@ -70,16 +70,17 @@ export default async function CampaignsPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-[0.05em] text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Name</th>
-                <th className="px-4 py-3 text-left font-medium">Template</th>
-                <th className="px-4 py-3 text-left font-medium">List</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Sent</th>
-                <th className="px-4 py-3 text-left font-medium">Opens</th>
-                <th className="px-4 py-3 text-left font-medium">Updated</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Name</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Template</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">List</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Status</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Sent</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Opens</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -119,6 +120,7 @@ export default async function CampaignsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

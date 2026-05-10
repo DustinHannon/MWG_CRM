@@ -85,7 +85,7 @@ export default async function ListDetailPage({
   const totalPages = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE));
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.listsDetail(list.name)} />
       <Link
         href="/marketing/lists"
@@ -94,7 +94,7 @@ export default async function ListDetailPage({
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to lists
       </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">
             {list.name}
@@ -129,14 +129,14 @@ export default async function ListDetailPage({
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href={`/marketing/campaigns/new?listId=${list.id}`}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-foreground px-3 text-sm font-medium text-background transition hover:opacity-90"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-foreground px-3 text-sm font-medium text-background whitespace-nowrap transition hover:opacity-90"
           >
             <Send className="h-4 w-4" aria-hidden />
             Use in campaign
           </Link>
           <Link
             href={`/marketing/lists/${list.id}/edit`}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 text-sm text-foreground/90 transition hover:bg-muted"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 text-sm text-foreground/90 whitespace-nowrap transition hover:bg-muted"
           >
             <Pencil className="h-4 w-4" aria-hidden />
             Edit
@@ -160,14 +160,15 @@ export default async function ListDetailPage({
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-muted/50 text-xs uppercase tracking-[0.05em] text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Name</th>
-                  <th className="px-4 py-3 text-left font-medium">Email</th>
-                  <th className="px-4 py-3 text-left font-medium">Company</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-left font-medium">Added</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Name</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Email</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Company</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Added</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -202,6 +203,7 @@ export default async function ListDetailPage({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 

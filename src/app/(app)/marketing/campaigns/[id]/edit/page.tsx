@@ -40,7 +40,7 @@ export default async function EditCampaignPage({ params }: Props) {
 
   if (campaign.status !== "draft") {
     return (
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
         <BreadcrumbsSetter
           crumbs={marketingCrumbs.campaignsEdit(campaign.name, campaign.id)}
         />
@@ -104,7 +104,7 @@ export default async function EditCampaignPage({ params }: Props) {
     .limit(500);
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter
         crumbs={marketingCrumbs.campaignsEdit(campaign.name, campaign.id)}
       />

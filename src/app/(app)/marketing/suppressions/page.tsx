@@ -29,7 +29,7 @@ export default async function SuppressionsPage() {
     .limit(500);
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.suppressionsIndex()} />
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Suppressions</h1>
@@ -50,14 +50,15 @@ export default async function SuppressionsPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-[0.05em] text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Email</th>
-                <th className="px-4 py-3 text-left font-medium">Type</th>
-                <th className="px-4 py-3 text-left font-medium">Reason</th>
-                <th className="px-4 py-3 text-left font-medium">Suppressed</th>
-                <th className="px-4 py-3 text-left font-medium">Last synced</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Email</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Type</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Reason</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Suppressed</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Last synced</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -82,6 +83,7 @@ export default async function SuppressionsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

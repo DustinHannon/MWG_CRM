@@ -70,7 +70,7 @@ export default async function MarketingOverviewPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.index()} />
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Marketing</h1>

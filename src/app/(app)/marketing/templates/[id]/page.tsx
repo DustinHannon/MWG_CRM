@@ -62,7 +62,7 @@ export default async function TemplateDetailPage({
   const canEdit = (user.isAdmin || perms.canManageMarketing) && !lockedByOther;
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.templatesDetail(row.name)} />
 
       <Link
@@ -72,7 +72,7 @@ export default async function TemplateDetailPage({
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to templates
       </Link>
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{row.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{row.subject}</p>
@@ -86,7 +86,7 @@ export default async function TemplateDetailPage({
           {canEdit ? (
             <Link
               href={`/marketing/templates/${row.id}/edit`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 whitespace-nowrap transition hover:bg-muted"
             >
               <Pencil className="h-3.5 w-3.5" aria-hidden /> Edit
             </Link>
