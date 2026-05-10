@@ -66,10 +66,18 @@ export function FilterDslBuilder({
     const parsed = filterDslSchema.safeParse(candidate);
     if (parsed.success) {
       onChangeRef.current(parsed.data);
+      onValidationErrorRef.current?.([]);
     } else if (onValidationErrorRef.current) {
       const messages = parsed.error.issues.map((i) => {
-        const path = i.path.length > 0 ? `${i.path.join(".")}: ` : "";
-        return `${path}${i.message}`;
+        // Translate Zod paths like `rules.0.value` into "Rule 1: …"
+        // so the surface area of the message matches what the user
+        // sees on screen instead of the schema shape.
+        const ruleIdx =
+          i.path[0] === "rules" && typeof i.path[1] === "number"
+            ? (i.path[1] as number)
+            : null;
+        const prefix = ruleIdx !== null ? `Rule ${ruleIdx + 1}: ` : "";
+        return `${prefix}${i.message}`;
       });
       onValidationErrorRef.current(messages);
     }

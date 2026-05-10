@@ -354,6 +354,19 @@ export async function sendTestEmail(
     if (!tpl || tpl.isDeleted) {
       throw new ValidationError("Template not found.");
     }
+    // Fresh templates seed renderedHtml as ''; SendGrid rejects empty
+    // /v3/mail/send content with HTTP 400. Fail fast with a clear
+    // instruction so the user knows to save the design first.
+    if (tpl.renderedHtml.trim().length === 0) {
+      throw new ValidationError(
+        "Save the design before sending a test — this template has no rendered HTML yet.",
+      );
+    }
+    if (tpl.subject.trim().length === 0) {
+      throw new ValidationError(
+        "Set a subject before sending a test.",
+      );
+    }
     return sendRawTest({
       recipientEmail: input.recipientEmail,
       subject: tpl.subject,
@@ -397,15 +410,57 @@ async function sendRawTest(
     // library's expected parameter without smuggling `any` into the
     // module — `Parameters<typeof sgMail.send>[0]` infers the right
     // structural type and gives us a precise downcast.
-    const [response] = await sgMail.send(
-      payload as unknown as Parameters<typeof sgMail.send>[0],
-    );
+    type SgSendResult = Awaited<ReturnType<typeof sgMail.send>>;
+    let response: SgSendResult[0];
+    try {
+      [response] = await sgMail.send(
+        payload as unknown as Parameters<typeof sgMail.send>[0],
+      );
+    } catch (err) {
+      // @sendgrid/mail throws on 4xx/5xx; the bare error message is
+      // just the HTTP statusText ("Bad Request"), which is opaque to
+      // both the user and the operator. Pull the structured detail
+      // out of `err.response.body.errors[]` so the log line — and the
+      // user-visible publicMessage on a 4xx — points at the actual
+      // reason (e.g. "content must contain at least one character").
+      const sgErr = err as {
+        code?: number;
+        response?: { body?: unknown };
+        message?: string;
+      };
+      const detail = readSendGridErrorDetail(sgErr.response?.body);
+      const status = typeof sgErr.code === "number" ? sgErr.code : null;
+      logger.warn("sendgrid.send.failed", {
+        statusCode: status,
+        detail,
+        rawMessage: sgErr.message,
+      });
+      if (status !== null && status >= 400 && status < 500 && status !== 429) {
+        throw new ValidationError(
+          detail
+            ? `SendGrid rejected the message: ${detail}`
+            : "SendGrid rejected the message. Check the recipient address and template content.",
+        );
+      }
+      // Let withRetry decide on 5xx / 429 / network errors.
+      throw err;
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw asSendGridError(response.statusCode, response.body);
     }
     return readMessageIdHeader(response.headers) ?? "";
   });
   return { messageId };
+}
+
+function readSendGridErrorDetail(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const errors = (body as { errors?: unknown }).errors;
+  if (!Array.isArray(errors) || errors.length === 0) return null;
+  const first = errors[0] as { message?: unknown; field?: unknown };
+  if (typeof first?.message !== "string") return null;
+  const field = typeof first.field === "string" ? ` (${first.field})` : "";
+  return `${first.message}${field}`;
 }
 
 async function loadCampaignContext(

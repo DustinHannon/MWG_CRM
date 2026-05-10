@@ -42,11 +42,11 @@ export function ListForm({ mode, initial }: Props) {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!dsl) {
-      toast.error("Add at least one filter rule before saving.");
+      toast.error("Finish filling in the filter rules before saving.");
       return;
     }
     if (errors.length > 0) {
-      toast.error("Fix filter errors before saving.");
+      toast.error("Finish filling in the filter rules before saving.");
       return;
     }
     startTransition(async () => {
@@ -139,11 +139,16 @@ export function ListForm({ mode, initial }: Props) {
             onValidationError={(es) => setErrors(es)}
           />
           {errors.length > 0 ? (
-            <ul className="list-disc rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-              {errors.slice(0, 3).map((err, i) => (
-                <li key={i}>{err}</li>
-              ))}
-            </ul>
+            <div className="rounded-md border border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground/90">
+                Before saving — finish the filter rules:
+              </p>
+              <ul className="mt-1 list-disc pl-4">
+                {errors.slice(0, 3).map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            </div>
           ) : null}
         </div>
 
