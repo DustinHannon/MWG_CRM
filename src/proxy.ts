@@ -72,9 +72,25 @@ function buildCspHeader(nonce: string): string {
   // and editor previews. SendGrid (api.sendgrid.com) is reached
   // server-to-server only; the connect-src entry stays defensive in
   // case a future admin debug page calls it directly.
+  //
+  // Phase 25 §6.1 — 'unsafe-eval' removed from script-src. Previously
+  // present for Unlayer's editor bundle; the editor itself runs inside
+  // an iframe (frame-src https://editor.unlayer.com) so its script
+  // context is the unlayer.com origin, not ours — its eval needs do
+  // not require our top-document CSP to permit eval. Smoke-tested
+  // against the marketing template editor before deploy. If Unlayer
+  // regresses, revert this commit; report-uri below will surface the
+  // violation in audit_log within minutes.
+  //
+  // Phase 25 §6.2 — report-uri + report-to point at the audited
+  // endpoint. Browsers send violation reports via either the legacy
+  // report-uri (Chrome, Firefox) or the Reporting API report-to
+  // (Edge, newer Chrome). Both are wired so the audit catches both
+  // dialects. The corresponding Report-To response header sits next
+  // to Content-Security-Policy below.
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval' https://editor.unlayer.com`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://editor.unlayer.com`,
     `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://editor.unlayer.com`,
     "font-src 'self' https://fonts.gstatic.com https://fonts.scalar.com data:",
     "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://graph.microsoft.com https://*.unlayer.com",
@@ -85,8 +101,21 @@ function buildCspHeader(nonce: string): string {
     "base-uri 'self'",
     "object-src 'none'",
     "upgrade-insecure-requests",
+    "report-uri /api/v1/security/csp-report",
+    "report-to csp-endpoint",
   ].join("; ");
 }
+
+// Phase 25 §6.2 — the Reporting API's group definition. 12-week
+// max_age (10886400 seconds) matches MDN's recommended longevity for
+// security-reporting endpoints; the value is informative for the
+// browser cache. Reports land at /api/v1/security/csp-report which
+// is public (under /api/v1/) and rate-limited per IP.
+const REPORT_TO_HEADER = JSON.stringify({
+  group: "csp-endpoint",
+  max_age: 10886400,
+  endpoints: [{ url: "/api/v1/security/csp-report" }],
+});
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -120,6 +149,7 @@ export function proxy(req: NextRequest) {
   });
 
   response.headers.set("Content-Security-Policy", buildCspHeader(nonce));
+  response.headers.set("Report-To", REPORT_TO_HEADER);
 
   // Phase 20 — additional defense-in-depth response headers. CSP
   // already covers script/style/connect/frame; these cover the bits

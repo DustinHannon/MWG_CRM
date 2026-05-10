@@ -113,6 +113,15 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(5),
+  // Phase 25 §6.2 — CSP violation report endpoint. Public endpoint;
+  // browsers POST to /api/v1/security/csp-report whenever the CSP
+  // blocks a resource. Bound the volume per source IP so a misbehaving
+  // page or a hostile origin can't flood audit_log.
+  RATE_LIMIT_CSP_REPORT_PER_IP_PER_MINUTE: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
 });
 
 const parsed = envSchema.safeParse(process.env);

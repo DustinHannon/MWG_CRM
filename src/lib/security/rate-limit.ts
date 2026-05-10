@@ -34,7 +34,11 @@ export type RateLimitKey =
   | { kind: "webhook"; principal: string }
   | { kind: "test_send"; principal: string }
   | { kind: "filter_preview"; principal: string }
-  | { kind: "campaign_send"; principal: string };
+  | { kind: "campaign_send"; principal: string }
+  // Phase 25 §6.2 — CSP violation report endpoint. Principal is the
+  // sha256-hashed client IP so we don't store raw IPs alongside the
+  // limiter bucket.
+  | { kind: "csp_report"; principal: string };
 
 export interface RateLimitResult {
   allowed: boolean;
