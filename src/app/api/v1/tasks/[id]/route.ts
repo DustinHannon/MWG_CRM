@@ -10,6 +10,7 @@ import { openapiZ as z, registry } from "@/lib/openapi/registry";
 import { TaskSchema, TaskUpdateSchema } from "@/lib/api/v1/task-schemas";
 import { ErrorBodySchema } from "@/lib/api/v1/schemas";
 import { serializeTask } from "@/lib/api/v1/serializers";
+import { writeAudit } from "@/lib/audit";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
@@ -196,8 +197,22 @@ export const DELETE = withApi<{ id: string }>(
     if (!existing) return errorResponse(404, "NOT_FOUND", "Task not found");
     if (force) {
       await deleteTasksById([params.id]);
+      await writeAudit({
+        actorId: key.createdById,
+        action: "task.hard_delete",
+        targetType: "tasks",
+        targetId: params.id,
+        before: { source: "api" },
+      });
     } else {
       await archiveTasksById([params.id], key.createdById, "API delete");
+      await writeAudit({
+        actorId: key.createdById,
+        action: "task.archive",
+        targetType: "tasks",
+        targetId: params.id,
+        after: { source: "api", reason: "API delete" },
+      });
     }
     return new Response(null, { status: 204 });
   },

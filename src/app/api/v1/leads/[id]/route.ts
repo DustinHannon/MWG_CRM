@@ -15,6 +15,7 @@ import {
 import { ErrorBodySchema } from "@/lib/api/v1/schemas";
 import { sessionFromKey } from "@/lib/api/v1/session";
 import { serializeLead } from "@/lib/api/v1/serializers";
+import { writeAudit } from "@/lib/audit";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
@@ -209,6 +210,17 @@ export const PATCH = withApi<{ id: string }>(
       throw err;
     }
 
+    // Phase 22 — `updateLead` lib helper does NOT emit audit (the
+    // server action does). Match the (app)/leads server-action pattern
+    // so API-key driven mutations land in audit_log too.
+    await writeAudit({
+      actorId: key.createdById,
+      action: "lead.update",
+      targetType: "lead",
+      targetId: params.id,
+      after: { ...patch, source: "api" },
+    });
+
     const fresh = await getLeadById(user, params.id, true);
     return Response.json(fresh ? serializeLead(fresh) : { id: params.id });
   },
@@ -233,8 +245,22 @@ export const DELETE = withApi<{ id: string }>(
     }
     if (force) {
       await deleteLeadsById([params.id]);
+      await writeAudit({
+        actorId: key.createdById,
+        action: "lead.hard_delete",
+        targetType: "lead",
+        targetId: params.id,
+        before: { source: "api" },
+      });
     } else {
       await archiveLeadsById([params.id], key.createdById, "API delete");
+      await writeAudit({
+        actorId: key.createdById,
+        action: "lead.archive",
+        targetType: "lead",
+        targetId: params.id,
+        after: { source: "api", reason: "API delete" },
+      });
     }
     return new Response(null, { status: 204 });
   },

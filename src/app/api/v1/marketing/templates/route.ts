@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { withApi } from "@/lib/api/handler";
 import { errorResponse } from "@/lib/api/errors";
+import { writeAudit } from "@/lib/audit";
+import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -154,6 +156,21 @@ export const POST = withApi(
     if (!row) {
       return errorResponse(500, "INTERNAL_ERROR", "Failed to create template");
     }
+    // Phase 22 — audit parity with the (app)/marketing/templates server
+    // action. API-key driven mutations were previously bypassing the
+    // marketing audit taxonomy; see phase22-findings-A §F-A1.
+    await writeAudit({
+      actorId: key.createdById,
+      action: MARKETING_AUDIT_EVENTS.TEMPLATE_CREATE,
+      targetType: "marketing_template",
+      targetId: row.id,
+      after: {
+        name: row.name,
+        subject: row.subject,
+        status: row.status,
+        source: "api",
+      },
+    });
     return Response.json(serialize(row), { status: 201 });
   },
 );

@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/v1/contact-schemas";
 import { ErrorBodySchema } from "@/lib/api/v1/schemas";
 import { serializeContact } from "@/lib/api/v1/serializers";
+import { writeAudit } from "@/lib/audit";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
@@ -162,6 +163,16 @@ export const PATCH = withApi<{ id: string }>(
       }
       throw err;
     }
+    // Phase 22 — `updateContactForApi` lib helper does NOT emit audit
+    // (the (app)/contacts server action does). Mirror that here so
+    // API-key driven updates land in audit_log too.
+    await writeAudit({
+      actorId: key.createdById,
+      action: "contact.update",
+      targetType: "contacts",
+      targetId: params.id,
+      after: { ...patch, source: "api" },
+    });
     const fresh = await getContactForApi(params.id, {
       actorId: key.createdById,
       canViewAll: true,
@@ -189,8 +200,22 @@ export const DELETE = withApi<{ id: string }>(
     if (!existing) return errorResponse(404, "NOT_FOUND", "Contact not found");
     if (force) {
       await deleteContactsById([params.id]);
+      await writeAudit({
+        actorId: key.createdById,
+        action: "contact.hard_delete",
+        targetType: "contacts",
+        targetId: params.id,
+        before: { source: "api" },
+      });
     } else {
       await archiveContactsById([params.id], key.createdById, "API delete");
+      await writeAudit({
+        actorId: key.createdById,
+        action: "contact.archive",
+        targetType: "contacts",
+        targetId: params.id,
+        after: { source: "api", reason: "API delete" },
+      });
     }
     return new Response(null, { status: 204 });
   },

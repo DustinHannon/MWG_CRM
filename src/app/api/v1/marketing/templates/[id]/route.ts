@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { withApi } from "@/lib/api/handler";
 import { errorResponse } from "@/lib/api/errors";
+import { writeAudit } from "@/lib/audit";
+import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -144,6 +146,32 @@ export const PUT = withApi<{ id: string }>(
     if (!updated) {
       return errorResponse(500, "INTERNAL_ERROR", "Failed to update template");
     }
+    // Phase 22 — audit parity with the (app)/marketing/templates server
+    // action. Diff captured as before/after of the patched fields only;
+    // the full row is not snapshot to keep audit_log JSONB compact.
+    await writeAudit({
+      actorId: key.createdById,
+      action: MARKETING_AUDIT_EVENTS.TEMPLATE_UPDATE,
+      targetType: "marketing_template",
+      targetId: params.id,
+      before: {
+        name: existing.name,
+        subject: existing.subject,
+        status: existing.status,
+        version: existing.version,
+      },
+      after: {
+        ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+        ...(parsed.data.subject !== undefined
+          ? { subject: parsed.data.subject }
+          : {}),
+        ...(parsed.data.status !== undefined
+          ? { status: parsed.data.status }
+          : {}),
+        version: updated.version,
+        source: "api",
+      },
+    });
     return Response.json(serialize(updated));
   },
 );
@@ -174,6 +202,17 @@ export const DELETE = withApi<{ id: string }>(
           updatedAt: new Date(),
         })
         .where(eq(marketingTemplates.id, params.id));
+      // Phase 22 — audit parity with the (app)/marketing/templates
+      // server action. The single-template GET selects only id +
+      // isDeleted, so we don't carry a name into `before`.
+      await writeAudit({
+        actorId: key.createdById,
+        action: MARKETING_AUDIT_EVENTS.TEMPLATE_DELETE,
+        targetType: "marketing_template",
+        targetId: params.id,
+        before: { isDeleted: false },
+        after: { isDeleted: true, source: "api" },
+      });
     }
     return new Response(null, { status: 204 });
   },

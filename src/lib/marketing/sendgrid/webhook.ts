@@ -71,18 +71,25 @@ export function verifySendGridSignature(
   }
   // The library accepts the raw base64 form returned by SendGrid's
   // signed-webhook settings endpoint. Some envs strip the PEM markers
-  // — `convertPublicKeyToECDSA` handles both.
+  // — `convertPublicKeyToECDSA` handles both. Any failure to convert
+  // OR verify is treated as a signature failure (401), not a 500 —
+  // a malformed signature header or unparseable public key from a
+  // forged request is by definition an auth failure, and Phase 22 D-1
+  // showed the raw Error path leaking to a 500 broke the audit trail.
   const ew = new EventWebhook();
-  let ec: ReturnType<typeof ew.convertPublicKeyToECDSA>;
+  let valid = false;
   try {
-    ec = ew.convertPublicKeyToECDSA(publicKey);
+    let ec: ReturnType<typeof ew.convertPublicKeyToECDSA>;
+    try {
+      ec = ew.convertPublicKeyToECDSA(publicKey);
+    } catch {
+      const wrapped = `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`;
+      ec = ew.convertPublicKeyToECDSA(wrapped);
+    }
+    valid = ew.verifySignature(ec, rawBody, signatureHeader, timestampHeader);
   } catch {
-    // Retry with PEM-wrapped form (workaround for known issue with
-    // raw-base64 inputs on some Node versions).
-    const wrapped = `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`;
-    ec = ew.convertPublicKeyToECDSA(wrapped);
+    throw new WebhookSignatureError("verify_failed");
   }
-  const valid = ew.verifySignature(ec, rawBody, signatureHeader, timestampHeader);
   if (!valid) throw new WebhookSignatureError("verify_failed");
 }
 
@@ -398,7 +405,16 @@ async function upsertSuppression(
 
 function snakeCaseCol(camel: string): string {
   // Drizzle TS keys → SQL column names. Only used for the campaign
-  // counter columns which have predictable shapes.
+  // counter columns which have predictable shapes. Phase 22 — the
+  // fallback regex was removed: the value is fed through `sql.raw`
+  // and any non-allowlisted key would land directly in the UPDATE
+  // statement. Defense in depth: throw on unknown keys so a future
+  // refactor that broadens `counterField` past the allowlist fails
+  // closed instead of silently accepting an attacker-controlled
+  // identifier. The current call site already constrains
+  // `counterField` to a typed literal union, so this throw is a
+  // belt-and-braces invariant guard, not a runtime branch reached
+  // by any valid input.
   const map: Record<string, string> = {
     totalSent: "total_sent",
     totalDelivered: "total_delivered",
@@ -407,7 +423,12 @@ function snakeCaseCol(camel: string): string {
     totalBounced: "total_bounced",
     totalUnsubscribed: "total_unsubscribed",
   };
-  return map[camel] ?? camel.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+  const mapped = map[camel];
+  if (!mapped) {
+    // Invariant violation — bare Error is correct here per CLAUDE.md.
+    throw new Error(`snakeCaseCol: refusing to translate non-allowlisted key '${camel}'.`);
+  }
+  return mapped;
 }
 
 /**

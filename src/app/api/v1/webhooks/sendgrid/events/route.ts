@@ -53,6 +53,37 @@ export const maxDuration = 60;
 const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
 
 export async function POST(req: Request): Promise<Response> {
+  // Phase 22 F-D2 — top-level safety net. Anything thrown that escapes
+  // the typed reject paths below becomes a 500 with audit row, not an
+  // uncaught Vercel function exception (which would skip our forensic
+  // trail and surface as an opaque infra error in SendGrid's retry queue).
+  try {
+    return await handlePost(req);
+  } catch (err) {
+    const ip = ipFromRequest(req);
+    await writeSystemAudit({
+      actorEmailSnapshot: "system@webhook",
+      action: "marketing.security.webhook.unhandled_error",
+      targetType: "marketing_webhook",
+      ipAddress: ip,
+      after: {
+        errorMessage: err instanceof Error ? err.message : String(err),
+      },
+    }).catch(() => {
+      // Audit failure is best-effort; never block the response.
+    });
+    logger.error("sendgrid.webhook.unhandled_error", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+      errorStack: err instanceof Error ? err.stack : undefined,
+    });
+    return NextResponse.json(
+      { ok: false, error: "Webhook processing failed" },
+      { status: 500 },
+    );
+  }
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const ip = ipFromRequest(req);
 
   // 1. Body size cap (Content-Length precheck before reading).

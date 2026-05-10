@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/v1/account-schemas";
 import { ErrorBodySchema } from "@/lib/api/v1/schemas";
 import { serializeAccount } from "@/lib/api/v1/serializers";
+import { writeAudit } from "@/lib/audit";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
@@ -171,6 +172,16 @@ export const PATCH = withApi<{ id: string }>(
       }
       throw err;
     }
+    // Phase 22 — `updateAccountForApi` lib helper does NOT emit audit
+    // (the (app)/accounts server action does). Mirror that here so
+    // API-key driven updates land in audit_log too.
+    await writeAudit({
+      actorId: key.createdById,
+      action: "account.update",
+      targetType: "crm_accounts",
+      targetId: params.id,
+      after: { ...patch, source: "api" },
+    });
     const fresh = await getAccountForApi(params.id, {
       actorId: key.createdById,
       canViewAll: true,
@@ -198,8 +209,22 @@ export const DELETE = withApi<{ id: string }>(
     if (!existing) return errorResponse(404, "NOT_FOUND", "Account not found");
     if (force) {
       await deleteAccountsById([params.id]);
+      await writeAudit({
+        actorId: key.createdById,
+        action: "account.hard_delete",
+        targetType: "crm_accounts",
+        targetId: params.id,
+        before: { source: "api" },
+      });
     } else {
       await archiveAccountsById([params.id], key.createdById, "API delete");
+      await writeAudit({
+        actorId: key.createdById,
+        action: "account.archive",
+        targetType: "crm_accounts",
+        targetId: params.id,
+        after: { source: "api", reason: "API delete" },
+      });
     }
     return new Response(null, { status: 204 });
   },

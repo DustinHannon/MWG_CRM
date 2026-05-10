@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/v1/activity-schemas";
 import { ErrorBodySchema } from "@/lib/api/v1/schemas";
 import { serializeActivity } from "@/lib/api/v1/serializers";
+import { writeAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -132,6 +133,16 @@ export const PATCH = withApi<{ id: string }>(
       patch.occurredAt = new Date(m.occurred_at);
     }
     await updateActivityForApi(params.id, patch);
+    // Phase 22 — `updateActivityForApi` lib helper does NOT emit audit.
+    // Mirror the (app) action's behaviour so API-key driven updates land
+    // in audit_log with the same `activity.update` event taxonomy.
+    await writeAudit({
+      actorId: key.createdById,
+      action: "activity.update",
+      targetType: "activities",
+      targetId: params.id,
+      after: { ...patch, source: "api" },
+    });
     const fresh = await getActivityForApi(params.id, {
       actorId: key.createdById,
       canViewAll: true,
@@ -161,12 +172,26 @@ export const DELETE = withApi<{ id: string }>(
     if (!existing) return errorResponse(404, "NOT_FOUND", "Activity not found");
     if (force) {
       await db.delete(activities).where(eq(activities.id, params.id));
+      await writeAudit({
+        actorId: key.createdById,
+        action: "activity.hard_delete",
+        targetType: "activities",
+        targetId: params.id,
+        before: { source: "api" },
+      });
     } else {
       // Bypass softDeleteActivity's per-actor authorship check — API
       // keys with `delete:activities` scope can archive any activity
       // in the org. This matches the broader API-key design (key acts
       // org-wide, not as the issuing user).
       await softDeleteActivity(params.id, key.createdById, /* isAdmin */ true);
+      await writeAudit({
+        actorId: key.createdById,
+        action: "activity.archive",
+        targetType: "activities",
+        targetId: params.id,
+        after: { source: "api" },
+      });
     }
     return new Response(null, { status: 204 });
   },

@@ -132,6 +132,11 @@ export function UnlayerEditor({
           "sandbox",
           "allow-same-origin allow-scripts allow-forms allow-popups",
         );
+        // Phase 22 — strict-origin on the editor iframe trims path/query
+        // out of any Referer header it sends to api.unlayer.com / asset
+        // CDNs. The editor only needs the origin for asset upload calls;
+        // path data is internal to the CRM and shouldn't leak.
+        iframe.setAttribute("referrerpolicy", "strict-origin");
         return true;
       }
       return false;

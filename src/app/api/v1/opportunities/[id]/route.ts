@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/v1/opportunity-schemas";
 import { ErrorBodySchema } from "@/lib/api/v1/schemas";
 import { serializeOpportunity } from "@/lib/api/v1/serializers";
+import { writeAudit } from "@/lib/audit";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
@@ -166,6 +167,16 @@ export const PATCH = withApi<{ id: string }>(
       }
       throw err;
     }
+    // Phase 22 — `updateOpportunityForApi` lib helper does NOT emit
+    // audit (the (app)/opportunities server action does). Mirror the
+    // action's audit emit so API-key driven updates land in audit_log.
+    await writeAudit({
+      actorId: key.createdById,
+      action: "opportunity.update",
+      targetType: "opportunities",
+      targetId: params.id,
+      after: { ...patch, source: "api" },
+    });
     const fresh = await getOpportunityForApi(params.id, {
       actorId: key.createdById,
       canViewAll: true,
@@ -195,8 +206,22 @@ export const DELETE = withApi<{ id: string }>(
     if (!existing) return errorResponse(404, "NOT_FOUND", "Opportunity not found");
     if (force) {
       await deleteOpportunitiesById([params.id]);
+      await writeAudit({
+        actorId: key.createdById,
+        action: "opportunity.hard_delete",
+        targetType: "opportunities",
+        targetId: params.id,
+        before: { source: "api" },
+      });
     } else {
       await archiveOpportunitiesById([params.id], key.createdById, "API delete");
+      await writeAudit({
+        actorId: key.createdById,
+        action: "opportunity.archive",
+        targetType: "opportunities",
+        targetId: params.id,
+        after: { source: "api", reason: "API delete" },
+      });
     }
     return new Response(null, { status: 204 });
   },
