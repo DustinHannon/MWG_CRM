@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { BuiltInReports } from "@/components/reports/built-in-reports";
 import { ReportList } from "@/components/reports/report-list";
-import { requireSession } from "@/lib/auth-helpers";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { isMarketingReportEntity } from "@/lib/reports/categories";
 import {
   listBuiltinReports,
   listUserAndSharedReports,
@@ -16,10 +18,21 @@ export const dynamic = "force-dynamic";
  */
 export default async function ReportsListPage() {
   const viewer = await requireSession();
-  const [builtin, mine] = await Promise.all([
+  const [builtin, mine, perms] = await Promise.all([
     listBuiltinReports(),
     listUserAndSharedReports(viewer.id),
+    getPermissions(viewer.id),
   ]);
+
+  // Marketing-entity reports are gated to admin + canManageMarketing
+  // per src/lib/reports/access.ts. Filter them out of the built-in
+  // list before the categorization layer so non-marketing users
+  // don't see cards that would 403 on click. Mirrors the same
+  // entity-set used for category bucketing.
+  const canSeeMarketing = viewer.isAdmin || perms.canManageMarketing;
+  const visibleBuiltin = canSeeMarketing
+    ? builtin
+    : builtin.filter((r) => !isMarketingReportEntity(r.entityType));
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -53,10 +66,7 @@ export default async function ReportsListPage() {
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Built-in reports
         </h2>
-        <ReportList
-          reports={builtin}
-          emptyMessage="No built-in reports installed yet."
-        />
+        <BuiltInReports reports={visibleBuiltin} />
       </section>
 
       <section className="mt-10">
