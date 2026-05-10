@@ -169,7 +169,7 @@ function ResumeOrAbort({
           onClick={onResume}
           disabled={pending}
           className={cn(
-            "rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50",
+            "rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50",
           )}
         >
           {pending ? "Resuming…" : resumeLabel}
@@ -265,7 +265,7 @@ function ConflictResolutionForm({
           type="button"
           onClick={onApply}
           disabled={pending}
-          className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
         >
           {pending ? "Applying…" : "Apply and resume"}
         </button>
@@ -294,7 +294,7 @@ function ValidationRegressionActions({
         {pendingBatchId ? (
           <a
             href={`/admin/d365-import/${runId}/${pendingBatchId}`}
-            className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90"
+            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
           >
             Open batch for review
           </a>

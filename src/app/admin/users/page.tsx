@@ -71,7 +71,7 @@ export default async function UsersListPage({
           { label: "Users" },
         ]}
       />
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Users</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -82,7 +82,7 @@ export default async function UsersListPage({
         </div>
         <Link
           href="/admin/users/help"
-          className="shrink-0 rounded-md border border-glass-border bg-input/60 px-3 py-1.5 text-xs text-foreground/80 transition hover:bg-accent/40"
+          className="shrink-0 rounded-md border border-glass-border bg-input/60 px-3 py-1.5 text-xs text-foreground/80 whitespace-nowrap transition hover:bg-accent/40"
         >
           Permission help
         </Link>

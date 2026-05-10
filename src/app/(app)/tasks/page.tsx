@@ -48,7 +48,7 @@ export default async function TasksPage({
       <BreadcrumbsSetter crumbs={[{ label: "Tasks" }]} />
       <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["tasks"]} />
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Tasks
@@ -61,7 +61,7 @@ export default async function TasksPage({
         {session.isAdmin ? (
           <Link
             href="/tasks/archived"
-            className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted md:inline-flex"
+            className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 whitespace-nowrap transition hover:bg-muted md:inline-flex"
           >
             Archived
           </Link>

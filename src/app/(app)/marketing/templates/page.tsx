@@ -45,9 +45,9 @@ export default async function TemplatesPage() {
         </div>
         <Link
           href="/marketing/templates/new"
-          className="inline-flex h-9 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background whitespace-nowrap transition hover:opacity-90 sm:w-auto"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
         >
-          New template
+          + New template
         </Link>
       </div>
 

@@ -162,7 +162,7 @@ export function NewRunModal() {
               <button
                 type="submit"
                 disabled={pending}
-                className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
               >
                 {pending ? "Creating…" : "Create run"}
               </button>

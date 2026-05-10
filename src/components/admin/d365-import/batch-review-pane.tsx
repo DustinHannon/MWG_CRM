@@ -609,7 +609,7 @@ function DecisionButtons({
         type="button"
         onClick={approve}
         disabled={pending || status === "approved"}
-        className="inline-flex items-center gap-1 rounded-md bg-foreground px-2.5 py-1 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+        className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
       >
         <Check className="h-3 w-3" />
         {status === "approved" ? "Approved" : "Approve"}
@@ -638,7 +638,7 @@ function DecisionButtons({
             type="button"
             onClick={reject}
             disabled={pending}
-            className="rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+            className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
           >
             Confirm reject
           </button>
@@ -765,7 +765,7 @@ function BatchFooter({
             type="button"
             onClick={() => setConfirming(true)}
             disabled={!allDecided || pending}
-            className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
           >
             Commit batch
           </button>
@@ -778,7 +778,7 @@ function BatchFooter({
               type="button"
               onClick={commit}
               disabled={pending}
-              className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
             >
               {pending ? "Committing…" : "Confirm commit"}
             </button>

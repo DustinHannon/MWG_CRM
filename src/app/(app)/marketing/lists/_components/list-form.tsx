@@ -156,7 +156,7 @@ export function ListForm({ mode, initial }: Props) {
           <button
             type="submit"
             disabled={submitDisabled}
-            className="inline-flex h-9 items-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
           >
             {pending
               ? mode === "create"
@@ -170,7 +170,7 @@ export function ListForm({ mode, initial }: Props) {
             type="button"
             onClick={() => router.back()}
             disabled={pending}
-            className="inline-flex h-9 items-center rounded-md border border-border bg-muted/40 px-4 text-sm text-foreground/90 transition hover:bg-muted disabled:opacity-50"
+            className="inline-flex items-center rounded-md border border-border bg-muted/40 px-4 py-2 text-sm text-foreground/90 transition hover:bg-muted disabled:opacity-50"
           >
             Cancel
           </button>

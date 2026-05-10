@@ -25,7 +25,7 @@ export default async function ReportsListPage() {
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Reports" }]} />
 
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Reports
@@ -41,7 +41,7 @@ export default async function ReportsListPage() {
         </div>
         <Link
           href="/reports/builder"
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" /> New report
         </Link>

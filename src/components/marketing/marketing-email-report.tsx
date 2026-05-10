@@ -105,7 +105,7 @@ export function MarketingEmailReport({
         </div>
         <button
           type="submit"
-          className="rounded-md bg-foreground px-4 py-1.5 text-sm font-medium text-background transition hover:opacity-90"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
         >
           Apply
         </button>

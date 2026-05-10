@@ -51,7 +51,7 @@ export function PullNextBatchButton({
         type="button"
         onClick={onClick}
         disabled={disabled || pending}
-        className="inline-flex items-center gap-2 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
       >
         <DownloadCloud className="h-3.5 w-3.5" strokeWidth={1.5} />
         {pending ? "Pulling…" : "Pull next 100"}
