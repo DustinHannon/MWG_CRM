@@ -69,22 +69,23 @@ function parse<T>(
 }
 
 /**
- * Build a default scope for a quick-pull (modifiedSince=2 years ago,
- * activeOnly=true for entities that have a statecode).
+ * Build a default scope for a quick-pull. Per user instruction
+ * (2026-05-10): NO filters — quick-pull walks the entire D365
+ * history for that entity, ordered by modifiedon DESC. Includes
+ * disqualified / lost / closed records (any statecode). The cursor
+ * advances per click and the run terminates when D365 returns no
+ * more pages.
+ *
+ * Use the "+ New import run" modal if you want to scope to a date
+ * range or active-only.
+ *
+ * Note: `entityType` is intentionally unused at the moment — kept
+ * in the signature so a future scope variant per entity (e.g. notes
+ * vs leads needing different OData query shapes) drops in cleanly.
  */
-function defaultQuickPullScope(entityType: string): Record<string, unknown> {
-  const twoYearsAgo = new Date();
-  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-  const supportsActiveOnly =
-    entityType === "lead" ||
-    entityType === "contact" ||
-    entityType === "account" ||
-    entityType === "opportunity";
+function defaultQuickPullScope(_entityType: string): Record<string, unknown> {
   return {
-    filter: {
-      modifiedSince: twoYearsAgo.toISOString(),
-      ...(supportsActiveOnly ? { statecode: [0] } : {}),
-    },
+    filter: {},
     includeChildren: false,
   };
 }
