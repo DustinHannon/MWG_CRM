@@ -84,6 +84,35 @@ const envSchema = z.object({
   // Phase 19 — Template soft-lock for collaborative editing.
   MARKETING_LOCK_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(60),
   MARKETING_LOCK_HEARTBEAT_SECONDS: z.coerce.number().int().positive().default(30),
+
+  // Phase 20 — Security hardening: rate-limit budgets and webhook
+  // signature freshness window. All have safe defaults so a missing
+  // value in development doesn't disable the limiter.
+  WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(300),
+  RATE_LIMIT_WEBHOOK_PER_MINUTE: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(300),
+  RATE_LIMIT_TEST_SEND_PER_USER_PER_HOUR: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(20),
+  RATE_LIMIT_FILTER_PREVIEW_PER_USER_PER_MINUTE: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(30),
+  RATE_LIMIT_CAMPAIGN_SEND_PER_USER_PER_HOUR: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5),
 });
 
 const parsed = envSchema.safeParse(process.env);

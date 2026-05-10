@@ -121,6 +121,44 @@ export function proxy(req: NextRequest) {
 
   response.headers.set("Content-Security-Policy", buildCspHeader(nonce));
 
+  // Phase 20 — additional defense-in-depth response headers. CSP
+  // already covers script/style/connect/frame; these cover the bits
+  // CSP doesn't:
+  //   - COOP `same-origin` isolates the browsing context group so a
+  //     window opened by us (or that opens us) can't reach back via
+  //     `window.opener` / cross-origin DOM access. Critical when we
+  //     later embed Unlayer's editor iframe.
+  //   - COEP is intentionally NOT set. `require-corp` would block
+  //     cross-origin embeds (Unlayer editor iframe, SendGrid pixels)
+  //     unless those origins serve CORP headers. `credentialless`
+  //     would force credential-stripped fetches that may break OAuth
+  //     callback flows. Revisit when Unlayer compatibility is confirmed.
+  //   - Referrer-Policy `strict-origin-when-cross-origin` matches the
+  //     modern browser default; setting it explicitly avoids relying
+  //     on user-agent defaults.
+  //   - Permissions-Policy denies device features the CRM never uses
+  //     so a future feature can't accidentally turn them on without an
+  //     explicit grant. Camera/microphone/geolocation are obvious; we
+  //     also deny payment, usb, midi, magnetometer, gyroscope, and
+  //     accelerometer so a marketing template iframe cannot probe
+  //     hardware sensors.
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set(
+    "Permissions-Policy",
+    [
+      "camera=()",
+      "microphone=()",
+      "geolocation=()",
+      "payment=()",
+      "usb=()",
+      "midi=()",
+      "magnetometer=()",
+      "gyroscope=()",
+      "accelerometer=()",
+    ].join(", "),
+  );
+
   return response;
 }
 

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { apiUsageLog } from "@/db/schema/api-keys";
 import { emailSendLog } from "@/db/schema/email-send-log";
+import { rateLimitBuckets, webhookEventDedupe } from "@/db/schema/security";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 
@@ -30,6 +31,12 @@ export const maxDuration = 300;
 const AUDIT_RETENTION_DAYS = 730;
 const API_USAGE_RETENTION_DAYS = 730;
 const EMAIL_SEND_RETENTION_DAYS = 730;
+// Phase 20 — security primitives (rate-limit + webhook idempotency).
+// Both have short, bounded retention: the limiter only needs a 1-day
+// horizon to evaluate sliding windows; the dedupe table only needs to
+// outlive SendGrid's 24h retry window with cushion.
+const RATE_LIMIT_RETENTION_DAYS = 1;
+const WEBHOOK_DEDUPE_RETENTION_DAYS = 7;
 
 export async function GET(req: Request) {
   const unauth = requireCronAuth(req);
@@ -64,15 +71,39 @@ export async function GET(req: Request) {
       )
       SELECT count(*)::int AS n FROM d
     `);
+    // Phase 20 — bounded-volume security primitives. Old rate-limit
+    // buckets only matter while the sliding window references them
+    // (max ~2x window size); 1d retention is generous. webhook_event_dedupe
+    // protects against SendGrid retries (24h window) — 7d is a cushion.
+    const rateLimitDeleted = await db.execute(sql`
+      WITH d AS (
+        DELETE FROM ${rateLimitBuckets}
+        WHERE window_start < now() - (${RATE_LIMIT_RETENTION_DAYS} || ' days')::interval
+        RETURNING 1
+      )
+      SELECT count(*)::int AS n FROM d
+    `);
+    const webhookDedupeDeleted = await db.execute(sql`
+      WITH d AS (
+        DELETE FROM ${webhookEventDedupe}
+        WHERE received_at < now() - (${WEBHOOK_DEDUPE_RETENTION_DAYS} || ' days')::interval
+        RETURNING 1
+      )
+      SELECT count(*)::int AS n FROM d
+    `);
 
     const auditN = readCount(auditDeleted);
     const apiUsageN = readCount(apiUsageDeleted);
     const emailSendN = readCount(emailSendDeleted);
+    const rateLimitN = readCount(rateLimitDeleted);
+    const webhookDedupeN = readCount(webhookDedupeDeleted);
 
     logger.info("cron.retention_prune.completed", {
       auditDeleted: auditN,
       apiUsageDeleted: apiUsageN,
       emailSendDeleted: emailSendN,
+      rateLimitDeleted: rateLimitN,
+      webhookDedupeDeleted: webhookDedupeN,
     });
 
     // Self-audit so the activity log shows the cron's own work.
@@ -88,9 +119,13 @@ export async function GET(req: Request) {
           audit_deleted: auditN,
           api_usage_deleted: apiUsageN,
           email_send_deleted: emailSendN,
+          rate_limit_deleted: rateLimitN,
+          webhook_dedupe_deleted: webhookDedupeN,
           audit_retention_days: AUDIT_RETENTION_DAYS,
           api_usage_retention_days: API_USAGE_RETENTION_DAYS,
           email_send_retention_days: EMAIL_SEND_RETENTION_DAYS,
+          rate_limit_retention_days: RATE_LIMIT_RETENTION_DAYS,
+          webhook_dedupe_retention_days: WEBHOOK_DEDUPE_RETENTION_DAYS,
         },
         requestId: null,
         ipAddress: null,
@@ -106,6 +141,8 @@ export async function GET(req: Request) {
       auditDeleted: auditN,
       apiUsageDeleted: apiUsageN,
       emailSendDeleted: emailSendN,
+      rateLimitDeleted: rateLimitN,
+      webhookDedupeDeleted: webhookDedupeN,
     });
   } catch (err) {
     logger.error("cron.retention_prune.failed", {

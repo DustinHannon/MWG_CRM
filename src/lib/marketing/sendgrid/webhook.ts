@@ -11,6 +11,7 @@ import {
   marketingEmailEvents,
   marketingSuppressions,
 } from "@/db/schema/marketing-events";
+import { webhookEventDedupe } from "@/db/schema/security";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { WebhookSignatureError } from "@/lib/marketing/errors";
@@ -97,6 +98,69 @@ export function readSignatureHeaders(headers: Headers): {
     signature: headers.get(EventWebhookHeader.SIGNATURE()),
     timestamp: headers.get(EventWebhookHeader.TIMESTAMP()),
   };
+}
+
+/**
+ * Phase 20 — Validate the SendGrid timestamp header is within an
+ * acceptable freshness window (default ±300s, configurable via
+ * `WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS`). The signature alone does not
+ * prevent replay — a captured signed payload remains valid forever
+ * until this freshness check is enforced.
+ *
+ * Returns the absolute delta in seconds when fresh; throws
+ * `WebhookSignatureError` with `replay_rejected` reason when stale.
+ *
+ * Header value is the unix-seconds string SendGrid signs alongside the
+ * body. NaN / non-numeric → reject as `missing_headers` (already-failed
+ * signature check, but caller may invoke this in a different order).
+ */
+export function verifyTimestampFreshness(
+  timestampHeader: string | null,
+  toleranceSeconds: number = env.WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): number {
+  if (!timestampHeader) {
+    throw new WebhookSignatureError("missing_headers");
+  }
+  const ts = Number.parseInt(timestampHeader, 10);
+  if (!Number.isFinite(ts)) {
+    throw new WebhookSignatureError("missing_headers");
+  }
+  const delta = Math.abs(nowSeconds - ts);
+  if (delta > toleranceSeconds) {
+    // Distinct reason so the caller can route to a replay-specific
+    // audit event. We re-use the same error class for simpler 401
+    // mapping; the discriminant is the new `replay_rejected` value.
+    throw new WebhookSignatureError("replay_rejected" as const);
+  }
+  return delta;
+}
+
+/**
+ * Phase 20 — Try to claim a `sg_event_id` for first-time processing.
+ *
+ * INSERT…ON CONFLICT DO NOTHING returns the row on insert and zero rows
+ * on conflict. We use the row count as the discriminator:
+ *
+ *   - 1 row returned → first time; caller should run `processEvent`.
+ *   - 0 rows         → already seen; caller should skip.
+ *
+ * Events without `sg_event_id` (rare, legacy or non-standard) bypass
+ * dedupe and are processed every time. We log them rather than reject
+ * because the alternative is silently dropping a forensic row.
+ */
+export async function tryClaimSgEvent(
+  sgEventId: string | undefined | null,
+): Promise<{ claimed: boolean; bypassed: boolean }> {
+  if (!sgEventId) {
+    return { claimed: true, bypassed: true };
+  }
+  const inserted = await db
+    .insert(webhookEventDedupe)
+    .values({ sgEventId })
+    .onConflictDoNothing({ target: webhookEventDedupe.sgEventId })
+    .returning({ sgEventId: webhookEventDedupe.sgEventId });
+  return { claimed: inserted.length > 0, bypassed: false };
 }
 
 /**

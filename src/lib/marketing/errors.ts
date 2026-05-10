@@ -51,8 +51,18 @@ export class SuppressedRecipientError extends KnownError {
  * leaking which check failed.
  */
 export class WebhookSignatureError extends Error {
-  readonly reason: "missing_headers" | "verify_failed" | "no_public_key";
-  constructor(reason: "missing_headers" | "verify_failed" | "no_public_key") {
+  readonly reason:
+    | "missing_headers"
+    | "verify_failed"
+    | "no_public_key"
+    | "replay_rejected"; // Phase 20 — timestamp outside freshness window
+  constructor(
+    reason:
+      | "missing_headers"
+      | "verify_failed"
+      | "no_public_key"
+      | "replay_rejected",
+  ) {
     super(`SendGrid webhook signature failed: ${reason}`);
     this.name = "WebhookSignatureError";
     this.reason = reason;

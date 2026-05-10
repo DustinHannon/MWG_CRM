@@ -37,7 +37,21 @@ export type MarketingAuditAction =
   // Suppressions
   | "marketing.suppression.add"
   | "marketing.suppression.remove"
-  | "marketing.suppression.sync";
+  | "marketing.suppression.sync"
+  // Phase 20 — Security events. webhook.* are emitted by the Signed
+  // Event Webhook receiver on every reject/duplicate path. The remaining
+  // events (idor, force_unlock, api_key, filter_dsl, rate_limit) become
+  // active when their owning surfaces ship in subsequent passes.
+  | "marketing.security.webhook.signature_failed"
+  | "marketing.security.webhook.replay_rejected"
+  | "marketing.security.webhook.duplicate_event"
+  | "marketing.security.webhook.body_too_large"
+  | "marketing.security.webhook.malformed"
+  | "marketing.security.rate_limit.exceeded"
+  | "marketing.security.idor.attempt"
+  | "marketing.security.lock.force_unlocked"
+  | "marketing.security.api_key.invalid"
+  | "marketing.security.filter_dsl.validation_failed";
 
 interface MarketingAuditArgs {
   actorId: string;

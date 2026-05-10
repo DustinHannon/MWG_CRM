@@ -1,0 +1,116 @@
+rules:
+  # Phase 20 — MWG CRM custom Semgrep rules.
+  # Run via: pnpm security:semgrep
+  # Local Windows note: native Semgrep does not support Windows. The
+  # script invokes `python -m semgrep`; install once via
+  # `pip install semgrep`. CI runners (Linux) need no extra steps.
+
+  # ---- Marketing surface defense in depth ----------------------------
+  - id: mwg-dangerouslysetinnerhtml-marketing
+    message: |
+      `dangerouslySetInnerHTML` in the marketing surface must render via
+      a sandboxed iframe (srcdoc) — see STANDARDS §marketing for the
+      pattern. Marketing rendered HTML is attacker-controllable (template
+      bodies, merge-tag substitutions); rendering it directly into the
+      admin DOM is stored XSS into the admin session.
+    severity: ERROR
+    languages: [tsx, typescript]
+    pattern: dangerouslySetInnerHTML={...}
+    paths:
+      include:
+        - "src/app/(app)/marketing/**"
+        - "src/components/marketing/**"
+        - "src/app/marketing/**"
+
+  # ---- SQL injection class — Drizzle identifier --------------------
+  # CVE-2026-39356 surface. Drizzle is patched at 0.45.2+, but defense
+  # in depth requires the application to NEVER pass a non-literal
+  # column/table name to `sql.identifier()` or `.as()`. Marketing
+  # surface only — `concurrent-update.ts` uses Drizzle column names from
+  # caller patches (Zod-validated, TS-typed) and is excluded.
+  - id: mwg-sql-identifier-non-literal-marketing
+    message: |
+      `sql.identifier()` and `.as()` must take a string literal in the
+      marketing surface. Use a column-name allowlist registry — see
+      STANDARDS §filter-dsl for the pattern.
+    severity: ERROR
+    languages: [typescript]
+    patterns:
+      - pattern-either:
+          - pattern: sql.identifier($X)
+          - pattern: $A.as($X)
+      - pattern-not: sql.identifier("...")
+      - pattern-not: $A.as("...")
+    paths:
+      include:
+        - "src/app/api/v1/marketing/**"
+        - "src/lib/marketing/**"
+      exclude:
+        - "src/lib/marketing/sendgrid/webhook.ts"   # snake_case col map only — verified safe in Phase 20
+
+  # ---- SQL injection class — sql.raw template literal -------------
+  # `sql.raw` with a template literal containing a variable bypasses
+  # parameter binding. Allowed only for compile-time-constant strings.
+  - id: mwg-sql-raw-template-literal
+    message: |
+      `sql.raw` with a template-literal containing variables is SQL
+      injection. Use the parameterized `sql\`\`` tag instead, or a
+      precomputed `sql.raw` over a Zod-validated literal at module load.
+    severity: ERROR
+    languages: [typescript]
+    pattern-regex: 'sql\.raw\(`[^`]*\$\{'
+
+  # ---- Constant-time secret compare ---------------------------------
+  - id: mwg-non-constant-time-secret-compare
+    message: |
+      Use `safeStringEqual` from `@/lib/security/constant-time` (or the
+      `requireCronAuth` helper for cron) to compare secrets/tokens.
+      Native `===` leaks length / matching-prefix timing.
+    severity: WARNING
+    languages: [typescript]
+    patterns:
+      - pattern-either:
+          - pattern: $A === process.env.CRON_SECRET
+          - pattern: process.env.CRON_SECRET === $A
+          - pattern: $A === process.env.SENDGRID_WEBHOOK_PUBLIC_KEY
+          - pattern: process.env.SENDGRID_WEBHOOK_PUBLIC_KEY === $A
+          - pattern: $A === env.CRON_SECRET
+          - pattern: env.CRON_SECRET === $A
+          - pattern: $A === env.SENDGRID_WEBHOOK_PUBLIC_KEY
+          - pattern: env.SENDGRID_WEBHOOK_PUBLIC_KEY === $A
+
+  # ---- Missing postMessage origin check -----------------------------
+  - id: mwg-window-message-no-origin-check
+    message: |
+      `window.addEventListener('message', …)` MUST check
+      `event.origin === 'https://editor.unlayer.com'` (or another exact
+      allowlisted origin) before trusting the payload. Wildcards are
+      not acceptable.
+    severity: WARNING
+    languages: [tsx, typescript]
+    patterns:
+      - pattern: |
+          window.addEventListener('message', $FN)
+      - pattern-not-inside: |
+          $FN = ($E) => { if ($E.origin === ...) { ... } }
+    paths:
+      include:
+        - "src/app/(app)/marketing/**"
+        - "src/components/marketing/**"
+
+  # ---- Forbidden console.log in production code ---------------------
+  # Phase 16 STANDARDS forbids console.log; flag any new ones.
+  - id: mwg-console-log
+    message: |
+      `console.log` is forbidden in production code. Use the structured
+      `logger` from `@/lib/logger` or an explicit `console.warn` /
+      `console.error` with a comment justifying the diagnostic fallback.
+    severity: WARNING
+    languages: [tsx, typescript]
+    pattern: console.log(...)
+    paths:
+      include:
+        - "src/**"
+      exclude:
+        - "src/**/*.test.ts"
+        - "src/**/*.test.tsx"

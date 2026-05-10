@@ -21,3 +21,5 @@ export * from "./marketing-templates";
 export * from "./marketing-lists";
 export * from "./marketing-campaigns";
 export * from "./marketing-events";
+// Phase 20 — Security primitives (rate limiting + webhook idempotency)
+export * from "./security";
