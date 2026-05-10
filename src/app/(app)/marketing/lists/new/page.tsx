@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { ListForm } from "../_components/list-form";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Phase 21 — New marketing list. Composes the filter-DSL builder with
+ * a live-preview right rail and submits via the create action.
+ */
 export default function NewListPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -18,19 +23,10 @@ export default function NewListPage() {
       <div>
         <h1 className="text-2xl font-semibold text-foreground">New list</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Filter-DSL builder lands in the next pass.
+          Build a recipient segment from your CRM leads.
         </p>
       </div>
-      <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
-        <p className="text-sm font-medium text-foreground">
-          Filter builder coming next pass
-        </p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Phase 19 foundation provisions schema, refresh logic surface, and
-          API endpoints. The drag-to-build filter UI mounts here when the
-          first SendGrid → CRM round-trip is verified in production.
-        </p>
-      </div>
+      <ListForm mode="create" />
     </div>
   );
 }

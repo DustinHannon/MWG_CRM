@@ -2,16 +2,15 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
+import { NewTemplateForm } from "./_components/new-template-form";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 19 — Template create. Stub form for the foundation pass; the
- * Unlayer drag-and-drop editor wires up in the next implementation
- * pass (deferred to Phase 19B per the project's tight delivery
- * boundary). For now, a marketing user can stage a template name +
- * subject + plain HTML body, then refine inside SendGrid until the
- * editor lands.
+ * Phase 21 — Template create. The metadata (name, subject, preheader,
+ * description) is captured here; the design itself lives on the next
+ * step. The Unlayer editor mounts on the edit page once the row
+ * exists so the lock infrastructure has a target id to talk to.
  */
 export default function NewTemplatePage() {
   return (
@@ -27,21 +26,13 @@ export default function NewTemplatePage() {
       <div>
         <h1 className="text-2xl font-semibold text-foreground">New template</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          The drag-and-drop editor (Unlayer) lands in the next pass. For now,
-          provision the template metadata via the admin debug API or import
-          from SendGrid&apos;s console.
+          Give the template a name and subject; the drag-and-drop editor
+          opens after creation.
         </p>
       </div>
 
-      <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
-        <p className="text-sm font-medium text-foreground">
-          Editor coming next pass
-        </p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Schema, soft-lock infrastructure, and SendGrid sync are live. The
-          embedded Unlayer editor mounts here once the foundation is verified
-          in production.
-        </p>
+      <div className="max-w-2xl">
+        <NewTemplateForm />
       </div>
     </div>
   );

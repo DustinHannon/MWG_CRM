@@ -28,6 +28,8 @@ import { ActivityComposer } from "./activities/activity-composer";
 import { ActivityFeed } from "./activities/activity-feed";
 import { GraphActionPanel } from "./graph/graph-actions";
 import { UserChip, UserHoverCard } from "@/components/user-display";
+import { EmailActivityTimeline } from "@/components/leads/email-activity-timeline";
+import { getEmailActivityForLead } from "@/lib/leads/email-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -254,6 +256,18 @@ export default async function LeadDetailPage({
             Activity timeline
           </h2>
           <ActivityFeed leadId={lead.id} user={user} />
+        </div>
+
+        {/* Phase 21 — Marketing email rollup. Server-fetched and passed
+            to the timeline so the client component doesn't waterfall. */}
+        <div className="lg:col-span-3">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Marketing emails
+          </h2>
+          <EmailActivityTimeline
+            data={await getEmailActivityForLead(lead.id)}
+            prefs={prefs}
+          />
         </div>
       </div>
     </div>

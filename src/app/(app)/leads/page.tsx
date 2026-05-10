@@ -14,6 +14,7 @@ import { canDeleteLead } from "@/lib/access/can-delete";
 import { StatusPill } from "@/components/ui/status-pill";
 import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserChip } from "@/components/user-display";
+import { AddVisibleToListButton } from "./_components/add-visible-to-list-button";
 import { MobileFilterSelect } from "./_components/filters-mobile";
 import { LeadListMobile } from "./_components/lead-list-mobile";
 import { LeadRowActions } from "./_components/lead-row-actions";
@@ -238,6 +239,15 @@ export default async function LeadsPage({
               Export
             </a>
           ) : null}
+          {/* Phase 21 — bulk add visible leads to a marketing list. Gated
+              upstream so the button only renders for admins / users with
+              canManageMarketing. Desktop-only to match Import/Export. */}
+          <div className="hidden md:inline-flex">
+            <AddVisibleToListButton
+              leadIds={result.rows.map((r) => r.id)}
+              canManage={user.isAdmin || perms.canManageMarketing}
+            />
+          </div>
           {perms.canCreateLeads || user.isAdmin ? (
             <Link
               href="/leads/new"

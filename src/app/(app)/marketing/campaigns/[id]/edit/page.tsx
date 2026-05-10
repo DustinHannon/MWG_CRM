@@ -1,0 +1,149 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { and, asc, desc, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
+import { marketingTemplates } from "@/db/schema/marketing-templates";
+import { marketingLists } from "@/db/schema/marketing-lists";
+import { env } from "@/lib/env";
+import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
+import { CampaignWizard } from "../../new/_components/campaign-wizard";
+
+export const dynamic = "force-dynamic";
+
+interface Props {
+  params: Promise<{ id: string }>;
+}
+
+/**
+ * Phase 21 — Edit a draft campaign. Reuses the wizard component but
+ * jumps the user straight to the schedule step (since template + list
+ * are already chosen). Only `draft` campaigns are editable; any other
+ * status renders a read-only notice with a link back to detail.
+ */
+export default async function EditCampaignPage({ params }: Props) {
+  const { id } = await params;
+
+  const [campaign] = await db
+    .select()
+    .from(marketingCampaigns)
+    .where(
+      and(
+        eq(marketingCampaigns.id, id),
+        eq(marketingCampaigns.isDeleted, false),
+      ),
+    )
+    .limit(1);
+  if (!campaign) notFound();
+
+  if (campaign.status !== "draft") {
+    return (
+      <div className="flex flex-col gap-6 p-6">
+        <BreadcrumbsSetter
+          crumbs={marketingCrumbs.campaignsEdit(campaign.name, campaign.id)}
+        />
+        <Link
+          href={`/marketing/campaigns/${campaign.id}`}
+          className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to campaign
+        </Link>
+        <div className="rounded-lg border border-dashed border-border bg-muted/40 p-8 text-center">
+          <p className="text-sm font-medium text-foreground">
+            This campaign cannot be edited
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Only draft campaigns can be modified. Cancel the campaign first
+            if you need to make changes.
+          </p>
+          <Link
+            href={`/marketing/campaigns/${campaign.id}`}
+            className="mt-4 inline-flex h-9 items-center rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground transition hover:bg-muted"
+          >
+            View campaign
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Load the candidate templates + lists so the wizard can re-render
+  // selection grids if the user wants to swap.
+  const templates = await db
+    .select({
+      id: marketingTemplates.id,
+      name: marketingTemplates.name,
+      subject: marketingTemplates.subject,
+      preheader: marketingTemplates.preheader,
+      renderedHtml: marketingTemplates.renderedHtml,
+      updatedAt: marketingTemplates.updatedAt,
+    })
+    .from(marketingTemplates)
+    .where(
+      and(
+        eq(marketingTemplates.isDeleted, false),
+        eq(marketingTemplates.status, "ready"),
+      ),
+    )
+    .orderBy(desc(marketingTemplates.updatedAt))
+    .limit(200);
+
+  const lists = await db
+    .select({
+      id: marketingLists.id,
+      name: marketingLists.name,
+      description: marketingLists.description,
+      memberCount: marketingLists.memberCount,
+      lastRefreshedAt: marketingLists.lastRefreshedAt,
+    })
+    .from(marketingLists)
+    .where(eq(marketingLists.isDeleted, false))
+    .orderBy(asc(marketingLists.name))
+    .limit(500);
+
+  return (
+    <div className="flex flex-col gap-6 p-6">
+      <BreadcrumbsSetter
+        crumbs={marketingCrumbs.campaignsEdit(campaign.name, campaign.id)}
+      />
+      <Link
+        href={`/marketing/campaigns/${campaign.id}`}
+        className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to campaign
+      </Link>
+      <div>
+        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+          Edit campaign
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold text-foreground">
+          {campaign.name}
+        </h1>
+      </div>
+
+      <CampaignWizard
+        templates={templates}
+        lists={lists}
+        existing={{
+          id: campaign.id,
+          name: campaign.name,
+          templateId: campaign.templateId,
+          listId: campaign.listId,
+          fromEmail: campaign.fromEmail,
+          fromName: campaign.fromName,
+          replyToEmail: campaign.replyToEmail,
+          scheduledFor: campaign.scheduledFor
+            ? campaign.scheduledFor.toISOString()
+            : null,
+          status: campaign.status,
+        }}
+        defaultListId={null}
+        defaultTemplateId={null}
+        defaultFromEmail={`noreply@${env.SENDGRID_FROM_DOMAIN}`}
+        defaultFromName={env.SENDGRID_FROM_NAME_DEFAULT}
+      />
+    </div>
+  );
+}
