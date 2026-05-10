@@ -45,6 +45,13 @@ export const D365_HALT_REASONS = {
   HIGH_VOLUME_CONFLICT: "high_volume_conflict",
   OWNER_JIT_FAILURE: "owner_jit_failure",
   VALIDATION_REGRESSION: "validation_regression",
+  /**
+   * > 50% of a batch verdicts as `garbage` from the data-quality
+   * heuristics in `quality.ts`. Almost certainly a known-bad import
+   * era from the legacy CRM — admin reviews the batch before
+   * silent-skip locks in.
+   */
+  BAD_LEAD_VOLUME: "bad_lead_volume",
 } as const;
 
 export type D365HaltReason =

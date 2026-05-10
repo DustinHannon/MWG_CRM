@@ -3,6 +3,7 @@ import type { InferInsertModel } from "drizzle-orm";
 import { leadCreateSchema } from "@/lib/leads";
 import type { leads } from "@/db/schema/leads";
 import type { D365Lead } from "../types";
+import { assessLeadQuality } from "../quality";
 import {
   type AttachedActivity,
   type MapResult,
@@ -406,6 +407,40 @@ export function mapD365Lead(
   };
   const zodResult = softValidate(leadCreateSchema, softInputForZod);
   warnings.push(...zodResult.warnings);
+
+  // Phase 23 — bad-lead quality assessment. Verdict drives
+  // map-batch's auto-skip for `garbage` and surfaces warnings for
+  // `suspicious`. Verdict travels on the mapped payload under
+  // `_qualityVerdict` (a `_`-prefixed virtual stripped by
+  // commit-batch's cleanPayload step before Drizzle insert).
+  const quality = assessLeadQuality({
+    firstName: mapped.firstName,
+    lastName: mapped.lastName,
+    companyName: mapped.companyName,
+    email: mapped.email,
+    phone: mapped.phone,
+    mobilePhone: mapped.mobilePhone,
+    jobTitle: mapped.jobTitle,
+    description: mapped.description,
+    subject: mapped.subject,
+    industry: mapped.industry,
+    city: mapped.city,
+    state: mapped.state,
+  });
+  if (quality.verdict !== "clean") {
+    for (const reason of quality.reasons) {
+      warnings.push({
+        field: "__quality__",
+        code:
+          quality.verdict === "garbage"
+            ? "bad_lead_quality"
+            : "suspicious_lead_quality",
+        message: reason,
+      });
+    }
+  }
+  (mapped as Record<string, unknown>)._qualityVerdict = quality.verdict;
+  (mapped as Record<string, unknown>)._qualityReasons = quality.reasons;
 
   // Attached activities are populated by the orchestrator from
   // $expand'd children; the lead mapper itself returns an empty

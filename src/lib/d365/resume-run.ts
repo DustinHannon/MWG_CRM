@@ -69,6 +69,11 @@ const ALLOWED_RESOLUTIONS: Record<D365HaltReason, ResumeResolution["kind"][]> =
       "apply_dedup_default",
       "open_for_review",
     ],
+    // Phase 23 — bad-lead-volume halt only resolves via human
+    // review of the batch (admin walks the auto-skipped records,
+    // confirms or un-skips). No bulk resolution makes sense here
+    // because each record's "bad" reason can be different.
+    [D365_HALT_REASONS.BAD_LEAD_VOLUME]: ["open_for_review"],
     [D365_HALT_REASONS.OWNER_JIT_FAILURE]: [
       "use_default_owner",
       "open_for_review",

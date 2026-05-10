@@ -25,18 +25,21 @@ export type HaltReason =
   | "unmapped_picklist"
   | "high_volume_conflict"
   | "owner_jit_failure"
-  | "validation_regression";
+  | "validation_regression"
+  | "bad_lead_volume";
 
 export interface HaltBannerProps {
   runId: string;
   reason: HaltReason;
   message?: string | null;
-  /** For validation_regression: the batch that needs review. */
+  /** For validation_regression / bad_lead_volume: the batch that needs review. */
   pendingBatchId?: string | null;
   /** For high_volume_conflict: how many records collided. */
   conflictCount?: number;
   /** For owner_jit_failure: how many records fell back. */
   defaultOwnerCount?: number;
+  /** For bad_lead_volume: how many records auto-skipped as garbage. */
+  garbageCount?: number;
 }
 
 const REASON_TITLE: Record<HaltReason, string> = {
@@ -45,6 +48,7 @@ const REASON_TITLE: Record<HaltReason, string> = {
   high_volume_conflict: "High-volume duplicate conflict",
   owner_jit_failure: "Owner could not be resolved",
   validation_regression: "Validation regression detected",
+  bad_lead_volume: "High volume of bad-quality records",
 };
 
 export function HaltBanner(props: HaltBannerProps) {
@@ -113,6 +117,13 @@ function ReasonBody(props: HaltBannerProps) {
         />
       );
     case "validation_regression":
+      return (
+        <ValidationRegressionActions
+          runId={props.runId}
+          pendingBatchId={props.pendingBatchId}
+        />
+      );
+    case "bad_lead_volume":
       return (
         <ValidationRegressionActions
           runId={props.runId}

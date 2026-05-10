@@ -52,7 +52,19 @@ export interface ValidationWarning {
     | "out_of_range"
     | "unparseable_date"
     | "custom_field_dropped"
-    | "unparseable_value";
+    | "unparseable_value"
+    /**
+     * Phase 23 — record auto-skipped by the bad-lead quality
+     * heuristic in `quality.ts`. Reasons are in the warning message.
+     * map-batch reads `_qualityVerdict === 'garbage'` from the
+     * mapped payload and transitions to status='skipped'.
+     */
+    | "bad_lead_quality"
+    /**
+     * Phase 23 — record has 1-2 quality issues but enough real data
+     * to commit. Surfaces in the review UI for manual confirmation.
+     */
+    | "suspicious_lead_quality";
   message: string;
 }
 

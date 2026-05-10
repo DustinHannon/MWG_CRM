@@ -31,6 +31,7 @@ import {
   type ValidationWarning,
 } from "./mapping";
 import { resolveD365Owner } from "./owner-mapping";
+import { shouldHaltOnGarbageVolume } from "./quality";
 import type {
   D365Account,
   D365Annotation,
@@ -278,6 +279,13 @@ export async function mapBatch(
   let warningCount = 0;
   let processed = 0;
   let halted = false;
+  // Phase 23 — garbage-quality records auto-skip via the
+  // `_qualityVerdict` virtual on the mapped payload. If > 50% of a
+  // batch verdicts as garbage we halt the run for human review.
+  let garbageCount = 0;
+  // Don't halt on the first few records — need a meaningful sample
+  // size before the ratio is informative.
+  const HALT_MIN_SAMPLE = 10;
 
   for (const rec of pending) {
     if (halted) break;
@@ -292,7 +300,7 @@ export async function mapBatch(
       conflictResolution: "none",
       matchedBy: null,
     };
-    let nextStatus: "mapped" | "review" | "failed" = "mapped";
+    let nextStatus: "mapped" | "review" | "failed" | "skipped" = "mapped";
     let errorText: string | null = null;
 
     try {
@@ -338,6 +346,44 @@ export async function mapBatch(
       if (warnings.length > 0) {
         nextStatus = "review";
         warningCount += warnings.length;
+      }
+
+      // Phase 23 — bad-lead quality auto-skip. The lead mapper writes
+      // `_qualityVerdict` + `_qualityReasons` virtuals onto the mapped
+      // object. `garbage` short-circuits to skipped + audit; the
+      // commit-batch cleanPayload step strips `_*` virtuals before
+      // Drizzle insert so they never reach the database.
+      const qualityVerdict = (result.mapped as Record<string, unknown>)
+        ._qualityVerdict;
+      if (qualityVerdict === "garbage") {
+        const reasons =
+          ((result.mapped as Record<string, unknown>)._qualityReasons as
+            | string[]
+            | undefined) ?? [];
+        garbageCount += 1;
+        nextStatus = "failed"; // overwritten below to 'skipped'
+        // Use status 'skipped' (a valid import_records status) so the
+        // record can be reviewed and un-skipped manually if needed.
+        nextStatus = "skipped";
+        errorText = `Auto-skipped (bad_lead_quality): ${reasons.join("; ")}`;
+        await writeAudit({
+          actorId,
+          action: D365_AUDIT_EVENTS.RECORD_SKIPPED,
+          targetType: "import_record",
+          targetId: rec.id,
+          after: {
+            reason: "bad_lead_quality",
+            qualityReasons: reasons,
+            entityType,
+            sourceId: rec.sourceId,
+          },
+        });
+        logger.info("d365.map_batch.auto_skip_garbage", {
+          recordId: rec.id,
+          sourceId: rec.sourceId,
+          entityType,
+          reasons,
+        });
       }
 
       // Halt-on-unmapped-picklist gate (brief §"Constraints" + §4.5).
@@ -399,6 +445,29 @@ export async function mapBatch(
         event: D365_REALTIME_EVENTS.MAPPING_PROGRESS,
         payload: { batchId, processed, total: pending.length },
       });
+    }
+
+    // Phase 23 — halt the run if too much of the batch is garbage.
+    // Only checks after a meaningful sample (10 records) so the very
+    // first few being bad doesn't immediately halt the run.
+    if (
+      !halted &&
+      processed >= HALT_MIN_SAMPLE &&
+      shouldHaltOnGarbageVolume(garbageCount, processed)
+    ) {
+      await haltRun({
+        runId,
+        actorId,
+        reason: D365_HALT_REASONS.BAD_LEAD_VOLUME,
+        detail: {
+          batchId,
+          processed,
+          garbageCount,
+          ratio: Number((garbageCount / processed).toFixed(2)),
+          message: `${garbageCount} of ${processed} records auto-skipped as bad-quality. Likely a known-bad import era — review the batch before continuing.`,
+        },
+      });
+      halted = true;
     }
   }
 
