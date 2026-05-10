@@ -59,7 +59,11 @@ interface BuiltinReport {
     | "contact"
     | "opportunity"
     | "activity"
-    | "task";
+    | "task"
+    // Phase 24 — marketing/email entities (admin + canManageMarketing only).
+    | "marketing_campaign"
+    | "marketing_email_event"
+    | "email_send_log";
   fields: string[];
   filters: Record<string, Record<string, unknown>>;
   groupBy: string[];
@@ -189,6 +193,68 @@ const REPORTS: BuiltinReport[] = [
     groupBy: ["stage"],
     metrics: [{ fn: "sum", field: "amount", alias: "pipeline" }],
     visualization: "kpi",
+  },
+  // ----- Phase 24 — marketing/email built-ins -----
+  // Visible only to admins + users with canManageMarketing per
+  // src/lib/reports/access.ts assertCanViewReport gate.
+  {
+    name: "Campaign Performance",
+    description:
+      "Sends, opens, clicks, bounces, and unsubscribes per email campaign. Filter the date range on the report run page.",
+    entityType: "marketing_campaign",
+    fields: [
+      "name",
+      "status",
+      "sent_at",
+      "total_recipients",
+      "total_sent",
+      "total_delivered",
+      "total_opened",
+      "total_clicked",
+      "total_bounced",
+      "total_unsubscribed",
+    ],
+    filters: {},
+    groupBy: [],
+    metrics: [],
+    visualization: "table",
+  },
+  {
+    name: "Top Engaged Recipients",
+    description:
+      "Recipients ranked by total open + click count from SendGrid events. Higher counts = warmer marketing audience.",
+    entityType: "marketing_email_event",
+    fields: [],
+    filters: { event_type: { in: ["open", "click"] } },
+    groupBy: ["email"],
+    metrics: [{ fn: "count", alias: "engagement_events" }],
+    visualization: "bar",
+  },
+  {
+    name: "Email Deliverability Issues",
+    description:
+      "Bounces, spam reports, blocks, and unsubscribes grouped by SendGrid event type. Trend this to spot deliverability regressions.",
+    entityType: "marketing_email_event",
+    fields: [],
+    filters: {
+      event_type: {
+        in: ["bounce", "dropped", "spamreport", "blocked", "unsubscribe"],
+      },
+    },
+    groupBy: ["event_type"],
+    metrics: [{ fn: "count", alias: "events" }],
+    visualization: "bar",
+  },
+  {
+    name: "Transactional Email Volume",
+    description:
+      "Phase 15 transactional email log (lead-activity sends, digests, welcome emails, password rotations). Grouped by feature + status.",
+    entityType: "email_send_log",
+    fields: [],
+    filters: {},
+    groupBy: ["feature", "status"],
+    metrics: [{ fn: "count", alias: "count" }],
+    visualization: "bar",
   },
 ];
 

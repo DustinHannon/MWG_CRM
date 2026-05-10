@@ -22,7 +22,13 @@ import type { RealtimeEntity } from "@/hooks/realtime/use-realtime-poll";
 
 export const dynamic = "force-dynamic";
 
-const ENTITY_TO_REALTIME: Record<ReportEntityType, RealtimeEntity> = {
+// Marketing entities (marketing_campaign / marketing_email_event /
+// email_send_log) intentionally have no realtime subscription — they
+// don't need live reactivity for reporting (events stream in via the
+// SendGrid webhook on a separate path and aren't user-edited). When
+// the entity isn't present in this map, the page skips PageRealtime /
+// PagePoll mounting.
+const ENTITY_TO_REALTIME: Partial<Record<ReportEntityType, RealtimeEntity>> = {
   lead: "leads",
   account: "accounts",
   contact: "contacts",
@@ -59,8 +65,12 @@ export default async function ReportRunPage({
           { label: report.name },
         ]}
       />
-      <PageRealtime entities={[ENTITY_TO_REALTIME[entityType]]} />
-      <PagePoll entities={[ENTITY_TO_REALTIME[entityType]]} />
+      {ENTITY_TO_REALTIME[entityType] ? (
+        <>
+          <PageRealtime entities={[ENTITY_TO_REALTIME[entityType]!]} />
+          <PagePoll entities={[ENTITY_TO_REALTIME[entityType]!]} />
+        </>
+      ) : null}
 
       <div className="flex items-start justify-between gap-4">
         <div>

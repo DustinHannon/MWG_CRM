@@ -1,6 +1,7 @@
 import "server-only";
 import { sqlClient } from "@/db";
 import {
+  MARKETING_REPORT_ENTITY_TYPES,
   type ReportEntityType,
   type ReportMetric,
   type SavedReport,
@@ -78,8 +79,13 @@ export async function executeReport(
   const params: unknown[] = [];
   const conditions: string[] = [];
 
-  // 1. soft-delete (always present for these entities)
-  conditions.push(`${quote(REPORT_ENTITIES[entityType].softDeleteColumn ?? "is_deleted")} = false`);
+  // 1. soft-delete (only when the table has the column — marketing
+  // entities like marketing_email_events / email_send_log are
+  // append-only and have no soft-delete column).
+  const softDeleteCol = REPORT_ENTITIES[entityType].softDeleteColumn;
+  if (softDeleteCol) {
+    conditions.push(`${quote(softDeleteCol)} = false`);
+  }
 
   // 2. viewer scope
   const scope = await buildViewerScope(entityType, viewer);
@@ -113,11 +119,37 @@ export async function executeReport(
 /* Access gating                                                          */
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Marketing-entity reports are gated to admins + users with the
+ * canManageMarketing permission. Returns true when the viewer is
+ * allowed to access the entity type, false otherwise.
+ */
+async function canViewMarketingEntity(viewer: SessionUser): Promise<boolean> {
+  if (viewer.isAdmin) return true;
+  const perms = await getPermissions(viewer.id);
+  return perms.canManageMarketing === true;
+}
+
 export async function assertCanViewReport(
   report: SavedReport,
   viewer: SessionUser,
 ): Promise<void> {
   if (report.isDeleted) throw new ForbiddenError("Report unavailable.");
+
+  // Phase 24 — marketing-entity gate. Applied BEFORE owner/builtin/shared
+  // checks so a non-marketing user can't bypass via a shared-report or
+  // builtin marketing report.
+  const entityType = report.entityType as ReportEntityType;
+  if (
+    (MARKETING_REPORT_ENTITY_TYPES as readonly string[]).includes(entityType)
+  ) {
+    if (!(await canViewMarketingEntity(viewer))) {
+      throw new ForbiddenError(
+        "Marketing reports require admin or marketing manager role.",
+      );
+    }
+  }
+
   if (report.isBuiltin) return;
   if (report.ownerId === viewer.id) return;
   if (viewer.isAdmin) return;
@@ -131,6 +163,18 @@ export async function assertCanEditReport(
 ): Promise<void> {
   if (report.isBuiltin) {
     throw new ForbiddenError("Built-in reports cannot be edited.");
+  }
+  // Marketing-entity reports require the marketing permission to edit
+  // — same gate as view.
+  const entityType = report.entityType as ReportEntityType;
+  if (
+    (MARKETING_REPORT_ENTITY_TYPES as readonly string[]).includes(entityType)
+  ) {
+    if (!(await canViewMarketingEntity(viewer))) {
+      throw new ForbiddenError(
+        "Marketing reports require admin or marketing manager role.",
+      );
+    }
   }
   if (report.ownerId === viewer.id) return;
   if (viewer.isAdmin) return;
@@ -173,6 +217,13 @@ async function buildViewerScope(
       return { column: "assigned_to_id", value: viewer.id };
     case "activity":
       return { column: "user_id", value: viewer.id };
+    // Marketing entities — access is gated at assertCanViewReport
+    // (admin OR canManageMarketing). Once past that gate, no per-row
+    // viewer scope applies; marketing data isn't per-user-owned.
+    case "marketing_campaign":
+    case "marketing_email_event":
+    case "email_send_log":
+      return undefined;
   }
 }
 
@@ -339,5 +390,26 @@ function defaultFields(entityType: ReportEntityType): string[] {
       return ["title", "status", "priority", "due_at", "assigned_to_id"];
     case "activity":
       return ["kind", "subject", "occurred_at", "user_id"];
+    case "marketing_campaign":
+      return [
+        "name",
+        "status",
+        "sent_at",
+        "total_sent",
+        "total_delivered",
+        "total_opened",
+        "total_clicked",
+      ];
+    case "marketing_email_event":
+      return ["email", "event_type", "event_timestamp", "campaign_id", "reason"];
+    case "email_send_log":
+      return [
+        "from_user_email_snapshot",
+        "to_email",
+        "feature",
+        "subject",
+        "status",
+        "queued_at",
+      ];
   }
 }

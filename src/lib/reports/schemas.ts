@@ -81,6 +81,37 @@ const TASK_STATUS_VALUES = [
 ] as const;
 const TASK_PRIORITY_VALUES = ["low", "normal", "high", "urgent"] as const;
 const ACTIVITY_KIND_VALUES = ["note", "call", "email", "meeting", "log"] as const;
+const CAMPAIGN_STATUS_VALUES = [
+  "draft",
+  "scheduled",
+  "sending",
+  "sent",
+  "failed",
+  "cancelled",
+] as const;
+// SendGrid event types — exact strings as recorded in marketing_email_events.
+const SENDGRID_EVENT_TYPES = [
+  "processed",
+  "delivered",
+  "open",
+  "click",
+  "bounce",
+  "dropped",
+  "deferred",
+  "unsubscribe",
+  "spamreport",
+  "group_unsubscribe",
+  "group_resubscribe",
+  "blocked",
+] as const;
+const EMAIL_SEND_STATUS_VALUES = [
+  "queued",
+  "sending",
+  "sent",
+  "failed",
+  "blocked_preflight",
+  "blocked_e2e",
+] as const;
 
 export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
   lead: {
@@ -245,6 +276,100 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
       { column: "occurred_at", label: "Occurred", kind: "date" },
       { column: "created_at", label: "Created", kind: "date" },
       { column: "updated_at", label: "Updated", kind: "date" },
+    ],
+  },
+  // ----- Phase 21+ marketing entities -----
+  marketing_campaign: {
+    table: "marketing_campaigns",
+    timestampColumn: "updated_at",
+    // Marketing data is not per-user-owned; the access layer falls
+    // back to admin/canManageMarketing gating on the entity type
+    // rather than per-row owner scoping.
+    ownerColumn: "created_by_id",
+    softDeleteColumn: "is_deleted",
+    label: "Email Campaigns",
+    fields: [
+      { column: "id", label: "ID", kind: "uuid" },
+      { column: "name", label: "Name", kind: "string" },
+      {
+        column: "status",
+        label: "Status",
+        kind: "enum",
+        values: CAMPAIGN_STATUS_VALUES,
+      },
+      { column: "template_id", label: "Template", kind: "uuid" },
+      { column: "list_id", label: "List", kind: "uuid" },
+      { column: "from_email", label: "From email", kind: "string" },
+      { column: "from_name", label: "From name", kind: "string" },
+      { column: "scheduled_for", label: "Scheduled for", kind: "date" },
+      { column: "sent_at", label: "Sent", kind: "date" },
+      { column: "total_recipients", label: "Recipients", kind: "number" },
+      { column: "total_sent", label: "Sent", kind: "number" },
+      { column: "total_delivered", label: "Delivered", kind: "number" },
+      { column: "total_opened", label: "Opened", kind: "number" },
+      { column: "total_clicked", label: "Clicked", kind: "number" },
+      { column: "total_bounced", label: "Bounced", kind: "number" },
+      { column: "total_unsubscribed", label: "Unsubscribed", kind: "number" },
+      { column: "created_by_id", label: "Created by", kind: "uuid" },
+      { column: "created_at", label: "Created", kind: "date" },
+      { column: "updated_at", label: "Updated", kind: "date" },
+    ],
+  },
+  marketing_email_event: {
+    table: "marketing_email_events",
+    timestampColumn: "received_at",
+    ownerColumn: "campaign_id",
+    // Append-only event log — no soft delete column on this table.
+    softDeleteColumn: null,
+    label: "Email Events (raw)",
+    fields: [
+      { column: "id", label: "ID", kind: "uuid" },
+      { column: "email", label: "Recipient email", kind: "string" },
+      {
+        column: "event_type",
+        label: "Event type",
+        kind: "enum",
+        values: SENDGRID_EVENT_TYPES,
+      },
+      { column: "event_timestamp", label: "Event time", kind: "date" },
+      { column: "received_at", label: "Received", kind: "date" },
+      { column: "campaign_id", label: "Campaign", kind: "uuid" },
+      { column: "lead_id", label: "Lead", kind: "uuid" },
+      { column: "recipient_id", label: "Recipient row", kind: "uuid" },
+      { column: "sendgrid_message_id", label: "SendGrid msg id", kind: "string" },
+      { column: "url", label: "Click URL", kind: "string" },
+      { column: "reason", label: "Bounce/drop reason", kind: "string" },
+      { column: "ip_address", label: "IP address", kind: "string" },
+      { column: "user_agent", label: "User agent", kind: "string" },
+    ],
+  },
+  email_send_log: {
+    table: "email_send_log",
+    timestampColumn: "queued_at",
+    ownerColumn: "from_user_id",
+    // No soft delete; rows are pruned by the retention cron.
+    softDeleteColumn: null,
+    label: "Transactional Email Log",
+    fields: [
+      { column: "id", label: "ID", kind: "uuid" },
+      { column: "from_user_id", label: "From user", kind: "uuid" },
+      { column: "from_user_email_snapshot", label: "From email", kind: "string" },
+      { column: "to_email", label: "To email", kind: "string" },
+      { column: "to_user_id", label: "To user", kind: "uuid" },
+      { column: "feature", label: "Feature", kind: "string" },
+      { column: "feature_record_id", label: "Feature record", kind: "string" },
+      { column: "subject", label: "Subject", kind: "string" },
+      {
+        column: "status",
+        label: "Status",
+        kind: "enum",
+        values: EMAIL_SEND_STATUS_VALUES,
+      },
+      { column: "error_code", label: "Error code", kind: "string" },
+      { column: "http_status", label: "HTTP status", kind: "number" },
+      { column: "duration_ms", label: "Duration (ms)", kind: "number" },
+      { column: "queued_at", label: "Queued", kind: "date" },
+      { column: "sent_at", label: "Sent", kind: "date" },
     ],
   },
 };
