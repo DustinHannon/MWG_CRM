@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { eq } from "drizzle-orm";
 import { sendEmailAs } from "@/lib/email";
+import { NotFoundError } from "@/lib/errors";
 
 export interface DigestRecord {
   id: string;
@@ -36,7 +37,7 @@ export async function sendDigestEmail(args: DigestArgs): Promise<void> {
     .from(users)
     .where(eq(users.id, args.userId))
     .limit(1);
-  if (!user) throw new Error(`User ${args.userId} not found`);
+  if (!user) throw new NotFoundError("user");
 
   const html = renderDigestHtml({
     displayName: user.displayName,

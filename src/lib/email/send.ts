@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { emailSendLog } from "@/db/schema/email-send-log";
 import { writeAudit } from "@/lib/audit";
-import { ValidationError } from "@/lib/errors";
+import { NotFoundError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { graphAppRequest, isGraphAppConfigured } from "./graph-app-token";
 import { checkMailboxKind } from "./preflight";
@@ -49,7 +49,7 @@ export async function sendEmailAs(opts: SendOptions): Promise<SendResult> {
 
   const allRecipients = collectRecipients(opts);
   if (allRecipients.length === 0) {
-    throw new Error("sendEmailAs: at least one recipient is required");
+    throw new ValidationError("sendEmailAs: at least one recipient is required");
   }
 
   if (!isGraphAppConfigured()) {
@@ -77,7 +77,7 @@ export async function sendEmailAs(opts: SendOptions): Promise<SendResult> {
     .limit(1);
 
   if (!fromUser) {
-    throw new Error(`sendEmailAs: from_user_id ${opts.fromUserId} not found`);
+    throw new NotFoundError("user");
   }
 
   if (!fromUser.entraOid) {
@@ -289,7 +289,7 @@ type BlockedArgs = {
 
 async function logBlocked(args: BlockedArgs): Promise<SendResult> {
   if (!args.fromUser) {
-    throw new Error(`sendEmailAs: from_user_id ${args.opts.fromUserId} not found`);
+    throw new NotFoundError("user");
   }
   const allRecipients = collectRecipients(args.opts);
   const totalAttachmentBytes = (args.opts.attachments ?? []).reduce(

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { emailSendLog } from "@/db/schema/email-send-log";
 import { leads } from "@/db/schema/leads";
@@ -297,6 +297,15 @@ export async function sendCampaign(
       totalAccepted += acceptedInBatch;
       failingSlice = null;
 
+      // Roll the batch's recipients forward from `queued` → `sent`.
+      // The schema-level fix replaces the prior bug where rows were
+      // marked `sent` BEFORE the API call (so a failed send left
+      // recipients incorrectly stamped).
+      const slicedRecipientIds = slice
+        .map((c) => recipientByLead.get(c.leadId))
+        .filter((id): id is string => typeof id === "string");
+      await markRecipientsSent(slicedRecipientIds);
+
       // Bump totalSent atomically per batch so the realtime UI shows
       // progress. This is independent of webhook-driven `total_delivered`
       // counters (which arrive after SendGrid actually delivers).
@@ -346,6 +355,19 @@ export async function sendCampaign(
         httpStatus,
         durationMs: Date.now() - batchStart.ts,
       });
+
+      // Roll the failing batch's recipients forward from `queued` →
+      // `dropped` with the SendGrid error as bounceReason. Recipients
+      // in batches not yet attempted stay `queued` (accurate: never
+      // sent). Recipients in successfully-sent earlier batches are
+      // already `sent` via markRecipientsSent above.
+      const failedRecipientIds = failingSlice
+        .map((c) => recipientByLead.get(c.leadId))
+        .filter((id): id is string => typeof id === "string");
+      await markRecipientsDropped(
+        failedRecipientIds,
+        detail ?? errorMessage,
+      );
     }
 
     await db
@@ -698,6 +720,11 @@ async function insertRecipientRows(
   const out: { id: string; leadId: string }[] = [];
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
     const slice = candidates.slice(i, i + BATCH_SIZE);
+    // Recipients enter `queued` — the canonical pre-send state. Rolled
+    // forward to `sent` (with sentAt) on successful batch send, or to
+    // `dropped` (with bounceReason) if SendGrid rejects the batch.
+    // Previously this insert wrote `sent` upfront which left
+    // recipients incorrectly stamped if the subsequent send failed.
     const inserted = await db
       .insert(campaignRecipients)
       .values(
@@ -705,8 +732,7 @@ async function insertRecipientRows(
           campaignId,
           leadId: c.leadId,
           email: c.email,
-          status: "sent" as const,
-          sentAt: new Date(),
+          status: "queued" as const,
         })),
       )
       .returning({
@@ -721,6 +747,54 @@ async function insertRecipientRows(
     }
   }
   return out;
+}
+
+/**
+ * Roll forward a batch of recipients to `sent` after SendGrid
+ * accepted the API call. Best-effort: log + continue on failure —
+ * the webhook reconciliation still updates delivery state via
+ * custom_args.recipient_id.
+ */
+async function markRecipientsSent(recipientIds: string[]): Promise<void> {
+  if (recipientIds.length === 0) return;
+  try {
+    await db
+      .update(campaignRecipients)
+      .set({ status: "sent", sentAt: new Date() })
+      .where(inArray(campaignRecipients.id, recipientIds));
+  } catch (err) {
+    logger.error("marketing.send.mark_sent_failed", {
+      recipientCount: recipientIds.length,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Roll forward a batch of recipients to `dropped` after the SendGrid
+ * API call threw. SendGrid never accepted the message — `dropped` is
+ * the matching status in their event taxonomy.
+ */
+async function markRecipientsDropped(
+  recipientIds: string[],
+  reason: string,
+): Promise<void> {
+  if (recipientIds.length === 0) return;
+  try {
+    await db
+      .update(campaignRecipients)
+      .set({
+        status: "dropped",
+        bounceReason: reason.slice(0, 500),
+        bouncedAt: new Date(),
+      })
+      .where(inArray(campaignRecipients.id, recipientIds));
+  } catch (err) {
+    logger.error("marketing.send.mark_dropped_failed", {
+      recipientCount: recipientIds.length,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 interface SendBatchInput {

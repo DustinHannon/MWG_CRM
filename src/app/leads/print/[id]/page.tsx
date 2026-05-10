@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, attachments } from "@/db/schema/activities";
 import { tags as tagsTable, leadTags } from "@/db/schema/tags";
@@ -55,8 +55,11 @@ export default async function LeadPrintPage({
       })
       .from(activities)
       .leftJoin(users, eq(users.id, activities.userId))
-      .where(eq(activities.leadId, id))
-      .orderBy(activities.occurredAt),
+      // Soft-delete filter — archived activities must not appear on
+      // the printable view. Limit caps unbounded scan on high-volume leads.
+      .where(and(eq(activities.leadId, id), eq(activities.isDeleted, false)))
+      .orderBy(activities.occurredAt)
+      .limit(500),
     db
       .select({ name: tagsTable.name, color: tagsTable.color })
       .from(leadTags)
@@ -70,14 +73,17 @@ export default async function LeadPrintPage({
         dueAt: tasks.dueAt,
       })
       .from(tasks)
-      .where(eq(tasks.leadId, id))
+      .where(and(eq(tasks.leadId, id), eq(tasks.isDeleted, false)))
       .orderBy(desc(tasks.dueAt))
       .limit(50),
     db
       .select({ id: attachments.id, filename: attachments.filename })
       .from(attachments)
       .innerJoin(activities, eq(activities.id, attachments.activityId))
-      .where(eq(activities.leadId, id)),
+      // Filter both the activity FK AND the activity's soft-delete so
+      // attachments on archived activities don't leak onto the print view.
+      .where(and(eq(activities.leadId, id), eq(activities.isDeleted, false)))
+      .limit(200),
   ]);
 
   return (

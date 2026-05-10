@@ -219,7 +219,7 @@ function RevokeButton({ keyId, keyName }: { keyId: string; keyName: string }) {
           router.refresh();
         });
       }}
-      className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-amber-500/20 disabled:opacity-50"
+      className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-accent/40 disabled:opacity-50"
     >
       {pending ? "Revoking…" : "Revoke"}
     </button>
@@ -472,7 +472,7 @@ function PlaintextModal({
       }}
     >
       <div className="grid gap-4">
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
           <strong>Copy this key now.</strong> You will not be able to see it
           again. Store it in a secure secret manager.
         </div>

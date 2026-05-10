@@ -7,6 +7,7 @@ import { emailSendLog } from "@/db/schema/email-send-log";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { eq } from "drizzle-orm";
+import { ValidationError } from "@/lib/errors";
 import {
   graphFetchAs,
   graphFetchBinaryAs,
@@ -54,8 +55,9 @@ export async function sendEmailAndTrack(args: {
 }): Promise<{ activityId: string }> {
   const cleanAttachments = (args.attachments ?? []).map((a, i) => {
     if (a.bytes.byteLength > 3 * 1024 * 1024) {
-      throw new Error(
+      throw new ValidationError(
         `Attachment ${a.filename} exceeds the 3MB v1 limit. Strip it or upload to a shared link.`,
+        { filename: a.filename, sizeBytes: a.bytes.byteLength, limit: 3 * 1024 * 1024 },
       );
     }
     return {
