@@ -18,6 +18,8 @@ const ADMIN_NAV: NavItem[] = [
   { label: "API Usage", href: "/admin/api-usage", iconKey: "Activity" },
   // Phase 15 — operational view of failed/blocked email sends.
   { label: "Email Failures", href: "/admin/email-failures", iconKey: "MailWarning" },
+  // Phase 23 — D365 CRM data import (human-in-the-loop, batch-of-100 review).
+  { label: "D365 Import", href: "/admin/d365-import", iconKey: "DownloadCloud" },
   { divider: true },
   { label: "Back to dashboard", href: "/dashboard", iconKey: "ArrowLeft" },
 ];

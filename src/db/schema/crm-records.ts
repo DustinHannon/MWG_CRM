@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -63,6 +64,8 @@ export const crmAccounts = pgTable(
       onDelete: "set null",
     }),
     deleteReason: text("delete_reason"),
+    // Phase 23 — D365 custom-field passthrough.
+    metadata: jsonb("metadata"),
   },
   (t) => [
     index("crm_accounts_owner_idx").on(t.ownerId),
@@ -120,6 +123,8 @@ export const contacts = pgTable(
       onDelete: "set null",
     }),
     deleteReason: text("delete_reason"),
+    // Phase 23 — D365 custom-field passthrough.
+    metadata: jsonb("metadata"),
   },
   (t) => [
     index("contacts_account_idx").on(t.accountId),
@@ -187,6 +192,8 @@ export const opportunities = pgTable(
       onDelete: "set null",
     }),
     deleteReason: text("delete_reason"),
+    // Phase 23 — D365 custom-field passthrough.
+    metadata: jsonb("metadata"),
   },
   (t) => [
     index("opportunities_account_idx").on(t.accountId),

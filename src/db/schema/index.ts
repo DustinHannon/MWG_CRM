@@ -23,3 +23,5 @@ export * from "./marketing-campaigns";
 export * from "./marketing-events";
 // Phase 20 — Security primitives (rate limiting + webhook idempotency)
 export * from "./security";
+// Phase 23 — D365 CRM import pipeline (external IDs + run/batch/record state)
+export * from "./d365-imports";

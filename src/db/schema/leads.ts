@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -105,6 +106,11 @@ export const leads = pgTable(
     score: integer("score").notNull().default(0),
     scoreBand: text("score_band").notNull().default("cold"),
     scoredAt: timestamp("scored_at", { withTimezone: true }),
+    // Phase 23 — D365 custom-field passthrough. Mappers route any
+    // non-native field (D365 `new_*`, `cr*_*`, `mwg_*`) into this
+    // JSONB so the review UI surfaces it without re-fetching the raw
+    // OData payload. NULL on manually-created leads.
+    metadata: jsonb("metadata"),
   },
   (t) => [
     index("leads_owner_idx").on(t.ownerId),

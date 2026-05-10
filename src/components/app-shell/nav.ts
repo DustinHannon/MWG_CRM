@@ -23,6 +23,7 @@ import {
   CheckSquare,
   Contact,
   Database,
+  DownloadCloud,
   HelpCircle,
   Home,
   Key,
@@ -62,6 +63,7 @@ export const ICON_KEYS = [
   "Key",
   "Activity",
   "MailWarning",
+  "DownloadCloud",
   "ArrowLeft",
 ] as const;
 
@@ -88,6 +90,7 @@ export const ICON_MAP: Record<IconKey, LucideIcon> = {
   Key,
   Activity,
   MailWarning,
+  DownloadCloud,
   ArrowLeft,
 };
 
