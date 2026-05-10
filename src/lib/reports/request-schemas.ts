@@ -51,4 +51,3 @@ export type ReportDefinitionInput = z.infer<typeof reportDefinitionSchema>;
 export const reportUpdateSchema = reportDefinitionSchema.partial();
 export type ReportUpdateInput = z.infer<typeof reportUpdateSchema>;
 
-export const reportPreviewSchema = reportDefinitionSchema;

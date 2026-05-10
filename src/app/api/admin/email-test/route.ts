@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { sendEmailAs } from "@/lib/email";
+import { escapeHtml } from "@/lib/security/escape-html";
 
 export const dynamic = "force-dynamic";
 
@@ -42,11 +43,3 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json(result);
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}

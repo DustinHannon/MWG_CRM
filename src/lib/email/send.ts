@@ -6,6 +6,7 @@ import { emailSendLog } from "@/db/schema/email-send-log";
 import { writeAudit } from "@/lib/audit";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { escapeHtml } from "@/lib/security/escape-html";
 import { graphAppRequest, isGraphAppConfigured } from "./graph-app-token";
 import { checkMailboxKind } from "./preflight";
 import type {
@@ -256,7 +257,11 @@ function toGraphRecipient(r: EmailRecipient) {
 }
 
 function appendFooter(html: string, displayName: string): string {
-  const safeName = displayName.replace(/[<>]/g, "");
+  // Phase 25 §4.5 S-003 — full HTML escape on the display name, not
+  // just an angle-bracket strip. Display names come from Entra and
+  // are admin-controlled in practice, but a forwarded reply-thread
+  // containing one could still inject markup via the footer.
+  const safeName = escapeHtml(displayName);
   const footer = `<p style="color:#888;font-size:12px;margin-top:32px;border-top:1px solid #ddd;padding-top:8px">Sent on behalf of ${safeName} via MWG CRM.</p>`;
   return `${html}${footer}`;
 }

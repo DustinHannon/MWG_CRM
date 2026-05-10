@@ -55,6 +55,7 @@ function isNextControlFlowError(err: unknown): boolean {
  *
  * - SQLSTATE 23514 (CHECK violation) → `ValidationError`
  * - SQLSTATE 23505 (unique violation) → `ConflictError`
+ * - SQLSTATE 23503 (foreign-key violation) → `ConflictError` (Phase 25 §4.6 A-004)
  *
  * Any other error is returned unchanged for the generic INTERNAL path.
  */
@@ -72,6 +73,21 @@ function translatePgError(err: unknown): unknown {
       pgCode: "23505",
       cause: (err as Error).message,
     });
+  }
+  if (code === "23503") {
+    // Phase 25 §4.6 A-004 — surface FK violations as conflicts with a
+    // human-readable message instead of an opaque 500. Typical trigger:
+    // a referenced record was archived/deleted between the user loading
+    // a form and submitting it. Caller-side OCC catches most of these,
+    // but cross-entity references slip through the OCC net.
+    return new ConflictError(
+      "Cannot complete: a referenced record is missing or was just deleted.",
+      {
+        pgCode: "23503",
+        constraint: (err as { constraint_name?: unknown }).constraint_name,
+        cause: (err as Error).message,
+      },
+    );
   }
   return err;
 }

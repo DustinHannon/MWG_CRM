@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-helpers";
 import { executeReport } from "@/lib/reports/access";
-import { reportPreviewSchema } from "@/lib/reports/request-schemas";
+import { reportDefinitionSchema } from "@/lib/reports/request-schemas";
 import { isValidField } from "@/lib/reports/schemas";
 import { withErrorBoundary } from "@/lib/server-action";
 import { ValidationError } from "@/lib/errors";
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       entityType: "report",
     },
     async () => {
-      const input = reportPreviewSchema.parse(body);
+      const input = reportDefinitionSchema.parse(body);
 
       // Field whitelist re-check.
       for (const c of input.fields) {

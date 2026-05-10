@@ -6,6 +6,7 @@ import { emailSendLog } from "@/db/schema/email-send-log";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { writeAudit } from "@/lib/audit";
 import { sendEmailAs } from "@/lib/email";
+import { escapeHtml } from "@/lib/security/escape-html";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -179,11 +180,3 @@ export async function POST(
   });
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
