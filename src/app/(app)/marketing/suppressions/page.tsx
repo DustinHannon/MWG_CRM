@@ -1,6 +1,7 @@
 import { desc } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardEmptyState } from "@/components/standard";
 import { marketingSuppressions } from "@/db/schema/marketing-events";
 import { UserTime } from "@/components/ui/user-time";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
@@ -40,14 +41,10 @@ export default async function SuppressionsPage() {
       </div>
 
       {rows.length === 0 ? (
-        <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card text-center">
-          <p className="text-sm font-medium text-foreground">
-            No suppressed addresses
-          </p>
-          <p className="text-xs text-muted-foreground">
-            All recipients are receiving marketing email.
-          </p>
-        </div>
+        <StandardEmptyState
+          title="No suppressed addresses"
+          description="All recipients are receiving marketing email."
+        />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="overflow-x-auto">

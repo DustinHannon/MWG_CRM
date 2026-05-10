@@ -2,6 +2,7 @@ import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardEmptyState } from "@/components/standard";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
@@ -54,14 +55,10 @@ export default async function TemplatesPage() {
       </div>
 
       {rows.length === 0 ? (
-        <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card text-center">
-          <p className="text-sm font-medium text-foreground">
-            No templates yet
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Create your first template to start sending campaigns.
-          </p>
-        </div>
+        <StandardEmptyState
+          title="No templates yet"
+          description="Create your first template to start sending campaigns."
+        />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="overflow-x-auto">

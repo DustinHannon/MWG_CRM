@@ -2,6 +2,7 @@ import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardEmptyState } from "@/components/standard";
 import {
   marketingCampaigns,
 } from "@/db/schema/marketing-campaigns";
@@ -62,14 +63,10 @@ export default async function CampaignsPage() {
       </div>
 
       {rows.length === 0 ? (
-        <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card text-center">
-          <p className="text-sm font-medium text-foreground">
-            No campaigns yet
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Build a list and pick a template to launch your first campaign.
-          </p>
-        </div>
+        <StandardEmptyState
+          title="No campaigns yet"
+          description="Build a list and pick a template to launch your first campaign."
+        />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="overflow-x-auto">
