@@ -30,6 +30,18 @@ export const D365_AUDIT_EVENTS = {
   RECORD_SKIPPED: "d365.import.record.skipped",
   CONFIG_CHANGED: "d365.import.config.changed",
   OWNER_JIT_PROVISIONED: "d365.import.owner.jit_provisioned",
+  // Phase 24 §7.2.3 — explicit *_FAILED events so the forensic trail
+  // captures every error class without relying on logger output. Each
+  // emit site pairs the event with the row-level `status='failed'`
+  // update so the audit log and the records table agree.
+  RECORD_COMMIT_FAILED: "d365.import.record.commit_failed",
+  RECORD_VALIDATION_FAILED: "d365.import.record.validation_failed",
+  /** Fetch failed in a non-halt way (programmer error, parse error). */
+  FETCH_FAILED: "d365.import.fetch.failed",
+  /** Auth (MSAL token acquisition) failed. */
+  AUTH_FAILED: "d365.import.auth.failed",
+  /** JIT owner provisioning failed for a record. */
+  OWNER_JIT_FAILED: "d365.import.owner.jit_failed",
 } as const;
 
 export type D365AuditEvent =

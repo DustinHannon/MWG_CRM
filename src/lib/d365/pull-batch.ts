@@ -379,6 +379,21 @@ async function handleFetchFailure(
       entityType,
       errorMessage: err instanceof Error ? err.message : String(err),
     });
+    // Phase 24 §7.2.3 — explicit audit event so the forensic trail
+    // captures non-halt fetch failures alongside the logger output.
+    await writeAudit({
+      actorId,
+      action: D365_AUDIT_EVENTS.FETCH_FAILED,
+      targetType: "import_batch",
+      targetId: batchId,
+      after: {
+        runId,
+        entityType,
+        errorMessage:
+          err instanceof Error ? err.message.slice(0, 500) : String(err).slice(0, 500),
+        kind: "unexpected_error",
+      },
+    });
     throw err;
   }
 

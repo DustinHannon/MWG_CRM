@@ -138,6 +138,19 @@ export async function commitBatch(
           error: message.slice(0, 1000),
         })
         .where(eq(importRecords.id, rec.id));
+      // Phase 24 §7.2.3 — pair the row's status='failed' update with
+      // a forensic audit row. writeAudit is best-effort; an audit
+      // outage cannot block the commit-batch loop's remaining work.
+      await writeAudit({
+        actorId,
+        action: D365_AUDIT_EVENTS.RECORD_COMMIT_FAILED,
+        targetType: "d365_import_record",
+        targetId: rec.id,
+        after: {
+          sourceEntityType: rec.sourceEntityType,
+          errorMessage: message.slice(0, 500),
+        },
+      });
     }
   }
 
