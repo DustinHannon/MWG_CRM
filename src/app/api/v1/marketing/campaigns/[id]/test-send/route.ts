@@ -103,6 +103,8 @@ export const POST = withApi<{ id: string }>(
       subject: tpl.subject,
       html: tpl.html,
       fromName: campaign.fromName,
+      actorUserId: key.createdById,
+      featureRecordId: idParse.data.id,
     });
 
     await writeAudit({

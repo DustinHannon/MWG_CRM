@@ -1,15 +1,19 @@
 import "server-only";
 import { logger } from "@/lib/logger";
-import { sql } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, attachments } from "@/db/schema/activities";
+import { emailSendLog } from "@/db/schema/email-send-log";
 import { leads } from "@/db/schema/leads";
+import { users } from "@/db/schema/users";
 import { eq } from "drizzle-orm";
 import {
   graphFetchAs,
   graphFetchBinaryAs,
   GraphRequestError,
 } from "@/lib/graph-token";
+
+const EMAIL_SEND_LOG_FEATURE = "lead.email_activity";
 
 interface SentMessage {
   id: string;
@@ -78,10 +82,111 @@ export async function sendEmailAndTrack(args: {
     saveToSentItems: true,
   };
 
-  await graphFetchAs<unknown>(args.userId, "/me/sendMail", {
-    method: "POST",
-    body: JSON.stringify(sendBody),
-  });
+  const totalAttachmentBytes = (args.attachments ?? []).reduce(
+    (n, a) => n + a.bytes.byteLength,
+    0,
+  );
+  const attachmentCount = args.attachments?.length ?? 0;
+
+  // Best-effort: snapshot sender email for the email_send_log row. Never
+  // block the actual send if this lookup fails.
+  let fromUserEmailSnapshot = "";
+  try {
+    const [u] = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, args.userId))
+      .limit(1);
+    fromUserEmailSnapshot = u?.email ?? "";
+  } catch (err) {
+    logger.error("graph_email.user_lookup_failed", {
+      userId: args.userId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Insert a 'sending' email_send_log row (best-effort) so admin failure
+  // dashboard sees this attempt even if Graph crashes mid-call.
+  let logId: string | null = null;
+  const sendStart = Date.now();
+  try {
+    const inserted = await db
+      .insert(emailSendLog)
+      .values({
+        fromUserId: args.userId,
+        fromUserEmailSnapshot,
+        toEmail: args.to,
+        feature: EMAIL_SEND_LOG_FEATURE,
+        featureRecordId: args.leadId,
+        subject: args.subject,
+        hasAttachments: attachmentCount > 0,
+        attachmentCount,
+        totalSizeBytes: totalAttachmentBytes || null,
+        status: "sending",
+      })
+      .returning({ id: emailSendLog.id });
+    logId = inserted[0]?.id ?? null;
+  } catch (err) {
+    logger.error("graph_email.email_send_log_insert_failed", {
+      userId: args.userId,
+      leadId: args.leadId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  try {
+    await graphFetchAs<unknown>(args.userId, "/me/sendMail", {
+      method: "POST",
+      body: JSON.stringify(sendBody),
+    });
+  } catch (err) {
+    // Log the failure to email_send_log (best-effort) before rethrowing.
+    if (logId) {
+      try {
+        const isGraphErr = err instanceof GraphRequestError;
+        await db
+          .update(emailSendLog)
+          .set({
+            status: "failed",
+            errorCode: isGraphErr
+              ? `GRAPH_${err.status}`
+              : "GRAPH_ERROR",
+            errorMessage:
+              err instanceof Error ? err.message : String(err),
+            httpStatus: isGraphErr ? err.status : null,
+            durationMs: Date.now() - sendStart,
+          })
+          .where(inArray(emailSendLog.id, [logId]));
+      } catch (logErr) {
+        logger.error("graph_email.email_send_log_failure_update_failed", {
+          logId,
+          errorMessage:
+            logErr instanceof Error ? logErr.message : String(logErr),
+        });
+      }
+    }
+    throw err;
+  }
+
+  // Mark the send as accepted by Graph (HTTP 202; per-recipient
+  // deliverability not guaranteed).
+  if (logId) {
+    try {
+      await db
+        .update(emailSendLog)
+        .set({
+          status: "sent",
+          sentAt: new Date(),
+          durationMs: Date.now() - sendStart,
+        })
+        .where(inArray(emailSendLog.id, [logId]));
+    } catch (err) {
+      logger.error("graph_email.email_send_log_success_update_failed", {
+        logId,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   // Graph's /me/sendMail returns 202 Accepted with no body. We need to walk
   // Sent Items by subject + recipient, polling briefly until it shows up.
@@ -89,6 +194,21 @@ export async function sendEmailAndTrack(args: {
     to: args.to,
     subject: args.subject,
   });
+
+  // Backfill the Graph message id on the email_send_log row (best-effort).
+  if (logId && sent?.id) {
+    try {
+      await db
+        .update(emailSendLog)
+        .set({ graphMessageId: sent.id })
+        .where(inArray(emailSendLog.id, [logId]));
+    } catch (err) {
+      logger.error("graph_email.email_send_log_message_id_update_failed", {
+        logId,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   const inserted = await db
     .insert(activities)

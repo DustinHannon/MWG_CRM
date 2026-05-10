@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { emailSendLog } from "@/db/schema/email-send-log";
 import { leads } from "@/db/schema/leads";
 import {
   campaignRecipients,
@@ -12,6 +13,7 @@ import {
 } from "@/db/schema/marketing-lists";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingSuppressions } from "@/db/schema/marketing-events";
+import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
 import { env } from "@/lib/env";
 import { ValidationError } from "@/lib/errors";
@@ -19,6 +21,77 @@ import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { withRetry } from "@/lib/marketing/with-retry";
 import { getSendGrid } from "./client";
+
+const FEATURE_TEST_SEND = "marketing.test_send";
+const FEATURE_CAMPAIGN_SEND = "marketing.campaign_send";
+
+/**
+ * Best-effort write of a marketing send failure into `email_send_log`. The
+ * admin email-failures dashboard reads this table; without these rows,
+ * SendGrid send rejections would be invisible to admins. Never blocks the
+ * caller's primary code path.
+ */
+async function logMarketingSendFailure(args: {
+  feature: string;
+  featureRecordId: string | null;
+  fromUserId: string | null;
+  fromEmail: string;
+  toEmail: string;
+  subject: string;
+  errorCode: string;
+  errorMessage: string;
+  httpStatus: number | null;
+  durationMs: number;
+}): Promise<void> {
+  try {
+    let fromUserId = args.fromUserId;
+    let fromUserEmailSnapshot = args.fromEmail;
+    // email_send_log.fromUserId is NOT NULL with FK to users(id). If we
+    // don't have a real user id (e.g. webhook-only test send through an
+    // API key), fall back to looking up an admin tied to the from-email
+    // domain. As a last resort, drop the log write — the structured
+    // logger.error below preserves the failure trail.
+    if (!fromUserId) {
+      const [u] = await db
+        .select({ id: users.id, email: users.email })
+        .from(users)
+        .where(eq(users.email, args.fromEmail))
+        .limit(1);
+      if (u) {
+        fromUserId = u.id;
+        fromUserEmailSnapshot = u.email;
+      }
+    }
+    if (!fromUserId) {
+      logger.error("marketing.email_send_log.skipped_no_user", {
+        feature: args.feature,
+        fromEmail: args.fromEmail,
+        toEmail: args.toEmail,
+      });
+      return;
+    }
+    await db.insert(emailSendLog).values({
+      fromUserId,
+      fromUserEmailSnapshot,
+      toEmail: args.toEmail,
+      feature: args.feature,
+      featureRecordId: args.featureRecordId,
+      subject: args.subject,
+      hasAttachments: false,
+      attachmentCount: 0,
+      status: "failed",
+      errorCode: args.errorCode,
+      errorMessage: args.errorMessage,
+      httpStatus: args.httpStatus,
+      durationMs: args.durationMs,
+    });
+  } catch (err) {
+    logger.error("marketing.email_send_log.insert_failed", {
+      feature: args.feature,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
 
 /**
  * Phase 21 — SendGrid send pipeline.
@@ -206,9 +279,15 @@ export async function sendCampaign(
   }
 
   let totalAccepted = 0;
+  // Track the slice currently in flight so the outer catch can write a
+  // representative `email_send_log` row for the failing batch.
+  let failingSlice: RecipientCandidate[] | null = null;
+  const batchStart = { ts: Date.now() };
   try {
     for (let i = 0; i < candidateRows.length; i += BATCH_SIZE) {
       const slice = candidateRows.slice(i, i + BATCH_SIZE);
+      failingSlice = slice;
+      batchStart.ts = Date.now();
       const acceptedInBatch = await sendBatch({
         campaign,
         template,
@@ -216,6 +295,7 @@ export async function sendCampaign(
         recipientByLead,
       });
       totalAccepted += acceptedInBatch;
+      failingSlice = null;
 
       // Bump totalSent atomically per batch so the realtime UI shows
       // progress. This is independent of webhook-driven `total_delivered`
@@ -235,6 +315,39 @@ export async function sendCampaign(
       batchId,
       errorMessage,
     });
+
+    // Best-effort: surface the SendGrid API rejection on the admin
+    // failures dashboard. ONE row per failed API call (per-recipient
+    // delivery is tracked via marketing_email_events from the webhook).
+    if (failingSlice && failingSlice.length > 0) {
+      const sgErr = err as {
+        code?: number;
+        response?: { body?: unknown };
+      };
+      const detail = readSendGridErrorDetail(sgErr.response?.body);
+      const httpStatus =
+        typeof sgErr.code === "number" ? sgErr.code : null;
+      const headerEmail =
+        failingSlice.length > 1
+          ? `${failingSlice[0].email} (+${failingSlice.length - 1} more)`
+          : failingSlice[0].email;
+      await logMarketingSendFailure({
+        feature: FEATURE_CAMPAIGN_SEND,
+        featureRecordId: campaign.id,
+        fromUserId: campaign.createdById,
+        fromEmail: campaign.fromEmail,
+        toEmail: headerEmail,
+        subject: template.subject,
+        errorCode:
+          httpStatus !== null
+            ? `SENDGRID_${httpStatus}`
+            : "SENDGRID_ERROR",
+        errorMessage: detail ?? errorMessage,
+        httpStatus,
+        durationMs: Date.now() - batchStart.ts,
+      });
+    }
+
     await db
       .update(marketingCampaigns)
       .set({
@@ -317,6 +430,17 @@ export interface SendTestEmailRawInput {
   subject: string;
   html: string;
   fromName: string;
+  /**
+   * Optional — when provided, terminal SendGrid failures are written to
+   * `email_send_log` so they surface on the admin failures dashboard.
+   * Omit only when no user context is available.
+   */
+  actorUserId?: string;
+  /**
+   * Optional — opaque pointer to the related entity (template id,
+   * campaign id) for cross-reference in the failures dashboard.
+   */
+  featureRecordId?: string;
 }
 
 export interface SendTestEmailTemplateInput {
@@ -372,6 +496,8 @@ export async function sendTestEmail(
       subject: tpl.subject,
       html: tpl.renderedHtml,
       fromName: input.fromName ?? env.SENDGRID_FROM_NAME_DEFAULT,
+      actorUserId: input.actorUserId,
+      featureRecordId: input.templateId,
     });
   }
   return sendRawTest(input);
@@ -404,52 +530,85 @@ async function sendRawTest(
       sandbox_mode: { enable: env.SENDGRID_SANDBOX },
     },
   };
-  const messageId = await withRetry(async () => {
-    // The sendgrid types want a `MailDataRequired` shape from a
-    // helper package that isn't shipped at runtime. Cast to the
-    // library's expected parameter without smuggling `any` into the
-    // module — `Parameters<typeof sgMail.send>[0]` infers the right
-    // structural type and gives us a precise downcast.
-    type SgSendResult = Awaited<ReturnType<typeof sgMail.send>>;
-    let response: SgSendResult[0];
-    try {
-      [response] = await sgMail.send(
-        payload as unknown as Parameters<typeof sgMail.send>[0],
-      );
-    } catch (err) {
-      // @sendgrid/mail throws on 4xx/5xx; the bare error message is
-      // just the HTTP statusText ("Bad Request"), which is opaque to
-      // both the user and the operator. Pull the structured detail
-      // out of `err.response.body.errors[]` so the log line — and the
-      // user-visible publicMessage on a 4xx — points at the actual
-      // reason (e.g. "content must contain at least one character").
-      const sgErr = err as {
-        code?: number;
-        response?: { body?: unknown };
-        message?: string;
-      };
-      const detail = readSendGridErrorDetail(sgErr.response?.body);
-      const status = typeof sgErr.code === "number" ? sgErr.code : null;
-      logger.warn("sendgrid.send.failed", {
-        statusCode: status,
-        detail,
-        rawMessage: sgErr.message,
-      });
-      if (status !== null && status >= 400 && status < 500 && status !== 429) {
-        throw new ValidationError(
-          detail
-            ? `SendGrid rejected the message: ${detail}`
-            : "SendGrid rejected the message. Check the recipient address and template content.",
+  const sendStart = Date.now();
+  let messageId: string;
+  try {
+    messageId = await withRetry(async () => {
+      // The sendgrid types want a `MailDataRequired` shape from a
+      // helper package that isn't shipped at runtime. Cast to the
+      // library's expected parameter without smuggling `any` into the
+      // module — `Parameters<typeof sgMail.send>[0]` infers the right
+      // structural type and gives us a precise downcast.
+      type SgSendResult = Awaited<ReturnType<typeof sgMail.send>>;
+      let response: SgSendResult[0];
+      try {
+        [response] = await sgMail.send(
+          payload as unknown as Parameters<typeof sgMail.send>[0],
         );
+      } catch (err) {
+        // @sendgrid/mail throws on 4xx/5xx; the bare error message is
+        // just the HTTP statusText ("Bad Request"), which is opaque to
+        // both the user and the operator. Pull the structured detail
+        // out of `err.response.body.errors[]` so the log line — and the
+        // user-visible publicMessage on a 4xx — points at the actual
+        // reason (e.g. "content must contain at least one character").
+        const sgErr = err as {
+          code?: number;
+          response?: { body?: unknown };
+          message?: string;
+        };
+        const detail = readSendGridErrorDetail(sgErr.response?.body);
+        const status = typeof sgErr.code === "number" ? sgErr.code : null;
+        logger.warn("sendgrid.send.failed", {
+          statusCode: status,
+          detail,
+          rawMessage: sgErr.message,
+        });
+        if (status !== null && status >= 400 && status < 500 && status !== 429) {
+          throw new ValidationError(
+            detail
+              ? `SendGrid rejected the message: ${detail}`
+              : "SendGrid rejected the message. Check the recipient address and template content.",
+          );
+        }
+        // Let withRetry decide on 5xx / 429 / network errors.
+        throw err;
       }
-      // Let withRetry decide on 5xx / 429 / network errors.
-      throw err;
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw asSendGridError(response.statusCode, response.body);
-    }
-    return readMessageIdHeader(response.headers) ?? "";
-  });
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw asSendGridError(response.statusCode, response.body);
+      }
+      return readMessageIdHeader(response.headers) ?? "";
+    });
+  } catch (err) {
+    // Terminal failure (4xx ValidationError or retries-exhausted 5xx).
+    // Best-effort log to email_send_log so admins see it on the
+    // failures dashboard.
+    const sgErr = err as {
+      code?: number;
+      response?: { body?: unknown };
+      message?: string;
+    };
+    const detail = readSendGridErrorDetail(sgErr.response?.body);
+    const httpStatus = typeof sgErr.code === "number" ? sgErr.code : null;
+    await logMarketingSendFailure({
+      feature: FEATURE_TEST_SEND,
+      featureRecordId: input.featureRecordId ?? null,
+      fromUserId: input.actorUserId ?? null,
+      fromEmail,
+      toEmail: input.recipientEmail,
+      subject: input.subject,
+      errorCode:
+        httpStatus !== null
+          ? `SENDGRID_${httpStatus}`
+          : "SENDGRID_ERROR",
+      errorMessage:
+        detail ??
+        (err instanceof Error ? err.message : String(err)),
+      httpStatus,
+      durationMs: Date.now() - sendStart,
+    });
+    throw err;
+  }
   return { messageId };
 }
 

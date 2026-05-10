@@ -111,6 +111,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       subject: parsed.data.subject,
       html: parsed.data.html,
       fromName: env.SENDGRID_FROM_NAME_DEFAULT,
+      actorUserId: user.id,
     });
 
     await writeAudit({

@@ -649,6 +649,8 @@ export async function sendCampaignTestAction(input: {
         subject: tpl.subject,
         html: tpl.html,
         fromName: campaign.fromName,
+        actorUserId: user.id,
+        featureRecordId: parsed.data.id,
       });
 
       await writeAudit({
