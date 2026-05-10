@@ -27,6 +27,7 @@ import {
   Home,
   Key,
   LayoutDashboard,
+  Mail,
   MailWarning,
   ScrollText,
   Settings,
@@ -47,6 +48,7 @@ export const ICON_KEYS = [
   "Target",
   "CheckSquare",
   "BarChart3",
+  "Mail",
   "Settings",
   // Admin nav
   "Home",
@@ -73,6 +75,7 @@ export const ICON_MAP: Record<IconKey, LucideIcon> = {
   Target,
   CheckSquare,
   BarChart3,
+  Mail,
   Settings,
   Home,
   UserCog,

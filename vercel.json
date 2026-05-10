@@ -4,6 +4,7 @@
     { "path": "/api/cron/saved-search-digest", "schedule": "0 14 * * *" },
     { "path": "/api/cron/rescore-leads", "schedule": "0 9 * * *" },
     { "path": "/api/cron/purge-archived", "schedule": "0 10 * * *" },
-    { "path": "/api/cron/retention-prune", "schedule": "0 8 * * *" }
+    { "path": "/api/cron/retention-prune", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/marketing-sync-suppressions", "schedule": "0 * * * *" }
   ]
 }

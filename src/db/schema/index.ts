@@ -16,3 +16,8 @@ export * from "./lead-scoring";
 export * from "./saved-reports";
 export * from "./api-keys";
 export * from "./email-send-log";
+// Phase 19 — Marketing email subsystem (SendGrid + Unlayer)
+export * from "./marketing-templates";
+export * from "./marketing-lists";
+export * from "./marketing-campaigns";
+export * from "./marketing-events";

@@ -112,6 +112,10 @@ export const permissions = pgTable("permissions", {
   // are tracked in ROADMAP — schema landed first so the column is
   // available for future work.
   canViewTeamRecords: boolean("can_view_team_records").notNull().default(false),
+  // Phase 19 — gates the Marketing tab (templates, lists, campaigns,
+  // suppressions). Admin bypasses. Defaults to false; flip per user via
+  // /admin/users/<id>/permissions.
+  canManageMarketing: boolean("can_manage_marketing").notNull().default(false),
 });
 
 // =============================================================================

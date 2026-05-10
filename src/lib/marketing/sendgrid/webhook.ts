@@ -1,0 +1,361 @@
+import "server-only";
+import { EventWebhook, EventWebhookHeader } from "@sendgrid/eventwebhook";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@/db";
+import {
+  campaignRecipients,
+  marketingCampaigns,
+} from "@/db/schema/marketing-campaigns";
+import {
+  marketingEmailEvents,
+  marketingSuppressions,
+} from "@/db/schema/marketing-events";
+import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
+import { WebhookSignatureError } from "@/lib/marketing/errors";
+
+/**
+ * Phase 19 — SendGrid Event Webhook ingest.
+ *
+ * The webhook route handler does THREE things:
+ *   1. Verify the ECDSA signature against SENDGRID_WEBHOOK_PUBLIC_KEY.
+ *      Drop on mismatch — never trust unsigned events.
+ *   2. Append every event to `marketing_email_events` (forensic record).
+ *   3. Reconcile state on `marketing_campaign_recipients` and bump the
+ *      counters on `marketing_campaigns`.
+ *
+ * The reconcile step is best-effort. If a webhook fires before our send
+ * loop has inserted the recipient row (race), the event still lands in
+ * the events table and the periodic suppression sync cron will catch
+ * any state drift.
+ */
+
+const SendGridEventSchema = z.object({
+  email: z.string(),
+  timestamp: z.number(),
+  event: z.string(),
+  sg_message_id: z.string().optional(),
+  sg_event_id: z.string().optional(),
+  ip: z.string().optional(),
+  useragent: z.string().optional(),
+  url: z.string().optional(),
+  reason: z.string().optional(),
+  status: z.string().optional(),
+  type: z.string().optional(),
+  // custom_args we set on send so we can match the event back
+  campaign_id: z.string().optional(),
+  recipient_id: z.string().optional(),
+  lead_id: z.string().optional(),
+}).passthrough();
+
+export type SendGridEvent = z.infer<typeof SendGridEventSchema>;
+
+/**
+ * Verify the request signature using @sendgrid/eventwebhook. Throws
+ * `WebhookSignatureError` on any failure path so the route handler can
+ * map to a clean 401.
+ */
+export function verifySendGridSignature(
+  rawBody: string,
+  signatureHeader: string | null,
+  timestampHeader: string | null,
+): void {
+  if (!signatureHeader || !timestampHeader) {
+    throw new WebhookSignatureError("missing_headers");
+  }
+  const publicKey = env.SENDGRID_WEBHOOK_PUBLIC_KEY;
+  if (!publicKey) {
+    throw new WebhookSignatureError("no_public_key");
+  }
+  // The library accepts the raw base64 form returned by SendGrid's
+  // signed-webhook settings endpoint. Some envs strip the PEM markers
+  // — `convertPublicKeyToECDSA` handles both.
+  const ew = new EventWebhook();
+  let ec: ReturnType<typeof ew.convertPublicKeyToECDSA>;
+  try {
+    ec = ew.convertPublicKeyToECDSA(publicKey);
+  } catch {
+    // Retry with PEM-wrapped form (workaround for known issue with
+    // raw-base64 inputs on some Node versions).
+    const wrapped = `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`;
+    ec = ew.convertPublicKeyToECDSA(wrapped);
+  }
+  const valid = ew.verifySignature(ec, rawBody, signatureHeader, timestampHeader);
+  if (!valid) throw new WebhookSignatureError("verify_failed");
+}
+
+/**
+ * Determine the SendGrid `Signature` and `Timestamp` headers. Header
+ * names are returned by the library so we don't bake the strings.
+ */
+export function readSignatureHeaders(headers: Headers): {
+  signature: string | null;
+  timestamp: string | null;
+} {
+  return {
+    signature: headers.get(EventWebhookHeader.SIGNATURE()),
+    timestamp: headers.get(EventWebhookHeader.TIMESTAMP()),
+  };
+}
+
+/**
+ * Parse the raw body as a JSON array of events. Keeps unknown event
+ * shapes — we still want to record them so we don't lose forensics.
+ */
+export function parseEvents(rawBody: string): SendGridEvent[] {
+  const parsed = JSON.parse(rawBody);
+  if (!Array.isArray(parsed)) {
+    throw new Error("SendGrid event payload must be an array");
+  }
+  return parsed.map((p) => {
+    const r = SendGridEventSchema.safeParse(p);
+    if (r.success) return r.data;
+    // Log + keep — every event still goes into the events table.
+    logger.warn("sendgrid.event.partial_parse", {
+      issues: r.error.issues.map((i) => i.path.join(".")),
+    });
+    return p as SendGridEvent;
+  });
+}
+
+/**
+ * Process one event:
+ *   1. Insert into marketing_email_events (always).
+ *   2. Lookup recipient by sg_message_id (or custom_args).
+ *   3. UPDATE campaign_recipients status / first*At / counters.
+ *   4. UPDATE campaign-level counter (atomic: total_X = total_X + 1).
+ *   5. For unsubscribe / spamreport / bounce: UPSERT into marketing_suppressions.
+ *
+ * Counter increments are scoped to "first time we see this transition"
+ * via the recipient status flag, so duplicate webhook deliveries
+ * (SendGrid retries) don't double-count.
+ */
+export async function processEvent(event: SendGridEvent): Promise<void> {
+  const eventType = event.event;
+  const eventTimestamp = new Date(event.timestamp * 1000);
+
+  // Resolve recipient — by custom_args first (most reliable), fall back
+  // to sg_message_id lookup.
+  let recipientId: string | null = event.recipient_id ?? null;
+  let leadId: string | null = event.lead_id ?? null;
+  let campaignId: string | null = event.campaign_id ?? null;
+
+  if (!recipientId && event.sg_message_id) {
+    const [match] = await db
+      .select({
+        id: campaignRecipients.id,
+        campaignId: campaignRecipients.campaignId,
+        leadId: campaignRecipients.leadId,
+      })
+      .from(campaignRecipients)
+      .where(sql`${campaignRecipients.sendgridMessageId} = ${event.sg_message_id}`)
+      .limit(1);
+    if (match) {
+      recipientId = match.id;
+      campaignId = campaignId ?? match.campaignId;
+      leadId = leadId ?? match.leadId;
+    }
+  }
+
+  // 1. Forensic record (always).
+  await db.insert(marketingEmailEvents).values({
+    recipientId,
+    leadId,
+    campaignId,
+    email: event.email,
+    sendgridMessageId: event.sg_message_id ?? null,
+    eventType,
+    eventTimestamp,
+    ipAddress: event.ip ?? null,
+    userAgent: event.useragent ?? null,
+    url: event.url ?? null,
+    reason: event.reason ?? null,
+    rawPayload: event as unknown as object,
+  });
+
+  if (!recipientId || !campaignId) {
+    // Unmatched event — common for legacy sg_message_ids or transactional
+    // sends that wandered into the marketing webhook. Logged in the
+    // events table; no further action.
+    return;
+  }
+
+  // 2 & 3. Per-event reconcile.
+  const reconciledCounter = await reconcileRecipientAndCampaign(
+    recipientId,
+    campaignId,
+    eventType,
+    eventTimestamp,
+    event,
+  );
+
+  // 4. Suppressions for terminal events.
+  if (eventType === "unsubscribe" || eventType === "group_unsubscribe") {
+    await upsertSuppression(event.email, "unsubscribe", event.reason ?? null);
+  } else if (eventType === "bounce") {
+    // SendGrid's `bounce` event has type='hard'|'soft'|'block' in `type`.
+    const sgType = event.type;
+    if (sgType === "blocked") {
+      await upsertSuppression(event.email, "block", event.reason ?? null);
+    } else if (sgType === "bounce") {
+      await upsertSuppression(event.email, "bounce", event.reason ?? null);
+    } else {
+      await upsertSuppression(event.email, "bounce", event.reason ?? null);
+    }
+  } else if (eventType === "spamreport") {
+    await upsertSuppression(event.email, "spamreport", null);
+  } else if (eventType === "dropped") {
+    // Dropped events from Invalid Email reach the suppression list as
+    // `invalid` so future sends to the same address skip immediately.
+    await upsertSuppression(event.email, "invalid", event.reason ?? null);
+  }
+
+  if (!reconciledCounter) {
+    logger.info("sendgrid.event.no_counter_change", {
+      eventType,
+      campaignId,
+      recipientId,
+    });
+  }
+}
+
+async function reconcileRecipientAndCampaign(
+  recipientId: string,
+  campaignId: string,
+  eventType: string,
+  ts: Date,
+  event: SendGridEvent,
+): Promise<boolean> {
+  // Map event → recipient updates. Each branch is idempotent — repeats
+  // of the same event (SendGrid retries on non-2xx) don't double-bump
+  // counters because the WHERE predicate filters out already-applied
+  // states.
+  const tsSql = sql`${ts.toISOString()}::timestamptz`;
+  let counterField: keyof typeof marketingCampaigns | null = null;
+
+  if (eventType === "delivered") {
+    const updated = await db
+      .update(campaignRecipients)
+      .set({ status: "delivered", deliveredAt: ts })
+      .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.status} = 'sent'`)
+      .returning({ id: campaignRecipients.id });
+    if (updated.length > 0) counterField = "totalDelivered";
+  } else if (eventType === "open") {
+    const updated = await db.execute(sql`
+      UPDATE marketing_campaign_recipients
+      SET first_opened_at = COALESCE(first_opened_at, ${tsSql}),
+          last_opened_at = ${tsSql},
+          open_count = open_count + 1
+      WHERE id = ${recipientId}
+      RETURNING (first_opened_at = ${tsSql})::int AS first_open_flag
+    `);
+    const rows = (reconcileResultRows(updated) as unknown[]) as Array<{
+      first_open_flag?: number | string | null;
+    }>;
+    if (rows.length > 0 && rows[0]?.first_open_flag) counterField = "totalOpened";
+  } else if (eventType === "click") {
+    const updated = await db.execute(sql`
+      UPDATE marketing_campaign_recipients
+      SET first_clicked_at = COALESCE(first_clicked_at, ${tsSql}),
+          last_clicked_at = ${tsSql},
+          click_count = click_count + 1
+      WHERE id = ${recipientId}
+      RETURNING (first_clicked_at = ${tsSql})::int AS first_click_flag
+    `);
+    const rows = (reconcileResultRows(updated) as unknown[]) as Array<{
+      first_click_flag?: number | string | null;
+    }>;
+    if (rows.length > 0 && rows[0]?.first_click_flag) counterField = "totalClicked";
+  } else if (eventType === "bounce") {
+    const updated = await db
+      .update(campaignRecipients)
+      .set({
+        status: "bounced",
+        bouncedAt: ts,
+        bounceReason: event.reason ?? null,
+      })
+      .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.status} NOT IN ('bounced','dropped','blocked')`)
+      .returning({ id: campaignRecipients.id });
+    if (updated.length > 0) counterField = "totalBounced";
+  } else if (eventType === "dropped") {
+    await db
+      .update(campaignRecipients)
+      .set({ status: "dropped", bounceReason: event.reason ?? null })
+      .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.status} NOT IN ('bounced','dropped','blocked')`);
+  } else if (eventType === "deferred") {
+    await db
+      .update(campaignRecipients)
+      .set({ status: "deferred" })
+      .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.status} = 'sent'`);
+  } else if (eventType === "unsubscribe" || eventType === "group_unsubscribe") {
+    const updated = await db
+      .update(campaignRecipients)
+      .set({ status: "unsubscribed", unsubscribedAt: ts })
+      .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.unsubscribedAt} IS NULL`)
+      .returning({ id: campaignRecipients.id });
+    if (updated.length > 0) counterField = "totalUnsubscribed";
+  } else if (eventType === "spamreport") {
+    await db
+      .update(campaignRecipients)
+      .set({ status: "spamreport" })
+      .where(sql`${campaignRecipients.id} = ${recipientId}`);
+  }
+
+  if (counterField) {
+    const fieldNameSql = sql.raw(snakeCaseCol(counterField));
+    await db.execute(sql`
+      UPDATE marketing_campaigns
+      SET ${fieldNameSql} = ${fieldNameSql} + 1, updated_at = now()
+      WHERE id = ${campaignId}
+    `);
+    return true;
+  }
+  return false;
+}
+
+async function upsertSuppression(
+  email: string,
+  type: "unsubscribe" | "bounce" | "block" | "spamreport" | "invalid",
+  reason: string | null,
+): Promise<void> {
+  await db
+    .insert(marketingSuppressions)
+    .values({ email, suppressionType: type, reason })
+    .onConflictDoUpdate({
+      target: marketingSuppressions.email,
+      set: {
+        suppressionType: type,
+        reason,
+        syncedAt: sql`now()`,
+      },
+    });
+}
+
+function snakeCaseCol(camel: string): string {
+  // Drizzle TS keys → SQL column names. Only used for the campaign
+  // counter columns which have predictable shapes.
+  const map: Record<string, string> = {
+    totalSent: "total_sent",
+    totalDelivered: "total_delivered",
+    totalOpened: "total_opened",
+    totalClicked: "total_clicked",
+    totalBounced: "total_bounced",
+    totalUnsubscribed: "total_unsubscribed",
+  };
+  return map[camel] ?? camel.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+}
+
+/**
+ * Drizzle's `db.execute(sql\`…\`)` returns a driver-specific shape (rows
+ * via `.rows` for postgres-js; iterable for some drivers). Normalize.
+ */
+function reconcileResultRows(result: unknown): unknown[] {
+  if (!result) return [];
+  if (Array.isArray(result)) return result;
+  if (typeof result === "object" && result !== null && "rows" in result) {
+    const r = (result as { rows: unknown }).rows;
+    if (Array.isArray(r)) return r;
+  }
+  return [];
+}

@@ -62,7 +62,8 @@ export type PermissionKey =
   | "canImport"
   | "canExport"
   | "canSendEmail"
-  | "canViewReports";
+  | "canViewReports"
+  | "canManageMarketing";
 
 /**
  * Admin bypasses all per-feature permission checks.
@@ -177,6 +178,7 @@ export async function getPermissions(
       canExport: false,
       canSendEmail: true,
       canViewReports: true,
+      canManageMarketing: false,
     };
   }
   const r = row[0];
@@ -189,5 +191,6 @@ export async function getPermissions(
     canExport: r.canExport,
     canSendEmail: r.canSendEmail,
     canViewReports: r.canViewReports,
+    canManageMarketing: r.canManageMarketing,
   };
 }

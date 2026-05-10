@@ -64,13 +64,22 @@ function buildCspHeader(nonce: string): string {
   // react-hook-form inject styles at runtime; nonce-tagging every one
   // would require deep framework integration. Documented in
   // docs/architecture/SECURITY-NOTES.md.
+  //
+  // Phase 19 — Unlayer (react-email-editor) loads its editor JS bundle
+  // from editor.unlayer.com and renders the editor inside an iframe
+  // (frame-src). The editor calls api.unlayer.com for asset uploads and
+  // template gallery. img-src includes *.unlayer.com for stock images
+  // and editor previews. SendGrid (api.sendgrid.com) is reached
+  // server-to-server only; the connect-src entry stays defensive in
+  // case a future admin debug page calls it directly.
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval'`,
-    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval' https://editor.unlayer.com`,
+    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://editor.unlayer.com`,
     "font-src 'self' https://fonts.gstatic.com https://fonts.scalar.com data:",
-    "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://graph.microsoft.com",
-    "connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com https://*.supabase.co wss://*.supabase.co",
+    "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://graph.microsoft.com https://*.unlayer.com",
+    "connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com https://*.supabase.co wss://*.supabase.co https://api.unlayer.com https://api.sendgrid.com",
+    "frame-src https://editor.unlayer.com",
     "frame-ancestors 'none'",
     "form-action 'self' https://login.microsoftonline.com",
     "base-uri 'self'",

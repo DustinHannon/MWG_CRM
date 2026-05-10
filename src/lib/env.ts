@@ -61,6 +61,29 @@ const envSchema = z.object({
   VERCEL_URL: z.string().optional(),
   VERCEL_ENV: z.enum(["production", "preview", "development"]).optional(),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+
+  // Phase 19 — SendGrid marketing email. Optional in dev so a missing key
+  // just disables marketing send paths (the UI shows a banner). Production
+  // boot has all four set.
+  SENDGRID_API_KEY: z.string().optional(),
+  SENDGRID_WEBHOOK_PUBLIC_KEY: z.string().optional(),
+  SENDGRID_FROM_DOMAIN: z.string().default("morganwhite.com"),
+  SENDGRID_FROM_NAME_DEFAULT: z.string().default("Morgan White Group"),
+  SENDGRID_SANDBOX: z.coerce.boolean().default(false),
+  // ASM unsubscribe group used as asm.group_id for every marketing send.
+  // Created via /v3/asm/groups; id is per-account.
+  SENDGRID_UNSUBSCRIBE_GROUP_ID: z.coerce.number().int().optional(),
+
+  // Phase 19 — Unlayer (react-email-editor). Project id is a tenant
+  // identifier and is exposed to the client; the API key is server-only
+  // and only used for backend export-to-html fallback.
+  UNLAYER_PROJECT_ID: z.coerce.number().int().optional(),
+  NEXT_PUBLIC_UNLAYER_PROJECT_ID: z.coerce.number().int().optional(),
+  UNLAYER_API_KEY: z.string().optional(),
+
+  // Phase 19 — Template soft-lock for collaborative editing.
+  MARKETING_LOCK_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(60),
+  MARKETING_LOCK_HEARTBEAT_SECONDS: z.coerce.number().int().positive().default(30),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -90,3 +113,12 @@ export const entraConfigured =
 
 /** Tenant ID baked into the issuer URL (used in error messages and dev tooling). */
 export const MWG_TENANT_ID = "ae128315-4515-4382-89e8-094e98d313bc";
+
+/** True when the SendGrid marketing pipeline has every key it needs. */
+export const sendgridConfigured =
+  Boolean(env.SENDGRID_API_KEY) &&
+  Boolean(env.SENDGRID_WEBHOOK_PUBLIC_KEY) &&
+  Boolean(env.SENDGRID_UNSUBSCRIBE_GROUP_ID);
+
+/** True when Unlayer is configured for client-side embedding. */
+export const unlayerConfigured = Boolean(env.NEXT_PUBLIC_UNLAYER_PROJECT_ID);

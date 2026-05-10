@@ -19,6 +19,16 @@ const APP_NAV: NavItem[] = [
   { label: "Reports", href: "/reports", iconKey: "BarChart3" },
 ];
 
+// Phase 19 — Marketing nav. Inserted after Reports for users with
+// canManageMarketing or admin. The page-level gate in
+// /marketing/layout.tsx is the source of truth — this nav entry just
+// hides the link from non-permitted users so it doesn't bounce.
+const MARKETING_NAV_ITEM: NavItem = {
+  label: "Marketing",
+  href: "/marketing",
+  iconKey: "Mail",
+};
+
 export default async function AppLayout({
   children,
 }: {
@@ -35,13 +45,20 @@ export default async function AppLayout({
       ? APP_NAV
       : APP_NAV.filter((item) => !("href" in item) || item.href !== "/dashboard");
 
+  // Phase 19 — append Marketing for users with canManageMarketing (or admin).
+  // The /marketing layout double-checks; this just hides the link.
+  const navWithMarketing: NavItem[] =
+    user.isAdmin || perms.canManageMarketing
+      ? [...baseNav, MARKETING_NAV_ITEM]
+      : baseNav;
+
   const nav: NavItem[] = user.isAdmin
     ? [
-        ...baseNav,
+        ...navWithMarketing,
         { divider: true },
         { label: "Admin", href: "/admin", iconKey: "Settings" },
       ]
-    : baseNav;
+    : navWithMarketing;
   return (
     <RealtimeProvider userId={user.id}>
       {/*
