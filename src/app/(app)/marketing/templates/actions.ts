@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
+import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -332,6 +333,40 @@ export async function archiveTemplateAction(
     if (existing.isDeleted) {
       // Idempotent — already archived.
       return;
+    }
+
+    // Phase 24 §6.5.2 — refuse to archive a template referenced by any
+    // active (scheduled or sending) campaign. Snapshot the blocking
+    // campaigns so the UI can link the user to them. The block is
+    // audited as a separate event so the forensic trail captures the
+    // attempt even though the row is unchanged.
+    const blockingCampaigns = await db
+      .select({
+        id: marketingCampaigns.id,
+        name: marketingCampaigns.name,
+        status: marketingCampaigns.status,
+      })
+      .from(marketingCampaigns)
+      .where(
+        and(
+          eq(marketingCampaigns.templateId, parsed.data.id),
+          eq(marketingCampaigns.isDeleted, false),
+          inArray(marketingCampaigns.status, ["scheduled", "sending"]),
+        ),
+      )
+      .limit(20);
+    if (blockingCampaigns.length > 0) {
+      await writeAudit({
+        actorId: user.id,
+        action: MARKETING_AUDIT_EVENTS.TEMPLATE_DELETE_BLOCKED,
+        targetType: "marketing_template",
+        targetId: parsed.data.id,
+        after: { blockingCampaigns },
+      });
+      throw new ConflictError(
+        `Cannot archive: ${blockingCampaigns.length} active campaign(s) reference this template. Cancel or complete them first.`,
+        { code: "TEMPLATE_IN_USE", references: blockingCampaigns },
+      );
     }
 
     await db

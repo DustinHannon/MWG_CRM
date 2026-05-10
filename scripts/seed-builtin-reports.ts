@@ -256,6 +256,62 @@ const REPORTS: BuiltinReport[] = [
     metrics: [{ fn: "count", alias: "count" }],
     visualization: "bar",
   },
+  // ----- Phase 24 — second wave of marketing/email built-ins -----
+  {
+    name: "Template Usage",
+    description:
+      "Email templates ranked by number of campaigns that used them and total recipients reached. Use to spot templates that are over-used or never-used.",
+    entityType: "marketing_campaign",
+    fields: [],
+    filters: {},
+    groupBy: ["template_id"],
+    metrics: [
+      { fn: "count", alias: "campaign_count" },
+      { fn: "sum", field: "total_recipients", alias: "total_recipients" },
+      { fn: "sum", field: "total_sent", alias: "total_sent" },
+      { fn: "sum", field: "total_opened", alias: "total_opened" },
+    ],
+    visualization: "table",
+  },
+  {
+    name: "Sender Performance",
+    description:
+      "Campaigns grouped by the sender (from_email). Shows total sent, delivered, and opened per sender so you can compare which senders get higher engagement.",
+    entityType: "marketing_campaign",
+    fields: [],
+    filters: { status: { eq: "sent" } },
+    groupBy: ["from_email"],
+    metrics: [
+      { fn: "count", alias: "campaigns_sent" },
+      { fn: "sum", field: "total_sent", alias: "total_sent" },
+      { fn: "sum", field: "total_delivered", alias: "total_delivered" },
+      { fn: "sum", field: "total_opened", alias: "total_opened" },
+      { fn: "sum", field: "total_clicked", alias: "total_clicked" },
+    ],
+    visualization: "table",
+  },
+  {
+    name: "Click Engagement by Campaign",
+    description:
+      "Click events from the SendGrid event stream grouped by campaign. Use to compare which campaigns drive the most click-throughs from recipients who opened.",
+    entityType: "marketing_email_event",
+    fields: [],
+    filters: { event_type: { eq: "click" } },
+    groupBy: ["campaign_id"],
+    metrics: [{ fn: "count", alias: "clicks" }],
+    visualization: "bar",
+  },
+  {
+    name: "Bounce Reasons",
+    description:
+      "Top reasons SendGrid bounced or dropped email. Useful when deliverability dips — surfaces whether the issue is sender reputation, recipient mailbox state, or content filtering.",
+    entityType: "marketing_email_event",
+    fields: [],
+    filters: { event_type: { in: ["bounce", "dropped", "blocked"] } },
+    groupBy: ["reason"],
+    metrics: [{ fn: "count", alias: "occurrences" }],
+    visualization: "bar",
+  },
 ];
 
 async function ensureSystemUser(): Promise<string> {

@@ -725,6 +725,11 @@ async function insertRecipientRows(
     // `dropped` (with bounceReason) if SendGrid rejects the batch.
     // Previously this insert wrote `sent` upfront which left
     // recipients incorrectly stamped if the subsequent send failed.
+    //
+    // Phase 24 §6.5.1 — snapshot the merge data at queue-time. Once
+    // queued, subsequent edits to the source lead (rename, company
+    // change) do NOT affect what this recipient receives. The send
+    // batch reads from snapshot_merge_data.
     const inserted = await db
       .insert(campaignRecipients)
       .values(
@@ -733,6 +738,7 @@ async function insertRecipientRows(
           leadId: c.leadId,
           email: c.email,
           status: "queued" as const,
+          snapshotMergeData: buildMergeData(c),
         })),
       )
       .returning({

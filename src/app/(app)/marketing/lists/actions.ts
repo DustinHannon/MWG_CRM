@@ -5,12 +5,14 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
+import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import {
   marketingListMembers,
   marketingLists,
 } from "@/db/schema/marketing-lists";
 import { writeAudit } from "@/lib/audit";
 import {
+  ConflictError,
   ForbiddenError,
   NotFoundError,
   ValidationError,
@@ -223,6 +225,38 @@ export async function deleteListAction(
       .limit(1);
     if (!existing || existing.isDeleted) {
       throw new NotFoundError("marketing list");
+    }
+
+    // Phase 24 §6.5.2 — refuse to archive a list referenced by any
+    // active (scheduled or sending) campaign. Mirrors the template
+    // delete-block; surfaces the blocking campaigns to the UI.
+    const blockingCampaigns = await db
+      .select({
+        id: marketingCampaigns.id,
+        name: marketingCampaigns.name,
+        status: marketingCampaigns.status,
+      })
+      .from(marketingCampaigns)
+      .where(
+        and(
+          eq(marketingCampaigns.listId, parsedId.data),
+          eq(marketingCampaigns.isDeleted, false),
+          inArray(marketingCampaigns.status, ["scheduled", "sending"]),
+        ),
+      )
+      .limit(20);
+    if (blockingCampaigns.length > 0) {
+      await writeAudit({
+        actorId: user.id,
+        action: MARKETING_AUDIT_EVENTS.LIST_DELETE_BLOCKED,
+        targetType: "marketing_list",
+        targetId: parsedId.data,
+        after: { blockingCampaigns },
+      });
+      throw new ConflictError(
+        `Cannot archive: ${blockingCampaigns.length} active campaign(s) reference this list. Cancel or complete them first.`,
+        { code: "LIST_IN_USE", references: blockingCampaigns },
+      );
     }
 
     await db

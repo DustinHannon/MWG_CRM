@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -154,6 +155,26 @@ export const campaignRecipients = pgTable(
     unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
+    /**
+     * Phase 24 §6.5.1 — snapshot of per-recipient merge fields captured
+     * at queue-time. The send loop reads this in preference to a fresh
+     * lead lookup so mid-send lead edits do not change later batches.
+     * Stored shape mirrors the SendGrid Dynamic Template substitution
+     * payload: { firstName, lastName, fullName, email, companyName,
+     * jobTitle, city, state }.
+     */
+    snapshotMergeData: jsonb("snapshot_merge_data"),
+    /**
+     * Phase 24 §6.5.1 — reserved for future per-recipient subject
+     * override. NULL means the SendGrid Dynamic Template's own subject
+     * is used.
+     */
+    snapshotSubject: text("snapshot_subject"),
+    /**
+     * Phase 24 §6.5.1 — reserved for future per-recipient preheader
+     * override. NULL means the template's preheader is used.
+     */
+    snapshotPreheader: text("snapshot_preheader"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

@@ -14,6 +14,11 @@ export const MARKETING_AUDIT_EVENTS = {
   TEMPLATE_CREATE: "marketing.template.create",
   TEMPLATE_UPDATE: "marketing.template.update",
   TEMPLATE_DELETE: "marketing.template.delete",
+  // Phase 24 §6.5.2 — deletion of a template referenced by an active
+  // (scheduled / sending) campaign is refused at the action layer.
+  // The block is forensic-grade: every attempt audits the campaigns
+  // that blocked it.
+  TEMPLATE_DELETE_BLOCKED: "marketing.template.delete_blocked",
   TEMPLATE_PUSHED_TO_SENDGRID: "marketing.template.pushed_to_sendgrid",
   TEMPLATE_TEST_SEND: "marketing.template.test_send",
   TEMPLATE_FORCE_UNLOCK: "marketing.template.force_unlock",
@@ -21,6 +26,9 @@ export const MARKETING_AUDIT_EVENTS = {
   LIST_CREATE: "marketing.list.create",
   LIST_UPDATE: "marketing.list.update",
   LIST_DELETE: "marketing.list.delete",
+  // Phase 24 §6.5.2 — list deletion blocked when referenced by an
+  // active (scheduled / sending) campaign.
+  LIST_DELETE_BLOCKED: "marketing.list.delete_blocked",
   LIST_REFRESH: "marketing.list.refresh",
   LIST_MEMBER_BULK_ADD: "marketing.list.member_bulk_add",
 
