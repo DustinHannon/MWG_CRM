@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
@@ -484,8 +484,15 @@ export async function sendCampaignNowAction(
         );
       }
 
-      // Atomic transition — the WHERE clause guards re-entry from a
-      // double-click sending two batches.
+      // Atomic claim — the WHERE clause guards BOTH:
+      // (a) double-click from the same user (the in-flight first
+      //     UPDATE has already flipped status to 'sending'),
+      // (b) race with /api/cron/marketing-process-scheduled-campaigns,
+      //     which uses the same conditional-UPDATE pattern on
+      //     status='scheduled'. If the cron grabs the row first, our
+      //     status moves from 'scheduled' to 'sending' and this
+      //     WHERE clause won't match — we throw ConflictError instead
+      //     of double-sending.
       const result = await db
         .update(marketingCampaigns)
         .set({
@@ -497,12 +504,20 @@ export async function sendCampaignNowAction(
           and(
             eq(marketingCampaigns.id, parsedId),
             eq(marketingCampaigns.isDeleted, false),
+            inArray(marketingCampaigns.status, ["draft", "scheduled"]),
           ),
         )
         .returning({ id: marketingCampaigns.id });
 
       if (result.length === 0) {
-        throw new NotFoundError("campaign");
+        // Either the campaign was deleted/aborted between the load
+        // and the atomic claim, or another worker (cron / concurrent
+        // user) already moved it past 'draft'/'scheduled'. Surface
+        // distinctly from "missing" so the UI can render a
+        // helpful retry-or-refresh message.
+        throw new ConflictError(
+          "Campaign is already being sent or is no longer eligible.",
+        );
       }
 
       await writeAudit({
