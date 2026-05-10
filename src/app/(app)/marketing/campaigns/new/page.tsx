@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 
 export const dynamic = "force-dynamic";
 
 export default function NewCampaignPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
+      <BreadcrumbsSetter crumbs={marketingCrumbs.campaignsNew()} />
       <Link
         href="/marketing/campaigns"
         className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"

@@ -2,10 +2,12 @@ import Link from "next/link";
 import { ChevronRight, Mail, Users, Send, Ban } from "lucide-react";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { marketingSuppressions } from "@/db/schema/marketing-events";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
+import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +71,7 @@ export default async function MarketingOverviewPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
+      <BreadcrumbsSetter crumbs={marketingCrumbs.index()} />
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Marketing</h1>
         <p className="mt-1 text-sm text-muted-foreground">

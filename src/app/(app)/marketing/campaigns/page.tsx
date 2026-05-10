@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
+import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import {
   marketingCampaigns,
 } from "@/db/schema/marketing-campaigns";
@@ -8,6 +9,7 @@ import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
+import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +43,7 @@ export default async function CampaignsPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
+      <BreadcrumbsSetter crumbs={marketingCrumbs.campaignsIndex()} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Campaigns</h1>
