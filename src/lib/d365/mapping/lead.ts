@@ -413,19 +413,25 @@ export function mapD365Lead(
   // `suspicious`. Verdict travels on the mapped payload under
   // `_qualityVerdict` (a `_`-prefixed virtual stripped by
   // commit-batch's cleanPayload step before Drizzle insert).
+  // Quality assessment uses RAW D365 values, not the mapped-and-defaulted
+  // values. The mapper defaults missing firstName to "Unknown" to satisfy
+  // the leads.first_name NOT NULL constraint — but `assessLeadQuality`
+  // would then see "Unknown" and (correctly) flag it as a placeholder.
+  // That's a false positive: a record with a real lastName + email but
+  // missing firstName isn't garbage. Pass the pre-default raw value.
   const quality = assessLeadQuality({
-    firstName: mapped.firstName,
-    lastName: mapped.lastName,
-    companyName: mapped.companyName,
-    email: mapped.email,
-    phone: mapped.phone,
-    mobilePhone: mapped.mobilePhone,
-    jobTitle: mapped.jobTitle,
-    description: mapped.description,
-    subject: mapped.subject,
+    firstName: parseString(raw.firstname),
+    lastName: parseString(raw.lastname),
+    companyName: parseString(raw.companyname),
+    email: parseString(raw.emailaddress1),
+    phone: parseString(raw.telephone1),
+    mobilePhone: parseString(raw.mobilephone),
+    jobTitle: parseString(raw.jobtitle),
+    description: parseString(raw.description),
+    subject: parseString(raw.subject),
     industry: mapped.industry,
-    city: mapped.city,
-    state: mapped.state,
+    city: parseString(raw.address1_city),
+    state: parseString(raw.address1_stateorprovince),
   });
   if (quality.verdict !== "clean") {
     for (const reason of quality.reasons) {

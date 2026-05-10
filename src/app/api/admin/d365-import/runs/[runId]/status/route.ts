@@ -181,6 +181,9 @@ function stringifyDetail(after: unknown): string | undefined {
     const s = JSON.stringify(after);
     return s.length > 500 ? `${s.slice(0, 497)}...` : s;
   } catch {
+    // JSON.stringify can throw on circular refs or BigInt — we don't
+    // need to fail the polling response over a malformed audit body.
+    // Return undefined so the UI just doesn't show the detail.
     return undefined;
   }
 }
@@ -199,7 +202,9 @@ function extractHaltReason(notes: string | null): string | null {
         return null;
       }
     } catch {
-      // Non-JSON line — skip.
+      // Non-JSON line in the notes stream — likely an old free-text
+      // entry from before the kind:halt/resume contract was enforced.
+      // Skip and continue scanning.
     }
   }
   return null;

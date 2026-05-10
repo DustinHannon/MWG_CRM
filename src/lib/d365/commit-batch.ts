@@ -6,6 +6,7 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { externalIds, importBatches, importRecords } from "@/db/schema/d365-imports";
 import { leads } from "@/db/schema/leads";
 import { writeAudit } from "@/lib/audit";
+import { ConflictError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { D365_AUDIT_EVENTS } from "./audit-events";
 import type { D365EntityType } from "./types";
@@ -171,16 +172,37 @@ async function commitOneRecord(
   actorId: string,
 ): Promise<CommitOutcome> {
   if (!rec.mappedPayload || typeof rec.mappedPayload !== "object") {
-    throw new Error("missing mappedPayload");
+    throw new ValidationError("missing mappedPayload", { recordId: rec.id });
   }
-  const payload = rec.mappedPayload as Record<string, unknown>;
-  // Strip mapper-only metadata keys before insert. Convention:
-  // anything `_`-prefixed in mappedPayload is mapper-only metadata
-  // (e.g. _meta, _parentEntityType, _parentSourceId, _attached) that
-  // commit-batch reads off `payload` but must not flow to Drizzle.
+  const wrapper = rec.mappedPayload as Record<string, unknown>;
+  // map-batch persists mappedPayload as `{ mapped, attached, customFields }`
+  // (see map-batch.ts). The actual insertable object lives at `wrapper.mapped`;
+  // `wrapper.attached` and `wrapper.customFields` are sibling metadata that
+  // must NOT flow to Drizzle. Defensive fallback: if upstream changes the
+  // shape and writes the insertable object directly at the top, we still
+  // unwrap correctly.
+  const mappedRaw =
+    wrapper.mapped && typeof wrapper.mapped === "object"
+      ? (wrapper.mapped as Record<string, unknown>)
+      : wrapper;
+
+  // Extract `_`-prefixed virtuals BEFORE strip — commit-batch reads the
+  // parent FK from these for the activity path.
+  const parentEntityType =
+    typeof mappedRaw._parentEntityType === "string"
+      ? (mappedRaw._parentEntityType as string)
+      : null;
+  const parentSourceId =
+    typeof mappedRaw._parentSourceId === "string"
+      ? (mappedRaw._parentSourceId as string)
+      : null;
+
+  // Strip every `_`-prefixed virtual (`_meta`, `_parentEntityType`,
+  // `_parentSourceId`, `_qualityVerdict`, `_qualityReasons`, etc.) before
+  // Drizzle insert.
   const cleanPayload: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(payload)) {
-    if (k.startsWith("_") || k === "attached") continue;
+  for (const [k, v] of Object.entries(mappedRaw)) {
+    if (k.startsWith("_")) continue;
     cleanPayload[k] = v;
   }
 
@@ -200,6 +222,7 @@ async function commitOneRecord(
         entityType,
         rec.sourceId,
         cleanPayload,
+        { entityType: parentEntityType, sourceId: parentSourceId },
         actorId,
       );
       if (!local) {
@@ -344,7 +367,12 @@ async function insertParentEntity(
     .values(clean)
     .returning({ id: table.id });
   const row = inserted[0] as { id: string } | undefined;
-  if (!row) throw new Error(`insert returned no row for ${entityType}`);
+  if (!row) {
+    throw new ConflictError(`insert returned no row for ${entityType}`, {
+      entityType,
+      sourceId,
+    });
+  }
   await upsertExternalId(tx, entityType, sourceId, row.id);
   return row.id;
 }
@@ -397,19 +425,15 @@ async function commitActivity(
   entityType: "annotation" | "task" | "phonecall" | "appointment" | "email",
   sourceId: string,
   payload: Record<string, unknown>,
+  parentRef: { entityType: string | null; sourceId: string | null },
   actorId: string,
 ): Promise<string | null> {
-  // Activity payloads carry the parent's local lookup keys via
-  // `_parentEntityType` / `_parentSourceId` set by Sub-agent B's
-  // mappers. We resolve those into a local FK via external_ids.
-  const parentEntityType =
-    typeof payload._parentEntityType === "string"
-      ? (payload._parentEntityType as string)
-      : null;
-  const parentSourceId =
-    typeof payload._parentSourceId === "string"
-      ? (payload._parentSourceId as string)
-      : null;
+  // Parent FK resolution — caller passes the parent reference
+  // explicitly (extracted from the unwrapped mapped object's
+  // `_parentEntityType` / `_parentSourceId` virtuals before the
+  // `_*` strip).
+  const parentEntityType = parentRef.entityType;
+  const parentSourceId = parentRef.sourceId;
 
   let parentLocalId: string | null = null;
   if (parentEntityType && parentSourceId) {
@@ -475,7 +499,12 @@ async function commitActivity(
     } as typeof activities.$inferInsert)
     .returning({ id: activities.id });
   const row = inserted[0];
-  if (!row) throw new Error("activity insert returned no row");
+  if (!row) {
+    throw new ConflictError("activity insert returned no row", {
+      entityType,
+      sourceId,
+    });
+  }
 
   await upsertExternalId(tx, entityType, sourceId, row.id);
   return row.id;

@@ -387,9 +387,13 @@ export async function mapBatch(
       }
 
       // Halt-on-unmapped-picklist gate (brief §"Constraints" + §4.5).
-      const hasUnmappedPicklist = warnings.some(
-        (w) => w.code === "unmapped_picklist",
-      );
+      // Skip the gate for records that already auto-skipped on quality —
+      // bad-quality records frequently carry weird picklist values that
+      // shouldn't drive a system-wide halt. The picklist halt must only
+      // fire on records we'd otherwise commit.
+      const hasUnmappedPicklist =
+        nextStatus !== "skipped" &&
+        warnings.some((w) => w.code === "unmapped_picklist");
       if (hasUnmappedPicklist) {
         await haltRun({
           runId,
@@ -410,6 +414,16 @@ export async function mapBatch(
       if (err instanceof MappingError) {
         nextStatus = "failed";
         errorText = err.message;
+        // Log so the server-side trace captures mapping validation
+        // failures (otherwise a flood of bad records leaves no
+        // operator-visible signal).
+        logger.info("d365.map_batch.mapping_error", {
+          batchId,
+          recordId: rec.id,
+          sourceId: rec.sourceId,
+          entityType,
+          errorMessage: errorText,
+        });
       } else {
         nextStatus = "failed";
         errorText = err instanceof Error ? err.message : String(err);

@@ -161,8 +161,13 @@ export async function resumeRun(
   }
 
   const nextStatus = NEXT_STATUS[resolution.kind];
+  // Note shape MUST use `kind` not `type` — the run-detail page's
+  // parseHaltFromNotes (and the polling endpoint's extractHaltReason)
+  // walk the JSON-line stream looking for `kind === "halt"` /
+  // `kind === "resume"` to detect supersedes. Mismatched key names
+  // cause stale halt banners to linger after a real resume.
   const noteEntry = {
-    type: "resume",
+    kind: "resume" as const,
     haltReason,
     resolution,
     actorId,
