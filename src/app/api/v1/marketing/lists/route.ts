@@ -12,6 +12,7 @@ import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { likeContains } from "@/lib/security/like-escape";
 import { filterDslSchema } from "@/lib/security/filter-dsl";
 import { writeAudit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { refreshList } from "@/lib/marketing/lists/refresh";
 import { withErrorBoundary } from "@/lib/server-action";
@@ -139,10 +140,18 @@ export async function POST(req: Request) {
         .returning({ id: marketingLists.id });
       if (!row) throw new ValidationError("Failed to create list.");
 
+      // Phase 25 §4.1 — surface non-validation refresh failures via
+      // logger.warn. The list row already exists; membership stays
+      // empty until next refresh.
       try {
         await refreshList(row.id, user.id);
       } catch (err) {
         if (err instanceof ValidationError) throw err;
+        logger.warn("marketing.list.refresh_after_create_failed", {
+          listId: row.id,
+          userId: user.id,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
       }
 
       await writeAudit({

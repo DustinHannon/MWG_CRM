@@ -13,6 +13,7 @@ import {
   ValidationError,
 } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { refreshList } from "@/lib/marketing/lists/refresh";
 import { filterDslSchema } from "@/lib/security/filter-dsl";
@@ -131,10 +132,19 @@ export async function PUT(
         })
         .where(eq(marketingLists.id, id));
 
+      // Phase 25 §4.1 — surface non-validation refresh failures via
+      // logger.warn so they're visible in production diagnostics.
+      // The list update already landed; membership stays stale until
+      // the next refresh.
       try {
         await refreshList(id, user.id);
       } catch (err) {
         if (err instanceof ValidationError) throw err;
+        logger.warn("marketing.list.refresh_after_update_failed", {
+          listId: id,
+          userId: user.id,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
       }
 
       await writeAudit({

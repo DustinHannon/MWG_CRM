@@ -17,6 +17,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/lib/errors";
+import { logger } from "@/lib/logger";
 import {
   getPermissions,
   requireSession,
@@ -114,7 +115,14 @@ export async function createListAction(input: {
       // The list row exists; refresh can be retried from detail page.
       // Re-throw validation errors so the user can correct the DSL.
       if (err instanceof ValidationError) throw err;
-      // Otherwise silent — the audit row below records the create.
+      // Phase 25 §4.1 — non-validation failures (DB blip, connectivity)
+      // get logged structured so production diagnostics catch them.
+      // The list still exists; membership is empty until next refresh.
+      logger.warn("marketing.list.refresh_after_create_failed", {
+        listId: row.id,
+        userId: user.id,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
     }
 
     await writeAudit({
@@ -177,11 +185,21 @@ export async function updateListAction(input: {
       })
       .where(eq(marketingLists.id, parsed.data.id));
 
-    // Re-evaluate membership against the new DSL.
+    // Re-evaluate membership against the new DSL. Phase 25 §4.1 —
+    // ValidationError rethrows to the user (bad DSL); any other failure
+    // (DB connectivity, etc.) gets logged structured so it's visible
+    // in production diagnostics but does NOT block the user since the
+    // list update itself already landed. Membership stays stale until
+    // the next manual refresh or list-refresh cron run.
     try {
       await refreshList(parsed.data.id, user.id);
     } catch (err) {
       if (err instanceof ValidationError) throw err;
+      logger.warn("marketing.list.refresh_after_update_failed", {
+        listId: parsed.data.id,
+        userId: user.id,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
     }
 
     await writeAudit({

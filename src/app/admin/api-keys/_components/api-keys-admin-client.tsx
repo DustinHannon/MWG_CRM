@@ -492,6 +492,10 @@ function PlaintextModal({
           <button
             type="button"
             onClick={() => {
+              // best-effort: clipboard write can fail on permission deny,
+              // unfocused window, or non-HTTPS context. UI optimistically
+              // flips to "Copied!"; the plaintext stays visible above so
+              // the user can manually copy if the API call dropped it.
               navigator.clipboard.writeText(plaintext).catch(() => {});
               setCopied(true);
             }}
