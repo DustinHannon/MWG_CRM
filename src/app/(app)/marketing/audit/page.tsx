@@ -130,13 +130,15 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
             suppression action.
           </p>
         </div>
-        <Link
-          href="/marketing/reports/email"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm font-medium text-foreground whitespace-nowrap transition hover:bg-muted"
-        >
-          <BarChart3 className="h-4 w-4" aria-hidden />
-          Marketing email report
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/marketing/reports/email"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm font-medium text-foreground whitespace-nowrap transition hover:bg-muted"
+          >
+            <BarChart3 className="h-4 w-4" aria-hidden />
+            Marketing email report
+          </Link>
+        </div>
       </div>
 
       <FilterBar

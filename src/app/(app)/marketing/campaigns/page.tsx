@@ -51,12 +51,14 @@ export default async function CampaignsPage() {
             Sends of a template to a list. Schedule, send, and track.
           </p>
         </div>
-        <Link
-          href="/marketing/campaigns/new"
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
-        >
-          + New campaign
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/marketing/campaigns/new"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
+          >
+            + New campaign
+          </Link>
+        </div>
       </div>
 
       {rows.length === 0 ? (

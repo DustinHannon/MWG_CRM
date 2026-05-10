@@ -80,12 +80,14 @@ export default async function UsersListPage({
             row to manage permissions and admin flags.
           </p>
         </div>
-        <Link
-          href="/admin/users/help"
-          className="shrink-0 rounded-md border border-glass-border bg-input/60 px-3 py-1.5 text-xs text-foreground/80 whitespace-nowrap transition hover:bg-accent/40"
-        >
-          Permission help
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/admin/users/help"
+            className="shrink-0 rounded-md border border-glass-border bg-input/60 px-3 py-1.5 text-xs text-foreground/80 whitespace-nowrap transition hover:bg-accent/40"
+          >
+            Permission help
+          </Link>
+        </div>
       </div>
 
       {/* Phase 15 — recently-joined filter chips. */}
