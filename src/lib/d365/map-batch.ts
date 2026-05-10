@@ -32,6 +32,7 @@ import {
 } from "./mapping";
 import { resolveD365Owner } from "./owner-mapping";
 import { shouldHaltOnGarbageVolume } from "./quality";
+import { NotFoundError } from "@/lib/errors";
 import type {
   D365Account,
   D365Annotation,
@@ -191,6 +192,9 @@ async function dispatchMap(
     default: {
       const _exhaustive: never = entityType;
       void _exhaustive;
+      // invariant: TypeScript exhaustive-check above guarantees this
+      // branch is unreachable. If we ever land here, a new entity
+      // type was added without registering a mapper in this dispatch.
       throw new Error(`Unknown entity type in dispatchMap: ${entityType}`);
     }
   }
@@ -228,6 +232,9 @@ async function dispatchDedup(
     default: {
       const _exhaustive: never = entityType;
       void _exhaustive;
+      // invariant: TypeScript exhaustive-check above guarantees this
+      // branch is unreachable. If we ever land here, a new entity
+      // type was added without a dedup helper in this dispatch.
       throw new Error(`Unknown entity type in dispatchDedup: ${entityType}`);
     }
   }
@@ -249,7 +256,11 @@ export async function mapBatch(
     .limit(1);
   const runId = batchRows[0]?.runId;
   if (!runId) {
-    throw new Error(`mapBatch: batch ${batchId} not found`);
+    // Domain — caller may pass a batchId that was deleted between
+    // fetch and process (e.g. admin aborted the run). Typed so the
+    // server action's error boundary returns a clean 404-style result
+    // instead of an opaque 500.
+    throw new NotFoundError("import_batch");
   }
 
   // Pull pending records — process as a single page (batch size is

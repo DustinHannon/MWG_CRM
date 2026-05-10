@@ -114,7 +114,10 @@ export async function GET(_req: Request, ctx: RouteParams) {
     }
   }
 
-  // Last 10 d365.import.* events for this run, newest first.
+  // Last N d365.import.* events for this run, newest first.
+  // Hard-bounded for safety even though admin-gated — defends
+  // against a future regression that drops the auth check.
+  const AUDIT_LIMIT = 10;
   const auditRows = await db
     .select({
       id: auditLog.id,
@@ -131,7 +134,7 @@ export async function GET(_req: Request, ctx: RouteParams) {
       ),
     )
     .orderBy(desc(auditLog.createdAt))
-    .limit(10);
+    .limit(AUDIT_LIMIT);
 
   const logs = auditRows.map((r) => ({
     id: r.id,

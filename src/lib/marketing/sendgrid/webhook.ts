@@ -15,6 +15,7 @@ import { webhookEventDedupe } from "@/db/schema/security";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { WebhookSignatureError } from "@/lib/marketing/errors";
+import { ValidationError } from "@/lib/errors";
 
 /**
  * Phase 19 — SendGrid Event Webhook ingest.
@@ -177,7 +178,9 @@ export async function tryClaimSgEvent(
 export function parseEvents(rawBody: string): SendGridEvent[] {
   const parsed = JSON.parse(rawBody);
   if (!Array.isArray(parsed)) {
-    throw new Error("SendGrid event payload must be an array");
+    // Domain-level — parsing user-supplied request body; route
+    // handler maps this to HTTP 400 via the typed-error contract.
+    throw new ValidationError("SendGrid event payload must be an array");
   }
   return parsed.map((p) => {
     const r = SendGridEventSchema.safeParse(p);

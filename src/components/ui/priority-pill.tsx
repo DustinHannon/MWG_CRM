@@ -45,6 +45,10 @@ export function PriorityPill({ priority, className }: PriorityPillProps) {
     "bg-[var(--priority-default-bg)] text-[var(--priority-default-fg)]";
   const label = LABELS[priority] ?? priority;
   if (!(priority in VARIANTS) && typeof window !== "undefined") {
+    // console.warn allowed here per CLAUDE.md "Errors and logging"
+    // as a client-side diagnostic for unknown enum values. The
+    // component falls back to a default-styled pill so the UI
+    // stays usable.
     console.warn(
       `PriorityPill: unknown priority "${priority}", using default`,
     );

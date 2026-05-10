@@ -140,6 +140,10 @@ async function getDefaultOwner(): Promise<ResolvedOwner> {
     .where(eq(users.email, defaultOwnerEmail))
     .limit(1);
   if (!owner[0]) {
+    // invariant: bootstrap-time config — the default-owner user
+    // must exist in `users` before any D365 import runs. If we
+    // reach here, the deployment was configured with a stale or
+    // typo'd D365_DEFAULT_OWNER_EMAIL.
     throw new Error(
       `D365 default-owner '${defaultOwnerEmail}' not found in users table. Set D365_DEFAULT_OWNER_EMAIL to an existing user's email.`,
     );

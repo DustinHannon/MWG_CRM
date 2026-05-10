@@ -89,6 +89,10 @@ export class D365Client {
       scopes: [`${this.env.baseUrl}/.default`],
     });
     if (!result?.accessToken) {
+      // invariant: MSAL's acquireTokenByClientCredential resolves
+      // with an accessToken or rejects. A nullish accessToken with
+      // a resolved result is a library-contract violation, not a
+      // domain error — bubble as a bare Error per CLAUDE.md.
       throw new Error("D365 token acquisition returned no access_token");
     }
     this.cachedToken = {

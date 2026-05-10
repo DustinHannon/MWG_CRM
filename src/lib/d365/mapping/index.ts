@@ -114,6 +114,9 @@ export function getMapperForEntity(entityType: D365EntityType): GenericMapper {
     default: {
       const _exhaustive: never = entityType;
       void _exhaustive;
+      // invariant: TypeScript exhaustive-check above guarantees
+      // this branch is unreachable. A new D365EntityType added
+      // without a mapper registration lands here.
       throw new Error(`No mapper registered for entity type: ${entityType}`);
     }
   }

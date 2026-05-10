@@ -43,6 +43,9 @@ export function getD365Env(): D365Env {
   const clientSecret = process.env.D365_CLIENT_SECRET;
   const baseUrl = process.env.D365_BASE_URL;
   if (!tenantId || !clientId || !clientSecret || !baseUrl) {
+    // invariant: bootstrap-time config failure — admin-only routes
+    // gate on isD365Configured() before invoking, so reaching here
+    // with a missing env is a deployment misconfiguration.
     throw new Error(
       "D365 environment variables not configured (need D365_TENANT_ID, D365_CLIENT_ID, D365_CLIENT_SECRET, D365_BASE_URL).",
     );

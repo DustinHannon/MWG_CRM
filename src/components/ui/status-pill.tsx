@@ -88,6 +88,10 @@ export function StatusPill({ status, className }: StatusPillProps) {
     "bg-[var(--status-default-bg)] text-[var(--status-default-fg)]";
   const label = LABELS[status] ?? status;
   if (!(status in VARIANTS) && typeof window !== "undefined") {
+    // console.warn allowed here per CLAUDE.md "Errors and logging"
+    // as a client-side diagnostic for unknown enum values. The
+    // component falls back to a default-styled pill so the UI
+    // stays usable.
     console.warn(`StatusPill: unknown status "${status}", using default`);
   }
   return (

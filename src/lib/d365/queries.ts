@@ -637,6 +637,9 @@ export function fetchByEntityType(
     default: {
       const _exhaustive: never = entityType;
       void _exhaustive;
+      // invariant: TypeScript exhaustive-check above guarantees
+      // this branch is unreachable. A new D365EntityType added
+      // without a query builder lands here.
       throw new Error(`Unsupported D365 entity type: ${String(entityType)}`);
     }
   }

@@ -39,6 +39,9 @@ function getSecret(): string {
   // Reuse AUTH_SECRET — it's already required, we don't add a new env var
   // surface for one feature with a 5-second blast radius.
   const s = env.AUTH_SECRET ?? process.env.AUTH_SECRET ?? "";
+  // invariant: AUTH_SECRET is required by Auth.js v5 itself — the app
+  // can't boot without it. Reaching here means a runtime mutation of
+  // process.env after boot, which is a deployment-level bug.
   if (!s) throw new Error("AUTH_SECRET is required for undo tokens");
   return s;
 }
