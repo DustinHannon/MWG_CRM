@@ -315,9 +315,6 @@ export async function listTasksForUser(args: {
     .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
     .leftJoin(contacts, eq(contacts.id, tasks.contactId))
     .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
-    .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
-    .leftJoin(contacts, eq(contacts.id, tasks.contactId))
-    .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
     .where(where)
     .orderBy(sql`${tasks.dueAt} ASC NULLS LAST`, desc(tasks.id))
     .$dynamic();
