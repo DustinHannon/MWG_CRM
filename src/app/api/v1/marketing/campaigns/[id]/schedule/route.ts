@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
@@ -21,6 +21,12 @@ export const runtime = "nodejs";
 
 const Body = z.object({
   scheduledFor: z.string().datetime(),
+  // Phase 25 §5.2 — optional OCC token. When provided, the UPDATE
+  // refuses to schedule a campaign whose version has been bumped
+  // since the caller read it. Existing API consumers without
+  // version-awareness keep working; only race-aware clients pay
+  // for the strictness.
+  expectedVersion: z.number().int().nonnegative().optional(),
 });
 
 const IdParam = z.object({ id: z.string().uuid() });
@@ -57,6 +63,7 @@ export const POST = withApi<{ id: string }>(
         status: marketingCampaigns.status,
         scheduledFor: marketingCampaigns.scheduledFor,
         isDeleted: marketingCampaigns.isDeleted,
+        version: marketingCampaigns.version,
       })
       .from(marketingCampaigns)
       .where(eq(marketingCampaigns.id, idParse.data.id))
@@ -72,20 +79,40 @@ export const POST = withApi<{ id: string }>(
       );
     }
 
-    await db
+    // Phase 25 §5.2 — OCC enforcement matching the server-action path.
+    const whereClauses = [
+      eq(marketingCampaigns.id, idParse.data.id),
+      eq(marketingCampaigns.status, "draft"),
+    ];
+    if (parsed.data.expectedVersion !== undefined) {
+      whereClauses.push(
+        eq(marketingCampaigns.version, parsed.data.expectedVersion),
+      );
+    }
+
+    const updated = await db
       .update(marketingCampaigns)
       .set({
         status: "scheduled",
         scheduledFor,
         updatedAt: new Date(),
         updatedById: key.createdById,
+        version: sql`${marketingCampaigns.version} + 1`,
       })
-      .where(
-        and(
-          eq(marketingCampaigns.id, idParse.data.id),
-          eq(marketingCampaigns.status, "draft"),
-        ),
+      .where(and(...whereClauses))
+      .returning({ id: marketingCampaigns.id });
+
+    if (updated.length === 0) {
+      // Phase 25 §5.2 — version mismatch (or status flipped between
+      // the SELECT above and this UPDATE). Surfaces as the canonical
+      // CONFLICT api error code; the message hints at the recovery
+      // path (refresh-and-retry).
+      return errorResponse(
+        409,
+        "CONFLICT",
+        "This campaign was modified by someone else. Refresh and try again.",
       );
+    }
 
     await writeAudit({
       actorId: key.createdById,

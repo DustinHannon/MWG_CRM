@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
@@ -81,6 +81,13 @@ const campaignScheduleSchema = z.object({
   scheduledFor: z
     .union([z.string(), z.date()])
     .transform((v) => (v instanceof Date ? v : new Date(v))),
+  // Phase 25 §5.2 — optional `expectedVersion` enables OCC. Callers
+  // that loaded the campaign before submitting can pass the version
+  // they saw; the UPDATE refuses to write if another writer bumped
+  // it in the meantime. Optional so existing callers don't break;
+  // when omitted the action falls back to the prior status='draft'
+  // TOCTOU close (which is sufficient for single-writer flows).
+  expectedVersion: z.number().int().nonnegative().optional(),
 });
 
 const campaignTestSchema = z.object({
@@ -324,6 +331,7 @@ export async function updateCampaignDraftAction(input: {
 export async function scheduleCampaignAction(input: {
   id: string;
   scheduledFor: Date;
+  expectedVersion?: number;
 }): Promise<ActionResult<never>> {
   return withErrorBoundary(
     {
@@ -353,31 +361,63 @@ export async function scheduleCampaignAction(input: {
         );
       }
 
-      await db
+      // Phase 25 §5.2 — OCC enforcement. When the caller supplied
+      // `expectedVersion`, the UPDATE atomically:
+      //   - matches the current version against the caller's snapshot,
+      //   - bumps version by 1 on success.
+      // If no row updated, the campaign was modified by another writer
+      // in the meantime; surface as ConflictError so the UI can show
+      // the standard "someone else changed this" recovery flow.
+      // The status='draft' clause stays as a defense-in-depth guard
+      // (it also catches the cron-claimed-scheduled race even without
+      // expectedVersion).
+      const whereClauses = [
+        eq(marketingCampaigns.id, parsed.data.id),
+        eq(marketingCampaigns.status, "draft"),
+        eq(marketingCampaigns.isDeleted, false),
+      ];
+      if (parsed.data.expectedVersion !== undefined) {
+        whereClauses.push(
+          eq(marketingCampaigns.version, parsed.data.expectedVersion),
+        );
+      }
+
+      const updated = await db
         .update(marketingCampaigns)
         .set({
           status: "scheduled",
           scheduledFor: parsed.data.scheduledFor,
           updatedAt: new Date(),
           updatedById: user.id,
+          version: sql`${marketingCampaigns.version} + 1`,
         })
-        .where(
-          and(
-            eq(marketingCampaigns.id, parsed.data.id),
-            eq(marketingCampaigns.status, "draft"),
-            eq(marketingCampaigns.isDeleted, false),
-          ),
+        .where(and(...whereClauses))
+        .returning({ id: marketingCampaigns.id });
+
+      if (updated.length === 0) {
+        // Either the campaign was already scheduled/sent (status guard
+        // missed) or the version expectation failed. Both are
+        // conflict-class outcomes.
+        throw new ConflictError(
+          "This campaign was modified by someone else. Refresh and try again.",
+          { code: "CONCURRENCY_CONFLICT" },
         );
+      }
 
       await writeAudit({
         actorId: user.id,
         action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SCHEDULE,
         targetType: "marketing_campaign",
         targetId: parsed.data.id,
-        before: { status: campaign.status, scheduledFor: campaign.scheduledFor },
+        before: {
+          status: campaign.status,
+          scheduledFor: campaign.scheduledFor,
+          version: campaign.version,
+        },
         after: {
           status: "scheduled",
           scheduledFor: parsed.data.scheduledFor.toISOString(),
+          version: campaign.version + 1,
         },
       });
 
