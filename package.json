@@ -30,6 +30,7 @@
     "@sendgrid/mail": "^8.1.6",
     "@supabase/supabase-js": "^2.105.4",
     "@vercel/blob": "^2.3.3",
+    "@vercel/functions": "^3.5.1",
     "@vercel/speed-insights": "^2.0.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

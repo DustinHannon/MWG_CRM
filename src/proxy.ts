@@ -1,12 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { geolocation } from "@vercel/functions";
+import { createHash } from "node:crypto";
+import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
+import { rateLimit } from "@/lib/security/rate-limit";
+import { writeSystemAudit } from "@/lib/audit";
 
 /**
- * Next.js 16 proxy (formerly "middleware"). Two responsibilities:
+ * Next.js 16 proxy (formerly "middleware"). Three responsibilities:
  *
- *   1. Phase 1/2 — lightweight auth cookie check. If no session cookie
+ *   1. Phase 26 §6 — geo-block requests outside `GEO_ALLOWED_COUNTRIES`
+ *      (default US, JM, PR). Runs FIRST, before auth/CSP, so a hostile
+ *      source from a non-allowlisted region never reaches a route
+ *      handler. WAF rule in front is the primary defense; this is the
+ *      fallback for traffic that bypasses or precedes WAF eval.
+ *
+ *   2. Phase 1/2 — lightweight auth cookie check. If no session cookie
  *      is present, redirect non-public paths to /auth/signin.
  *
- *   2. Phase 3J — generate a per-request CSP nonce, attach it to the
+ *   3. Phase 3J — generate a per-request CSP nonce, attach it to the
  *      request via `x-nonce` so server components can read it, and set
  *      the strict CSP on the response. This replaces the permissive CSP
  *      that lived in next.config.ts (now removed from there).
@@ -15,7 +27,127 @@ import { NextResponse, type NextRequest } from "next/server";
  * our JWT callback queries the DB; doing that here would force a heavy
  * postgres driver into the Edge runtime. So this proxy does only the
  * cookie presence check; full validation happens in server components.
+ *
+ * Runtime: Next.js 16 `proxy.ts` runs on the Node.js runtime (Fluid
+ * Compute), which is required for `writeSystemAudit` (postgres-js is
+ * Node-only) and for `@vercel/functions` `geolocation()`.
  */
+
+// Phase 26 §6 — paths that must never be geo-blocked regardless of
+// source country. /api/health for external uptime monitors, /blocked
+// for the destination page itself, CSP report endpoint so a blocked
+// page can still report any CSP violation, plus Next.js static and
+// well-known files.
+const GEO_BYPASS_PATH_PREFIXES = [
+  "/api/health",
+  "/blocked",
+  "/api/v1/security/csp-report",
+  "/_next",
+  "/favicon",
+  "/robots.txt",
+  "/sitemap.xml",
+];
+
+// Vercel-internal probes that traverse the proxy from outside the US
+// (screenshot service, og-image bots, edge favicon prefetch). Match
+// case-insensitively. Brittle by nature — kept minimal so a UA spoofer
+// can't bypass the block with a common string.
+const GEO_BYPASS_USER_AGENT_PATTERNS: readonly RegExp[] = [
+  /vercel-favicon/i,
+  /vercel-screenshot/i,
+  /vercel-edge-bot/i,
+];
+
+function shouldBypassGeoBlock(req: NextRequest): boolean {
+  // Preview + local-dev are always bypassed so engineers in non-US
+  // regions don't lock themselves out and so `next dev` works.
+  if (env.VERCEL_ENV === "preview") return true;
+  if (env.VERCEL_ENV === "development") return true;
+  if (env.NODE_ENV === "development") return true;
+
+  const { pathname } = req.nextUrl;
+  if (GEO_BYPASS_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`) || pathname.startsWith(p))) {
+    return true;
+  }
+  const ua = req.headers.get("user-agent") ?? "";
+  if (ua && GEO_BYPASS_USER_AGENT_PATTERNS.some((re) => re.test(ua))) {
+    return true;
+  }
+  return false;
+}
+
+function extractCallerIp(req: NextRequest): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown"
+  );
+}
+
+function sha256Hex(input: string): string {
+  return createHash("sha256").update(input).digest("hex");
+}
+
+/**
+ * Phase 26 §6 — Edge geo-block check. Returns a 403 rewrite to
+ * `/blocked` for non-allowlisted countries; returns `null` to let the
+ * proxy continue (allowed country, bypass path, or missing/unknown
+ * country which we treat as allow).
+ */
+async function geoBlockIfDisallowed(
+  req: NextRequest,
+): Promise<NextResponse | null> {
+  if (shouldBypassGeoBlock(req)) return null;
+
+  const { country } = geolocation(req);
+  // Vercel can't always resolve country (internal traffic, edge cold
+  // path, IPv6 oddities). Allow — the WAF layer is authoritative for
+  // production decisions; the proxy is a defense-in-depth fallback.
+  if (!country) return null;
+
+  const cc = country.toUpperCase();
+  if (env.GEO_ALLOWED_COUNTRIES.includes(cc)) return null;
+
+  // Block. Throttle audit emission to env.GEO_BLOCK_AUDIT_RATE_LIMIT
+  // per ip-hash per hour so a bot looping against /blocked can't
+  // saturate audit_log. Both the limiter bucket and the audit-row
+  // forensic fields use the same hash (no raw IPs in DB rows).
+  const ip = extractCallerIp(req);
+  const ipHash = sha256Hex(ip);
+  try {
+    const rl = await rateLimit(
+      { kind: "geo_block", principal: ipHash },
+      env.GEO_BLOCK_AUDIT_RATE_LIMIT_PER_IP_PER_HOUR,
+      3600,
+    );
+    if (rl.allowed) {
+      await writeSystemAudit({
+        actorEmailSnapshot: "system@geo-block",
+        action: "geo.block.middleware_enforced",
+        targetType: "geo_block",
+        ipAddress: ip,
+        after: {
+          country: cc,
+          allowed: env.GEO_ALLOWED_COUNTRIES,
+          path: req.nextUrl.pathname,
+          ipHash,
+        },
+      });
+    }
+  } catch (err) {
+    // NEVER let an audit write block the 403 — log structured for
+    // observability and continue.
+    logger.warn("geo.block.audit_emit_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+      country: cc,
+    });
+  }
+
+  const url = req.nextUrl.clone();
+  url.pathname = "/blocked";
+  url.search = "";
+  return NextResponse.rewrite(url, { status: 403 });
+}
 
 const PUBLIC_PATH_PREFIXES = [
   "/auth/",
@@ -39,6 +171,11 @@ const PUBLIC_PATH_PREFIXES = [
   // non-secret. Rate-limit isn't necessary since the endpoint caches
   // in-process for HEALTH_CHECK_CACHE_TTL_SECONDS (default 30s).
   "/api/health",
+  // Phase 26 §6 — geo-block destination page. Public so an
+  // unauthenticated source from a non-allowlisted country sees the
+  // 403 page directly instead of being redirected to /auth/signin
+  // (which would defeat the block by exposing the auth surface).
+  "/blocked",
   "/_next/",
   "/favicon",
   "/robots.txt",
@@ -131,8 +268,13 @@ const REPORT_TO_HEADER = JSON.stringify({
   endpoints: [{ url: "/api/v1/security/csp-report" }],
 });
 
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Phase 26 §6 — geo-block FIRST. A 403 for a non-allowlisted source
+  // is more important than anything else this proxy does.
+  const blocked = await geoBlockIfDisallowed(req);
+  if (blocked) return blocked;
 
   // Auth redirect (skip for public paths).
   const isPublic = PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p));

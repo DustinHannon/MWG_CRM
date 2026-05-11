@@ -39,7 +39,13 @@ export type RateLimitKey =
   // sha256-hashed client IP (lower-case hex, 64 chars) so raw IPs
   // aren't persisted alongside the limiter bucket. Callers pass the
   // hash via `hashIpForRateLimit(ip)` from the csp-report route.
-  | { kind: "csp_report"; principal: string };
+  | { kind: "csp_report"; principal: string }
+  // Phase 26 §6 — geo-block audit emission throttle. Principal is the
+  // sha256-hashed client IP for the same reason as csp_report — keeps
+  // raw IPs out of the limiter bucket. Used by `src/proxy.ts` to bound
+  // audit_log volume when a non-allowlisted source retries in a tight
+  // loop.
+  | { kind: "geo_block"; principal: string };
 
 export interface RateLimitResult {
   allowed: boolean;

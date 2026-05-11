@@ -122,6 +122,26 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(60),
+
+  // Phase 26 §6 — Geo-blocking. Allowlist is a comma-separated list of
+  // ISO 3166-1 alpha-2 country codes. Requests from any other country
+  // are rewritten to /blocked with a 403 status by `src/proxy.ts`.
+  // Default `US,JM,PR` matches the WAF rule documented in
+  // docs/operations/geo-blocking.md — keep the two in sync.
+  GEO_ALLOWED_COUNTRIES: z
+    .string()
+    .default("US,JM,PR")
+    .transform((s) =>
+      s
+        .split(",")
+        .map((c) => c.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  GEO_BLOCK_AUDIT_RATE_LIMIT_PER_IP_PER_HOUR: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5),
 });
 
 const parsed = envSchema.safeParse(process.env);
