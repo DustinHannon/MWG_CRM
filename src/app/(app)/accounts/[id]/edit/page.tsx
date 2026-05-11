@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { AccountEditForm } from "./_components/account-edit-form";
 
@@ -52,10 +53,9 @@ export default async function EditAccountPage({
       >
         ← Back to account
       </Link>
-      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
-        Edit
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold">{account.name}</h1>
+      <div className="mt-3">
+        <StandardPageHeader kicker="Edit" title={account.name} />
+      </div>
 
       <AccountEditForm
         account={{

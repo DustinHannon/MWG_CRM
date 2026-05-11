@@ -1,4 +1,5 @@
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { ReportBuilder } from "@/components/reports/report-builder";
 import { requireSession } from "@/lib/auth-helpers";
 
@@ -20,14 +21,17 @@ export default async function ReportBuilderPage() {
           { label: "New report" },
         ]}
       />
-      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-        Reports
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold font-display">New report</h1>
-      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Pick an entity, choose fields and group-bys, and the preview
-        updates as you go. Save to share or come back to it later.
-      </p>
+      <StandardPageHeader
+        kicker="Reports"
+        title="New report"
+        fontFamily="display"
+        description={
+          <>
+            Pick an entity, choose fields and group-bys, and the preview
+            updates as you go. Save to share or come back to it later.
+          </>
+        }
+      />
 
       <div className="mt-8">
         <ReportBuilder mode="create" />

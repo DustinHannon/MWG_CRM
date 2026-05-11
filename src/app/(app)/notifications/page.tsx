@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
+import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
@@ -32,10 +33,11 @@ export default async function NotificationsPage({
         Layout-level refresh propagates down to this segment.
       */}
       <PagePoll entities={["notifications"]} />
-      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-        Notifications
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold font-display">All notifications</h1>
+      <StandardPageHeader
+        kicker="Notifications"
+        title="All notifications"
+        fontFamily="display"
+      />
 
       <GlassCard className="mt-6 overflow-hidden p-0">
         {list.length === 0 ? (

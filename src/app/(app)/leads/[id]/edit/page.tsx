@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
 import { getTagsForLead } from "@/lib/tags";
@@ -43,8 +44,9 @@ export default async function EditLeadPage({
       >
         ← Back to lead
       </Link>
-      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Edit</p>
-      <h1 className="mt-1 text-2xl font-semibold">{formatPersonName(lead)}</h1>
+      <div className="mt-3">
+        <StandardPageHeader kicker="Edit" title={formatPersonName(lead)} />
+      </div>
 
       <LeadForm
         mode="edit"

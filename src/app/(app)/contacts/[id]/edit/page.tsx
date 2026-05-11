@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts } from "@/db/schema/crm-records";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 import { ContactEditForm } from "./_components/contact-edit-form";
@@ -48,12 +49,9 @@ export default async function EditContactPage({
       >
         ← Back to contact
       </Link>
-      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
-        Edit
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold">
-        {formatPersonName(contact)}
-      </h1>
+      <div className="mt-3">
+        <StandardPageHeader kicker="Edit" title={formatPersonName(contact)} />
+      </div>
 
       <ContactEditForm
         contact={{

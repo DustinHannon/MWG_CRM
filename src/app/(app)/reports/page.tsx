@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { BuiltInReports } from "@/components/reports/built-in-reports";
 import { ReportList } from "@/components/reports/report-list";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -38,29 +39,26 @@ export default async function ReportsListPage() {
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Reports" }]} />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Reports
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold font-display">
-            Insights &amp; saved reports
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+      <StandardPageHeader
+        kicker="Reports"
+        title="Insights & saved reports"
+        fontFamily="display"
+        description={
+          <>
             Built-in reports cover the common pipeline questions. Build
             your own to slice the data your way — every report is scoped
             to what you&apos;re allowed to see.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+          </>
+        }
+        actions={
           <Link
             href="/reports/builder"
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" /> New report
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       <section className="mt-10">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
