@@ -252,7 +252,7 @@ export default async function LeadsPage({
           {perms.canImport || user.isAdmin ? (
             <Link
               href="/leads/import"
-              className="hidden rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
+              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
             >
               Import
             </Link>
@@ -260,7 +260,7 @@ export default async function LeadsPage({
           {perms.canExport || user.isAdmin ? (
             <a
               href={buildExportHref(sp)}
-              className="hidden rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
+              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
             >
               Export
             </a>
@@ -286,7 +286,7 @@ export default async function LeadsPage({
           {perms.canCreateLeads || user.isAdmin ? (
             <Link
               href="/leads/new"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
               + Add lead
             </Link>

@@ -1,25 +1,14 @@
 import { AppShell } from "@/components/app-shell/app-shell";
-import type { NavItem } from "@/components/app-shell/nav";
+import { ADMIN_NAV_ITEMS, type NavItem } from "@/components/app-shell/nav";
 import { requireAdmin } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
+// Source of truth for the admin sub-nav lives in `nav.ts` so the (app)
+// shell's expandable Admin group and this dedicated /admin shell stay
+// in sync. Each new admin page is added in one place.
 const ADMIN_NAV: NavItem[] = [
-  { label: "Overview", href: "/admin", iconKey: "Home" },
-  { label: "Users", href: "/admin/users", iconKey: "UserCog" },
-  { label: "Tags", href: "/admin/tags", iconKey: "Tag" },
-  { label: "Scoring", href: "/admin/scoring", iconKey: "Star" },
-  { label: "Audit log", href: "/admin/audit", iconKey: "ScrollText" },
-  { label: "Data tools", href: "/admin/data", iconKey: "Database" },
-  { label: "Import help", href: "/admin/import-help", iconKey: "HelpCircle" },
-  { label: "Settings", href: "/admin/settings", iconKey: "SlidersHorizontal" },
-  // Phase 13 — API Keys (Sub-A) and API Usage (Sub-C).
-  { label: "API Keys", href: "/admin/api-keys", iconKey: "Key" },
-  { label: "API Usage", href: "/admin/api-usage", iconKey: "Activity" },
-  // Phase 15 — operational view of failed/blocked email sends.
-  { label: "Email Failures", href: "/admin/email-failures", iconKey: "MailWarning" },
-  // Phase 23 — D365 CRM data import (human-in-the-loop, batch-of-100 review).
-  { label: "D365 Import", href: "/admin/d365-import", iconKey: "DownloadCloud" },
+  ...ADMIN_NAV_ITEMS,
   { divider: true },
   { label: "Back to dashboard", href: "/dashboard", iconKey: "ArrowLeft" },
 ];

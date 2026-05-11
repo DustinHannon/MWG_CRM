@@ -94,8 +94,17 @@ export const ICON_MAP: Record<IconKey, LucideIcon> = {
   ArrowLeft,
 };
 
+export type NavLink = { label: string; href: string; iconKey?: IconKey };
+export type NavGroup = {
+  label: string;
+  iconKey?: IconKey;
+  /** Used to match `pathname.startsWith(href)` for auto-expand / active state. */
+  href: string;
+  children: NavLink[];
+};
 export type NavItem =
-  | { label: string; href: string; iconKey?: IconKey }
+  | NavLink
+  | NavGroup
   | { divider: true };
 
 export function isDivider(
@@ -103,3 +112,32 @@ export function isDivider(
 ): item is { divider: true } {
   return "divider" in item && item.divider === true;
 }
+
+export function isGroup(item: NavItem): item is NavGroup {
+  return !isDivider(item) && "children" in item;
+}
+
+export function isLink(item: NavItem): item is NavLink {
+  return !isDivider(item) && !isGroup(item);
+}
+
+/**
+ * Phase 13 + post-Phase 25 — the admin section's nav items. Exported so
+ * both the (app) shell (renders this as a collapsible group) and the
+ * /admin shell (renders this as flat siblings under an "Admin" header)
+ * consume the same source list.
+ */
+export const ADMIN_NAV_ITEMS: NavLink[] = [
+  { label: "Overview", href: "/admin", iconKey: "Home" },
+  { label: "Users", href: "/admin/users", iconKey: "UserCog" },
+  { label: "Tags", href: "/admin/tags", iconKey: "Tag" },
+  { label: "Scoring", href: "/admin/scoring", iconKey: "Star" },
+  { label: "Settings", href: "/admin/settings", iconKey: "SlidersHorizontal" },
+  { label: "Audit log", href: "/admin/audit", iconKey: "ScrollText" },
+  { label: "Data tools", href: "/admin/data", iconKey: "Database" },
+  { label: "Import help", href: "/admin/import-help", iconKey: "HelpCircle" },
+  { label: "D365 Import", href: "/admin/d365-import", iconKey: "DownloadCloud" },
+  { label: "API Keys", href: "/admin/api-keys", iconKey: "Key" },
+  { label: "API Usage", href: "/admin/api-usage", iconKey: "Activity" },
+  { label: "Email Failures", href: "/admin/email-failures", iconKey: "MailWarning" },
+];

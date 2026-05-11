@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -36,7 +37,13 @@ export default async function EditLeadPage({
           { label: "Edit" },
         ]}
       />
-      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Edit</p>
+      <Link
+        href={`/leads/${lead.id}`}
+        className="text-xs text-muted-foreground hover:text-foreground"
+      >
+        ← Back to lead
+      </Link>
+      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Edit</p>
       <h1 className="mt-1 text-2xl font-semibold">{formatPersonName(lead)}</h1>
 
       <LeadForm

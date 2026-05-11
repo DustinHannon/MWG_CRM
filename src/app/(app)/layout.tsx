@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/app-shell/app-shell";
-import type { NavItem } from "@/components/app-shell/nav";
+import { ADMIN_NAV_ITEMS, type NavItem } from "@/components/app-shell/nav";
 import { PageRealtime } from "@/components/realtime/page-realtime";
 import { RealtimeProvider } from "@/components/realtime/realtime-provider";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -52,11 +52,21 @@ export default async function AppLayout({
       ? [...baseNav, MARKETING_NAV_ITEM]
       : baseNav;
 
+  // Post-Phase 25 — admins get an expandable Admin group that exposes
+  // every admin sub-page inline. Auto-expands when the active route
+  // is under /admin. The (app) shell renders the group; the /admin
+  // shell renders the same items flat under its own subtitle so users
+  // who navigate via /admin still get the same nav surface.
   const nav: NavItem[] = user.isAdmin
     ? [
         ...navWithMarketing,
         { divider: true },
-        { label: "Admin", href: "/admin", iconKey: "Settings" },
+        {
+          label: "Admin",
+          href: "/admin",
+          iconKey: "Settings",
+          children: ADMIN_NAV_ITEMS,
+        },
       ]
     : navWithMarketing;
   return (

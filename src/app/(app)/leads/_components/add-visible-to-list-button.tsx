@@ -53,7 +53,7 @@ export function AddVisibleToListButton({ leadIds, canManage }: Props) {
         <button
           type="button"
           disabled={pending}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 text-sm text-foreground/90 transition hover:bg-muted disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted disabled:opacity-50"
         >
           <ListPlus className="h-4 w-4" aria-hidden />
           {pending ? "Adding…" : "Add to marketing list"}

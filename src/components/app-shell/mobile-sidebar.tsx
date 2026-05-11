@@ -8,7 +8,13 @@ import { useState } from "react";
 import { UserPanel } from "@/components/user-panel/user-panel";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { Brand } from "./brand";
-import { ICON_MAP, isDivider, type NavItem } from "./nav";
+import {
+  ICON_MAP,
+  isDivider,
+  isGroup,
+  type NavGroup,
+  type NavItem,
+} from "./nav";
 
 interface MobileSidebarProps {
   brand: { subtitle?: string };
@@ -78,6 +84,15 @@ export function MobileSidebar({ brand, nav, user }: MobileSidebarProps) {
                   <div key={`div-${i}`} className="my-3 h-px bg-glass-border" />
                 );
               }
+              if (isGroup(item)) {
+                return (
+                  <MobileGroup
+                    key={item.href}
+                    group={item}
+                    currentPath={pathname}
+                  />
+                );
+              }
               const Icon = item.iconKey ? ICON_MAP[item.iconKey] : null;
               return (
                 <Link
@@ -103,5 +118,48 @@ export function MobileSidebar({ brand, nav, user }: MobileSidebarProps) {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function MobileGroup({
+  group,
+  currentPath,
+}: {
+  group: NavGroup;
+  currentPath: string;
+}) {
+  const groupActive =
+    currentPath === group.href || currentPath.startsWith(`${group.href}/`);
+  const Icon = group.iconKey ? ICON_MAP[group.iconKey] : null;
+  return (
+    <div className="flex flex-col">
+      <Link
+        href={group.href}
+        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-base text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
+      >
+        {Icon ? <Icon size={18} aria-hidden /> : null}
+        <span className="truncate">{group.label}</span>
+      </Link>
+      {groupActive ? (
+        <ul className="mt-0.5 flex flex-col gap-0.5 pl-4">
+          {group.children.map((child) => {
+            const ChildIcon = child.iconKey ? ICON_MAP[child.iconKey] : null;
+            return (
+              <li key={child.href}>
+                <Link
+                  href={child.href}
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
+                >
+                  {ChildIcon ? (
+                    <ChildIcon size={14} aria-hidden />
+                  ) : null}
+                  <span className="truncate">{child.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
   );
 }

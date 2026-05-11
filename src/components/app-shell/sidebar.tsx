@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { UserPanel } from "@/components/user-panel/user-panel";
 import {
   Tooltip,
@@ -12,7 +13,13 @@ import {
 import type { SessionUser } from "@/lib/auth-helpers";
 import { cn } from "@/lib/utils";
 import { Brand } from "./brand";
-import { ICON_MAP, isDivider, type NavItem } from "./nav";
+import {
+  ICON_MAP,
+  isDivider,
+  isGroup,
+  type NavGroup,
+  type NavItem,
+} from "./nav";
 import { useSidebarState } from "./use-sidebar-state";
 
 interface SidebarProps {
@@ -71,6 +78,16 @@ export function Sidebar({
                 key={`div-${i}`}
                 className="my-3 h-px bg-glass-border"
                 aria-hidden
+              />
+            );
+          }
+          if (isGroup(item)) {
+            return (
+              <SidebarGroup
+                key={item.href}
+                group={item}
+                collapsed={collapsed}
+                pathname={pathname}
               />
             );
           }
@@ -171,4 +188,123 @@ function isActive(pathname: string, href: string): boolean {
   if (pathname === href) return true;
   if (href === "/admin" || href === "/dashboard") return false;
   return pathname.startsWith(`${href}/`);
+}
+
+interface SidebarGroupProps {
+  group: NavGroup;
+  collapsed: boolean;
+  pathname: string;
+}
+
+/**
+ * Collapsible nav group (used for the Admin section). Auto-expands
+ * when the current route matches the group's `href` prefix. When the
+ * sidebar itself is collapsed (rail mode), the group header acts as a
+ * single icon-link to the group's index page; children are reachable
+ * via the per-page nav once you land there.
+ */
+function SidebarGroup({ group, collapsed, pathname }: SidebarGroupProps) {
+  const groupActive =
+    pathname === group.href || pathname.startsWith(`${group.href}/`);
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const expanded = manualOpen ?? groupActive;
+  const GroupIcon = group.iconKey ? ICON_MAP[group.iconKey] : null;
+
+  // Collapsed sidebar — render the group header as a normal icon-link
+  // so admins still have a single click into /admin from rail mode.
+  if (collapsed) {
+    return (
+      <SidebarLink
+        item={{ label: group.label, href: group.href, iconKey: group.iconKey }}
+        collapsed={collapsed}
+        active={groupActive}
+      />
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setManualOpen(!expanded)}
+        aria-expanded={expanded}
+        aria-controls={`nav-group-${group.href}`}
+        className={cn(
+          "group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition",
+          groupActive
+            ? "bg-accent/40 text-foreground"
+            : "text-muted-foreground hover:bg-accent/30 hover:text-foreground",
+        )}
+      >
+        {groupActive ? (
+          <span
+            aria-hidden
+            className="absolute inset-y-1 left-0 w-[3px] rounded-r bg-foreground/80"
+          />
+        ) : null}
+        {GroupIcon ? (
+          <GroupIcon
+            size={18}
+            aria-hidden
+            className={cn("shrink-0", groupActive ? "text-foreground" : "")}
+          />
+        ) : null}
+        <span className="flex-1 truncate text-left">{group.label}</span>
+        <ChevronDown
+          size={14}
+          aria-hidden
+          className={cn(
+            "shrink-0 transition-transform duration-200",
+            expanded ? "rotate-0" : "-rotate-90",
+          )}
+        />
+      </button>
+      {expanded ? (
+        <ul
+          id={`nav-group-${group.href}`}
+          className="mt-1 flex flex-col gap-0.5 pl-3"
+        >
+          {group.children.map((child) => {
+            const childActive =
+              pathname === child.href ||
+              (child.href !== group.href &&
+                pathname.startsWith(`${child.href}/`));
+            const ChildIcon = child.iconKey ? ICON_MAP[child.iconKey] : null;
+            return (
+              <li key={child.href}>
+                <Link
+                  href={child.href}
+                  aria-current={childActive ? "page" : undefined}
+                  className={cn(
+                    "group relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition",
+                    childActive
+                      ? "bg-accent/40 text-foreground"
+                      : "text-muted-foreground hover:bg-accent/30 hover:text-foreground",
+                  )}
+                >
+                  {childActive ? (
+                    <span
+                      aria-hidden
+                      className="absolute inset-y-1 left-0 w-[2px] rounded-r bg-foreground/80"
+                    />
+                  ) : null}
+                  {ChildIcon ? (
+                    <ChildIcon
+                      size={14}
+                      aria-hidden
+                      className={cn(
+                        "shrink-0",
+                        childActive ? "text-foreground" : "text-muted-foreground/80",
+                      )}
+                    />
+                  ) : null}
+                  <span className="truncate">{child.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
