@@ -363,11 +363,15 @@ export default async function ApiUsageLogPage({
                   <td className="px-5 py-3 text-xs">
                     <span
                       className={cn(
-                        "inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold",
+                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
                         statusChipClass(r.statusCode),
                       )}
+                      title={statusOutcomeTitle(r.statusCode)}
                     >
-                      {r.statusCode}
+                      <span>{statusOutcomeLabel(r.statusCode)}</span>
+                      <span className="font-mono opacity-70">
+                        · {r.statusCode}
+                      </span>
                     </span>
                   </td>
                   <td className="px-5 py-3 text-xs text-muted-foreground tabular-nums">
@@ -376,13 +380,13 @@ export default async function ApiUsageLogPage({
                   <td className="px-5 py-3 font-mono text-[10px] text-muted-foreground">
                     {r.ipAddress ?? "—"}
                   </td>
-                  <td className="px-5 py-3 text-xs text-muted-foreground">
+                  <td className="px-5 py-3 text-xs text-muted-foreground align-top">
                     {detailHasContent ? (
-                      <details>
+                      <details className="w-[280px] max-w-[280px]">
                         <summary className="cursor-pointer text-foreground/80 underline-offset-4 hover:underline">
                           view
                         </summary>
-                        <pre className="mt-2 max-w-md overflow-x-auto rounded bg-black/30 p-2 font-mono text-[10px] text-foreground/90">
+                        <pre className="mt-2 max-h-64 w-[280px] max-w-[280px] overflow-y-auto whitespace-pre-wrap break-all rounded bg-black/30 p-2 font-mono text-[10px] text-foreground/90">
                           {JSON.stringify(
                             {
                               request_query: r.requestQuery,
@@ -505,6 +509,32 @@ function statusChipClass(code: number): string {
   if (code >= 300) return "bg-muted/60 text-muted-foreground ring-1 ring-inset ring-border";
   if (code >= 200) return "bg-emerald-500/15 text-emerald-400 ring-1 ring-inset ring-emerald-500/30";
   return "bg-muted/40 text-muted-foreground";
+}
+
+/**
+ * Plain-English outcome label paired with the HTTP status code so
+ * "401" doesn't read ambiguously. A 4xx specifically means the
+ * request was REJECTED at an auth / validation gate before any
+ * database mutation ran — nothing was created, updated, or deleted.
+ */
+function statusOutcomeLabel(code: number): string {
+  if (code >= 500) return "Server error";
+  if (code >= 400) return "Blocked";
+  if (code >= 300) return "Redirected";
+  if (code >= 200) return "Allowed";
+  return "Unknown";
+}
+
+function statusOutcomeTitle(code: number): string {
+  if (code >= 500)
+    return `Server error (${code}) — the request reached the server but the handler threw. Look in the Detail column for the error message.`;
+  if (code >= 400)
+    return `Blocked (${code}) — the request was rejected at an auth, permission, or validation gate. No data was created, updated, or deleted.`;
+  if (code >= 300)
+    return `Redirected (${code}) — the server returned a redirect response. No data was created, updated, or deleted.`;
+  if (code >= 200)
+    return `Allowed (${code}) — the request succeeded. Any mutation it performed is in the audit log.`;
+  return `Unknown status (${code}).`;
 }
 
 function statusBucketActiveClass(bucket: string): string {
