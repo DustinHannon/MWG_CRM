@@ -14,6 +14,8 @@ import { UserTime } from "@/components/ui/user-time";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { canDeleteOpportunity } from "@/lib/access/can-delete";
+import { listTasksForOpportunity } from "@/lib/tasks";
+import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
 import { OpportunityDetailDelete } from "../_components/opportunity-detail-delete";
 
 export const dynamic = "force-dynamic";
@@ -151,6 +153,23 @@ export default async function OpportunityDetailPage({
           ) : null}
           <Row label="Created" value={<UserTime value={opp.createdAt} />} />
         </dl>
+      </GlassCard>
+
+      {/* Phase 25 §7.3 — opportunity-scoped Tasks section. Same
+          EntityTasksSection used by /leads /accounts /contacts;
+          auto-FK to this opportunity on quick-add. */}
+      <GlassCard className="mt-6 p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Tasks
+        </h2>
+        <div className="mt-3">
+          <EntityTasksSection
+            entityType="opportunity"
+            entityId={opp.id}
+            tasks={await listTasksForOpportunity(opp.id)}
+            currentUserId={session.id}
+          />
+        </div>
       </GlassCard>
     </div>
   );

@@ -13,6 +13,8 @@ import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 import { canDeleteContact } from "@/lib/access/can-delete";
+import { listTasksForContact } from "@/lib/tasks";
+import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
 import { ContactDetailDelete } from "../_components/contact-detail-delete";
 
 export const dynamic = "force-dynamic";
@@ -141,6 +143,23 @@ export default async function ContactDetailPage({
               .join(", ") || null}
           />
         </dl>
+      </GlassCard>
+
+      {/* Phase 25 §7.3 — contact-scoped Tasks section. Same
+          EntityTasksSection used by /leads /accounts /opportunities;
+          auto-FK to this contact on quick-add. */}
+      <GlassCard className="mt-6 p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Tasks
+        </h2>
+        <div className="mt-3">
+          <EntityTasksSection
+            entityType="contact"
+            entityId={contact.id}
+            tasks={await listTasksForContact(contact.id)}
+            currentUserId={session.id}
+          />
+        </div>
       </GlassCard>
     </div>
   );

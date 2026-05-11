@@ -14,6 +14,8 @@ import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 import { canDeleteAccount } from "@/lib/access/can-delete";
+import { listTasksForAccount } from "@/lib/tasks";
+import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
 import { AccountDetailDelete } from "../_components/account-detail-delete";
 
 export const dynamic = "force-dynamic";
@@ -237,6 +239,23 @@ export default async function AccountDetailPage({
                 <li className="text-xs text-muted-foreground">No opportunities.</li>
               ) : null}
             </ul>
+          </GlassCard>
+
+          {/* Phase 25 §7.3 — account-scoped Tasks section. Same
+              EntityTasksSection used by /leads /contacts
+              /opportunities; auto-FK to this account on quick-add. */}
+          <GlassCard className="p-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Tasks
+            </h2>
+            <div className="mt-3">
+              <EntityTasksSection
+                entityType="account"
+                entityId={account.id}
+                tasks={await listTasksForAccount(account.id)}
+                currentUserId={session.id}
+              />
+            </div>
           </GlassCard>
         </div>
       </div>
