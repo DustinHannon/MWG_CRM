@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { Tags } from "lucide-react";
 import { toast } from "sonner";
 import { bulkTagLeadsAction } from "@/components/tags/actions";
+import { TagChip } from "@/components/tags/tag-chip";
+import { cn } from "@/lib/utils";
 
 /**
  * Phase 25 §7.5 — bulk-tag toolbar surface. Mirrors the
@@ -134,27 +136,24 @@ export function BulkTagButton({
               </label>
             </div>
 
-            <div className="mt-4 max-h-64 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
-              {availableTags.map((t) => (
-                <label
-                  key={t.id}
-                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/40"
-                >
-                  <input
-                    type="checkbox"
-                    checked={picked.has(t.id)}
-                    onChange={() => toggleTag(t.id)}
-                    className="h-4 w-4 cursor-pointer"
-                  />
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full"
-                    style={{
-                      backgroundColor: t.color ?? "var(--muted-foreground)",
-                    }}
-                  />
-                  <span>{t.name}</span>
-                </label>
-              ))}
+            <div className="mt-4 flex max-h-64 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-glass-border bg-input/60 p-2">
+              {availableTags.map((t) => {
+                const isPicked = picked.has(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => toggleTag(t.id)}
+                    aria-pressed={isPicked}
+                    className={cn(
+                      "rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      isPicked ? "opacity-100" : "opacity-50 hover:opacity-80",
+                    )}
+                  >
+                    <TagChip name={t.name} color={t.color ?? "slate"} />
+                  </button>
+                );
+              })}
             </div>
 
             <div className="mt-5 flex justify-end gap-2">
