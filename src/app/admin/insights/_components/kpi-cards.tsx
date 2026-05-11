@@ -3,11 +3,11 @@ import { getKpiSnapshot } from "@/lib/observability/insights-queries";
 /**
  * Phase 26 §4 — 6 KPI cards across the top of the Insights dashboard.
  *
- * Three cards are powered by the existing runtime-logs drain (requests,
- * page views, error rate); the other three depend on Speed Insights
- * data that we don't ingest today (LCP/INP/TTFB). Those render an
- * em-dash with a "Drain not configured" subtitle until that drain
- * is added in Vercel.
+ * Three cards are powered by the runtime-logs drain (requests, page
+ * views, error rate); three more are powered by the Speed Insights
+ * drain (p75 LCP, p75 INP, median TTFB). When the Speed Insights
+ * drain has no samples in the window, the corresponding cards show
+ * an em-dash with an "Awaiting data" subtitle.
  */
 export async function KpiCards() {
   let snapshot: Awaited<ReturnType<typeof getKpiSnapshot>> | null = null;
@@ -48,18 +48,21 @@ export async function KpiCards() {
         },
         {
           label: "p75 LCP",
-          value: "—",
-          delta: "Drain not configured",
+          value: formatMs(snapshot.p75LcpMs),
+          delta: formatMsDelta(snapshot.p75LcpMs, snapshot.p75LcpPriorMs),
         },
         {
           label: "p75 INP",
-          value: "—",
-          delta: "Drain not configured",
+          value: formatMs(snapshot.p75InpMs),
+          delta: formatMsDelta(snapshot.p75InpMs, snapshot.p75InpPriorMs),
         },
         {
           label: "Median TTFB",
-          value: "—",
-          delta: "Drain not configured",
+          value: formatMs(snapshot.medianTtfbMs),
+          delta: formatMsDelta(
+            snapshot.medianTtfbMs,
+            snapshot.medianTtfbPriorMs,
+          ),
         },
       ]
     : [];
@@ -116,4 +119,20 @@ function formatRateDelta(current: number, prior: number): string {
   const diffPp = (current - prior) * 100;
   const sign = diffPp >= 0 ? "+" : "";
   return `${sign}${diffPp.toFixed(2)} pp vs prior 24h`;
+}
+
+/** Render `1234 ms` or `1.23 s` for human-friendly large values, em-dash for null. */
+function formatMs(ms: number | null): string {
+  if (ms == null || !Number.isFinite(ms)) return "—";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(2)} s`;
+}
+
+/** Delta string for a latency metric, with "Awaiting data" when no samples. */
+function formatMsDelta(current: number | null, prior: number | null): string {
+  if (current == null) return "Awaiting data";
+  if (prior == null || prior === 0) return "vs prior 24h: —";
+  const diffPct = ((current - prior) / prior) * 100;
+  const sign = diffPct >= 0 ? "+" : "";
+  return `${sign}${diffPct.toFixed(1)}% vs prior 24h`;
 }

@@ -55,6 +55,23 @@ const PUBLIC_PATH_FILTER = `${PATH} IS NOT NULL
   AND ${PATH} != '/sitemap.xml'`;
 
 // ----------------------------------------------------------------------------
+// Speed Insights + Analytics drain aliases (Phase 26 follow-up).
+// Once the dedicated drains are configured these records flow into the
+// SAME Better Stack source as runtime logs; the `vercel.schema` field
+// distinguishes them.
+// ----------------------------------------------------------------------------
+const SCHEMA = `JSONExtract(raw, 'vercel', 'schema', 'Nullable(String)')`;
+const SI_FILTER = `${SCHEMA} = 'vercel.speed_insights.v1'`;
+const AN_FILTER = `${SCHEMA} = 'vercel.analytics.v1'`;
+/** Per-event path on Speed Insights / Analytics drains (NOT proxy.path). */
+const SI_PATH = `JSONExtract(raw, 'vercel', 'path', 'Nullable(String)')`;
+const SI_METRIC = `JSONExtract(raw, 'vercel', 'metricType', 'Nullable(String)')`;
+const SI_VALUE = `JSONExtract(raw, 'vercel', 'value', 'Nullable(Float64)')`;
+const COUNTRY = `JSONExtract(raw, 'vercel', 'country', 'Nullable(String)')`;
+const AN_EVENT = `JSONExtract(raw, 'vercel', 'eventType', 'Nullable(String)')`;
+const DEVICE_ID = `JSONExtract(raw, 'vercel', 'deviceId', 'Nullable(UInt64)')`;
+
+// ----------------------------------------------------------------------------
 // KPI cards
 // ----------------------------------------------------------------------------
 
@@ -71,6 +88,19 @@ export interface KpiSnapshot {
   errorRateLast24h: number;
   /** Same for prior 24h, used for delta. */
   errorRatePrior24h: number;
+  /**
+   * p75 LCP / INP / TTFB over the last 24h in ms. `null` when the
+   * Speed Insights drain hasn't produced any samples yet (Vercel
+   * sampling means a new project can take a few minutes to surface
+   * its first metrics).
+   */
+  p75LcpMs: number | null;
+  p75LcpPriorMs: number | null;
+  p75InpMs: number | null;
+  p75InpPriorMs: number | null;
+  /** Median (p50) TTFB — Vercel SI labels this as the primary TTFB metric. */
+  medianTtfbMs: number | null;
+  medianTtfbPriorMs: number | null;
 }
 
 interface KpiRow {
@@ -78,6 +108,62 @@ interface KpiRow {
   total: string;
   page_views: string;
   errors: string;
+}
+
+interface WebVitalKpiRow {
+  bucket: string;
+  metric: string;
+  p75: string | number | null;
+  p50: string | number | null;
+}
+
+async function getWebVitalKpiRows(): Promise<WebVitalKpiRow[]> {
+  // p75 (and p50 for TTFB) over last + prior 24h, grouped by metricType.
+  // Speed Insights events are short-lived in hot storage (~30m). For
+  // 48h coverage we UNION hot + cold; cold is filtered by `_row_type=1`
+  // per Better Stack's S3 schema.
+  const query = `
+    SELECT
+      bucket,
+      metric,
+      quantile(0.75)(value) AS p75,
+      quantile(0.50)(value) AS p50
+    FROM (
+      SELECT
+        if(dt >= now() - INTERVAL 24 HOUR, 'last', 'prior') AS bucket,
+        ${SI_METRIC} AS metric,
+        ${SI_VALUE} AS value
+      FROM remote(${HOT})
+      WHERE dt >= now() - INTERVAL 48 HOUR
+        AND ${SI_FILTER}
+        AND ${SI_VALUE} IS NOT NULL
+      UNION ALL
+      SELECT
+        if(dt >= now() - INTERVAL 24 HOUR, 'last', 'prior') AS bucket,
+        ${SI_METRIC} AS metric,
+        ${SI_VALUE} AS value
+      FROM s3Cluster(primary, ${COLD})
+      WHERE _row_type = 1
+        AND dt >= now() - INTERVAL 48 HOUR
+        AND dt < now() - INTERVAL 30 MINUTE
+        AND ${SI_FILTER}
+        AND ${SI_VALUE} IS NOT NULL
+    )
+    WHERE metric IS NOT NULL
+    GROUP BY bucket, metric
+    FORMAT JSONEachRow
+  `;
+  try {
+    return await queryBetterStack<WebVitalKpiRow>({
+      query,
+      cacheKey: "kpi-web-vitals",
+    });
+  } catch {
+    // If the SI drain hasn't produced any rows yet (or the schema
+    // filter matches zero records) we want a graceful fallback so
+    // the request KPIs still render — return empty.
+    return [];
+  }
 }
 
 export async function getKpiSnapshot(): Promise<KpiSnapshot> {
@@ -114,14 +200,28 @@ export async function getKpiSnapshot(): Promise<KpiSnapshot> {
     ORDER BY bucket
     FORMAT JSONEachRow
   `;
-  const rows = await queryBetterStack<KpiRow>({
-    query,
-    cacheKey: "kpi-snapshot",
-  });
+  const [rows, vitalRows] = await Promise.all([
+    queryBetterStack<KpiRow>({ query, cacheKey: "kpi-snapshot" }),
+    getWebVitalKpiRows(),
+  ]);
   const last = rows.find((r) => r.bucket === "last");
   const prior = rows.find((r) => r.bucket === "prior");
   const lastTotal = Number(last?.total ?? 0);
   const priorTotal = Number(prior?.total ?? 0);
+
+  const pickVital = (
+    bucket: "last" | "prior",
+    metric: string,
+    field: "p75" | "p50" = "p75",
+  ): number | null => {
+    const row = vitalRows.find(
+      (r) => r.bucket === bucket && r.metric === metric,
+    );
+    if (!row) return null;
+    const v = Number(row[field]);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  };
+
   return {
     requestsLast24h: lastTotal,
     requestsPrior24h: priorTotal,
@@ -130,7 +230,61 @@ export async function getKpiSnapshot(): Promise<KpiSnapshot> {
     errorRateLast24h: lastTotal > 0 ? Number(last?.errors ?? 0) / lastTotal : 0,
     errorRatePrior24h:
       priorTotal > 0 ? Number(prior?.errors ?? 0) / priorTotal : 0,
+    p75LcpMs: pickVital("last", "LCP"),
+    p75LcpPriorMs: pickVital("prior", "LCP"),
+    p75InpMs: pickVital("last", "INP"),
+    p75InpPriorMs: pickVital("prior", "INP"),
+    medianTtfbMs: pickVital("last", "TTFB", "p50"),
+    medianTtfbPriorMs: pickVital("prior", "TTFB", "p50"),
   };
+}
+
+// ----------------------------------------------------------------------------
+// Core Web Vitals breakdown (p75 per metric, last 24h)
+// ----------------------------------------------------------------------------
+
+export type WebVitalMetric = "LCP" | "FCP" | "CLS" | "INP" | "TTFB";
+
+export interface CoreWebVitalRow {
+  metric: WebVitalMetric;
+  p75: number;
+  samples: number;
+}
+
+interface CoreWebVitalQueryRow {
+  metric: string;
+  p75: string | number;
+  samples: string | number;
+}
+
+export async function getCoreWebVitals(): Promise<CoreWebVitalRow[]> {
+  const query = `
+    SELECT
+      ${SI_METRIC} AS metric,
+      quantile(0.75)(${SI_VALUE}) AS p75,
+      count(*) AS samples
+    FROM remote(${HOT})
+    WHERE dt > now() - INTERVAL 24 HOUR
+      AND ${SI_FILTER}
+      AND ${SI_VALUE} IS NOT NULL
+      AND ${SI_METRIC} IN ('LCP', 'FCP', 'CLS', 'INP', 'TTFB')
+    GROUP BY metric
+    FORMAT JSONEachRow
+  `;
+  const rows = await queryBetterStack<CoreWebVitalQueryRow>({
+    query,
+    cacheKey: "core-web-vitals",
+  });
+  return rows
+    .filter((r): r is CoreWebVitalQueryRow & { metric: WebVitalMetric } =>
+      ["LCP", "FCP", "CLS", "INP", "TTFB"].includes(r.metric ?? ""),
+    )
+    .map((r) => ({
+      metric: r.metric as WebVitalMetric,
+      p75: Number(r.p75),
+      samples: Number(r.samples),
+    }))
+    .filter((r) => Number.isFinite(r.p75) && r.p75 > 0);
 }
 
 // ----------------------------------------------------------------------------
@@ -274,17 +428,50 @@ export async function getTopReferrers(): Promise<TopReferrerRow[]> {
 }
 
 // ----------------------------------------------------------------------------
-// Visitors by country — REQUIRES Web Analytics drain (not configured today).
-// Returns empty array; the panel falls through to <StandardEmptyState />.
+// Visitors by country — powered by the Web Analytics drain (Phase 26 follow-up).
+// Returns a country-code → unique-visitor-count map keyed by ISO 3166-1
+// alpha-2. Falls back to an empty record if the analytics drain hasn't
+// produced any samples in the last 24h.
 // ----------------------------------------------------------------------------
+
+interface VisitorCountryRow {
+  country: string;
+  visitors: string | number;
+}
 
 export async function getVisitorsByCountry(): Promise<
   Record<string, number>
 > {
-  // Today's drain captures runtime logs only — no visitor-country
-  // payloads exist in the source. Return an empty record so the
-  // panel renders the documented "drain not configured" empty state.
-  return {};
+  const query = `
+    SELECT
+      ${COUNTRY} AS country,
+      uniqExact(${DEVICE_ID}) AS visitors
+    FROM remote(${HOT})
+    WHERE dt > now() - INTERVAL 24 HOUR
+      AND ${AN_FILTER}
+      AND ${AN_EVENT} = 'pageview'
+      AND ${COUNTRY} IS NOT NULL
+      AND ${COUNTRY} != ''
+      AND ${DEVICE_ID} IS NOT NULL
+    GROUP BY country
+    ORDER BY visitors DESC
+    FORMAT JSONEachRow
+  `;
+  let rows: VisitorCountryRow[];
+  try {
+    rows = await queryBetterStack<VisitorCountryRow>({
+      query,
+      cacheKey: "visitors-by-country",
+    });
+  } catch {
+    return {};
+  }
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    if (!r.country) continue;
+    out[r.country.toUpperCase()] = Number(r.visitors);
+  }
+  return out;
 }
 
 // ----------------------------------------------------------------------------

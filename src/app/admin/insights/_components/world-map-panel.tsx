@@ -26,8 +26,8 @@ export async function WorldMapPanel() {
       ) : (
         <StandardEmptyState
           variant="muted"
-          title="Web Analytics / Speed Insights drain not configured"
-          description="Add a Vercel Drain for this data type in Vercel team settings → Drains → Add Drain → Better Stack destination. Until configured, this panel cannot populate."
+          title="No visitor data yet"
+          description="The Web Analytics drain is configured but no pageviews with a country header have been recorded in the last 24h. Browse the site and refresh."
         />
       )}
     </section>
