@@ -169,6 +169,14 @@ export const adminCrumbs = {
   importHelp: (): Breadcrumb[] => [ADMIN, { label: "Import help" }],
   emailFailures: (): Breadcrumb[] => [ADMIN, { label: "Email failures" }],
 
+  // Platform insights (Phase 26 §4) — Better Stack-driven dashboard
+  // for traffic, error rate, and deployment health.
+  insights: (): Breadcrumb[] => [ADMIN, { label: "Platform insights" }],
+
+  // Server logs (Phase 26 §5) — aggregated telemetry from the
+  // Better Stack drain. Not a raw log tail.
+  serverLogs: (): Breadcrumb[] => [ADMIN, { label: "Server logs" }],
+
   // D365 import (Phase 23)
   d365Import: (): Breadcrumb[] => [ADMIN, { label: "D365 import" }],
   d365ImportRun: (runShortId: string): Breadcrumb[] => [
