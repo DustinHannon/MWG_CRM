@@ -363,7 +363,7 @@ export default async function ApiUsageLogPage({
                   <td className="px-5 py-3 text-xs">
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold",
                         statusChipClass(r.statusCode),
                       )}
                       title={statusOutcomeTitle(r.statusCode)}
