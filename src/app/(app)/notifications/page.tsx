@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
-import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
@@ -25,10 +24,13 @@ export default async function NotificationsPage({
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Notifications" }]} />
-      <PageRealtime
-        entities={["notifications"]}
-        filter={`user_id=eq.${session.id}`}
-      />
+      {/*
+        Realtime subscription for `notifications` is mounted at the
+        authenticated layout (so the topbar bell updates everywhere).
+        Re-subscribing here produces the same channel name and triggers
+        "cannot add postgres_changes callbacks after subscribe()".
+        Layout-level refresh propagates down to this segment.
+      */}
       <PagePoll entities={["notifications"]} />
       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
         Notifications
