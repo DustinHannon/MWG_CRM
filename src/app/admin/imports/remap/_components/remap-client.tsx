@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 import { toast } from "sonner";
 import { remapImportedByNameAction } from "../actions";
 
@@ -33,13 +33,15 @@ export function RemapClient({
   // Phase 25 §7.5 follow-up — `new Date().toLocaleString()` returns
   // different strings on the server (UTC, env locale) vs the client
   // (user's locale + timezone), which triggers a React #418 hydration
-  // mismatch. Defer the formatted timestamp render until after mount
-  // so the server pass renders the ISO string and the client swaps
-  // to the local-format string on the first effect tick.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // mismatch. useSyncExternalStore returns the server snapshot during
+  // SSR/hydration and the client snapshot from the first client render
+  // forward — same hydration-safe swap as useEffect+useState, but
+  // without setting state in an effect (react-hooks/set-state-in-effect).
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
 
   function setPick(name: string, userId: string) {
     setPicks((prev) => ({ ...prev, [name]: userId }));
@@ -143,4 +145,8 @@ export function RemapClient({
       </table>
     </div>
   );
+}
+
+function subscribeNoop() {
+  return () => {};
 }
