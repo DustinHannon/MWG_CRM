@@ -75,6 +75,42 @@ export function betterStackS3Collection(sourceSlug = "mwg_crm"): string {
   return `t${env.BETTERSTACK_TEAM_ID}_${sourceSlug}_s3`;
 }
 
+/**
+ * Process-local concurrency limiter. Better Stack's Standard plan
+ * caps logs queries at 4 concurrent per user. The Insights page
+ * issues 5–6 panel queries via Suspense streaming; without a limiter
+ * we hit HTTP 429. Cap at 3 to leave headroom for any other panel
+ * (e.g., Server Logs page rendering in the same render pass).
+ *
+ * Semaphore is per-Node-process. Fluid Compute reuses instances, so
+ * the queue persists across requests on the same worker — desirable
+ * since the rate limit is also per-user, not per-request.
+ */
+const BETTERSTACK_MAX_CONCURRENCY = 3;
+
+class AsyncSemaphore {
+  private active = 0;
+  private readonly waiters: Array<() => void> = [];
+  constructor(private readonly max: number) {}
+
+  async acquire(): Promise<void> {
+    if (this.active < this.max) {
+      this.active++;
+      return;
+    }
+    await new Promise<void>((resolve) => this.waiters.push(resolve));
+    this.active++;
+  }
+
+  release(): void {
+    this.active--;
+    const next = this.waiters.shift();
+    if (next) next();
+  }
+}
+
+const bsLimiter = new AsyncSemaphore(BETTERSTACK_MAX_CONCURRENCY);
+
 async function executeQuery<TRow>(
   query: string,
   auditFamily: "observability.insights" | "observability.server_logs",
@@ -83,6 +119,18 @@ async function executeQuery<TRow>(
     throw new BetterStackNotConfiguredError();
   }
 
+  await bsLimiter.acquire();
+  try {
+    return await executeQueryInner<TRow>(query, auditFamily);
+  } finally {
+    bsLimiter.release();
+  }
+}
+
+async function executeQueryInner<TRow>(
+  query: string,
+  auditFamily: "observability.insights" | "observability.server_logs",
+): Promise<TRow[]> {
   const url = `https://${env.BETTERSTACK_QUERY_HOST}?output_format_pretty_row_numbers=0`;
   const auth = Buffer.from(
     `${env.BETTERSTACK_QUERY_USERNAME}:${env.BETTERSTACK_QUERY_PASSWORD}`,

@@ -93,7 +93,7 @@ export async function getKpiSnapshot(): Promise<KpiSnapshot> {
         count(*) AS total,
         countIf(${PUBLIC_PATH_FILTER}) AS page_views,
         countIf(${STATUS} >= 500) AS errors
-      FROM ${HOT}
+      FROM remote(${HOT})
       WHERE dt >= now() - INTERVAL 48 HOUR
         AND ${PROXY_ROWS}
       GROUP BY bucket
@@ -154,7 +154,7 @@ export async function getTrafficTimeline(): Promise<TrafficDay[]> {
       sum(requests)         AS requests
     FROM (
       SELECT toStartOfDay(dt) AS day, count(*) AS requests
-      FROM ${HOT}
+      FROM remote(${HOT})
       WHERE dt >= now() - INTERVAL 7 DAY
         AND ${PROXY_ROWS}
       GROUP BY day
@@ -198,7 +198,7 @@ export async function getTopPages(): Promise<TopPageRow[]> {
     SELECT path, sum(requests) AS requests
     FROM (
       SELECT ${PATH} AS path, count(*) AS requests
-      FROM ${HOT}
+      FROM remote(${HOT})
       WHERE dt >= now() - INTERVAL 24 HOUR
         AND ${PROXY_ROWS}
         AND ${PUBLIC_PATH_FILTER}
@@ -244,7 +244,7 @@ export async function getTopReferrers(): Promise<TopReferrerRow[]> {
     SELECT referer, sum(requests) AS requests
     FROM (
       SELECT ${REFERER} AS referer, count(*) AS requests
-      FROM ${HOT}
+      FROM remote(${HOT})
       WHERE dt >= now() - INTERVAL 24 HOUR
         AND ${PROXY_ROWS}
         AND ${REFERER} IS NOT NULL
@@ -319,7 +319,7 @@ export async function getErrorRateIssues(): Promise<IssueEntry[]> {
         if(dt >= now() - INTERVAL 1 HOUR, 'last_hour', 'baseline_7d') AS bucket,
         count(*) AS total,
         countIf(${STATUS} >= 500) AS errors
-      FROM ${HOT}
+      FROM remote(${HOT})
       WHERE dt >= now() - INTERVAL 7 DAY
         AND ${PROXY_ROWS}
       GROUP BY bucket
