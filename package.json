@@ -17,6 +17,7 @@
     "@asteasolutions/zod-to-openapi": "^7.3.4",
     "@azure/msal-node": "^5.2.0",
     "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@node-rs/argon2": "^2.0.2",
     "@radix-ui/react-alert-dialog": "^1.1.15",

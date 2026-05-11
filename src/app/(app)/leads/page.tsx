@@ -18,6 +18,9 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserChip } from "@/components/user-display";
 import { AddVisibleToListButton } from "./_components/add-visible-to-list-button";
+import { BulkTagButton } from "./_components/bulk-tag-button";
+import { SortableLeadsHeaders } from "./_components/sortable-leads-headers";
+import { listTags } from "@/lib/tags";
 import { MobileFilterSelect } from "./_components/filters-mobile";
 import { LeadListMobile } from "./_components/lead-list-mobile";
 import { LeadRowActions } from "./_components/lead-row-actions";
@@ -179,6 +182,11 @@ export default async function LeadsPage({
   });
 
   // ---- Toolbar payload ---------------------------------------------------
+  // Phase 25 §7.5 — preload tags for the BulkTagButton picker.
+  // Cheap query (tags table is small) and cached at the page level
+  // so we don't fetch per-render of the dropdown.
+  const allTags = await listTags();
+
   const allViews: ViewSummary[] = [
     ...visibleBuiltins(canViewAll).map((v) => ({
       id: v.id,
@@ -264,6 +272,15 @@ export default async function LeadsPage({
             <AddVisibleToListButton
               leadIds={result.rows.map((r) => r.id)}
               canManage={user.isAdmin || perms.canManageMarketing}
+            />
+          </div>
+          {/* Phase 25 §7.5 — bulk-tag toolbar. Acts on the currently
+              visible leadIds (same pattern as AddVisibleToList);
+              backed by the existing bulkTagLeadsAction. */}
+          <div className="hidden md:inline-flex">
+            <BulkTagButton
+              leadIds={result.rows.map((r) => r.id)}
+              availableTags={allTags}
             />
           </div>
           {perms.canCreateLeads || user.isAdmin ? (
@@ -418,17 +435,14 @@ export default async function LeadsPage({
 
       <div className="mt-6 hidden overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl md:block">
         <table className="data-table min-w-full divide-y divide-border/60 text-sm">
-          <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-              {activeColumns.map((c) => (
-                <th key={c} className="px-5 py-3 font-medium whitespace-nowrap">
-                  {AVAILABLE_COLUMNS.find((col) => col.key === c)?.label ?? c}
-                </th>
-              ))}
-              {/* Phase 10 — fixed-width trailing actions cell. */}
-              <th className="w-10 px-2 py-3" aria-label="actions" />
-            </tr>
-          </thead>
+          {/* Phase 25 §7.5 — DnD column reorder via @dnd-kit/sortable.
+              Drag a header horizontally to reorder; setAdhocColumnsAction
+              persists, then revalidatePath re-renders the table body
+              with the new column order applied to every row cell. */}
+          <SortableLeadsHeaders
+            initialColumns={activeColumns}
+            activeViewId={activeViewParam}
+          />
           <tbody className="divide-y divide-border/60">
             {result.rows.length === 0 ? (
               <tr>
