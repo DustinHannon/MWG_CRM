@@ -12,6 +12,7 @@ import {
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
+import { StandardEmptyState } from "@/components/standard";
 import type { FilterDsl } from "@/lib/security/filter-dsl";
 import { DslSummary } from "../_components/dsl-summary";
 import { ListDetailActions } from "../_components/list-detail-actions";
@@ -150,14 +151,10 @@ export default async function ListDetailPage({
       <div className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold text-foreground">Members</h2>
         {memberRows.length === 0 ? (
-          <div className="flex h-32 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card text-center">
-            <p className="text-sm font-medium text-foreground">
-              No members yet
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Click Refresh now to evaluate the filter against current leads.
-            </p>
-          </div>
+          <StandardEmptyState
+            title="No members yet"
+            description="Click Refresh now to evaluate the filter against current leads."
+          />
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <div className="overflow-x-auto">
