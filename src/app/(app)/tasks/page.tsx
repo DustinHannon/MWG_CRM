@@ -6,6 +6,7 @@ import { userPreferences } from "@/db/schema/views";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
+import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -199,20 +200,21 @@ export default async function TasksPage({
       <BreadcrumbsSetter crumbs={[{ label: "Tasks" }]} />
       <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["tasks"]} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div>
-          {/* Phase 25 §7.3 — title is "Tasks"; subtitle removed. */}
-          <h1 className="text-2xl font-semibold font-display">Tasks</h1>
-        </div>
-        {session.isAdmin ? (
-          <Link
-            href="/tasks/archived"
-            className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 whitespace-nowrap transition hover:bg-muted md:inline-flex"
-          >
-            Archived
-          </Link>
-        ) : null}
-      </div>
+      {/* Phase 25 §7.3 — title is "Tasks"; subtitle removed. */}
+      <StandardPageHeader
+        title="Tasks"
+        fontFamily="display"
+        actions={
+          session.isAdmin ? (
+            <Link
+              href="/tasks/archived"
+              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 whitespace-nowrap transition hover:bg-muted md:inline-flex"
+            >
+              Archived
+            </Link>
+          ) : null
+        }
+      />
 
       {/* Phase 25 §7.3 — view selector + filter bar. URL-state driven,
           like the /leads filter bar. */}

@@ -6,6 +6,7 @@ import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
+import { StandardPageHeader } from "@/components/standard";
 import { ArchivedListMobile } from "@/components/archived/archived-list-mobile";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
@@ -70,22 +71,18 @@ export default async function ArchivedLeadsPage() {
       />
       <PageRealtime entities={["leads"]} />
       <PagePoll entities={["leads"]} />
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Archived leads
-          </h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Hidden from the main views. Auto-purged 30 days after archive.
-          </p>
-        </div>
-        <Link
-          href="/leads"
-          className="text-xs uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground/90"
-        >
-          ← Back to leads
-        </Link>
-      </div>
+      <StandardPageHeader
+        title="Archived leads"
+        description="Hidden from the main views. Auto-purged 30 days after archive."
+        actions={
+          <Link
+            href="/leads"
+            className="text-xs uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground/90"
+          >
+            ← Back to leads
+          </Link>
+        }
+      />
 
       {rows.length === 0 ? (
         <GlassCard className="px-6 py-10 text-center text-sm text-muted-foreground">
