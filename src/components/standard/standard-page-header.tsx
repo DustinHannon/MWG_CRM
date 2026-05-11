@@ -7,6 +7,10 @@ import type { ReactNode } from "react";
  *   - subtitle: text-sm (was text-xs)
  *   - kicker?: optional `text-[10px] uppercase tracking-[0.3em]` label
  *   - fontFamily?: "default" | "display" — applies font-display serif
+ * Phase 26 D4.1 — optional `controls?: ReactNode` slot rendered in the
+ *   trailing flex row to the LEFT of `actions`. Used by /leads and
+ *   /opportunities for the Table↔Pipeline view toggle that shares the
+ *   header row with the action cluster.
  *
  * Replaces the inline H1 + description + actions row pattern at the top
  * of nearly every list and detail page. Headers stay consistent in
@@ -39,6 +43,13 @@ export interface StandardPageHeaderProps {
    * Defaults to "default" (system sans).
    */
   fontFamily?: "default" | "display";
+  /**
+   * Optional controls (view toggles, segmented selectors) rendered in
+   * the trailing flex row to the LEFT of `actions`. Reserved for
+   * power-user controls that share the header row with the action
+   * cluster on /leads and /opportunities (Table↔Pipeline toggle).
+   */
+  controls?: ReactNode;
   /** Tighter top padding for detail pages embedded in a card shell. */
   variant?: "page" | "section";
   className?: string;
@@ -51,6 +62,7 @@ export function StandardPageHeader({
   badges,
   kicker,
   fontFamily = "default",
+  controls,
   variant = "page",
   className,
 }: StandardPageHeaderProps) {
@@ -96,8 +108,11 @@ export function StandardPageHeader({
           <div className="mt-1 text-sm text-muted-foreground">{description}</div>
         ) : null}
       </div>
-      {actions ? (
-        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      {controls || actions ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {controls}
+          {actions}
+        </div>
       ) : null}
     </header>
   );
