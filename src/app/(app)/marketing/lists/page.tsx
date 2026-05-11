@@ -43,7 +43,7 @@ export default async function ListsPage() {
         <div className="flex flex-wrap gap-2">
           <Link
             href="/marketing/lists/new"
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
           >
             + New list
           </Link>
