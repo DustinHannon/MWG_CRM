@@ -54,7 +54,10 @@ export default async function ClaimAndRemapPage() {
       <BreadcrumbsSetter
         crumbs={[
           { label: "Admin", href: "/admin" },
-          { label: "Imports", href: "/admin/imports" },
+          // Phase 25 §7.5 follow-up — /admin/imports parent route
+          // doesn't exist yet; render the segment as plain text so
+          // RSC prefetch doesn't 404 against a nonexistent path.
+          { label: "Imports" },
           { label: "Imported-by remap" },
         ]}
       />

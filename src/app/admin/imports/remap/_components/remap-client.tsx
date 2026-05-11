@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { remapImportedByNameAction } from "../actions";
 
@@ -30,6 +30,16 @@ export function RemapClient({
 }) {
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [busy, startTransition] = useTransition();
+  // Phase 25 §7.5 follow-up — `new Date().toLocaleString()` returns
+  // different strings on the server (UTC, env locale) vs the client
+  // (user's locale + timezone), which triggers a React #418 hydration
+  // mismatch. Defer the formatted timestamp render until after mount
+  // so the server pass renders the ISO string and the client swaps
+  // to the local-format string on the first effect tick.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   function setPick(name: string, userId: string) {
     setPicks((prev) => ({ ...prev, [name]: userId }));
@@ -97,7 +107,9 @@ export function RemapClient({
                 <td className="px-4 py-2 font-mono text-xs">{name}</td>
                 <td className="px-4 py-2 tabular-nums">{row.count}</td>
                 <td className="px-4 py-2 text-xs text-muted-foreground">
-                  {new Date(row.mostRecent).toLocaleString()}
+                  {mounted
+                    ? new Date(row.mostRecent).toLocaleString()
+                    : new Date(row.mostRecent).toISOString()}
                 </td>
                 <td className="px-4 py-2">
                   <select
