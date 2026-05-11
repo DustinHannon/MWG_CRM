@@ -6,6 +6,7 @@ import { savedSearchSubscriptions } from "@/db/schema/saved-search-subscriptions
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
+import { StandardPageHeader } from "@/components/standard";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import {
@@ -218,13 +219,16 @@ export default async function LeadsPage({
           Phase 11 polling layer remains as the documented fallback. */}
       <PageRealtime entities={["leads"]} />
       <PagePoll entities={["leads"]} />
-      {/* Phase 12 Sub-E — header row stacks on mobile, returns to
-          horizontal layout at >=640px so the +Add lead / Import /
-          Export pills don't collide with the title block. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Leads</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+      {/* Phase 12 Sub-E / Phase 26 §7.2 — header migrated to
+          StandardPageHeader. The Table↔Pipeline toggle rides in the
+          `controls` slot (left of `actions`) so it shares the row with
+          the action cluster. Power-user controls remain hidden at <md
+          per the existing mobile toolbar rules; only `+Add lead`
+          stays in the action cluster on mobile. */}
+      <StandardPageHeader
+        title="Leads"
+        description={
+          <>
             {/* Phase 9C — cursor pagination skips the COUNT query for
                 speed at scale. We show the row count only when the
                 offset path runs (custom sort or filtered view). */}
@@ -232,12 +236,9 @@ export default async function LeadsPage({
               ? `${result.total} ${result.total === 1 ? "lead" : "leads"}`
               : `${result.rows.length}${result.nextCursor ? "+" : ""} ${result.rows.length === 1 ? "lead" : "leads"}`}
             {sp.q ? ` matching "${sp.q}"` : ""} · view {activeView.name}
-          </p>
-        </div>
-        {/* Phase 12 — at <md only `+Add lead` shows. Pipeline / Import
-            / Export / Table-Pipeline toggle are power-user controls
-            that crowded a 380 px viewport; they reappear at md+. */}
-        <div className="flex flex-wrap gap-2">
+          </>
+        }
+        controls={
           <div className="hidden gap-1 rounded-lg border border-glass-border bg-glass-1 p-1 md:flex">
             <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
               Table
@@ -249,50 +250,54 @@ export default async function LeadsPage({
               Pipeline
             </Link>
           </div>
-          {perms.canImport || user.isAdmin ? (
-            <Link
-              href="/leads/import"
-              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
-            >
-              Import
-            </Link>
-          ) : null}
-          {perms.canExport || user.isAdmin ? (
-            <a
-              href={buildExportHref(sp)}
-              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
-            >
-              Export
-            </a>
-          ) : null}
-          {/* Phase 21 — bulk add visible leads to a marketing list. Gated
-              upstream so the button only renders for admins / users with
-              canManageMarketing. Desktop-only to match Import/Export. */}
-          <div className="hidden md:inline-flex">
-            <AddVisibleToListButton
-              leadIds={result.rows.map((r) => r.id)}
-              canManage={user.isAdmin || perms.canManageMarketing}
-            />
-          </div>
-          {/* Phase 25 §7.5 — bulk-tag toolbar. Acts on the currently
-              visible leadIds (same pattern as AddVisibleToList);
-              backed by the existing bulkTagLeadsAction. */}
-          <div className="hidden md:inline-flex">
-            <BulkTagButton
-              leadIds={result.rows.map((r) => r.id)}
-              availableTags={allTags}
-            />
-          </div>
-          {perms.canCreateLeads || user.isAdmin ? (
-            <Link
-              href="/leads/new"
-              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-            >
-              + Add lead
-            </Link>
-          ) : null}
-        </div>
-      </div>
+        }
+        actions={
+          <>
+            {perms.canImport || user.isAdmin ? (
+              <Link
+                href="/leads/import"
+                className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
+              >
+                Import
+              </Link>
+            ) : null}
+            {perms.canExport || user.isAdmin ? (
+              <a
+                href={buildExportHref(sp)}
+                className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
+              >
+                Export
+              </a>
+            ) : null}
+            {/* Phase 21 — bulk add visible leads to a marketing list. Gated
+                upstream so the button only renders for admins / users with
+                canManageMarketing. Desktop-only to match Import/Export. */}
+            <div className="hidden md:inline-flex">
+              <AddVisibleToListButton
+                leadIds={result.rows.map((r) => r.id)}
+                canManage={user.isAdmin || perms.canManageMarketing}
+              />
+            </div>
+            {/* Phase 25 §7.5 — bulk-tag toolbar. Acts on the currently
+                visible leadIds (same pattern as AddVisibleToList);
+                backed by the existing bulkTagLeadsAction. */}
+            <div className="hidden md:inline-flex">
+              <BulkTagButton
+                leadIds={result.rows.map((r) => r.id)}
+                availableTags={allTags}
+              />
+            </div>
+            {perms.canCreateLeads || user.isAdmin ? (
+              <Link
+                href="/leads/new"
+                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              >
+                + Add lead
+              </Link>
+            ) : null}
+          </>
+        }
+      />
 
       {/* ViewToolbar is desktop-only — view selector, MODIFIED badge,
           Save-as-new, Columns chooser are all power-user features
