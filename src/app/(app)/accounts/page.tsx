@@ -6,6 +6,7 @@ import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
+import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
@@ -86,33 +87,30 @@ export default async function AccountsPage({
       <BreadcrumbsSetter crumbs={[{ label: "Accounts" }]} />
       <PageRealtime entities={["accounts"]} />
       <PagePoll entities={["accounts"]} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Accounts
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold font-display">Accounts</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Companies — created from lead conversions or directly.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {session.isAdmin ? (
+      <StandardPageHeader
+        kicker="Accounts"
+        title="Accounts"
+        fontFamily="display"
+        description="Companies — created from lead conversions or directly."
+        actions={
+          <>
+            {session.isAdmin ? (
+              <Link
+                href="/accounts/archived"
+                className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted md:inline-flex"
+              >
+                Archived
+              </Link>
+            ) : null}
             <Link
-              href="/accounts/archived"
-              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted md:inline-flex"
+              href="/accounts/new"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
-              Archived
+              + New account
             </Link>
-          ) : null}
-          <Link
-            href="/accounts/new"
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-          >
-            + New account
-          </Link>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Phase 12 — dense single-line list at <md, mirrors /leads. */}
       <div className="mt-6 md:hidden">

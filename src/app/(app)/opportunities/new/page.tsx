@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { listAccountsForPicker } from "@/lib/accounts";
 import { listContactsForAccountPicker } from "@/lib/opportunities";
@@ -47,14 +48,18 @@ export default async function NewOpportunityPage({
       >
         {prefilledAccountId ? "← Back to account" : "← Back to opportunities"}
       </Link>
-      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
-        New
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold">Add opportunity</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Direct opportunity creation. Select the account first, then
-        fill in the deal details.
-      </p>
+      <div className="mt-3">
+        <StandardPageHeader
+          kicker="New"
+          title="Add opportunity"
+          description={
+            <>
+              Direct opportunity creation. Select the account first, then
+              fill in the deal details.
+            </>
+          }
+        />
+      </div>
 
       <OpportunityForm
         accounts={accounts}

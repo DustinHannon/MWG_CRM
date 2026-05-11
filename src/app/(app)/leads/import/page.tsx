@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { ImportClient } from "./import-client";
 
@@ -20,14 +21,18 @@ export default async function ImportPage() {
           { label: "Import" },
         ]}
       />
-      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Import</p>
-      <h1 className="mt-1 text-2xl font-semibold">Import leads from XLSX</h1>
-      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Download the template, fill it in, and upload it back. Existing leads
-        with a matching <code className="text-foreground/90">External ID</code>{" "}
-        are updated. Rows with an email matching an existing lead are flagged
-        for review (not auto-merged).
-      </p>
+      <StandardPageHeader
+        kicker="Import"
+        title="Import leads from XLSX"
+        description={
+          <>
+            Download the template, fill it in, and upload it back. Existing leads
+            with a matching <code className="text-foreground/90">External ID</code>{" "}
+            are updated. Rows with an email matching an existing lead are flagged
+            for review (not auto-merged).
+          </>
+        }
+      />
 
       <div className="mt-6 flex gap-3">
         <a

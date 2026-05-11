@@ -6,6 +6,7 @@ import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
+import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -75,30 +76,29 @@ export default async function ContactsPage({
       <BreadcrumbsSetter crumbs={[{ label: "Contacts" }]} />
       <PageRealtime entities={["contacts"]} />
       <PagePoll entities={["contacts"]} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Contacts
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold font-display">Contacts</h1>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {session.isAdmin ? (
+      <StandardPageHeader
+        kicker="Contacts"
+        title="Contacts"
+        fontFamily="display"
+        actions={
+          <>
+            {session.isAdmin ? (
+              <Link
+                href="/contacts/archived"
+                className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted md:inline-flex"
+              >
+                Archived
+              </Link>
+            ) : null}
             <Link
-              href="/contacts/archived"
-              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted md:inline-flex"
+              href="/contacts/new"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
-              Archived
+              + New contact
             </Link>
-          ) : null}
-          <Link
-            href="/contacts/new"
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-          >
-            + New contact
-          </Link>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="mt-6 md:hidden">
         <ContactListMobile

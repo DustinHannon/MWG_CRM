@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { listAccountsForPicker } from "@/lib/accounts";
 import { ContactForm } from "./_components/contact-form";
@@ -39,14 +40,18 @@ export default async function NewContactPage({
       >
         {prefilledAccountId ? "← Back to account" : "← Back to contacts"}
       </Link>
-      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
-        New
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold">Add contact</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Direct contact creation. Pick an account to attach this contact
-        to, or leave it blank to create a contact without an account.
-      </p>
+      <div className="mt-3">
+        <StandardPageHeader
+          kicker="New"
+          title="Add contact"
+          description={
+            <>
+              Direct contact creation. Pick an account to attach this contact
+              to, or leave it blank to create a contact without an account.
+            </>
+          }
+        />
+      </div>
 
       <ContactForm
         accounts={accounts}

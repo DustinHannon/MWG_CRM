@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { LeadForm } from "../lead-form";
 
@@ -20,12 +21,16 @@ export default async function NewLeadPage() {
           { label: "New" },
         ]}
       />
-      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">New</p>
-      <h1 className="mt-1 text-2xl font-semibold">Add lead</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Required fields are marked with an asterisk. Most fields are
-        optional — fill them in as you learn more about the lead.
-      </p>
+      <StandardPageHeader
+        kicker="New"
+        title="Add lead"
+        description={
+          <>
+            Required fields are marked with an asterisk. Most fields are
+            optional — fill them in as you learn more about the lead.
+          </>
+        }
+      />
 
       <LeadForm mode="create" />
     </div>
