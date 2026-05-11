@@ -11,6 +11,12 @@ import {
   tokenPrefix,
 } from "@/lib/api/token";
 import { isValidScope, type Scope } from "@/lib/api/scopes";
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from "@/lib/errors";
+import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
  * Phase 13 — admin server actions for /admin/api-keys.
@@ -30,156 +36,159 @@ export interface GenerateApiKeyInput {
   expiresInDays?: number | null;
 }
 
-export type GenerateApiKeyResult =
-  | {
-      ok: true;
-      id: string;
-      prefix: string;
-      plaintext: string;
-    }
-  | {
-      ok: false;
-      message: string;
-    };
+export interface GenerateApiKeyData {
+  id: string;
+  prefix: string;
+  plaintext: string;
+}
 
 export async function generateApiKeyAction(
   input: GenerateApiKeyInput,
-): Promise<GenerateApiKeyResult> {
-  const session = await requireAdmin();
+): Promise<ActionResult<GenerateApiKeyData>> {
+  return withErrorBoundary(
+    { action: "api_key.create" },
+    async (): Promise<GenerateApiKeyData> => {
+      const session = await requireAdmin();
 
-  const name = input.name.trim();
-  if (!name) {
-    return { ok: false, message: "Name is required" };
-  }
-  if (name.length > 120) {
-    return { ok: false, message: "Name must be 120 characters or fewer" };
-  }
-  if (!Array.isArray(input.scopes) || input.scopes.length === 0) {
-    return { ok: false, message: "At least one scope is required" };
-  }
-  const invalid = input.scopes.filter((s) => !isValidScope(s));
-  if (invalid.length > 0) {
-    return { ok: false, message: `Invalid scope(s): ${invalid.join(", ")}` };
-  }
-  if (
-    !Number.isInteger(input.rateLimitPerMinute) ||
-    input.rateLimitPerMinute < 10 ||
-    input.rateLimitPerMinute > 1000
-  ) {
-    return {
-      ok: false,
-      message: "Rate limit must be an integer between 10 and 1000",
-    };
-  }
+      const name = input.name.trim();
+      if (!name) {
+        throw new ValidationError("Name is required");
+      }
+      if (name.length > 120) {
+        throw new ValidationError("Name must be 120 characters or fewer");
+      }
+      if (!Array.isArray(input.scopes) || input.scopes.length === 0) {
+        throw new ValidationError("At least one scope is required");
+      }
+      const invalid = input.scopes.filter((s) => !isValidScope(s));
+      if (invalid.length > 0) {
+        throw new ValidationError(`Invalid scope(s): ${invalid.join(", ")}`);
+      }
+      if (
+        !Number.isInteger(input.rateLimitPerMinute) ||
+        input.rateLimitPerMinute < 10 ||
+        input.rateLimitPerMinute > 1000
+      ) {
+        throw new ValidationError(
+          "Rate limit must be an integer between 10 and 1000",
+        );
+      }
 
-  let expiresAt: Date | null = null;
-  if (input.expiresInDays && input.expiresInDays > 0) {
-    expiresAt = new Date(
-      Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000,
-    );
-  } else if (input.expiresAt) {
-    const d = new Date(input.expiresAt);
-    if (Number.isNaN(d.getTime())) {
-      return { ok: false, message: "Invalid expiration date" };
-    }
-    if (d.getTime() <= Date.now()) {
-      return { ok: false, message: "Expiration date must be in the future" };
-    }
-    expiresAt = d;
-  }
+      let expiresAt: Date | null = null;
+      if (input.expiresInDays && input.expiresInDays > 0) {
+        expiresAt = new Date(
+          Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000,
+        );
+      } else if (input.expiresAt) {
+        const d = new Date(input.expiresAt);
+        if (Number.isNaN(d.getTime())) {
+          throw new ValidationError("Invalid expiration date");
+        }
+        if (d.getTime() <= Date.now()) {
+          throw new ValidationError("Expiration date must be in the future");
+        }
+        expiresAt = d;
+      }
 
-  const plaintext = generatePlaintextToken();
-  const keyHash = hashToken(plaintext);
-  const keyPrefix = tokenPrefix(plaintext);
+      const plaintext = generatePlaintextToken();
+      const keyHash = hashToken(plaintext);
+      const keyPrefix = tokenPrefix(plaintext);
 
-  const inserted = await db
-    .insert(apiKeys)
-    .values({
-      name,
-      description: input.description?.trim() || null,
-      keyHash,
-      keyPrefix,
-      scopes: input.scopes as Scope[],
-      rateLimitPerMinute: input.rateLimitPerMinute,
-      expiresAt,
-      createdById: session.id,
-    })
-    .returning({ id: apiKeys.id });
+      const inserted = await db
+        .insert(apiKeys)
+        .values({
+          name,
+          description: input.description?.trim() || null,
+          keyHash,
+          keyPrefix,
+          scopes: input.scopes as Scope[],
+          rateLimitPerMinute: input.rateLimitPerMinute,
+          expiresAt,
+          createdById: session.id,
+        })
+        .returning({ id: apiKeys.id });
 
-  await writeAudit({
-    actorId: session.id,
-    action: "api_key.create",
-    targetType: "api_keys",
-    targetId: inserted[0].id,
-    after: {
-      name,
-      prefix: keyPrefix,
-      scopes: input.scopes,
-      rateLimitPerMinute: input.rateLimitPerMinute,
-      expiresAt: expiresAt ? expiresAt.toISOString() : null,
+      await writeAudit({
+        actorId: session.id,
+        action: "api_key.create",
+        targetType: "api_keys",
+        targetId: inserted[0].id,
+        after: {
+          name,
+          prefix: keyPrefix,
+          scopes: input.scopes,
+          rateLimitPerMinute: input.rateLimitPerMinute,
+          expiresAt: expiresAt ? expiresAt.toISOString() : null,
+        },
+      });
+
+      return {
+        id: inserted[0].id,
+        prefix: keyPrefix,
+        plaintext,
+      };
     },
-  });
-
-  return {
-    ok: true,
-    id: inserted[0].id,
-    prefix: keyPrefix,
-    plaintext,
-  };
+  );
 }
 
 export async function revokeApiKeyAction(
   id: string,
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  const session = await requireAdmin();
-  const [row] = await db
-    .select({ id: apiKeys.id, name: apiKeys.name, revokedAt: apiKeys.revokedAt })
-    .from(apiKeys)
-    .where(eq(apiKeys.id, id))
-    .limit(1);
-  if (!row) return { ok: false, message: "Key not found" };
-  if (row.revokedAt) {
-    return { ok: false, message: "Key is already revoked" };
-  }
-  await db
-    .update(apiKeys)
-    .set({
-      revokedAt: sql`now()`,
-      revokedById: session.id,
-      updatedAt: sql`now()`,
-    })
-    .where(eq(apiKeys.id, id));
-  await writeAudit({
-    actorId: session.id,
-    action: "api_key.revoke",
-    targetType: "api_keys",
-    targetId: id,
-    after: { name: row.name },
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "api_key.revoke" }, async () => {
+    const session = await requireAdmin();
+    const [row] = await db
+      .select({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        revokedAt: apiKeys.revokedAt,
+      })
+      .from(apiKeys)
+      .where(eq(apiKeys.id, id))
+      .limit(1);
+    if (!row) throw new NotFoundError("Key not found");
+    if (row.revokedAt) {
+      throw new ConflictError("Key is already revoked");
+    }
+    await db
+      .update(apiKeys)
+      .set({
+        revokedAt: sql`now()`,
+        revokedById: session.id,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(apiKeys.id, id));
+    await writeAudit({
+      actorId: session.id,
+      action: "api_key.revoke",
+      targetType: "api_keys",
+      targetId: id,
+      after: { name: row.name },
+    });
   });
-  return { ok: true };
 }
 
 export async function deleteApiKeyAction(
   id: string,
   confirmName: string,
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  const session = await requireAdmin();
-  const [row] = await db
-    .select({ id: apiKeys.id, name: apiKeys.name, prefix: apiKeys.keyPrefix })
-    .from(apiKeys)
-    .where(eq(apiKeys.id, id))
-    .limit(1);
-  if (!row) return { ok: false, message: "Key not found" };
-  if (confirmName !== row.name) {
-    return { ok: false, message: "Confirmation does not match key name" };
-  }
-  await db.delete(apiKeys).where(eq(apiKeys.id, id));
-  await writeAudit({
-    actorId: session.id,
-    action: "api_key.delete",
-    targetType: "api_keys",
-    targetId: id,
-    before: { name: row.name, prefix: row.prefix },
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "api_key.delete" }, async () => {
+    const session = await requireAdmin();
+    const [row] = await db
+      .select({ id: apiKeys.id, name: apiKeys.name, prefix: apiKeys.keyPrefix })
+      .from(apiKeys)
+      .where(eq(apiKeys.id, id))
+      .limit(1);
+    if (!row) throw new NotFoundError("Key not found");
+    if (confirmName !== row.name) {
+      throw new ValidationError("Confirmation does not match key name");
+    }
+    await db.delete(apiKeys).where(eq(apiKeys.id, id));
+    await writeAudit({
+      actorId: session.id,
+      action: "api_key.delete",
+      targetType: "api_keys",
+      targetId: id,
+      before: { name: row.name, prefix: row.prefix },
+    });
   });
-  return { ok: true };
 }

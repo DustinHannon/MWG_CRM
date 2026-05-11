@@ -213,7 +213,7 @@ function RevokeButton({ keyId, keyName }: { keyId: string; keyName: string }) {
         startTransition(async () => {
           const res = await revokeApiKeyAction(keyId);
           if (!res.ok) {
-            alert(res.message);
+            alert(res.error);
             return;
           }
           router.refresh();
@@ -282,10 +282,10 @@ function GenerateModal({ onClose, onGenerated }: GenerateModalProps) {
         expiresAt,
       });
       if (!res.ok) {
-        setError(res.message);
+        setError(res.error);
         return;
       }
-      onGenerated(res.plaintext, res.prefix);
+      onGenerated(res.data.plaintext, res.data.prefix);
     });
   }
 
@@ -569,7 +569,7 @@ function DeleteModal({
               startTransition(async () => {
                 const res = await deleteApiKeyAction(row.id, confirm);
                 if (!res.ok) {
-                  setError(res.message);
+                  setError(res.error);
                   return;
                 }
                 onClose();
