@@ -142,6 +142,31 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(5),
+
+  // Phase 26 §4.2 / §5.2 — Better Stack SQL Query API. All optional so the
+  // app still boots if a phase-26 prerequisite isn't provisioned yet;
+  // the /admin/insights and /admin/server-logs pages render an empty
+  // state via StandardEmptyState when any of these is missing.
+  BETTERSTACK_SOURCE_ID: z.string().optional(),
+  BETTERSTACK_TEAM_ID: z.string().optional(),
+  BETTERSTACK_QUERY_HOST: z.string().optional(),
+  BETTERSTACK_QUERY_USERNAME: z.string().optional(),
+  BETTERSTACK_QUERY_PASSWORD: z.string().optional(),
+
+  // Phase 26 §4.3 — Vercel REST API token for the recent-deployments
+  // panel on /admin/insights. Optional for the same reason.
+  VERCEL_API_TOKEN: z.string().optional(),
+  VERCEL_TEAM_ID: z.string().optional(),
+  VERCEL_PROJECT_ID: z.string().optional(),
+
+  // Phase 26 §4.4 + §5.5 — server-side cache TTLs (seconds) for the two
+  // admin observability pages.
+  INSIGHTS_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
+  SERVER_LOGS_CACHE_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
 });
 
 const parsed = envSchema.safeParse(process.env);
