@@ -241,11 +241,11 @@ function buildCspHeader(nonce: string): string {
   // to Content-Security-Policy below.
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://editor.unlayer.com`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://editor.unlayer.com https://va.vercel-scripts.com`,
     `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://editor.unlayer.com`,
     "font-src 'self' https://fonts.gstatic.com https://fonts.scalar.com data:",
     "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://graph.microsoft.com https://*.unlayer.com",
-    "connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com https://*.supabase.co wss://*.supabase.co https://api.unlayer.com https://api.sendgrid.com",
+    "connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com https://*.supabase.co wss://*.supabase.co https://api.unlayer.com https://api.sendgrid.com https://va.vercel-scripts.com https://vitals.vercel-analytics.com",
     "frame-src https://editor.unlayer.com",
     "frame-ancestors 'none'",
     "form-action 'self' https://login.microsoftonline.com",

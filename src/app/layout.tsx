@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
 import { headers } from "next/headers";
+import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme/theme-provider";
@@ -47,7 +48,15 @@ export default async function RootLayout({
     >
       <body className="antialiased font-sans">
         <ThemeProvider nonce={nonce}>{children}</ThemeProvider>
+        {/* Phase 26 follow-up — Vercel first-party telemetry SDKs.
+            `<SpeedInsights />` collects p75 LCP/INP/CLS/FCP/TTFB and
+            posts to https://vitals.vercel-analytics.com.
+            `<Analytics />` collects page-view + visitor-country and
+            posts to https://va.vercel-scripts.com. Both also require
+            the matching connect-src / script-src CSP entries set in
+            src/proxy.ts so the strict CSP doesn't block them. */}
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
