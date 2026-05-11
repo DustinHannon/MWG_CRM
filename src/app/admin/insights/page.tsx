@@ -44,7 +44,7 @@ export default async function InsightsPage() {
         actions={<RefreshButton />}
       />
 
-      <div className="mt-6 space-y-8">
+      <div className="mt-8 space-y-8">
         <Suspense fallback={<StandardLoadingState variant="card" />}>
           <IssuesBanner />
         </Suspense>

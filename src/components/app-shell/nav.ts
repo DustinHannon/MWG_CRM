@@ -19,6 +19,7 @@ import {
   Activity,
   ArrowLeft,
   BarChart3,
+  Server,
   Building2,
   CheckSquare,
   Contact,
@@ -65,6 +66,7 @@ export const ICON_KEYS = [
   "MailWarning",
   "DownloadCloud",
   "ArrowLeft",
+  "Server",
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -92,6 +94,7 @@ export const ICON_MAP: Record<IconKey, LucideIcon> = {
   MailWarning,
   DownloadCloud,
   ArrowLeft,
+  Server,
 };
 
 export type NavLink = { label: string; href: string; iconKey?: IconKey };
@@ -139,5 +142,7 @@ export const ADMIN_NAV_ITEMS: NavLink[] = [
   { label: "D365 Import", href: "/admin/d365-import", iconKey: "DownloadCloud" },
   { label: "API Keys", href: "/admin/api-keys", iconKey: "Key" },
   { label: "API Usage", href: "/admin/api-usage", iconKey: "Activity" },
+  { label: "Insights", href: "/admin/insights", iconKey: "BarChart3" },
+  { label: "Server logs", href: "/admin/server-logs", iconKey: "Server" },
   { label: "Email Failures", href: "/admin/email-failures", iconKey: "MailWarning" },
 ];

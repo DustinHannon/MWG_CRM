@@ -71,9 +71,12 @@ export default async function ServerLogsPage({
         }
       />
 
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Each panel is wrapped in its own Suspense so the slowest
-            query doesn't block the rest of the page from streaming. */}
+            query doesn't block the rest of the page from streaming.
+            Panel order pairs ErrorPatterns with StatusDistribution
+            (both moderate-height) on row 1; RequestVolume (20-row
+            table) pairs with SlowEndpoints on row 2. */}
         <Suspense
           fallback={<StandardLoadingState variant="table" rows={5} />}
           key={`error-patterns-${range}`}
@@ -82,17 +85,17 @@ export default async function ServerLogsPage({
         </Suspense>
 
         <Suspense
-          fallback={<StandardLoadingState variant="table" rows={5} />}
-          key={`request-volume-${range}`}
-        >
-          <RequestVolumePanel range={range} />
-        </Suspense>
-
-        <Suspense
           fallback={<StandardLoadingState variant="card" />}
           key={`status-distribution-${range}`}
         >
           <StatusDistributionPanel range={range} />
+        </Suspense>
+
+        <Suspense
+          fallback={<StandardLoadingState variant="table" rows={5} />}
+          key={`request-volume-${range}`}
+        >
+          <RequestVolumePanel range={range} />
         </Suspense>
 
         <SlowEndpointsPanel />
