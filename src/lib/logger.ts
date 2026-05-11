@@ -1,4 +1,5 @@
 import "server-only";
+import { getRequestId } from "@/lib/observability/request-context";
 
 /**
  * Structured JSON logger. Single source of truth for server-side log lines —
@@ -12,6 +13,12 @@ import "server-only";
  * Standard meta keys (use these names whenever applicable):
  *   requestId, userId, action, entityType, entityId,
  *   durationMs, errorCode, errorMessage, errorStack
+ *
+ * Phase 25 §4.3 — when a logger call happens inside a
+ * `runWithRequestContext` scope and the caller didn't pass an
+ * explicit `requestId` in the meta object, the context's id is
+ * pulled in automatically so every line for one request shares the
+ * same correlation id.
  */
 
 type Level = "ERROR" | "WARN" | "INFO" | "DEBUG";
@@ -62,11 +69,20 @@ function redact(obj: unknown, depth = 0): unknown {
 }
 
 function emit(level: Level, msg: string, meta: Record<string, unknown>) {
+  // Phase 25 §4.3 — auto-include requestId from AsyncLocalStorage
+  // when the caller didn't supply one explicitly. Caller-supplied
+  // requestId always wins so explicit values (e.g. retry attempts
+  // logging the original request id) stay authoritative.
+  const ctxRequestId = getRequestId();
+  const enrichedMeta =
+    ctxRequestId && meta.requestId === undefined
+      ? { requestId: ctxRequestId, ...meta }
+      : meta;
   const entry = {
     ts: new Date().toISOString(),
     level,
     msg,
-    ...(redact(meta) as Record<string, unknown>),
+    ...(redact(enrichedMeta) as Record<string, unknown>),
   };
   // ERROR/WARN to stderr; INFO/DEBUG to stdout. Vercel ingests both.
   const out = level === "ERROR" || level === "WARN" ? console.error : console.log;

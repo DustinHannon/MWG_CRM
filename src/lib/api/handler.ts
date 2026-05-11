@@ -2,7 +2,8 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { apiKeys, apiUsageLog } from "@/db/schema/api-keys";
-import { logger } from "@/lib/logger";
+import { logger, newRequestId } from "@/lib/logger";
+import { runWithRequestContext } from "@/lib/observability/request-context";
 import {
   authenticateApiRequest,
   checkRateLimit,
@@ -46,6 +47,26 @@ export function withApi<P = unknown>(
     req: Request,
     routeArgs?: { params: Promise<P> | P },
   ): Promise<Response> => {
+    // Phase 25 §4.3 — establish the request context as early as
+    // possible so the auth phase, rate-limit phase, and handler all
+    // share one correlation id. Honor an upstream `x-request-id`
+    // header when provided (so request ids match across a reverse
+    // proxy / load balancer chain); otherwise mint a fresh one.
+    const requestId =
+      req.headers.get("x-request-id")?.slice(0, 64) ?? newRequestId();
+    return runWithRequestContext({ requestId }, () =>
+      runApiHandler(req, routeArgs, options, handler, requestId),
+    );
+  };
+}
+
+async function runApiHandler<P>(
+  req: Request,
+  routeArgs: { params: Promise<P> | P } | undefined,
+  options: WithApiOptions,
+  handler: Handler<P>,
+  requestId: string,
+): Promise<Response> {
     const start = Date.now();
     const url = new URL(req.url);
     const ip =
@@ -201,7 +222,6 @@ export function withApi<P = unknown>(
       });
 
     return response;
-  };
 }
 
 interface LogArgs {

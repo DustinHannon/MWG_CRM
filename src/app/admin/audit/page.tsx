@@ -40,6 +40,11 @@ export default async function AuditLogPage({
         ilike(auditLog.action, pattern),
         ilike(auditLog.targetType, pattern),
         ilike(auditLog.targetId, pattern),
+        // Phase 25 §4.3 — searching by request id correlates every
+        // audit row written within one logical request (server action,
+        // REST call, webhook). Same column shows in the new Request
+        // column and links here as a click-through filter.
+        ilike(auditLog.requestId, pattern),
         ilike(users.displayName, pattern),
         ilike(users.email, pattern),
       ),
@@ -229,13 +234,14 @@ export default async function AuditLogPage({
               <th className="px-5 py-3 font-medium">Actor</th>
               <th className="px-5 py-3 font-medium">Action</th>
               <th className="px-5 py-3 font-medium">Target</th>
+              <th className="px-5 py-3 font-medium">Request</th>
               <th className="px-5 py-3 font-medium">Diff</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-muted-foreground">
+                <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
                   No audit events match.
                 </td>
               </tr>
@@ -274,6 +280,24 @@ export default async function AuditLogPage({
                         </div>
                       ) : null}
                     </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td className="px-5 py-3 text-xs text-muted-foreground">
+                  {/* Phase 25 §4.3 — requestId surface for cross-line
+                      log correlation. Render as a clickable filter that
+                      narrows the audit log to the same correlation id;
+                      title attribute shows the full id on hover so the
+                      truncated 12-char preview doesn't hide it. */}
+                  {r.requestId ? (
+                    <a
+                      href={`/admin/audit?q=${encodeURIComponent(r.requestId)}`}
+                      className="font-mono text-[10px] text-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
+                      title={r.requestId}
+                    >
+                      {r.requestId.slice(0, 12)}
+                    </a>
                   ) : (
                     "—"
                   )}

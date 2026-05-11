@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { users } from "@/db/schema/users";
 import { logger } from "@/lib/logger";
+import { getRequestId } from "@/lib/observability/request-context";
 
 /**
  * Phase 20 — Append a system-initiated audit event (no user actor).
@@ -27,6 +28,10 @@ export async function writeSystemAudit(args: {
   ipAddress?: string;
 }): Promise<void> {
   try {
+    // Phase 25 §4.3 — auto-pick requestId from AsyncLocalStorage when
+    // the caller didn't supply one explicitly, so every audit row
+    // emitted during a single request shares the same correlation id.
+    const requestId = args.requestId ?? getRequestId() ?? null;
     await db.insert(auditLog).values({
       actorId: null,
       actorEmailSnapshot: args.actorEmailSnapshot,
@@ -35,7 +40,7 @@ export async function writeSystemAudit(args: {
       targetId: args.targetId ?? null,
       beforeJson: args.before === undefined ? null : (args.before as object),
       afterJson: args.after === undefined ? null : (args.after as object),
-      requestId: args.requestId ?? null,
+      requestId,
       ipAddress: args.ipAddress ?? null,
     });
   } catch (err) {
@@ -76,6 +81,8 @@ export async function writeAudit(args: {
       snapshot = u?.email ?? null;
     }
 
+    // Phase 25 §4.3 — auto-pick requestId from AsyncLocalStorage.
+    const requestId = args.requestId ?? getRequestId() ?? null;
     await db.insert(auditLog).values({
       actorId: args.actorId,
       actorEmailSnapshot: snapshot,
@@ -84,7 +91,7 @@ export async function writeAudit(args: {
       targetId: args.targetId ?? null,
       beforeJson: args.before === undefined ? null : (args.before as object),
       afterJson: args.after === undefined ? null : (args.after as object),
-      requestId: args.requestId ?? null,
+      requestId,
       ipAddress: args.ipAddress ?? null,
     });
   } catch (err) {

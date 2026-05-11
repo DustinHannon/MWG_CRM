@@ -6,6 +6,7 @@ import {
   ValidationError,
 } from "@/lib/errors";
 import { logger, newRequestId } from "@/lib/logger";
+import { runWithRequestContext } from "@/lib/observability/request-context";
 
 /**
  * Result discriminated union returned to the client by every server action.
@@ -111,6 +112,11 @@ export async function withErrorBoundary<T>(
   const requestId = ctx.requestId ?? newRequestId();
   const start = performance.now();
 
+  // Phase 25 §4.3 — run the action body inside an AsyncLocalStorage
+  // scope so any nested `writeAudit`, `writeSystemAudit`, or
+  // `logger.*` call auto-correlates with this request id without
+  // every helper threading the id through its signature.
+  return runWithRequestContext({ requestId, userId: ctx.userId }, async () => {
   try {
     const data = await fn();
     logger.info("action.success", {
@@ -173,4 +179,5 @@ export async function withErrorBoundary<T>(
       requestId,
     };
   }
+  });
 }
