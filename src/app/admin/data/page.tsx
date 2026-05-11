@@ -1,4 +1,5 @@
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { DangerSection } from "./danger-section";
 
 export const dynamic = "force-dynamic";
@@ -12,12 +13,16 @@ export default function DataToolsPage() {
           { label: "Data" },
         ]}
       />
-      <h1 className="text-2xl font-semibold">Data tools</h1>
-      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Destructive operations. Each one requires you to type the exact
-        phrase shown to confirm. There is no undo. Every action is logged
-        in <a href="/admin/audit" className="underline">the audit log</a>.
-      </p>
+      <StandardPageHeader
+        title="Data tools"
+        description={
+          <>
+            Destructive operations. Each one requires you to type the exact
+            phrase shown to confirm. There is no undo. Every action is logged
+            in <a href="/admin/audit" className="underline">the audit log</a>.
+          </>
+        }
+      />
 
       <div className="mt-8 flex flex-col gap-6">
         <DangerSection

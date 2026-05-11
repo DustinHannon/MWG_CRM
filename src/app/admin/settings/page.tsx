@@ -1,4 +1,5 @@
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { entraConfigured, env, MWG_TENANT_ID } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -12,11 +13,10 @@ export default function AdminSettingsPage() {
           { label: "Settings" },
         ]}
       />
-      <h1 className="text-2xl font-semibold">Settings</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Read-only view of the deployed configuration. Edit via Vercel
-        environment variables and redeploy.
-      </p>
+      <StandardPageHeader
+        title="Settings"
+        description="Read-only view of the deployed configuration. Edit via Vercel environment variables and redeploy."
+      />
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <Card title="Identity">

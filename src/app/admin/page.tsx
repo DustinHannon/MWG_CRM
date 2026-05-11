@@ -4,6 +4,7 @@ import { users } from "@/db/schema/users";
 import { leads } from "@/db/schema/leads";
 import { activities } from "@/db/schema/activities";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +28,10 @@ export default async function AdminOverviewPage() {
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Admin" }]} />
-      <h1 className="text-2xl font-semibold">Admin overview</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        High-level state of the CRM. Everything here is read-only.
-      </p>
+      <StandardPageHeader
+        title="Admin overview"
+        description="High-level state of the CRM. Everything here is read-only."
+      />
 
       <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
         <Stat label="Users" value={c?.users ?? 0} />

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leadTags, tags } from "@/db/schema/tags";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { requireAdmin } from "@/lib/auth-helpers";
@@ -42,14 +43,12 @@ export default async function AdminTagsPage() {
           { label: "Tags" },
         ]}
       />
-      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-        Admin
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold font-display">Tags</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        First-class tags applied to leads. Editing name or color updates
-        every lead the tag is on. Deleting cascades.
-      </p>
+      <StandardPageHeader
+        kicker="Admin"
+        title="Tags"
+        fontFamily="display"
+        description="First-class tags applied to leads. Editing name or color updates every lead the tag is on. Deleting cascades."
+      />
 
       <GlassCard className="mt-6 p-0 overflow-hidden">
         <TagsAdminTable rows={rows} prefs={await getCurrentUserTimePrefs()} />
