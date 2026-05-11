@@ -4,12 +4,26 @@ import { AsyncLocalStorage } from "node:async_hooks";
 /**
  * Phase 25 §4.3 — Per-request context propagated via AsyncLocalStorage.
  *
- * Every server entry point (server action via `withErrorBoundary`,
- * public REST handler via `withApi`, cron route, webhook receiver)
- * runs its body inside `runWithRequestContext({ requestId }, ...)`
- * so any nested `writeAudit`, `writeSystemAudit`, or `logger.*` call
- * automatically picks up the request id without each caller threading
- * it through every function signature.
+ * Covered surfaces (as of 62039fc):
+ *   - Server actions via `withErrorBoundary` (src/lib/server-action.ts)
+ *   - Public REST routes via `withApi` (src/lib/api/handler.ts)
+ *
+ * NOT covered yet — direct route handlers in these paths still write
+ * audit rows with `request_id = null`:
+ *   - /api/cron/* — cron jobs
+ *   - /api/admin/* — admin route handlers (e.g. email-failures retry)
+ *   - /api/health — health probe
+ *   - /api/v1/security/csp-report — CSP violation receiver
+ *   - /api/v1/webhooks/sendgrid/events — SendGrid webhook
+ *
+ * Extending coverage is mechanical: wrap the handler body with
+ * `runWithRequestContext({ requestId: newRequestId() }, () => ...)`.
+ * Tracked as a follow-up; not blocking.
+ *
+ * The contract: any helper that reads `getRequestId()` outside a
+ * `runWithRequestContext` scope receives `undefined` — callers should
+ * treat that gracefully (audit rows fall back to null, logger lines
+ * omit the field).
  *
  * The data is server-only — node:async_hooks doesn't exist in browser
  * runtimes; `"server-only"` enforces this at module-resolution time.
@@ -51,21 +65,6 @@ export function getContextUserId(): string | undefined {
  */
 export function getRequestContext(): RequestContext | undefined {
   return storage.getStore();
-}
-
-/**
- * Update the current context's user id in place. Used after the
- * authentication step resolves the principal; the request id was
- * already set at request entry.
- *
- * Calling this outside an active `runWithRequestContext` scope is a
- * no-op (no store to mutate). It's intentionally permissive — the
- * audit/logger code paths that auto-pull from context handle the
- * undefined case gracefully.
- */
-export function setContextUserId(userId: string): void {
-  const store = storage.getStore();
-  if (store) store.userId = userId;
 }
 
 /**

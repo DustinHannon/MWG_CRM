@@ -40,8 +40,17 @@ export const runtime = "nodejs";
  * in proxy.ts so an external monitor can hit it without a session.
  */
 
+// Phase 25 §4.2 P1 follow-up — NaN guard on the env-parsed TTL.
+// Bad input (`"abc"`) used to silently produce NaN → cache never hits
+// → external monitor probe storms hammer Graph + Blob every request.
+// Falls back to 30s on any non-finite / negative value.
+const PARSED_TTL_SECONDS = Number(
+  process.env.HEALTH_CHECK_CACHE_TTL_SECONDS ?? 30,
+);
 const CACHE_TTL_MS =
-  Math.max(0, Number(process.env.HEALTH_CHECK_CACHE_TTL_SECONDS ?? 30)) * 1000;
+  (Number.isFinite(PARSED_TTL_SECONDS) && PARSED_TTL_SECONDS >= 0
+    ? PARSED_TTL_SECONDS
+    : 30) * 1000;
 const PROBE_TIMEOUT_MS = 5000;
 
 interface CheckResult {
@@ -87,7 +96,17 @@ async function withTimeout<T>(
 async function checkDb(): Promise<CheckResult> {
   const start = Date.now();
   try {
-    await withTimeout(db.execute(sql`SELECT 1`), PROBE_TIMEOUT_MS, "db");
+    // Phase 25 §4.2 P1 follow-up — Promise.race only races the
+    // promise; the underlying query keeps running until completion,
+    // which under sustained DB hang leaks a connection from the
+    // Supavisor max:1 pool. Setting `statement_timeout` server-side
+    // forces Postgres to cancel the SELECT once 5s elapses so the
+    // client connection is actually released.
+    await withTimeout(
+      db.execute(sql`SET LOCAL statement_timeout = '5s'; SELECT 1`),
+      PROBE_TIMEOUT_MS + 500,
+      "db",
+    );
     return { ok: true, durationMs: Date.now() - start };
   } catch (err) {
     return {

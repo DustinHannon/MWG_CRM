@@ -36,8 +36,9 @@ export type RateLimitKey =
   | { kind: "filter_preview"; principal: string }
   | { kind: "campaign_send"; principal: string }
   // Phase 25 §6.2 — CSP violation report endpoint. Principal is the
-  // sha256-hashed client IP so we don't store raw IPs alongside the
-  // limiter bucket.
+  // sha256-hashed client IP (lower-case hex, 64 chars) so raw IPs
+  // aren't persisted alongside the limiter bucket. Callers pass the
+  // hash via `hashIpForRateLimit(ip)` from the csp-report route.
   | { kind: "csp_report"; principal: string };
 
 export interface RateLimitResult {

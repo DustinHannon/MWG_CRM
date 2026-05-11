@@ -1,9 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { rateLimit, ipFromRequest } from "@/lib/security/rate-limit";
 import { writeSystemAudit } from "@/lib/audit";
+
+/**
+ * Phase 25 §6.2 P1 follow-up — hash the IP before passing it as the
+ * rate-limit principal so `rate_limit_buckets.principal` doesn't
+ * persist raw IPs for the 1-day retention window. The audit-event
+ * row still stores the raw `ipAddress` (for forensics — same as the
+ * webhook event receiver) but the limiter bucket gets the hash.
+ */
+function hashIpForRateLimit(ip: string): string {
+  return createHash("sha256").update(ip).digest("hex");
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -80,6 +92,13 @@ const reportToReportSchema = z
   })
   .passthrough();
 
+// Phase 25 §6.2 P1 follow-up — cap reports-per-request hard at 5.
+// The Reporting API permits batching up to ~50; combined with the
+// 60/min/IP rate limit that's 3000 audit rows per minute per source IP
+// — enough for one misbehaving browser extension to flood audit_log.
+// Five is generous: in practice browsers emit 1-2 reports per page
+// load when a violation occurs.
+const MAX_NORMALIZED_REPORTS_PER_REQUEST = 5;
 const reportToBatchSchema = z.array(reportToReportSchema).max(50);
 
 interface NormalizedReport {
@@ -128,7 +147,7 @@ export async function POST(req: NextRequest) {
 
   // 1. Rate limit per IP. Sliding 60s window.
   const rl = await rateLimit(
-    { kind: "csp_report", principal: ip },
+    { kind: "csp_report", principal: hashIpForRateLimit(ip) },
     env.RATE_LIMIT_CSP_REPORT_PER_IP_PER_MINUTE,
     60,
   );
@@ -195,9 +214,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 4. Emit audit events. One per normalized report; the rate limiter
-  // already bounds volume.
-  for (const r of normalized) {
+  // 4. Emit audit events. One per normalized report, hard-capped at
+  // MAX_NORMALIZED_REPORTS_PER_REQUEST so a batched Reporting API
+  // payload can't flood the audit log even within rate-limit budget.
+  // Excess entries are silently dropped — the rate limiter ensures
+  // a misbehaving source still gets bounded, and the typical case
+  // emits 1-2 reports anyway.
+  const toEmit = normalized.slice(0, MAX_NORMALIZED_REPORTS_PER_REQUEST);
+  for (const r of toEmit) {
     await writeSystemAudit({
       actorEmailSnapshot: "system@csp",
       action: "csp.violation.reported",
