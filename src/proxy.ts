@@ -33,6 +33,12 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/v1/",
   "/api/openapi.json",
   "/apihelp",
+  // Phase 25 §4.2 — public health-check endpoint. Probes DB + Graph
+  // + Blob; external uptime monitors need to reach it without a
+  // session cookie. No auth: failures are non-secret; success is
+  // non-secret. Rate-limit isn't necessary since the endpoint caches
+  // in-process for HEALTH_CHECK_CACHE_TTL_SECONDS (default 30s).
+  "/api/health",
   "/_next/",
   "/favicon",
   "/robots.txt",
