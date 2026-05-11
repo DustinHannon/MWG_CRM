@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
@@ -117,20 +118,16 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to marketing
       </Link>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Marketing audit
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold text-foreground">
-            Marketing audit log
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+      <StandardPageHeader
+        kicker="Marketing audit"
+        title="Marketing audit log"
+        description={
+          <>
             Forensic record of every marketing template, list, campaign, and
             suppression action.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+          </>
+        }
+        actions={
           <Link
             href="/marketing/reports/email"
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm font-medium text-foreground whitespace-nowrap transition hover:bg-muted"
@@ -138,8 +135,8 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
             <BarChart3 className="h-4 w-4" aria-hidden />
             Marketing email report
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       <FilterBar
         currentUser={sp.user ?? ""}

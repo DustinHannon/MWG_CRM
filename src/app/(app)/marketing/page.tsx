@@ -3,6 +3,7 @@ import { ChevronRight, Mail, Users, Send, Ban } from "lucide-react";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { marketingSuppressions } from "@/db/schema/marketing-events";
@@ -72,12 +73,10 @@ export default async function MarketingOverviewPage() {
   return (
     <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.index()} />
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Marketing</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Build templates, segment recipients, and send campaigns.
-        </p>
-      </div>
+      <StandardPageHeader
+        title="Marketing"
+        description="Build templates, segment recipients, and send campaigns."
+      />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map(({ href, label, description, Icon, count }) => (
           <Link

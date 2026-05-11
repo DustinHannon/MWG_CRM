@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { db } from "@/db";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
@@ -45,12 +46,10 @@ export default async function EditListPage({
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to list
       </Link>
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Edit list</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Saving recomputes membership against the latest leads.
-        </p>
-      </div>
+      <StandardPageHeader
+        title="Edit list"
+        description="Saving recomputes membership against the latest leads."
+      />
       <ListForm
         mode="edit"
         initial={{

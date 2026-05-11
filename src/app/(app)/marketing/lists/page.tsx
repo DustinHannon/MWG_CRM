@@ -2,7 +2,7 @@ import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
-import { StandardEmptyState } from "@/components/standard";
+import { StandardEmptyState, StandardPageHeader } from "@/components/standard";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
@@ -33,22 +33,18 @@ export default async function ListsPage() {
   return (
     <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.listsIndex()} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Lists</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Recipient segments derived from your CRM leads.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <StandardPageHeader
+        title="Lists"
+        description="Recipient segments derived from your CRM leads."
+        actions={
           <Link
             href="/marketing/lists/new"
             className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
           >
             + New list
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {rows.length === 0 ? (
         <StandardEmptyState

@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { db } from "@/db";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import {
   MarketingEmailReport,
@@ -97,18 +98,16 @@ export default async function MarketingEmailReportPage({ searchParams }: Props) 
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to marketing
       </Link>
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-          Marketing report
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold text-foreground">
-          Email performance
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Aggregate open/click/bounce rates across every campaign sent in the
-          window. Drill into any campaign for the recipient roster.
-        </p>
-      </div>
+      <StandardPageHeader
+        kicker="Marketing report"
+        title="Email performance"
+        description={
+          <>
+            Aggregate open/click/bounce rates across every campaign sent in the
+            window. Drill into any campaign for the recipient roster.
+          </>
+        }
+      />
       <MarketingEmailReport
         rows={reportRows}
         prefs={prefs}

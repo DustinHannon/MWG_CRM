@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingLists } from "@/db/schema/marketing-lists";
@@ -114,14 +115,10 @@ export default async function EditCampaignPage({ params }: Props) {
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to campaign
       </Link>
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-          Edit campaign
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold text-foreground">
-          {campaign.name}
-        </h1>
-      </div>
+      <StandardPageHeader
+        kicker="Edit campaign"
+        title={campaign.name}
+      />
 
       <CampaignWizard
         templates={templates}

@@ -1,6 +1,7 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingLists } from "@/db/schema/marketing-lists";
@@ -81,18 +82,16 @@ export default async function NewCampaignPage({ searchParams }: Props) {
   return (
     <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={marketingCrumbs.campaignsNew()} />
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-          New campaign
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold text-foreground">
-          {existing ? `Resume — ${existing.name}` : "Compose a new campaign"}
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Pick a template, choose your audience, set the schedule, then
-          review and send. Each step saves a draft so you can come back later.
-        </p>
-      </div>
+      <StandardPageHeader
+        kicker="New campaign"
+        title={existing ? `Resume — ${existing.name}` : "Compose a new campaign"}
+        description={
+          <>
+            Pick a template, choose your audience, set the schedule, then
+            review and send. Each step saves a draft so you can come back later.
+          </>
+        }
+      />
 
       <CampaignWizard
         templates={templates}

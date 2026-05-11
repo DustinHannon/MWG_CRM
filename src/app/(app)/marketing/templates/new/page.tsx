@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 import { NewTemplateForm } from "./_components/new-template-form";
 
@@ -23,13 +24,10 @@ export default function NewTemplatePage() {
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to templates
       </Link>
 
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">New template</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Give the template a name and subject; the drag-and-drop editor
-          opens after creation.
-        </p>
-      </div>
+      <StandardPageHeader
+        title="New template"
+        description="Give the template a name and subject; the drag-and-drop editor opens after creation."
+      />
 
       <div className="max-w-2xl">
         <NewTemplateForm />
