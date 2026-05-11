@@ -13,6 +13,7 @@ import {
   archiveAccountsById,
   deleteAccountsById,
   restoreAccountsById,
+  updateAccountForApi,
 } from "@/lib/accounts";
 import { canDeleteAccount, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
@@ -148,4 +149,78 @@ export async function hardDeleteAccountAction(
     });
     revalidatePath("/accounts/archived");
   });
+}
+
+/**
+ * Phase 25 §7.4 — dedicated edit form for accounts. Thin wrapper
+ * around `updateAccountForApi`; OCC enforced via expectedVersion in
+ * the form (hidden field).
+ */
+const accountUpdateSchema = z.object({
+  id: z.string().uuid(),
+  version: z.coerce.number().int().positive(),
+  name: z.string().trim().min(1).max(200),
+  industry: z.string().trim().max(120).optional().nullable(),
+  website: z.string().trim().max(200).optional().nullable(),
+  phone: z.string().trim().max(40).optional().nullable(),
+  description: z.string().trim().max(4000).optional().nullable(),
+});
+
+export async function updateAccountAction(
+  fd: FormData,
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "account.update", entityType: "account" },
+    async () => {
+      const user = await requireSession();
+      const parsed = accountUpdateSchema.parse(
+        Object.fromEntries(fd.entries()),
+      );
+      // Access gate: load + verify the user owns or has admin/canViewAll.
+      const [existing] = await db
+        .select({
+          id: crmAccounts.id,
+          ownerId: crmAccounts.ownerId,
+          name: crmAccounts.name,
+          industry: crmAccounts.industry,
+          website: crmAccounts.website,
+          phone: crmAccounts.phone,
+          description: crmAccounts.description,
+        })
+        .from(crmAccounts)
+        .where(eq(crmAccounts.id, parsed.id))
+        .limit(1);
+      if (!existing) throw new NotFoundError("account");
+      if (!user.isAdmin && existing.ownerId !== user.id) {
+        throw new ForbiddenError(
+          "You don't have permission to edit this account.",
+        );
+      }
+
+      await updateAccountForApi(
+        parsed.id,
+        {
+          name: parsed.name,
+          industry: parsed.industry ?? null,
+          website: parsed.website ?? null,
+          phone: parsed.phone ?? null,
+          description: parsed.description ?? null,
+        },
+        parsed.version,
+        user.id,
+      );
+
+      await writeAudit({
+        actorId: user.id,
+        action: "account.update",
+        targetType: "account",
+        targetId: parsed.id,
+        before: existing as object,
+        after: parsed as object,
+      });
+
+      revalidatePath(`/accounts/${parsed.id}`);
+      revalidatePath("/accounts");
+    },
+  );
 }

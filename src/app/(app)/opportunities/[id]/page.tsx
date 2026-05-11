@@ -101,12 +101,23 @@ export default async function OpportunityDetailPage({
             </span>
           </div>
         </div>
-        {canDeleteOpportunity(session, { ownerId: opp.ownerId }) ? (
-          <OpportunityDetailDelete
-            opportunityId={opp.id}
-            opportunityName={opp.name}
-          />
-        ) : null}
+        <div className="flex gap-2">
+          {/* Phase 25 §7.4 — dedicated edit affordance. */}
+          {session.isAdmin || opp.ownerId === session.id ? (
+            <Link
+              href={`/opportunities/${opp.id}/edit`}
+              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm transition hover:bg-muted"
+            >
+              Edit
+            </Link>
+          ) : null}
+          {canDeleteOpportunity(session, { ownerId: opp.ownerId }) ? (
+            <OpportunityDetailDelete
+              opportunityId={opp.id}
+              opportunityName={opp.name}
+            />
+          ) : null}
+        </div>
       </div>
 
       <GlassCard className="mt-6 p-5">

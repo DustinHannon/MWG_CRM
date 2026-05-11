@@ -13,6 +13,7 @@ import {
   archiveContactsById,
   deleteContactsById,
   restoreContactsById,
+  updateContactForApi,
 } from "@/lib/contacts";
 import { canDeleteContact, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
@@ -141,4 +142,85 @@ export async function hardDeleteContactAction(
     });
     revalidatePath("/contacts/archived");
   });
+}
+
+/**
+ * Phase 25 §7.4 — dedicated edit form for contacts. Thin wrapper
+ * around `updateContactForApi`; OCC via expectedVersion.
+ */
+const contactUpdateSchema = z.object({
+  id: z.string().uuid(),
+  version: z.coerce.number().int().positive(),
+  firstName: z.string().trim().min(1).max(100),
+  lastName: z.string().trim().max(100).optional().nullable(),
+  jobTitle: z.string().trim().max(120).optional().nullable(),
+  email: z
+    .string()
+    .trim()
+    .max(254)
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  phone: z.string().trim().max(40).optional().nullable(),
+  description: z.string().trim().max(4000).optional().nullable(),
+});
+
+export async function updateContactAction(
+  fd: FormData,
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "contact.update", entityType: "contact" },
+    async () => {
+      const user = await requireSession();
+      const parsed = contactUpdateSchema.parse(
+        Object.fromEntries(fd.entries()),
+      );
+      const [existing] = await db
+        .select({
+          id: contacts.id,
+          ownerId: contacts.ownerId,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+          jobTitle: contacts.jobTitle,
+          email: contacts.email,
+          phone: contacts.phone,
+          description: contacts.description,
+        })
+        .from(contacts)
+        .where(eq(contacts.id, parsed.id))
+        .limit(1);
+      if (!existing) throw new NotFoundError("contact");
+      if (!user.isAdmin && existing.ownerId !== user.id) {
+        throw new ForbiddenError(
+          "You don't have permission to edit this contact.",
+        );
+      }
+
+      await updateContactForApi(
+        parsed.id,
+        {
+          firstName: parsed.firstName,
+          lastName: parsed.lastName ?? null,
+          jobTitle: parsed.jobTitle ?? null,
+          email: parsed.email,
+          phone: parsed.phone ?? null,
+          description: parsed.description ?? null,
+        },
+        parsed.version,
+        user.id,
+      );
+
+      await writeAudit({
+        actorId: user.id,
+        action: "contact.update",
+        targetType: "contact",
+        targetId: parsed.id,
+        before: existing as object,
+        after: parsed as object,
+      });
+
+      revalidatePath(`/contacts/${parsed.id}`);
+      revalidatePath("/contacts");
+    },
+  );
 }

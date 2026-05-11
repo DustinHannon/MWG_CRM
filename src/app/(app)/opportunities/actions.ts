@@ -13,6 +13,7 @@ import {
   archiveOpportunitiesById,
   deleteOpportunitiesById,
   restoreOpportunitiesById,
+  updateOpportunityForApi,
 } from "@/lib/opportunities";
 import { canDeleteOpportunity, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
@@ -141,4 +142,94 @@ export async function hardDeleteOpportunityAction(
     });
     revalidatePath("/opportunities/archived");
   });
+}
+
+/**
+ * Phase 25 §7.4 — dedicated edit form for opportunities. Thin
+ * wrapper around `updateOpportunityForApi`; OCC via expectedVersion.
+ */
+const opportunityUpdateSchema = z.object({
+  id: z.string().uuid(),
+  version: z.coerce.number().int().positive(),
+  name: z.string().trim().min(1).max(200),
+  stage: z
+    .enum([
+      "prospecting",
+      "qualification",
+      "proposal",
+      "negotiation",
+      "closed_won",
+      "closed_lost",
+    ])
+    .optional(),
+  amount: z
+    .union([z.string(), z.number()])
+    .optional()
+    .nullable()
+    .transform((v) =>
+      v === null || v === undefined || v === "" ? null : String(v),
+    ),
+  expectedCloseDate: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  description: z.string().trim().max(4000).optional().nullable(),
+});
+
+export async function updateOpportunityAction(
+  fd: FormData,
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "opportunity.update", entityType: "opportunity" },
+    async () => {
+      const user = await requireSession();
+      const parsed = opportunityUpdateSchema.parse(
+        Object.fromEntries(fd.entries()),
+      );
+      const [existing] = await db
+        .select({
+          id: opportunities.id,
+          ownerId: opportunities.ownerId,
+          name: opportunities.name,
+          stage: opportunities.stage,
+          amount: opportunities.amount,
+          description: opportunities.description,
+        })
+        .from(opportunities)
+        .where(eq(opportunities.id, parsed.id))
+        .limit(1);
+      if (!existing) throw new NotFoundError("opportunity");
+      if (!user.isAdmin && existing.ownerId !== user.id) {
+        throw new ForbiddenError(
+          "You don't have permission to edit this opportunity.",
+        );
+      }
+
+      await updateOpportunityForApi(
+        parsed.id,
+        {
+          name: parsed.name,
+          stage: parsed.stage,
+          amount: parsed.amount,
+          expectedCloseDate: parsed.expectedCloseDate,
+          description: parsed.description ?? null,
+        },
+        parsed.version,
+        user.id,
+      );
+
+      await writeAudit({
+        actorId: user.id,
+        action: "opportunity.update",
+        targetType: "opportunity",
+        targetId: parsed.id,
+        before: existing as object,
+        after: parsed as object,
+      });
+
+      revalidatePath(`/opportunities/${parsed.id}`);
+      revalidatePath("/opportunities");
+    },
+  );
 }

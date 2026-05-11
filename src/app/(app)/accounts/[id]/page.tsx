@@ -161,6 +161,15 @@ export default async function AccountDetailPage({
           >
             + New opportunity
           </Link>
+          {/* Phase 25 §7.4 — dedicated edit affordance. */}
+          {session.isAdmin || account.ownerId === session.id ? (
+            <Link
+              href={`/accounts/${account.id}/edit`}
+              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm transition hover:bg-muted"
+            >
+              Edit
+            </Link>
+          ) : null}
           {canDeleteAccount(session, { ownerId: account.ownerId }) ? (
             <AccountDetailDelete
               accountId={account.id}
