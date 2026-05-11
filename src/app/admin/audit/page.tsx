@@ -232,8 +232,11 @@ export default async function AuditLogPage({
         </div>
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
-        <table className="data-table min-w-full divide-y divide-border/60 text-sm">
+      {/* Same horizontal-scroll pattern as /admin/api-usage so the dense
+          forensic table doesn't clip the rightmost columns at mid-range
+          viewports (~900px with sidebar). */}
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
+        <table className="data-table min-w-[1000px] divide-y divide-border/60 text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <th className="px-5 py-3 font-medium">When</th>
