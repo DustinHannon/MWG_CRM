@@ -6,6 +6,7 @@ import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
+import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
@@ -107,19 +108,16 @@ export default async function OpportunitiesPage({
       <BreadcrumbsSetter crumbs={[{ label: "Opportunities" }]} />
       <PageRealtime entities={["opportunities"]} />
       <PagePoll entities={["opportunities"]} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Opportunities
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold font-display">
-            Opportunities
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Phase 12 — match /leads mobile toolbar treatment.
-              Power-user controls hide at <md; only `+ New opportunity`
-              stays as the primary action. */}
+      {/* Phase 12 / Phase 26 §7.2 — header migrated to
+          StandardPageHeader. Table↔Pipeline toggle in `controls` (left
+          of `actions`) preserves the existing row layout. Power-user
+          controls hide at <md; only `+ New opportunity` stays as the
+          primary action on mobile. */}
+      <StandardPageHeader
+        kicker="Opportunities"
+        title="Opportunities"
+        fontFamily="display"
+        controls={
           <div className="hidden gap-1 rounded-lg border border-glass-border bg-glass-1 p-1 md:flex">
             <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
               Table
@@ -131,22 +129,26 @@ export default async function OpportunitiesPage({
               Pipeline
             </Link>
           </div>
-          {session.isAdmin ? (
+        }
+        actions={
+          <>
+            {session.isAdmin ? (
+              <Link
+                href="/opportunities/archived"
+                className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted md:inline-flex"
+              >
+                Archived
+              </Link>
+            ) : null}
             <Link
-              href="/opportunities/archived"
-              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 transition hover:bg-muted md:inline-flex"
+              href="/opportunities/new"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
-              Archived
+              + New opportunity
             </Link>
-          ) : null}
-          <Link
-            href="/opportunities/new"
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-          >
-            + New opportunity
-          </Link>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="mt-6 md:hidden">
         <OpportunityListMobile
