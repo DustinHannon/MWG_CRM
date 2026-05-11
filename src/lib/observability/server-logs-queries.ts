@@ -243,14 +243,78 @@ export async function getDeployTimeline(): Promise<DeployTimelineRow[]> {
 /* ============================================================================
  * Panel 4 — Slow endpoints (p95 by path)
  *
- * Intentionally not implemented in v1. Duration data is not in a
- * structured field on the Vercel drain — it's embedded in the
- * Lambda REPORT line as plain text:
- *   "REPORT RequestId: ... Duration: 6 ms Billed Duration: 6 ms"
- * Extracting that via ClickHouse regex is possible but expensive,
- * and pairing the duration with the request path requires joining
- * across two separate log lines that don't share a common ID in
- * the structured fields we have today. Tracked as a follow-up;
- * for Phase 26 ship, the panel renders an empty state with this
- * explanation.
+ * Vercel's drain writes Lambda invocation duration into the message
+ * text rather than a structured field — every invocation logs:
+ *
+ *   START RequestId: <uuid>
+ *   [METHOD] /path status=NNN
+ *   END RequestId: <uuid>
+ *   REPORT RequestId: <uuid> Duration: N ms Billed Duration: N ms ...
+ *
+ * Importantly, all four lines arrive in ONE log entry's `message`
+ * field, so we can extract path (already structured via
+ * `vercel.proxy.path`) and duration (regex over message) on the same
+ * row without a cross-row join. RSC traffic appends a `?_rsc=...`
+ * query string that's stripped here so /dashboard and
+ * /dashboard?_rsc=... aggregate together. Static-asset paths are
+ * excluded to mirror the request-volume panel.
  * ========================================================================= */
+
+export interface SlowEndpointRow {
+  path: string;
+  samples: string | number;
+  p95_ms: string | number;
+  p50_ms: string | number;
+  max_ms: string | number;
+}
+
+export async function getSlowEndpoints(
+  range: ServerLogsRange,
+): Promise<SlowEndpointRow[]> {
+  if (!isBetterStackConfigured()) return [];
+  const fromClause = buildFromClause(range);
+  const interval = RANGE_TO_INTERVAL[range];
+  // Inner subquery extracts the regex once per row; outer aggregates.
+  // HAVING samples >= 5 keeps p95 statistically meaningful while still
+  // surfacing low-volume endpoints on a quiet hour.
+  const query = `
+    SELECT
+      path,
+      count(*) AS samples,
+      round(quantile(0.95)(duration_ms)) AS p95_ms,
+      round(quantile(0.50)(duration_ms)) AS p50_ms,
+      max(duration_ms) AS max_ms
+    FROM (
+      SELECT
+        replaceRegexpOne(
+          JSONExtract(raw, 'vercel', 'proxy', 'path', 'Nullable(String)'),
+          '\\\\?.*$',
+          ''
+        ) AS path,
+        toUInt32OrZero(
+          extract(
+            JSONExtract(raw, 'message', 'Nullable(String)'),
+            'Duration:[[:space:]]+([0-9]+)[[:space:]]*ms'
+          )
+        ) AS duration_ms
+      ${fromClause}
+      WHERE dt > now() - ${interval}
+        AND JSONExtract(raw, 'message', 'Nullable(String)') LIKE '%Duration:%'
+    )
+    WHERE duration_ms > 0
+      AND path IS NOT NULL
+      AND path != ''
+      AND path NOT LIKE '/_next/%'
+      AND path NOT LIKE '/favicon%'
+    GROUP BY path
+    HAVING samples >= 5
+    ORDER BY p95_ms DESC
+    LIMIT 10
+    FORMAT JSONEachRow
+  `;
+  return queryBetterStack<SlowEndpointRow>({
+    query,
+    cacheKey: `server-logs.slow-endpoints.${range}`,
+    auditFamily: "observability.server_logs",
+  });
+}

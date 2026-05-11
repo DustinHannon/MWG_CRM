@@ -98,7 +98,12 @@ export default async function ServerLogsPage({
           <RequestVolumePanel range={range} />
         </Suspense>
 
-        <SlowEndpointsPanel />
+        <Suspense
+          fallback={<StandardLoadingState variant="table" rows={5} />}
+          key={`slow-endpoints-${range}`}
+        >
+          <SlowEndpointsPanel range={range} />
+        </Suspense>
       </div>
 
       <div className="mt-8">
