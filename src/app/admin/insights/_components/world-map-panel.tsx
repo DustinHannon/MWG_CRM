@@ -6,11 +6,10 @@ import { WorldMapChart } from "./world-map-chart";
 /**
  * Phase 26 §4 — server wrapper for the world chloropleth.
  *
- * `getVisitorsByCountry` returns `{}` until a Web Analytics drain is
- * configured, so today this always renders the documented
- * "drain not configured" empty state. The component is wired to
- * accept country data so the panel auto-populates when the drain is
- * added.
+ * Driven by `getVisitorsByCountry` which aggregates Web Analytics
+ * pageviews from the `vercel.analytics.v1` drain in Better Stack.
+ * Falls back to an empty state when no pageviews with a country
+ * header have been recorded in the last 24h.
  */
 export async function WorldMapPanel() {
   const visitorsByCountry = await getVisitorsByCountry();

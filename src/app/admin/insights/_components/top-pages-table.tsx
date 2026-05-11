@@ -4,9 +4,9 @@ import { StandardEmptyState } from "@/components/standard";
 /**
  * Phase 26 §4 — top 10 paths by request count, last 24h.
  *
- * Excludes `/api/*`, `/_next/*`, `/favicon*`. Excludes runtime-logs
- * panels are unaffected; this is one of the panels that has data
- * today on the existing drain.
+ * Excludes `/api/*`, `/_next/*`, `/favicon*`. Driven by the runtime
+ * logs drain (vercel.proxy.path), so it has data whenever real
+ * traffic has reached the app.
  */
 export async function TopPagesTable() {
   let rows;
@@ -26,8 +26,8 @@ export async function TopPagesTable() {
     return (
       <StandardEmptyState
         variant="muted"
-        title="Web Analytics / Speed Insights drain not configured"
-        description="Add a Vercel Drain for this data type in Vercel team settings → Drains → Add Drain → Better Stack destination. Until configured, this panel cannot populate."
+        title="No page requests in the last 24h"
+        description="The runtime-logs drain hasn't recorded any non-API requests in this window."
       />
     );
   }
