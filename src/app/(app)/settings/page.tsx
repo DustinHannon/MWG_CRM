@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
+import { savedSearchSubscriptions } from "@/db/schema/saved-search-subscriptions";
 import { savedViews, userPreferences } from "@/db/schema/views";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
@@ -66,6 +67,28 @@ export default async function SettingsPage() {
     .from(savedViews)
     .where(eq(savedViews.userId, session.id));
 
+  // Phase 25 §7.2 — active saved-search subscriptions joined to the
+  // owning view's name so the Notifications section can render a
+  // per-row list with unsubscribe + per-row frequency override.
+  const activeSubscriptions = await db
+    .select({
+      subscriptionId: savedSearchSubscriptions.id,
+      savedViewId: savedSearchSubscriptions.savedViewId,
+      frequency: savedSearchSubscriptions.frequency,
+      lastRunAt: savedSearchSubscriptions.lastRunAt,
+      createdAt: savedSearchSubscriptions.createdAt,
+      viewName: savedViews.name,
+    })
+    .from(savedSearchSubscriptions)
+    .innerJoin(savedViews, eq(savedViews.id, savedSearchSubscriptions.savedViewId))
+    .where(
+      and(
+        eq(savedSearchSubscriptions.userId, session.id),
+        eq(savedSearchSubscriptions.isActive, true),
+      ),
+    )
+    .orderBy(desc(savedSearchSubscriptions.createdAt));
+
   if (!profile) {
     return (
       <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -124,7 +147,10 @@ export default async function SettingsPage() {
           prefs={prefs ?? null}
           savedViews={myViews}
         />
-        <NotificationsSection prefs={prefs ?? null} />
+        <NotificationsSection
+          prefs={prefs ?? null}
+          subscriptions={activeSubscriptions}
+        />
         <GraphConnectionSection
           userId={session.id}
           isBreakglass={profile.isBreakglass}

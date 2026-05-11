@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { savedSearchSubscriptions } from "@/db/schema/saved-search-subscriptions";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
@@ -85,6 +88,21 @@ export default async function LeadsPage({
   if (!activeViewParam) activeViewParam = "builtin:my-open";
 
   const savedViews = await listSavedViewsForUser(user.id);
+
+  // Phase 25 §7.2 — active subscription state per saved view. The
+  // toolbar uses this to render Subscribe vs Unsubscribe on the
+  // current saved view. Cheap query — bounded by the user's own
+  // saved-view count.
+  const subscribedRows = await db
+    .select({ savedViewId: savedSearchSubscriptions.savedViewId })
+    .from(savedSearchSubscriptions)
+    .where(
+      and(
+        eq(savedSearchSubscriptions.userId, user.id),
+        eq(savedSearchSubscriptions.isActive, true),
+      ),
+    );
+  const subscribedViewIds = subscribedRows.map((r) => r.savedViewId);
 
   let activeView: ViewDefinition | null = null;
   if (activeViewParam.startsWith("saved:")) {
@@ -270,6 +288,7 @@ export default async function LeadsPage({
           baseColumns={baseColumns}
           savedDirtyId={savedDirtyId}
           columnsModified={columnsModified}
+          subscribedViewIds={subscribedViewIds}
         />
       </div>
 

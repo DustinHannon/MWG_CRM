@@ -6,6 +6,10 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { AVAILABLE_COLUMNS, type ColumnKey } from "@/lib/view-constants";
 import {
+  subscribeToViewAction,
+  unsubscribeFromViewAction,
+} from "@/app/(app)/settings/subscriptions-actions";
+import {
   createViewAction,
   deleteViewAction,
   setAdhocColumnsAction,
@@ -32,6 +36,8 @@ export interface ViewToolbarProps {
   savedDirtyId: string | null;
   /** True when activeColumns differs from baseColumns. */
   columnsModified: boolean;
+  /** Phase 25 §7.2 — saved-view ids the current user is subscribed to. */
+  subscribedViewIds?: string[];
 }
 
 /**
@@ -51,12 +57,13 @@ export function ViewToolbar({
   baseColumns,
   savedDirtyId,
   columnsModified,
+  subscribedViewIds,
 }: ViewToolbarProps) {
   const router = useRouter();
   const search = useSearchParams();
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
-  const [, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition();
 
   const grouped = useMemo(() => {
     return {
@@ -198,6 +205,24 @@ export function ViewToolbar({
               router.push(`/leads?${params.toString()}`);
             });
           }}
+        />
+      ) : null}
+
+      {/* Phase 25 §7.2 — Subscribe / Unsubscribe affordance for the
+          active saved view. The same `saved_search_subscriptions`
+          table backs this button and the per-row list on
+          /settings → Notifications. Digests are sent from the
+          user's own Microsoft 365 mailbox via Graph (NOT SendGrid). */}
+      {activeViewId.startsWith("saved:") ? (
+        <SubscribeButton
+          savedViewId={activeViewId.slice("saved:".length)}
+          isSubscribed={
+            subscribedViewIds?.includes(
+              activeViewId.slice("saved:".length),
+            ) ?? false
+          }
+          disabled={pending}
+          onChange={() => router.refresh()}
         />
       ) : null}
 
@@ -490,3 +515,70 @@ function SaveViewDialog({
 
 // Re-export Link in case the toolbar grows (keeps tree-shaking happy).
 export { Link };
+
+/**
+ * Phase 25 §7.2 — Subscribe / Unsubscribe affordance for the active
+ * saved view. Toggles `saved_search_subscriptions.is_active` via the
+ * settings/subscriptions-actions endpoints. Optimistic UI: flips the
+ * local label immediately, server confirms via revalidate.
+ */
+function SubscribeButton({
+  savedViewId,
+  isSubscribed,
+  disabled,
+  onChange,
+}: {
+  savedViewId: string;
+  isSubscribed: boolean;
+  disabled: boolean;
+  onChange: () => void;
+}) {
+  const [optimisticState, setOptimisticState] = useState(isSubscribed);
+  const [submitting, startSubscribeTransition] = useTransition();
+
+  function toggle() {
+    const next = !optimisticState;
+    setOptimisticState(next);
+    startSubscribeTransition(async () => {
+      const res = next
+        ? await subscribeToViewAction({ savedViewId })
+        : await unsubscribeFromViewAction({ savedViewId });
+      if (res.ok) {
+        toast.success(
+          next
+            ? "Subscribed — digest will arrive at your Microsoft 365 mailbox."
+            : "Unsubscribed.",
+        );
+        onChange();
+      } else {
+        // Revert optimistic flip on failure so the UI stays honest.
+        setOptimisticState(!next);
+        toast.error(res.error, { duration: Infinity, dismissible: true });
+      }
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={disabled || submitting}
+      className={
+        optimisticState
+          ? "rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/20"
+          : "rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground transition hover:bg-muted"
+      }
+      title={
+        optimisticState
+          ? "Subscribed. Click to unsubscribe. Digests are sent from your own Microsoft 365 mailbox."
+          : "Subscribe to a digest of new matches sent from your own Microsoft 365 mailbox."
+      }
+    >
+      {submitting
+        ? "Saving…"
+        : optimisticState
+          ? "Subscribed"
+          : "Subscribe"}
+    </button>
+  );
+}

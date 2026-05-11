@@ -161,11 +161,17 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
         summary.notified += 1;
       }
 
-      // Email digest if pref matches.
-      const wantsEmail =
-        sub.emailDigestFreq === sub.frequency ||
-        (sub.emailDigestFreq === "daily" && sub.frequency === "daily") ||
-        (sub.emailDigestFreq === "weekly" && sub.frequency === "weekly");
+      // Phase 25 §7.2 — email-digest gate. The per-sub `frequency`
+      // is authoritative for cadence (the WHERE clause above already
+      // picks up only the subs running today). The user's
+      // `email_digest_frequency` is now just a global emit-or-not
+      // toggle: 'off' → suppress emails entirely (in-app still fires
+      // if notifySavedSearch is on), 'daily' or 'weekly' → emit emails
+      // for every sub that runs today, regardless of which value.
+      // The earlier "freq must match" check is gone — that constraint
+      // confused users when their global default was 'weekly' but
+      // they wanted a daily sub on a specific high-priority view.
+      const wantsEmail = sub.emailDigestFreq !== "off";
       if (wantsEmail) {
         try {
           await sendDigestEmail({
