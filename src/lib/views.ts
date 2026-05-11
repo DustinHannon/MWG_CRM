@@ -216,13 +216,20 @@ export const savedViewSchema = z.object({
 
 export type SavedViewInput = z.infer<typeof savedViewSchema>;
 
+// Phase 25 §7.3 — every leads-domain saved-view query now scopes by
+// entityType='lead' so it ignores task views that share the same
+// table. Existing rows pre-migration default to 'lead' so behaviour
+// is unchanged.
+
 export async function listSavedViewsForUser(
   userId: string,
 ): Promise<ViewDefinition[]> {
   const rows = await db
     .select()
     .from(savedViews)
-    .where(eq(savedViews.userId, userId))
+    .where(
+      and(eq(savedViews.userId, userId), eq(savedViews.entityType, "lead")),
+    )
     .orderBy(desc(savedViews.isPinned), asc(savedViews.name));
   return rows.map(savedViewRowToDefinition);
 }
@@ -234,7 +241,13 @@ export async function getSavedView(
   const row = await db
     .select()
     .from(savedViews)
-    .where(and(eq(savedViews.id, id), eq(savedViews.userId, userId)))
+    .where(
+      and(
+        eq(savedViews.id, id),
+        eq(savedViews.userId, userId),
+        eq(savedViews.entityType, "lead"),
+      ),
+    )
     .limit(1);
   return row[0] ? savedViewRowToDefinition(row[0]) : null;
 }
@@ -247,6 +260,7 @@ export async function createSavedView(
     .insert(savedViews)
     .values({
       userId,
+      entityType: "lead",
       name: input.name,
       isPinned: input.isPinned,
       scope: input.scope,
@@ -281,6 +295,7 @@ export async function updateSavedView(
       and(
         eq(savedViews.id, id),
         eq(savedViews.userId, userId),
+        eq(savedViews.entityType, "lead"),
         eq(savedViews.version, expectedVersion),
       ),
     )
@@ -295,7 +310,13 @@ export async function deleteSavedView(
 ): Promise<void> {
   await db
     .delete(savedViews)
-    .where(and(eq(savedViews.id, id), eq(savedViews.userId, userId)));
+    .where(
+      and(
+        eq(savedViews.id, id),
+        eq(savedViews.userId, userId),
+        eq(savedViews.entityType, "lead"),
+      ),
+    );
 }
 
 function savedViewRowToDefinition(

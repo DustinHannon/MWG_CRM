@@ -32,6 +32,11 @@ export const savedViews = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // Phase 25 §7.3 — `entity_type` scopes views by domain. 'lead'
+    // (default) preserves prior behaviour; 'task' powers the new
+    // /tasks page saved-view selector. CHECK constraint
+    // `saved_views_entity_type_valid` restricts to known values.
+    entityType: text("entity_type").notNull().default("lead"),
     name: text("name").notNull(),
     isPinned: boolean("is_pinned").notNull().default(false),
     scope: text("scope").notNull().default("mine"),
@@ -50,7 +55,12 @@ export const savedViews = pgTable(
   },
   (t) => [
     index("saved_views_user_idx").on(t.userId),
-    unique("saved_views_user_name_uniq").on(t.userId, t.name),
+    index("saved_views_user_entity_idx").on(t.userId, t.entityType),
+    unique("saved_views_user_entity_name_uniq").on(
+      t.userId,
+      t.entityType,
+      t.name,
+    ),
   ],
 );
 

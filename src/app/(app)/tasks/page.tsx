@@ -4,71 +4,158 @@ import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
-import { requireSession } from "@/lib/auth-helpers";
-import { listTasksForUser, type TaskRow } from "@/lib/tasks";
-import { TaskListClient } from "./_components/task-list-client";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { listTasksForUser } from "@/lib/tasks";
+import {
+  BUILTIN_TASK_VIEWS,
+  findBuiltinTaskView,
+  getSavedTaskView,
+  listSavedTaskViewsForUser,
+  type TaskViewDefinition,
+  type TaskViewFilters,
+  type TaskViewSort,
+} from "@/lib/task-views";
+import { TaskTableClient } from "./_components/task-table-client";
+import { TaskViewSelector } from "./_components/task-view-selector";
 
 export const dynamic = "force-dynamic";
 
 /**
- * /tasks — primary task list. Filters: status (Open default), assignee
- * (Me default), due window (Overdue / Today / This Week / Later / No Date).
- * Group by due bucket. Inline-create at top.
+ * /tasks — Phase 25 §7.3 redesign.
  *
- * Phase 9C — cursor pagination on (due_at NULLS LAST, id DESC) at
- * pageSize 50. Bucketing happens client-side over a single page; users
- * can "Load more" to extend the list. At 1M+ tasks this keeps the
- * server-side scan bounded by the composite index.
+ * Title is "Tasks" (no subtitle — copy convention update).
+ *
+ * Filters: assignee / status / priority / relation / related-entity-
+ * type / due-range / free-text title search. Sort is URL-state. Built-
+ * in views + per-user saved views back the picker; the same
+ * `saved_views` table backs leads + tasks (entity_type='task').
+ *
+ * Single canonical audit names (task.completed, .reassigned, .deleted)
+ * for every surface — no fork by source.
  */
 export default async function TasksPage({
   searchParams,
 }: {
   searchParams: Promise<{
+    view?: string;
     status?: string;
-    cursor?: string;
+    priority?: string;
     relation?: string;
+    related?: string;
+    due?: string;
+    assignee?: string;
+    sort?: string;
+    dir?: string;
+    q?: string;
+    cursor?: string;
   }>;
 }) {
   const session = await requireSession();
+  const perms = await getPermissions(session.id);
+  const canViewOthers = session.isAdmin || perms.canViewOthersTasks;
+  const canReassign = session.isAdmin || perms.canReassignTasks;
+
   const sp = await searchParams;
-  const statusFilter = sp.status?.split(",").filter(Boolean) as
-    | ("open" | "in_progress" | "completed" | "cancelled")[]
-    | undefined;
-  // Phase 25 §7.3 — relation filter. `all` (default) keeps existing
-  // behavior; `standalone` shows only tasks with no entity FK;
-  // `linked` shows only entity-linked tasks.
-  const relationFilter: "all" | "standalone" | "linked" =
-    sp.relation === "standalone" || sp.relation === "linked"
-      ? sp.relation
-      : "all";
+  const prefs = await getCurrentUserTimePrefs();
+
+  // Resolve the active view: explicit URL > default built-in.
+  const activeViewId = sp.view ?? "builtin:my-open";
+  let activeView: TaskViewDefinition | null = null;
+  if (activeViewId.startsWith("saved:")) {
+    activeView = await getSavedTaskView(
+      session.id,
+      activeViewId.slice("saved:".length),
+    );
+  } else {
+    activeView = findBuiltinTaskView(activeViewId);
+  }
+  // Team view requires perm; fall back to my-open if unauthorized.
+  if (
+    activeView &&
+    activeView.id === "builtin:team-open" &&
+    !canViewOthers
+  ) {
+    activeView = findBuiltinTaskView("builtin:my-open");
+  }
+  if (!activeView) activeView = findBuiltinTaskView("builtin:my-open")!;
+
+  // URL params override the view's defaults so the user can tweak
+  // and save-as-new without losing intermediate state.
+  const filters: TaskViewFilters = {
+    ...activeView.filters,
+    ...(sp.assignee
+      ? { assignee: sp.assignee as TaskViewFilters["assignee"] }
+      : {}),
+    ...(sp.status
+      ? {
+          status: sp.status.split(",").filter(Boolean) as TaskViewFilters["status"],
+        }
+      : {}),
+    ...(sp.priority
+      ? {
+          priority: sp.priority
+            .split(",")
+            .filter(Boolean) as TaskViewFilters["priority"],
+        }
+      : {}),
+    ...(sp.relation
+      ? { relation: sp.relation as TaskViewFilters["relation"] }
+      : {}),
+    ...(sp.related
+      ? { relatedEntity: sp.related as TaskViewFilters["relatedEntity"] }
+      : {}),
+    ...(sp.due
+      ? { dueRange: sp.due as TaskViewFilters["dueRange"] }
+      : {}),
+    ...(sp.q ? { q: sp.q } : {}),
+  };
+
+  const sort: TaskViewSort =
+    sp.sort && sp.dir
+      ? {
+          field: sp.sort as TaskViewSort["field"],
+          direction: sp.dir as TaskViewSort["direction"],
+        }
+      : activeView.sort;
+
+  // Resolve `me` sentinel to userId for the lib helper.
+  const assigneeArg =
+    filters.assignee === "me"
+      ? "me"
+      : filters.assignee === "any"
+        ? "any"
+        : filters.assignee;
 
   const { rows: tasks, nextCursor } = await listTasksForUser({
     userId: session.id,
     isAdmin: session.isAdmin,
-    scope: "me",
-    status: statusFilter ?? ["open", "in_progress"],
-    relation: relationFilter,
+    assignee: assigneeArg,
+    status: filters.status,
+    priority: filters.priority,
+    relation: filters.relation,
+    relatedEntity: filters.relatedEntity,
+    dueRange: filters.dueRange,
+    q: filters.q,
+    sort,
     cursor: sp.cursor,
     pageSize: 50,
   });
 
-  const buckets = bucketTasks(tasks);
-  const prefs = await getCurrentUserTimePrefs();
+  // Saved views for the picker. Built-ins filtered by team perm.
+  const savedViews = await listSavedTaskViewsForUser(session.id);
+  const visibleBuiltins = canViewOthers
+    ? BUILTIN_TASK_VIEWS
+    : BUILTIN_TASK_VIEWS.filter((v) => v.id !== "builtin:team-open");
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Tasks" }]} />
       <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["tasks"]} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Tasks
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold font-display">My tasks</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Things to do. Mark complete with the checkbox. Group by due date.
-          </p>
+          {/* Phase 25 §7.3 — title is "Tasks"; subtitle removed. */}
+          <h1 className="text-2xl font-semibold font-display">Tasks</h1>
         </div>
         {session.isAdmin ? (
           <Link
@@ -80,30 +167,36 @@ export default async function TasksPage({
         ) : null}
       </div>
 
-      {/* Phase 25 §7.3 — relation filter chips. Default 'All' keeps
-          the existing surface; 'Standalone' shows operational tasks
-          with no entity link; 'Linked' shows only entity-tied tasks. */}
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-muted-foreground">Related to:</span>
-        <RelationChip current={relationFilter} value="all" label="All" />
-        <RelationChip
-          current={relationFilter}
-          value="standalone"
-          label="Standalone"
+      {/* Phase 25 §7.3 — view selector + filter bar. URL-state driven,
+          like the /leads filter bar. */}
+      <div className="mt-5 space-y-3">
+        <TaskViewSelector
+          activeViewId={activeView.id}
+          builtinViews={visibleBuiltins}
+          savedViews={savedViews}
+          currentFilters={filters}
+          currentSort={sort}
         />
-        <RelationChip
-          current={relationFilter}
-          value="linked"
-          label="Linked to entity"
+        <FilterBar
+          assignee={filters.assignee ?? "me"}
+          status={filters.status ?? []}
+          priority={filters.priority ?? []}
+          relation={filters.relation ?? "all"}
+          relatedEntity={filters.relatedEntity}
+          dueRange={filters.dueRange ?? "all"}
+          q={filters.q ?? ""}
+          canViewOthers={canViewOthers}
         />
       </div>
 
       <GlassCard className="mt-6 p-4">
-        <TaskListClient
-          buckets={buckets}
+        <TaskTableClient
+          tasks={tasks}
           userId={session.id}
           isAdmin={session.isAdmin}
+          canReassign={canReassign}
           prefs={prefs}
+          sort={sort}
         />
       </GlassCard>
 
@@ -121,7 +214,7 @@ export default async function TasksPage({
             ) : null}
             {nextCursor ? (
               <Link
-                href={`/tasks?cursor=${encodeURIComponent(nextCursor)}${sp.status ? `&status=${encodeURIComponent(sp.status)}` : ""}${relationFilter !== "all" ? `&relation=${relationFilter}` : ""}`}
+                href={appendCursor(sp, nextCursor)}
                 className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
               >
                 Load more →
@@ -135,74 +228,150 @@ export default async function TasksPage({
 }
 
 /**
- * Phase 25 §7.3 — chip-style filter for the Related-to picker.
- * Server-rendered link; the active option is highlighted via the
- * primary tone. Clicking jumps to /tasks with the param wiped or
- * set; cursor is reset since the filtered set differs.
+ * Build the "Load more" URL preserving every active filter + sort.
+ * Mirrors the leads cursor-link pattern.
  */
-function RelationChip({
-  current,
-  value,
-  label,
-}: {
-  current: "all" | "standalone" | "linked";
-  value: "all" | "standalone" | "linked";
-  label: string;
-}) {
-  const isActive = current === value;
-  const href =
-    value === "all" ? "/tasks" : `/tasks?relation=${value}`;
-  return (
-    <Link
-      href={href}
-      className={
-        isActive
-          ? "rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-primary"
-          : "rounded-md border border-border bg-muted/40 px-2.5 py-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-      }
-    >
-      {label}
-    </Link>
-  );
+function appendCursor(
+  sp: Record<string, string | undefined>,
+  cursor: string,
+): string {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (v && k !== "cursor") params.set(k, v);
+  }
+  params.set("cursor", cursor);
+  return `/tasks?${params.toString()}`;
 }
 
-function bucketTasks(
-  list: TaskRow[],
-): { label: string; tasks: TaskRow[] }[] {
-  const now = new Date();
-  const todayEnd = new Date(now);
-  todayEnd.setHours(23, 59, 59, 999);
-  const sevenDaysOut = new Date(now);
-  sevenDaysOut.setDate(now.getDate() + 7);
-
-  const overdue: TaskRow[] = [];
-  const today: TaskRow[] = [];
-  const thisWeek: TaskRow[] = [];
-  const later: TaskRow[] = [];
-  const none: TaskRow[] = [];
-
-  for (const t of list) {
-    if (!t.dueAt) {
-      none.push(t);
-      continue;
-    }
-    const d = new Date(t.dueAt);
-    if (d < now && t.status !== "completed") {
-      overdue.push(t);
-    } else if (d <= todayEnd) {
-      today.push(t);
-    } else if (d <= sevenDaysOut) {
-      thisWeek.push(t);
-    } else {
-      later.push(t);
-    }
-  }
-
-  const buckets = [];
-  if (overdue.length > 0) buckets.push({ label: "Overdue", tasks: overdue });
-  if (today.length > 0) buckets.push({ label: "Today", tasks: today });
-  if (thisWeek.length > 0) buckets.push({ label: "This week", tasks: thisWeek });
-  if (later.length > 0) buckets.push({ label: "Later", tasks: later });
-  if (none.length > 0) buckets.push({ label: "No due date", tasks: none });
-  return buckets;
+/**
+ * Server-rendered filter bar. URL-state only — each control is a link
+ * that adjusts the active query string. No JS state.
+ */
+function FilterBar({
+  assignee,
+  status,
+  priority,
+  relation,
+  relatedEntity,
+  dueRange,
+  q,
+  canViewOthers,
+}: {
+  assignee: string;
+  status: string[];
+  priority: string[];
+  relation: string;
+  relatedEntity: string | undefined;
+  dueRange: string;
+  q: string;
+  canViewOthers: boolean;
+}) {
+  return (
+    <form
+      method="get"
+      action="/tasks"
+      className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-muted/20 p-3 text-xs"
+    >
+      <label className="flex flex-col gap-1">
+        <span className="text-muted-foreground">Assignee</span>
+        <select
+          name="assignee"
+          defaultValue={assignee}
+          className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
+        >
+          <option value="me">Me</option>
+          {canViewOthers ? <option value="any">Anyone</option> : null}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-muted-foreground">Status</span>
+        <select
+          name="status"
+          defaultValue={status.join(",") || ""}
+          className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
+        >
+          <option value="open,in_progress">Open</option>
+          <option value="completed">Completed</option>
+          <option value="open,in_progress,completed,cancelled">All</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-muted-foreground">Priority</span>
+        <select
+          name="priority"
+          defaultValue={priority.join(",")}
+          className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
+        >
+          <option value="">Any</option>
+          <option value="urgent">Urgent</option>
+          <option value="high,urgent">High +</option>
+          <option value="normal,high,urgent">Normal +</option>
+          <option value="low">Low only</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-muted-foreground">Related to</span>
+        <select
+          name="relation"
+          defaultValue={relation}
+          className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
+        >
+          <option value="all">All</option>
+          <option value="standalone">Standalone</option>
+          <option value="linked">Linked to entity</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-muted-foreground">Entity type</span>
+        <select
+          name="related"
+          defaultValue={relatedEntity ?? ""}
+          className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
+        >
+          <option value="">Any</option>
+          <option value="lead">Lead</option>
+          <option value="account">Account</option>
+          <option value="contact">Contact</option>
+          <option value="opportunity">Opportunity</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-muted-foreground">Due</span>
+        <select
+          name="due"
+          defaultValue={dueRange}
+          className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
+        >
+          <option value="all">Any</option>
+          <option value="overdue">Overdue</option>
+          <option value="today">Today</option>
+          <option value="this_week">This week</option>
+          <option value="later">Later</option>
+          <option value="none">No date</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-muted-foreground">Search title</span>
+        <input
+          type="search"
+          name="q"
+          defaultValue={q}
+          placeholder="contains…"
+          className="h-8 w-40 rounded-md border border-border bg-input/60 px-2 text-xs"
+        />
+      </label>
+      <button
+        type="submit"
+        className="h-8 rounded-md border border-primary/40 bg-primary/10 px-3 text-xs font-medium text-primary hover:bg-primary/20"
+      >
+        Apply
+      </button>
+      <Link
+        href="/tasks"
+        className="h-8 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+      >
+        Reset
+      </Link>
+    </form>
+  );
 }

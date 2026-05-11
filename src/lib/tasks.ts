@@ -157,6 +157,28 @@ export async function listTasksForUser(args: {
   scope?: "me" | "all";
   /** Phase 25 §7.3 — filter by related-entity link state. */
   relation?: "all" | "standalone" | "linked";
+  /** Phase 25 §7.3 expansion — additional filter dimensions. */
+  priority?: ("low" | "normal" | "high" | "urgent")[];
+  relatedEntity?: "lead" | "account" | "contact" | "opportunity";
+  dueRange?: "overdue" | "today" | "this_week" | "later" | "none" | "all";
+  q?: string;
+  /** Phase 25 §7.3 — explicit assignee filter for the new /tasks
+   *  redesign. `me` (default) preserves existing behavior; a specific
+   *  user id scopes to that user; `any` shows everyone (requires
+   *  canViewOthersTasks). When unset, falls back to scope semantics. */
+  assignee?: "me" | "any" | string;
+  /** When false, skip the (due_at NULLS LAST, id DESC) cursor index
+   *  and use the requested sort. Cursor pagination is then disabled. */
+  sort?: {
+    field:
+      | "dueAt"
+      | "priority"
+      | "title"
+      | "assignee"
+      | "status"
+      | "createdAt";
+    direction: "asc" | "desc";
+  };
   cursor?: string | null;
   /** 0 disables pagination (legacy callers). Defaults to 50. */
   pageSize?: number;
@@ -164,11 +186,20 @@ export async function listTasksForUser(args: {
   const wheres: SQL[] = [];
   // Phase 9C — exclude soft-deleted tasks from every listing.
   wheres.push(eq(tasks.isDeleted, false));
-  if (args.scope !== "all") {
+
+  // Phase 25 §7.3 — assignee filter takes precedence over the legacy
+  // `scope` arg. When neither is set, default to "me" for the original
+  // /tasks personal-queue behavior. The "any" sentinel disables the
+  // assigned-to filter entirely (caller is responsible for gating via
+  // canViewOthersTasks).
+  const assignee = args.assignee ?? (args.scope === "all" ? "any" : "me");
+  if (assignee === "me") {
     wheres.push(eq(tasks.assignedToId, args.userId));
+  } else if (assignee !== "any") {
+    wheres.push(eq(tasks.assignedToId, assignee));
   } else if (!args.isAdmin) {
-    // Non-admins see tasks assigned to them OR created by them OR
-    // attached to a lead they own. Cap with the assigned filter for now.
+    // assignee === "any" but not admin — fall back to the existing
+    // creator-OR-assignee visibility window.
     wheres.push(
       or(
         eq(tasks.assignedToId, args.userId),
@@ -176,11 +207,18 @@ export async function listTasksForUser(args: {
       )!,
     );
   }
+
   if (args.status && args.status.length > 0) {
     wheres.push(
       or(
         ...args.status.map((s) => eq(tasks.status, s)),
       )!,
+    );
+  }
+  // Phase 25 §7.3 — priority filter.
+  if (args.priority && args.priority.length > 0) {
+    wheres.push(
+      or(...args.priority.map((p) => eq(tasks.priority, p)))!,
     );
   }
   // Phase 25 §7.3 — relation filter. CHECK `tasks_at_most_one_parent`
@@ -204,6 +242,47 @@ export async function listTasksForUser(args: {
         isNotNull(tasks.opportunityId),
       )!,
     );
+  }
+  // Phase 25 §7.3 — relatedEntity filter (only meaningful when
+  // relation='linked' or unset). Forces the chosen FK column to be
+  // non-null.
+  if (args.relatedEntity) {
+    if (args.relatedEntity === "lead") wheres.push(isNotNull(tasks.leadId));
+    else if (args.relatedEntity === "account")
+      wheres.push(isNotNull(tasks.accountId));
+    else if (args.relatedEntity === "contact")
+      wheres.push(isNotNull(tasks.contactId));
+    else if (args.relatedEntity === "opportunity")
+      wheres.push(isNotNull(tasks.opportunityId));
+  }
+  // Phase 25 §7.3 — due-date-range filter. Bucketed off the same
+  // boundaries the page UI used for grouping, so saved views show
+  // the same set the user picks via the chip row.
+  if (args.dueRange && args.dueRange !== "all") {
+    const now = sql`now()`;
+    const endOfToday = sql`date_trunc('day', now()) + interval '1 day' - interval '1 second'`;
+    const endOfWeek = sql`date_trunc('day', now()) + interval '7 days'`;
+    if (args.dueRange === "overdue") {
+      wheres.push(sql`${tasks.dueAt} IS NOT NULL AND ${tasks.dueAt} < ${now}`);
+    } else if (args.dueRange === "today") {
+      wheres.push(
+        sql`${tasks.dueAt} IS NOT NULL AND ${tasks.dueAt} >= date_trunc('day', now()) AND ${tasks.dueAt} <= ${endOfToday}`,
+      );
+    } else if (args.dueRange === "this_week") {
+      wheres.push(
+        sql`${tasks.dueAt} IS NOT NULL AND ${tasks.dueAt} > ${endOfToday} AND ${tasks.dueAt} <= ${endOfWeek}`,
+      );
+    } else if (args.dueRange === "later") {
+      wheres.push(sql`${tasks.dueAt} IS NOT NULL AND ${tasks.dueAt} > ${endOfWeek}`);
+    } else if (args.dueRange === "none") {
+      wheres.push(isNull(tasks.dueAt));
+    }
+  }
+  // Phase 25 §7.3 — title search. ILIKE is fine here (tasks table is
+  // small; no trigram index needed at current scale).
+  if (args.q && args.q.trim()) {
+    const pattern = `%${args.q.trim()}%`;
+    wheres.push(sql`${tasks.title} ILIKE ${pattern}`);
   }
 
   const pageSize = args.pageSize ?? 50;
