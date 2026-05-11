@@ -31,6 +31,14 @@ const client = postgres(env.POSTGRES_URL, {
   idle_timeout: 20,
   connect_timeout: 10,
   ssl: "require",
+  // Phase 25 §6.5 — pg_trgm + unaccent moved from `public` to a
+  // dedicated `extensions` schema. The mwg_crm_app role's default
+  // search_path was updated server-side, but pooled connections that
+  // existed before that ALTER ROLE landed kept the stale path until
+  // recycle. Setting search_path explicitly on every new postgres-js
+  // connection eliminates that staleness — the parameter is sent in
+  // the StartupMessage so it applies to every session immediately.
+  connection: { search_path: "public, extensions" },
   // Surface postgres notice / error context in logs so we can see what's
   // actually wrong instead of a Drizzle "Failed query" wrapper.
   onnotice: (n) => {
