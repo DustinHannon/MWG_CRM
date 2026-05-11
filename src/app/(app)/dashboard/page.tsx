@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
+import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -176,10 +177,7 @@ export default async function DashboardPage() {
         <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
         <PageRealtime entities={["leads", "tasks", "notifications"]} />
         <PagePoll entities={["leads", "tasks", "notifications"]} />
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
-          Welcome back
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold">{user.displayName}</h1>
+        <StandardPageHeader kicker="Welcome back" title={user.displayName} />
         <section className="mt-10 rounded-2xl border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)]/40 p-10 text-center">
           <h2 className="text-lg font-semibold text-[var(--status-lost-fg)]">
             Dashboard temporarily unavailable
@@ -210,10 +208,7 @@ export default async function DashboardPage() {
         <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
         <PageRealtime entities={["leads", "tasks", "notifications"]} />
         <PagePoll entities={["leads", "tasks", "notifications"]} />
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
-          Welcome back
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold">{user.displayName}</h1>
+        <StandardPageHeader kicker="Welcome back" title={user.displayName} />
 
         <GlassCard className="mt-10 p-10 text-center">
           <h2 className="text-lg font-semibold">Nothing here yet</h2>
@@ -271,11 +266,8 @@ export default async function DashboardPage() {
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
       <PageRealtime entities={["leads", "tasks", "notifications"]} />
-        <PagePoll entities={["leads", "tasks", "notifications"]} />
-      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
-        Welcome back
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold">{user.displayName}</h1>
+      <PagePoll entities={["leads", "tasks", "notifications"]} />
+      <StandardPageHeader kicker="Welcome back" title={user.displayName} />
 
       <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Kpi label="Open leads" value={k?.open_leads ?? 0} />
