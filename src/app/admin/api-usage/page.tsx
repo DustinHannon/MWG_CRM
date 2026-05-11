@@ -163,7 +163,7 @@ export default async function ApiUsageLogPage({
             name="q"
             defaultValue={sp.q ?? ""}
             placeholder="action / error / key name…"
-            className="min-w-[240px] rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+            className="w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 sm:w-auto sm:min-w-[240px]"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -279,8 +279,13 @@ export default async function ApiUsageLogPage({
         </div>
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
-        <table className="data-table min-w-full divide-y divide-border/60 text-sm">
+      {/* Horizontal scroll on mid-range / mobile viewports — at <1000px the
+          8-column forensic table would otherwise clip Latency / IP / Detail
+          on the right. The wrapper keeps the rounded chrome; the inner
+          table sets a min-width so columns don't squash. Mirrors the
+          existing pattern for dense admin log tables (audit log). */}
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
+        <table className="data-table min-w-[1000px] divide-y divide-border/60 text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <th className="px-5 py-3 font-medium">When</th>
