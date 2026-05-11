@@ -4,6 +4,7 @@ import { savedSearchSubscriptions } from "@/db/schema/saved-search-subscriptions
 import { savedViews, userPreferences } from "@/db/schema/views";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { requireSession } from "@/lib/auth-helpers";
 import { ProfileSection } from "./_components/profile-section";
@@ -103,12 +104,11 @@ export default async function SettingsPage() {
       <BreadcrumbsSetter crumbs={[{ label: "Settings" }]} />
       {/* Left rail */}
       <aside className="sticky top-10 hidden h-[calc(100vh-5rem)] w-48 shrink-0 lg:block">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-          Settings
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold font-display">
-          {profile.displayName.split(" ")[0]}&apos;s preferences
-        </h1>
+        <StandardPageHeader
+          kicker="Settings"
+          title={`${profile.displayName.split(" ")[0]}'s preferences`}
+          fontFamily="display"
+        />
         <nav className="mt-6 flex flex-col gap-1 text-sm">
           <a href="#profile" className="rounded px-2 py-1.5 text-muted-foreground hover:bg-accent/40 hover:text-foreground">
             Profile
@@ -134,12 +134,11 @@ export default async function SettingsPage() {
       {/* Right pane */}
       <div className="flex min-w-0 flex-1 flex-col gap-6">
         <div className="lg:hidden">
-          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Settings
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold font-display">
-            {profile.displayName.split(" ")[0]}&apos;s preferences
-          </h1>
+          <StandardPageHeader
+            kicker="Settings"
+            title={`${profile.displayName.split(" ")[0]}'s preferences`}
+            fontFamily="display"
+          />
         </div>
 
         <ProfileSection profile={profile} />
