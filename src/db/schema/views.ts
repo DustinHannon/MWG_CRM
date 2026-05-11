@@ -80,6 +80,10 @@ export const userPreferences = pgTable("user_preferences", {
   lastUsedViewId: uuid("last_used_view_id").references(() => savedViews.id, {
     onDelete: "set null",
   }),
+  // Phase 25 §7.3 — last-used view on /tasks. text not uuid because
+  // built-in views use string ids ("builtin:my-open") that don't
+  // match the savedViews uuid FK shape.
+  lastUsedTaskViewId: text("last_used_task_view_id"),
   // ad-hoc column visibility chosen on a built-in view (saved views
   // store their own columns array on the saved_views row instead).
   adhocColumns: jsonb("adhoc_columns"),

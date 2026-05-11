@@ -15,6 +15,7 @@ import { toggleTaskCompleteAction } from "../actions";
 import {
   bulkCompleteTasksAction,
   bulkDeleteTasksAction,
+  bulkReassignTasksAction,
 } from "../view-actions";
 
 /**
@@ -34,6 +35,10 @@ export interface TaskTableClientProps {
   userId: string;
   isAdmin: boolean;
   canReassign: boolean;
+  /** Phase 25 §7.3 — active users for the bulk-reassign modal.
+   *  Empty array when the viewer lacks reassign perm; the toolbar
+   *  hides the Reassign button in that case. */
+  assignableUsers: { id: string; displayName: string; email: string }[];
   prefs: TimePrefs;
   /** Current sort, surfaced by the server page from URL params. */
   sort: {
@@ -62,12 +67,16 @@ export function TaskTableClient({
   userId,
   isAdmin,
   canReassign,
+  assignableUsers,
   prefs,
   sort,
 }: TaskTableClientProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Phase 25 §7.3 follow-up — bulk-reassign modal state.
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignTo, setReassignTo] = useState<string>("");
 
   const allSelected = useMemo(
     () => tasks.length > 0 && tasks.every((t) => selected.has(t.id)),
@@ -143,6 +152,34 @@ export function TaskTableClient({
     });
   }
 
+  function openReassign() {
+    setReassignTo("");
+    setReassignOpen(true);
+  }
+
+  function confirmReassign() {
+    if (!reassignTo) {
+      toast.error("Pick an assignee first.");
+      return;
+    }
+    if (selected.size === 0) return;
+    startTransition(async () => {
+      const res = await bulkReassignTasksAction({
+        ids: Array.from(selected),
+        newAssigneeId: reassignTo,
+      });
+      if (res.ok) {
+        toast.success(`Reassigned ${res.data.updated} task(s)`);
+        setReassignOpen(false);
+        setReassignTo("");
+        clearSelection();
+        router.refresh();
+      } else {
+        toast.error(res.error, { duration: Infinity, dismissible: true });
+      }
+    });
+  }
+
   function sortHref(field: (typeof COLUMNS)[number]["key"]) {
     if (field === "related") return "#";
     const direction =
@@ -189,13 +226,15 @@ export function TaskTableClient({
             >
               Delete
             </button>
-            {canReassign ? (
-              <span
-                className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground"
-                title="Open the per-task edit dialog to reassign (bulk reassign UI is coming next)"
+            {canReassign && assignableUsers.length > 0 ? (
+              <button
+                type="button"
+                onClick={openReassign}
+                disabled={pending}
+                className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs hover:bg-muted"
               >
-                Reassign… (per-task)
-              </span>
+                Reassign…
+              </button>
             ) : null}
             <button
               type="button"
@@ -264,9 +303,69 @@ export function TaskTableClient({
         </table>
       </div>
 
-      {/* canReassign / isAdmin currently unused but kept here so the
-          fast-follow bulk-reassign modal can read them in props
-          without a signature change. */}
+      {/* Phase 25 §7.3 follow-up — bulk-reassign modal. Simple
+          inline dialog (no Radix dependency) — picker + Confirm +
+          Cancel. Backed by bulkReassignTasksAction; the server
+          gate-checks canReassignTasks before the UPDATE fires. */}
+      {reassignOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Reassign selected tasks"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-border bg-[var(--popover)] p-5 text-[var(--popover-foreground)] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold">
+              Reassign {selected.size} task{selected.size === 1 ? "" : "s"}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              The new assignee will receive the task; this emits a
+              `task.reassigned` audit per task. Notifications follow
+              the recipient&apos;s preferences.
+            </p>
+            <label className="mt-4 block text-xs uppercase tracking-wide text-muted-foreground">
+              Assign to
+            </label>
+            <select
+              value={reassignTo}
+              onChange={(e) => setReassignTo(e.target.value)}
+              disabled={pending}
+              className="mt-1 h-9 w-full rounded-md border border-border bg-input/60 px-2 text-sm"
+            >
+              <option value="">— select user —</option>
+              {assignableUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.displayName} ({u.email})
+                </option>
+              ))}
+            </select>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReassignOpen(false)}
+                disabled={pending}
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmReassign}
+                disabled={pending || !reassignTo}
+                className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {pending ? "Reassigning…" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* isAdmin currently informational only — could surface admin-
+          specific column controls in a later iteration. */}
       {!isAdmin && false ? <span /> : null}
     </div>
   );

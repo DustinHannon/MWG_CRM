@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { db } from "@/db";
+import { userPreferences } from "@/db/schema/views";
 import { requireSession } from "@/lib/auth-helpers";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import {
@@ -35,6 +38,30 @@ import { getPermissions } from "@/lib/auth-helpers";
  * Audit events stay canonical: `task.completed`, `task.reassigned`,
  * `task.deleted` (no fork by source surface).
  */
+
+// =============================================================================
+// Active view persistence
+// =============================================================================
+
+/**
+ * Phase 25 §7.3 — store the currently-selected /tasks view id on
+ * user_preferences so a returning user lands on the same surface.
+ * Built-in view ids look like "builtin:my-open"; saved view ids
+ * look like "saved:<uuid>". Both stored as text (no FK constraint).
+ */
+export async function trackTaskViewSelection(viewId: string): Promise<void> {
+  const session = await requireSession();
+  if (!viewId || viewId.length > 100) return;
+  // UPSERT so a first-time visitor without a user_preferences row
+  // still gets the persistence.
+  await db
+    .insert(userPreferences)
+    .values({ userId: session.id, lastUsedTaskViewId: viewId })
+    .onConflictDoUpdate({
+      target: userPreferences.userId,
+      set: { lastUsedTaskViewId: viewId, updatedAt: new Date() },
+    });
+}
 
 // =============================================================================
 // Saved view CRUD
