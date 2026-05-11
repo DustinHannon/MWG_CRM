@@ -63,7 +63,14 @@ export type PermissionKey =
   | "canExport"
   | "canSendEmail"
   | "canViewReports"
-  | "canManageMarketing";
+  | "canManageMarketing"
+  // Phase 25 §7.3 — task-scoped RBAC. "Own" perms are implicit
+  // (any user can manage their own tasks); these gate cross-user
+  // actions. Admins bypass via the existing isAdmin shortcut.
+  | "canViewOthersTasks"
+  | "canEditOthersTasks"
+  | "canDeleteOthersTasks"
+  | "canReassignTasks";
 
 /**
  * Admin bypasses all per-feature permission checks.
@@ -179,6 +186,10 @@ export async function getPermissions(
       canSendEmail: true,
       canViewReports: true,
       canManageMarketing: false,
+      canViewOthersTasks: false,
+      canEditOthersTasks: false,
+      canDeleteOthersTasks: false,
+      canReassignTasks: false,
     };
   }
   const r = row[0];
@@ -192,5 +203,9 @@ export async function getPermissions(
     canSendEmail: r.canSendEmail,
     canViewReports: r.canViewReports,
     canManageMarketing: r.canManageMarketing,
+    canViewOthersTasks: r.canViewOthersTasks,
+    canEditOthersTasks: r.canEditOthersTasks,
+    canDeleteOthersTasks: r.canDeleteOthersTasks,
+    canReassignTasks: r.canReassignTasks,
   };
 }

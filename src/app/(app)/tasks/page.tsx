@@ -23,19 +23,31 @@ export const dynamic = "force-dynamic";
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; cursor?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    cursor?: string;
+    relation?: string;
+  }>;
 }) {
   const session = await requireSession();
   const sp = await searchParams;
   const statusFilter = sp.status?.split(",").filter(Boolean) as
     | ("open" | "in_progress" | "completed" | "cancelled")[]
     | undefined;
+  // Phase 25 §7.3 — relation filter. `all` (default) keeps existing
+  // behavior; `standalone` shows only tasks with no entity FK;
+  // `linked` shows only entity-linked tasks.
+  const relationFilter: "all" | "standalone" | "linked" =
+    sp.relation === "standalone" || sp.relation === "linked"
+      ? sp.relation
+      : "all";
 
   const { rows: tasks, nextCursor } = await listTasksForUser({
     userId: session.id,
     isAdmin: session.isAdmin,
     scope: "me",
     status: statusFilter ?? ["open", "in_progress"],
+    relation: relationFilter,
     cursor: sp.cursor,
     pageSize: 50,
   });
@@ -68,6 +80,24 @@ export default async function TasksPage({
         ) : null}
       </div>
 
+      {/* Phase 25 §7.3 — relation filter chips. Default 'All' keeps
+          the existing surface; 'Standalone' shows operational tasks
+          with no entity link; 'Linked' shows only entity-tied tasks. */}
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted-foreground">Related to:</span>
+        <RelationChip current={relationFilter} value="all" label="All" />
+        <RelationChip
+          current={relationFilter}
+          value="standalone"
+          label="Standalone"
+        />
+        <RelationChip
+          current={relationFilter}
+          value="linked"
+          label="Linked to entity"
+        />
+      </div>
+
       <GlassCard className="mt-6 p-4">
         <TaskListClient
           buckets={buckets}
@@ -91,7 +121,7 @@ export default async function TasksPage({
             ) : null}
             {nextCursor ? (
               <Link
-                href={`/tasks?cursor=${encodeURIComponent(nextCursor)}${sp.status ? `&status=${encodeURIComponent(sp.status)}` : ""}`}
+                href={`/tasks?cursor=${encodeURIComponent(nextCursor)}${sp.status ? `&status=${encodeURIComponent(sp.status)}` : ""}${relationFilter !== "all" ? `&relation=${relationFilter}` : ""}`}
                 className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
               >
                 Load more →
@@ -101,6 +131,38 @@ export default async function TasksPage({
         </nav>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Phase 25 §7.3 — chip-style filter for the Related-to picker.
+ * Server-rendered link; the active option is highlighted via the
+ * primary tone. Clicking jumps to /tasks with the param wiped or
+ * set; cursor is reset since the filtered set differs.
+ */
+function RelationChip({
+  current,
+  value,
+  label,
+}: {
+  current: "all" | "standalone" | "linked";
+  value: "all" | "standalone" | "linked";
+  label: string;
+}) {
+  const isActive = current === value;
+  const href =
+    value === "all" ? "/tasks" : `/tasks?relation=${value}`;
+  return (
+    <Link
+      href={href}
+      className={
+        isActive
+          ? "rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-primary"
+          : "rounded-md border border-border bg-muted/40 px-2.5 py-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+      }
+    >
+      {label}
+    </Link>
   );
 }
 

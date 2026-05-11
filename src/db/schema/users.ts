@@ -116,6 +116,14 @@ export const permissions = pgTable("permissions", {
   // suppressions). Admin bypasses. Defaults to false; flip per user via
   // /admin/users/<id>/permissions.
   canManageMarketing: boolean("can_manage_marketing").notNull().default(false),
+  // Phase 25 §7.3 — task-scoped RBAC. Every user can always
+  // view/edit/delete/complete THEIR OWN tasks (the "own" half of the
+  // brief's permission constants is implicit). These four gate
+  // cross-user actions. Admins bypass all.
+  canViewOthersTasks: boolean("can_view_others_tasks").notNull().default(false),
+  canEditOthersTasks: boolean("can_edit_others_tasks").notNull().default(false),
+  canDeleteOthersTasks: boolean("can_delete_others_tasks").notNull().default(false),
+  canReassignTasks: boolean("can_reassign_tasks").notNull().default(false),
 });
 
 // =============================================================================

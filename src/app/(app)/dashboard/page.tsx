@@ -10,6 +10,8 @@ import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { logger } from "@/lib/logger";
 import { formatPersonNameRow } from "@/lib/format/person-name";
+import { listOpenTasksForUser } from "@/lib/tasks";
+import { MyOpenTasksWidget } from "./_components/my-open-tasks-widget";
 import {
   CreatedOverTime,
   type CreatedOverTimePoint,
@@ -283,6 +285,14 @@ export default async function DashboardPage() {
           label="Conversion (90d)"
           value={conversionRate === null ? "—" : `${conversionRate}%`}
         />
+      </div>
+
+      {/* Phase 25 §7.3 — "My open tasks" widget. Top 5 by due date,
+          overdue flagged, related entity (lead/account/contact/opp)
+          shown inline with click-through. Footer link surfaces the
+          full list at /tasks?assignee=me&status=open. */}
+      <div className="mt-8">
+        <MyOpenTasksWidget tasks={await listOpenTasksForUser(user.id, 5)} />
       </div>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">

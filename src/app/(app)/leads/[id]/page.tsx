@@ -18,7 +18,9 @@ import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { env } from "@/lib/env";
 import { getLeadById } from "@/lib/leads";
+import { listTasksForLead } from "@/lib/tasks";
 import { formatPersonName } from "@/lib/format/person-name";
+import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
 import { LeadDetailDelete } from "./_components/lead-detail-delete";
 import { canDeleteLead } from "@/lib/access/can-delete";
 import { formatPersonName as _fpn } from "@/lib/format/person-name";
@@ -256,6 +258,23 @@ export default async function LeadDetailPage({
             Activity timeline
           </h2>
           <ActivityFeed leadId={lead.id} user={user} />
+        </div>
+
+        {/* Phase 25 §7.3 — Tasks tab. Lists tasks where lead_id =
+            currentLead.id with the canonical EntityTasksSection +
+            quick-add (auto-FK to this lead). Same `tasks` table backs
+            this and /tasks; CHECK `tasks_at_most_one_parent` is the
+            single-parent guard. */}
+        <div className="lg:col-span-3">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Tasks
+          </h2>
+          <EntityTasksSection
+            entityType="lead"
+            entityId={lead.id}
+            tasks={await listTasksForLead(lead.id)}
+            currentUserId={user.id}
+          />
         </div>
 
         {/* Phase 21 — Marketing email rollup. Server-fetched and passed

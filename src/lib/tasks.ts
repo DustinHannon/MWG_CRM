@@ -1,7 +1,8 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
+import { crmAccounts, contacts, opportunities } from "@/db/schema/crm-records";
 import { leads } from "@/db/schema/leads";
 import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
@@ -36,14 +37,34 @@ export function encodeTaskCursor(due: Date | null, id: string): string {
   return `${due ? due.toISOString() : "null"}:${id}`;
 }
 
-export const taskCreateSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-  description: z.string().trim().max(2000).optional().nullable(),
-  priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
-  dueAt: z.coerce.date().optional().nullable(),
-  assignedToId: z.string().uuid().optional().nullable(),
-  leadId: z.string().uuid().optional().nullable(),
-});
+export const taskCreateSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(2000).optional().nullable(),
+    priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
+    dueAt: z.coerce.date().optional().nullable(),
+    assignedToId: z.string().uuid().optional().nullable(),
+    // Phase 25 §7.3 — exactly one of these four can be set (or all
+    // null = standalone). Backed by CHECK constraint
+    // `tasks_at_most_one_parent`. The Zod refine below catches the
+    // ≥2 case at the action layer so the user sees a clean
+    // ValidationError instead of a raw PG 23514.
+    leadId: z.string().uuid().optional().nullable(),
+    accountId: z.string().uuid().optional().nullable(),
+    contactId: z.string().uuid().optional().nullable(),
+    opportunityId: z.string().uuid().optional().nullable(),
+  })
+  .refine(
+    (v) => {
+      const count =
+        Number(!!v.leadId) +
+        Number(!!v.accountId) +
+        Number(!!v.contactId) +
+        Number(!!v.opportunityId);
+      return count <= 1;
+    },
+    { message: "A task can be linked to at most one entity." },
+  );
 
 export const taskUpdateSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
@@ -71,8 +92,17 @@ export interface TaskRow {
   assignedToId: string | null;
   assignedToName: string | null;
   createdById: string | null;
+  // Phase 25 §7.3 — exactly one of these is non-null when the task is
+  // linked to a parent entity (CHECK constraint `tasks_at_most_one_parent`
+  // enforces ≤1). All four null = standalone task.
   leadId: string | null;
   leadName: string | null;
+  accountId: string | null;
+  accountName: string | null;
+  contactId: string | null;
+  contactName: string | null;
+  opportunityId: string | null;
+  opportunityName: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -89,9 +119,19 @@ const baseSelect = {
   assignedToId: tasks.assignedToId,
   assignedToName: users.displayName,
   createdById: tasks.createdById,
+  // Phase 25 §7.3 — pull display names for every related-entity slot
+  // so the /tasks Related-to column + lead-detail tab + dashboard
+  // widget all share the same shape.
   leadId: tasks.leadId,
   leadName:
     sql<string | null>`CASE WHEN ${leads.id} IS NULL THEN NULL ELSE concat_ws(' ', ${leads.firstName}, ${leads.lastName}) END`,
+  accountId: tasks.accountId,
+  accountName: crmAccounts.name,
+  contactId: tasks.contactId,
+  contactName:
+    sql<string | null>`CASE WHEN ${contacts.id} IS NULL THEN NULL ELSE concat_ws(' ', ${contacts.firstName}, ${contacts.lastName}) END`,
+  opportunityId: tasks.opportunityId,
+  opportunityName: opportunities.name,
   createdAt: tasks.createdAt,
   updatedAt: tasks.updatedAt,
 };
@@ -115,6 +155,8 @@ export async function listTasksForUser(args: {
   isAdmin: boolean;
   status?: ("open" | "in_progress" | "completed" | "cancelled")[];
   scope?: "me" | "all";
+  /** Phase 25 §7.3 — filter by related-entity link state. */
+  relation?: "all" | "standalone" | "linked";
   cursor?: string | null;
   /** 0 disables pagination (legacy callers). Defaults to 50. */
   pageSize?: number;
@@ -138,6 +180,28 @@ export async function listTasksForUser(args: {
     wheres.push(
       or(
         ...args.status.map((s) => eq(tasks.status, s)),
+      )!,
+    );
+  }
+  // Phase 25 §7.3 — relation filter. CHECK `tasks_at_most_one_parent`
+  // ensures at most one FK is set, so "linked" means any of the four
+  // is non-null and "standalone" means all four are null.
+  if (args.relation === "standalone") {
+    wheres.push(
+      and(
+        isNull(tasks.leadId),
+        isNull(tasks.accountId),
+        isNull(tasks.contactId),
+        isNull(tasks.opportunityId),
+      )!,
+    );
+  } else if (args.relation === "linked") {
+    wheres.push(
+      or(
+        isNotNull(tasks.leadId),
+        isNotNull(tasks.accountId),
+        isNotNull(tasks.contactId),
+        isNotNull(tasks.opportunityId),
       )!,
     );
   }
@@ -169,6 +233,12 @@ export async function listTasksForUser(args: {
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assignedToId))
     .leftJoin(leads, eq(leads.id, tasks.leadId))
+    .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
+    .leftJoin(contacts, eq(contacts.id, tasks.contactId))
+    .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
+    .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
+    .leftJoin(contacts, eq(contacts.id, tasks.contactId))
+    .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
     .where(where)
     .orderBy(sql`${tasks.dueAt} ASC NULLS LAST`, desc(tasks.id))
     .$dynamic();
@@ -189,8 +259,150 @@ export async function listTasksForLead(leadId: string): Promise<TaskRow[]> {
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assignedToId))
     .leftJoin(leads, eq(leads.id, tasks.leadId))
+    .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
+    .leftJoin(contacts, eq(contacts.id, tasks.contactId))
+    .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
     .where(and(eq(tasks.leadId, leadId), eq(tasks.isDeleted, false)))
     .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
+}
+
+// Phase 25 §7.3 — sibling helpers for the other three entity-detail
+// Tasks tabs. Same shape as listTasksForLead; backed by the same
+// table + JOINs (no parallel storage).
+
+export async function listTasksForAccount(accountId: string): Promise<TaskRow[]> {
+  return db
+    .select(baseSelect)
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.assignedToId))
+    .leftJoin(leads, eq(leads.id, tasks.leadId))
+    .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
+    .leftJoin(contacts, eq(contacts.id, tasks.contactId))
+    .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
+    .where(and(eq(tasks.accountId, accountId), eq(tasks.isDeleted, false)))
+    .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
+}
+
+export async function listTasksForContact(contactId: string): Promise<TaskRow[]> {
+  return db
+    .select(baseSelect)
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.assignedToId))
+    .leftJoin(leads, eq(leads.id, tasks.leadId))
+    .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
+    .leftJoin(contacts, eq(contacts.id, tasks.contactId))
+    .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
+    .where(and(eq(tasks.contactId, contactId), eq(tasks.isDeleted, false)))
+    .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
+}
+
+export async function listTasksForOpportunity(
+  opportunityId: string,
+): Promise<TaskRow[]> {
+  return db
+    .select(baseSelect)
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.assignedToId))
+    .leftJoin(leads, eq(leads.id, tasks.leadId))
+    .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
+    .leftJoin(contacts, eq(contacts.id, tasks.contactId))
+    .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
+    .where(
+      and(eq(tasks.opportunityId, opportunityId), eq(tasks.isDeleted, false)),
+    )
+    .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
+}
+
+// Phase 25 §7.3 — bulk-action helpers for the new /tasks toolbar.
+// Each helper writes a single audit row per affected task using the
+// canonical event names so audit volume scales linearly. Caller
+// must have already access-checked (canEditOthersTasks /
+// canDeleteOthersTasks / canReassignTasks).
+
+export async function bulkCompleteTasks(
+  ids: string[],
+  actorId: string,
+): Promise<{ updated: number }> {
+  if (ids.length === 0) return { updated: 0 };
+  const completedAt = new Date();
+  const updated = await db
+    .update(tasks)
+    .set({
+      status: "completed",
+      completedAt,
+      updatedById: actorId,
+      updatedAt: completedAt,
+      version: sql`${tasks.version} + 1`,
+    })
+    .where(and(inArray(tasks.id, ids), eq(tasks.isDeleted, false)))
+    .returning({ id: tasks.id });
+  for (const t of updated) {
+    await writeAudit({
+      actorId,
+      action: "task.completed",
+      targetType: "tasks",
+      targetId: t.id,
+      after: { completedAt: completedAt.toISOString() },
+    });
+  }
+  return { updated: updated.length };
+}
+
+export async function bulkReassignTasks(
+  ids: string[],
+  newAssigneeId: string,
+  actorId: string,
+): Promise<{ updated: number }> {
+  if (ids.length === 0) return { updated: 0 };
+  const updated = await db
+    .update(tasks)
+    .set({
+      assignedToId: newAssigneeId,
+      updatedById: actorId,
+      updatedAt: new Date(),
+      version: sql`${tasks.version} + 1`,
+    })
+    .where(and(inArray(tasks.id, ids), eq(tasks.isDeleted, false)))
+    .returning({ id: tasks.id });
+  for (const t of updated) {
+    await writeAudit({
+      actorId,
+      action: "task.reassigned",
+      targetType: "tasks",
+      targetId: t.id,
+      after: { newAssigneeId },
+    });
+  }
+  return { updated: updated.length };
+}
+
+export async function bulkDeleteTasks(
+  ids: string[],
+  actorId: string,
+): Promise<{ updated: number }> {
+  if (ids.length === 0) return { updated: 0 };
+  const deletedAt = new Date();
+  const updated = await db
+    .update(tasks)
+    .set({
+      isDeleted: true,
+      deletedAt,
+      deletedById: actorId,
+      updatedAt: deletedAt,
+      updatedById: actorId,
+      version: sql`${tasks.version} + 1`,
+    })
+    .where(and(inArray(tasks.id, ids), eq(tasks.isDeleted, false)))
+    .returning({ id: tasks.id });
+  for (const t of updated) {
+    await writeAudit({
+      actorId,
+      action: "task.deleted",
+      targetType: "tasks",
+      targetId: t.id,
+    });
+  }
+  return { updated: updated.length };
 }
 
 export async function listOpenTasksForUser(
@@ -202,6 +414,9 @@ export async function listOpenTasksForUser(
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assignedToId))
     .leftJoin(leads, eq(leads.id, tasks.leadId))
+    .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
+    .leftJoin(contacts, eq(contacts.id, tasks.contactId))
+    .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
     .where(
       and(
         eq(tasks.isDeleted, false),
@@ -226,7 +441,12 @@ export async function createTask(
       dueAt: input.dueAt ?? null,
       assignedToId: input.assignedToId ?? actorId,
       createdById: actorId,
+      // Phase 25 §7.3 — at most one parent FK populated; the Zod
+      // refine + DB CHECK constraint both enforce this.
       leadId: input.leadId ?? null,
+      accountId: input.accountId ?? null,
+      contactId: input.contactId ?? null,
+      opportunityId: input.opportunityId ?? null,
     })
     .returning({ id: tasks.id, assignedToId: tasks.assignedToId, title: tasks.title });
   const row = inserted[0];

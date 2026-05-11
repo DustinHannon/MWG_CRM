@@ -66,9 +66,13 @@ export async function createTaskAction(
       }
 
       revalidatePath("/tasks");
-      if (parsed.leadId) {
-        revalidatePath(`/leads/${parsed.leadId}`);
-      }
+      // Phase 25 §7.3 — revalidate the linked entity's detail page
+      // so the Tasks section there picks up the new row immediately.
+      if (parsed.leadId) revalidatePath(`/leads/${parsed.leadId}`);
+      if (parsed.accountId) revalidatePath(`/accounts/${parsed.accountId}`);
+      if (parsed.contactId) revalidatePath(`/contacts/${parsed.contactId}`);
+      if (parsed.opportunityId)
+        revalidatePath(`/opportunities/${parsed.opportunityId}`);
       return { id: result.id };
     },
   );

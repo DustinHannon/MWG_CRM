@@ -125,12 +125,39 @@ export function TaskListClient({
                           {t.status !== "open" ? (
                             <StatusPill status={t.status} />
                           ) : null}
+                          {/* Phase 25 §7.3 — Related-to inline link.
+                              CHECK tasks_at_most_one_parent enforces
+                              ≤1 FK, so the four branches are
+                              mutually exclusive. Em-dash falls out
+                              naturally when standalone (no link
+                              rendered, no row decoration). */}
                           {t.leadId ? (
                             <Link
                               href={`/leads/${t.leadId}`}
                               className="text-foreground/80 hover:underline"
                             >
                               {t.leadName ?? "Lead"}
+                            </Link>
+                          ) : t.accountId ? (
+                            <Link
+                              href={`/accounts/${t.accountId}`}
+                              className="text-foreground/80 hover:underline"
+                            >
+                              {t.accountName ?? "Account"}
+                            </Link>
+                          ) : t.contactId ? (
+                            <Link
+                              href={`/contacts/${t.contactId}`}
+                              className="text-foreground/80 hover:underline"
+                            >
+                              {t.contactName ?? "Contact"}
+                            </Link>
+                          ) : t.opportunityId ? (
+                            <Link
+                              href={`/opportunities/${t.opportunityId}`}
+                              className="text-foreground/80 hover:underline"
+                            >
+                              {t.opportunityName ?? "Opportunity"}
                             </Link>
                           ) : null}
                           {/* Phase 9C — assignee avatar/name when the
