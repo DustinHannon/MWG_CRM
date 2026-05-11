@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     q: sp.get("q") ?? undefined,
     action: sp.get("action") ?? undefined,
     targetType: sp.get("target_type") ?? undefined,
+    requestId: sp.get("request_id") ?? undefined,
     createdAtGte: sp.get("created_at_gte") ?? undefined,
     createdAtLte: sp.get("created_at_lte") ?? undefined,
   });
@@ -101,6 +102,7 @@ export async function GET(req: NextRequest) {
         q: sp.get("q") ?? null,
         action: sp.get("action") ?? null,
         target_type: sp.get("target_type") ?? null,
+        request_id: sp.get("request_id") ?? null,
         created_at_gte: sp.get("created_at_gte") ?? null,
         created_at_lte: sp.get("created_at_lte") ?? null,
       },
@@ -121,6 +123,7 @@ interface AuditFilterInput {
   q?: string;
   action?: string;
   targetType?: string;
+  requestId?: string;
   createdAtGte?: string;
   createdAtLte?: string;
 }
@@ -141,6 +144,10 @@ function buildWhereClauses(f: AuditFilterInput) {
   }
   if (f.action) wheres.push(eq(auditLog.action, f.action));
   if (f.targetType) wheres.push(eq(auditLog.targetType, f.targetType));
+  // Phase 25 §4.3 P2 follow-up — exact-match on requestId (no
+  // wildcard scan).
+  if (f.requestId && f.requestId.trim())
+    wheres.push(eq(auditLog.requestId, f.requestId.trim()));
   if (f.createdAtGte) {
     const d = new Date(f.createdAtGte);
     if (!Number.isNaN(d.getTime())) {

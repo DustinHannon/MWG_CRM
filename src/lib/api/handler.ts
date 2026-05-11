@@ -154,13 +154,44 @@ async function runApiHandler<P>(
     }
 
     // 4. Resolve route params (Next 16 passes params as a Promise).
+    // Phase 25 §4.3 P2 follow-up — refuse to fall through with empty
+    // params on rejection. A framework-side failure here used to
+    // silently route the handler with `{} as P`, which can cascade
+    // into 200s on what should be 500s (e.g. /api/v1/leads/[id]
+    // running with no id). Surface as INTERNAL_ERROR + audit-log row.
     let params: P;
     try {
       params = (routeArgs?.params
         ? await routeArgs.params
         : ({} as P)) as P;
-    } catch {
-      params = {} as P;
+    } catch (err) {
+      logger.error("api.params_resolution_failed", {
+        path: url.pathname,
+        action: options.action,
+        keyId: key.id,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      const res = errorResponse(
+        500,
+        "INTERNAL_ERROR",
+        "Failed to resolve route parameters.",
+      );
+      await logUsage({
+        keyId: key.id,
+        keyName: key.name,
+        keyPrefix: key.prefix,
+        method: req.method,
+        path: url.pathname,
+        action: options.action,
+        statusCode: 500,
+        ms: Date.now() - start,
+        ip,
+        ua,
+        query,
+        errorCode: "PARAMS_RESOLUTION_FAILED",
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      return res;
     }
 
     // 5. Run the handler.

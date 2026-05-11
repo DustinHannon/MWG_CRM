@@ -88,6 +88,14 @@ function buildCspHeader(nonce: string): string {
   // regresses, revert this commit; report-uri below will surface the
   // violation in audit_log within minutes.
   //
+  // Failure-mode note (Phase 25 §6.1 P2 follow-up): if editor.unlayer.com
+  // itself goes down or the bundle is blocked, the iframe simply
+  // fails to render — there's no CSP violation to report, so our
+  // telemetry stays silent. Detection in that scenario must come
+  // from synthetic-monitoring or user reports, not the CSP report
+  // endpoint. The /marketing/templates/[id]/edit page renders the
+  // empty iframe shell but no editor controls.
+  //
   // Phase 25 §6.2 — report-uri + report-to point at the audited
   // endpoint. Browsers send violation reports via either the legacy
   // report-uri (Chrome, Firefox) or the Reporting API report-to

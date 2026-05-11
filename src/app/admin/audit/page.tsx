@@ -16,6 +16,7 @@ interface AuditSearchParams {
   q?: string;
   action?: string;
   target_type?: string;
+  request_id?: string;
   created_at_gte?: string;
   created_at_lte?: string;
   cursor?: string;
@@ -40,11 +41,6 @@ export default async function AuditLogPage({
         ilike(auditLog.action, pattern),
         ilike(auditLog.targetType, pattern),
         ilike(auditLog.targetId, pattern),
-        // Phase 25 §4.3 — searching by request id correlates every
-        // audit row written within one logical request (server action,
-        // REST call, webhook). Same column shows in the new Request
-        // column and links here as a click-through filter.
-        ilike(auditLog.requestId, pattern),
         ilike(users.displayName, pattern),
         ilike(users.email, pattern),
       ),
@@ -52,6 +48,15 @@ export default async function AuditLogPage({
   }
   if (sp.action) wheres.push(eq(auditLog.action, sp.action));
   if (sp.target_type) wheres.push(eq(auditLog.targetType, sp.target_type));
+  // Phase 25 §4.3 P2 follow-up — dedicated exact-match field for
+  // requestId. Previously folded into the `q` ilike-OR; that scaled
+  // poorly as audit_log grows since request_id has no index and the
+  // wildcard pattern forced a full scan. The Request column's
+  // click-through link uses this param, not `q`, so the per-request
+  // correlation lens hits a fast equality predicate.
+  if (sp.request_id && sp.request_id.trim()) {
+    wheres.push(eq(auditLog.requestId, sp.request_id.trim()));
+  }
   if (sp.created_at_gte) {
     const d = new Date(sp.created_at_gte);
     if (!Number.isNaN(d.getTime())) {
@@ -126,6 +131,7 @@ export default async function AuditLogPage({
   if (sp.q) exportParams.set("q", sp.q);
   if (sp.action) exportParams.set("action", sp.action);
   if (sp.target_type) exportParams.set("target_type", sp.target_type);
+  if (sp.request_id) exportParams.set("request_id", sp.request_id);
   if (sp.created_at_gte) exportParams.set("created_at_gte", sp.created_at_gte);
   if (sp.created_at_lte) exportParams.set("created_at_lte", sp.created_at_lte);
   const exportHref = `/admin/audit/export${
@@ -292,7 +298,7 @@ export default async function AuditLogPage({
                       truncated 12-char preview doesn't hide it. */}
                   {r.requestId ? (
                     <a
-                      href={`/admin/audit?q=${encodeURIComponent(r.requestId)}`}
+                      href={`/admin/audit?request_id=${encodeURIComponent(r.requestId)}`}
                       className="font-mono text-[10px] text-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
                       title={r.requestId}
                     >
@@ -360,6 +366,7 @@ function CursorLink({
   if (sp.q) params.set("q", sp.q);
   if (sp.action) params.set("action", sp.action);
   if (sp.target_type) params.set("target_type", sp.target_type);
+  if (sp.request_id) params.set("request_id", sp.request_id);
   if (sp.created_at_gte) params.set("created_at_gte", sp.created_at_gte);
   if (sp.created_at_lte) params.set("created_at_lte", sp.created_at_lte);
   if (cursor) params.set("cursor", cursor);

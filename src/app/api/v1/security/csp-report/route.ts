@@ -186,7 +186,12 @@ export async function POST(req: NextRequest) {
     });
     return new NextResponse(null, { status: 400 });
   }
-  if (bodyText.length === 0 || bodyText.length > MAX_BODY_BYTES) {
+  // Phase 25 §6.2 P2 follow-up — measure in BYTES (not chars) so
+  // multi-byte UTF-8 reports don't slip past the post-parse check
+  // when content-length is missing or unreliable. The earlier
+  // content-length gate is bytes already.
+  const byteLength = Buffer.byteLength(bodyText, "utf8");
+  if (byteLength === 0 || byteLength > MAX_BODY_BYTES) {
     return new NextResponse(null, { status: 400 });
   }
 

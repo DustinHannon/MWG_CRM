@@ -121,7 +121,11 @@ export async function getGraphAppToken(): Promise<string> {
           action: "graph.token.refresh.exhausted",
           targetType: "graph_token",
           after: {
-            attempts: attempt,
+            // Phase 25 §4.4 P2 follow-up — `attempted` is clearer
+            // than `attempts` and the value is the total count
+            // actually tried (1..N), not the zero-based loop index.
+            attempted: attempt,
+            maxAttempts,
             retryable,
             errorName: err instanceof Error ? err.name : "Unknown",
           },

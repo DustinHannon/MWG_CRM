@@ -63,16 +63,22 @@ function isNextControlFlowError(err: unknown): boolean {
 function translatePgError(err: unknown): unknown {
   if (!err || typeof err !== "object") return err;
   const code = (err as { code?: unknown }).code;
+  // Phase 25 P2 follow-up — postgres-js always returns Error subclasses
+  // today, but a non-Error object that happens to carry `.code` would
+  // surface as `"[object Object]"` via `(err as Error).message`. Coerce
+  // safely so the audit `cause` field stays readable.
+  const causeMsg =
+    err instanceof Error ? err.message : String(err);
   if (code === "23514") {
     return new ValidationError("One or more fields failed validation.", {
       pgCode: "23514",
-      cause: (err as Error).message,
+      cause: causeMsg,
     });
   }
   if (code === "23505") {
     return new ConflictError("That value is already in use.", {
       pgCode: "23505",
-      cause: (err as Error).message,
+      cause: causeMsg,
     });
   }
   if (code === "23503") {
@@ -86,7 +92,7 @@ function translatePgError(err: unknown): unknown {
       {
         pgCode: "23503",
         constraint: (err as { constraint_name?: unknown }).constraint_name,
-        cause: (err as Error).message,
+        cause: causeMsg,
       },
     );
   }
