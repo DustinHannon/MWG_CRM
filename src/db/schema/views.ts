@@ -32,10 +32,10 @@ export const savedViews = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // `entity_type` scopes views by domain. 'lead'
-    // (default) preserves prior behaviour; 'task' powers the new
-    // /tasks page saved-view selector. CHECK constraint
-    // `saved_views_entity_type_valid` restricts to known values.
+    // `entity_type` scopes views by domain. Allowed values: 'lead',
+    // 'task', 'account', 'contact', 'opportunity'. Enforced by check
+    // constraint `saved_views_entity_type_valid`. 'lead' is the default
+    // so historical rows continue to behave.
     entityType: text("entity_type").notNull().default("lead"),
     name: text("name").notNull(),
     isPinned: boolean("is_pinned").notNull().default(false),
