@@ -19,8 +19,7 @@ import type {
  *
  * The wizard owns:
  * • Stage state machine (upload / preview / result).
- * • Upload form chrome (file picker + Preview-import button + template
- * download link).
+ * • Upload form chrome (file picker + Preview-import button).
  * • Commit / cancel button wiring and pending state.
  * • Toast surfacing of success / failure.
  *
@@ -29,6 +28,11 @@ import type {
  * • What the result pane looks like (`renderResult`).
  * • Any extras inside / above the upload form (smart-detect checkbox,
  * resume-from-run CTA, etc.).
+ *
+ * The wizard does not render a "Download template" link. The host
+ * page is responsible for rendering a single page-level Download
+ * template button above the wizard so duplicate affordances do not
+ * appear in both the page chrome and the wizard.
  */
 type Stage = "upload" | "preview" | "result";
 
@@ -134,7 +138,6 @@ export function ImportWizard<
           <UploadForm
             pending={pending}
             uploadError={uploadError}
-            templateDownloadUrl={config.templateDownloadUrl}
             documentationUrl={config.documentationUrl}
             onSubmit={onUpload}
             renderExtras={config.renderUploadFormExtras}
@@ -159,14 +162,12 @@ export function ImportWizard<
 function UploadForm({
   pending,
   uploadError,
-  templateDownloadUrl,
   documentationUrl,
   onSubmit,
   renderExtras,
 }: {
   pending: boolean;
   uploadError: string | null;
-  templateDownloadUrl?: string;
   documentationUrl?: string;
   onSubmit: (fd: FormData) => void;
   renderExtras?: () => React.ReactNode;
@@ -176,26 +177,16 @@ function UploadForm({
       action={onSubmit}
       className="mt-8 flex flex-col gap-4 rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl"
     >
-      <div className="flex items-center justify-between gap-4">
-        <label className="flex-1 text-xs uppercase tracking-wide text-muted-foreground">
-          Upload .xlsx file
-          <input
-            type="file"
-            name="file"
-            accept=".xlsx"
-            required
-            className="mt-2 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
-          />
-        </label>
-        {templateDownloadUrl ? (
-          <Link
-            href={templateDownloadUrl}
-            className="self-end rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground/90 transition hover:bg-muted"
-          >
-            Download template (.xlsx)
-          </Link>
-        ) : null}
-      </div>
+      <label className="text-xs uppercase tracking-wide text-muted-foreground">
+        Upload .xlsx file
+        <input
+          type="file"
+          name="file"
+          accept=".xlsx"
+          required
+          className="mt-2 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+        />
+      </label>
 
       {renderExtras ? renderExtras() : null}
 

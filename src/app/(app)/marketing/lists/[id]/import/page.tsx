@@ -112,6 +112,16 @@ export default async function StaticListImportPage({
         title={`Import recipients into ${list.name}`}
         description="Upload an .xlsx file with one row per recipient. Duplicate emails inside the file or already in this list are flagged and skipped."
       />
+
+      <div className="flex gap-3">
+        <a
+          href={`/api/marketing/lists/${list.id}/import-template`}
+          className="rounded-md border border-border bg-muted/40 px-4 py-2 text-sm text-foreground/90 transition hover:bg-muted"
+        >
+          Download template
+        </a>
+      </div>
+
       <StaticListImportClient listId={list.id} resumable={resumable} />
     </div>
   );

@@ -48,7 +48,6 @@ export function StaticListImportClient({
     CommitStaticListImportData
   > = {
     destinationLabel: "List members",
-    templateDownloadUrl: `/api/marketing/lists/${listId}/import-template`,
     previewAction: (formData: FormData) =>
       previewStaticListImportAction(listId, formData),
     commitAction: commitStaticListImportAction,

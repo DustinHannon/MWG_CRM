@@ -43,9 +43,6 @@ export interface ImportWizardConfig<
   /** Plural-noun destination shown in headers and toasts. */
   destinationLabel: string;
 
-  /** Optional GET URL for an .xlsx template download. */
-  templateDownloadUrl?: string;
-
   /**
    * Optional docs link displayed beside the upload form.
    */

@@ -22,7 +22,6 @@ import type { ActionResult } from "@/lib/server-action";
 export function ImportClient() {
   const config: ImportWizardConfig<PreviewSuccessData, CommitSuccessData> = {
     destinationLabel: "Leads",
-    templateDownloadUrl: "/api/leads/import-template",
     previewAction: previewImportAction,
     commitAction: commitImportAction,
     cancelAction: cancelImportAction,
