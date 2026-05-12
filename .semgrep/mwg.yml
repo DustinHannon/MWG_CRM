@@ -114,3 +114,55 @@ rules:
       exclude:
         - "src/**/*.test.ts"
         - "src/**/*.test.tsx"
+
+  # ---- UI copy: no internal phase numbering -------------------------
+  # Phase 28 — User-facing strings must describe what surfaces DO, not
+  # when they were built. "Phase 24," "Phase 21 marketing," etc. are
+  # scaffolding terms with no meaning to MWG staff.
+  #
+  # Regex notes: the negated class excludes `<`, `>`, `{`, `}`, and
+  # newlines so TS generics like `Promise<...>`, JSX comments
+  # `{/* Phase N — … */}`, and `//` line comments cannot form spurious
+  # matches that bridge across unrelated code. We target JSX TEXT
+  # NODES, which by construction are single-line and never contain a
+  # literal `<`, `>`, `{`, or `}` (those are always tag delimiters or
+  # expression-container braces).
+  - id: mwg-ui-copy-phase-reference
+    languages: [generic]
+    paths:
+      include:
+        - "src/app/**/*.tsx"
+        - "src/components/**/*.tsx"
+    patterns:
+      - pattern-regex: '>[^<>{}\n]*[Pp]hase\s+\d+[^<>{}\n]*<'
+    message: |
+      User-facing string references internal phase numbering ("Phase N").
+      Replace with a functional description of what the surface does.
+      See CLAUDE.md → UI copy conventions.
+    severity: ERROR
+
+  # ---- UI copy: banned marketing words ------------------------------
+  # Phase 28 — Marketing adjectives in platform chrome are forbidden.
+  # The marketing surface is excluded because templates surface
+  # MWG-marketing-team-authored copy, which legitimately uses these
+  # words in customer-facing context.
+  #
+  # Regex notes: see `mwg-ui-copy-phase-reference` above — the negated
+  # class excludes `<`, `>`, `{`, `}`, and newlines so TS generics, JSX
+  # comments, and multi-line spans cannot form spurious matches.
+  - id: mwg-ui-copy-banned-words
+    languages: [generic]
+    paths:
+      include:
+        - "src/app/**/*.tsx"
+        - "src/components/**/*.tsx"
+      exclude:
+        - "src/app/(app)/marketing/**"
+        - "src/components/marketing/**"
+    patterns:
+      - pattern-regex: '>[^<>{}\n]*\b(powerful|seamless|robust|comprehensive|streamline|holistic|effortless|delve|leverage|empower|unlock|transform|revolutionize)\b[^<>{}\n]*<'
+    message: |
+      User-facing string contains marketing language.
+      Replace with a concise functional description.
+      See CLAUDE.md → UI copy conventions for the full banned list.
+    severity: WARNING
