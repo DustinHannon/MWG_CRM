@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { crmAccounts, opportunities } from "@/db/schema/crm-records";
+import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { savedViews, userPreferences } from "@/db/schema/views";
 import { expectAffected } from "@/lib/db/concurrent-update";
@@ -34,6 +34,10 @@ export interface AccountViewFilters {
   search?: string;
   owner?: string[];
   industry?: string[];
+  city?: string;
+  state?: string;
+  country?: string;
+  hasParentAccount?: boolean;
   recentlyUpdatedDays?: number;
 }
 
@@ -129,6 +133,10 @@ export const accountViewSchema = z.object({
       search: z.string().trim().max(200).optional(),
       owner: z.array(z.string().uuid()).optional(),
       industry: z.array(z.string().max(100)).optional(),
+      city: z.string().trim().max(120).optional(),
+      state: z.string().trim().max(120).optional(),
+      country: z.string().trim().max(80).optional(),
+      hasParentAccount: z.boolean().optional(),
       recentlyUpdatedDays: z.number().int().min(1).max(3650).optional(),
     })
     .default({}),
@@ -394,12 +402,20 @@ function coerceAdhocMap(raw: unknown): Record<string, unknown> {
 export interface AccountRow {
   id: string;
   name: string;
+  accountNumber: string | null;
   industry: string | null;
   website: string | null;
+  email: string | null;
   city: string | null;
   state: string | null;
   country: string | null;
   phone: string | null;
+  numberOfEmployees: number | null;
+  annualRevenue: string | null;
+  parentAccountId: string | null;
+  parentAccountName: string | null;
+  primaryContactId: string | null;
+  primaryContactName: string | null;
   ownerId: string | null;
   ownerDisplayName: string | null;
   ownerPhotoUrl: string | null;
@@ -457,7 +473,9 @@ export async function runAccountView(
       or(
         ilike(crmAccounts.name, pattern),
         ilike(crmAccounts.website, pattern),
+        ilike(crmAccounts.email, pattern),
         ilike(crmAccounts.industry, pattern),
+        ilike(crmAccounts.accountNumber, pattern),
       ),
     );
   }
@@ -466,6 +484,20 @@ export async function runAccountView(
   }
   if (merged.industry?.length) {
     wheres.push(inArray(crmAccounts.industry, merged.industry));
+  }
+  if (merged.city) {
+    wheres.push(ilike(crmAccounts.city, `%${merged.city}%`));
+  }
+  if (merged.state) {
+    wheres.push(eq(crmAccounts.state, merged.state));
+  }
+  if (merged.country) {
+    wheres.push(eq(crmAccounts.country, merged.country));
+  }
+  if (merged.hasParentAccount === true) {
+    wheres.push(sql`${crmAccounts.parentAccountId} IS NOT NULL`);
+  } else if (merged.hasParentAccount === false) {
+    wheres.push(sql`${crmAccounts.parentAccountId} IS NULL`);
   }
   if (merged.recentlyUpdatedDays && merged.recentlyUpdatedDays > 0) {
     wheres.push(
@@ -481,6 +513,8 @@ export async function runAccountView(
     switch (sort.field) {
       case "name":
         return crmAccounts.name;
+      case "accountNumber":
+        return crmAccounts.accountNumber;
       case "industry":
         return crmAccounts.industry;
       case "city":
@@ -489,6 +523,10 @@ export async function runAccountView(
         return crmAccounts.state;
       case "country":
         return crmAccounts.country;
+      case "annualRevenue":
+        return crmAccounts.annualRevenue;
+      case "numberOfEmployees":
+        return crmAccounts.numberOfEmployees;
       case "createdAt":
         return crmAccounts.createdAt;
       case "updatedAt":
@@ -533,12 +571,21 @@ export async function runAccountView(
       .select({
         id: crmAccounts.id,
         name: crmAccounts.name,
+        accountNumber: crmAccounts.accountNumber,
         industry: crmAccounts.industry,
         website: crmAccounts.website,
+        email: crmAccounts.email,
         city: crmAccounts.city,
         state: crmAccounts.state,
         country: crmAccounts.country,
         phone: crmAccounts.phone,
+        numberOfEmployees: crmAccounts.numberOfEmployees,
+        annualRevenue: crmAccounts.annualRevenue,
+        parentAccountId: crmAccounts.parentAccountId,
+        // The parent-account join is a self-join on crm_accounts; we
+        // resolve it in a separate pass below to avoid the Drizzle
+        // column-aliasing complexity. Leave the name null at SELECT.
+        primaryContactId: crmAccounts.primaryContactId,
         ownerId: crmAccounts.ownerId,
         ownerDisplayName: users.displayName,
         ownerPhotoUrl: users.photoBlobUrl,
@@ -568,8 +615,75 @@ export async function runAccountView(
     nextCursor = encodeCursor(last.updatedAt, last.id);
   }
 
+  // Resolve parent-account-name and primary-contact-name via two
+  // small lookups instead of a left-join (avoids self-join aliasing
+  // and keeps the projection select clean). Page-size capped at 200
+  // so the lookups never explode.
+  const parentIds = Array.from(
+    new Set(
+      trimmedRows
+        .map((r) => r.parentAccountId)
+        .filter((v): v is string => v != null),
+    ),
+  );
+  const primaryContactIds = Array.from(
+    new Set(
+      trimmedRows
+        .map((r) => r.primaryContactId)
+        .filter((v): v is string => v != null),
+    ),
+  );
+
+  const [parentRows, primaryContactRows] = await Promise.all([
+    parentIds.length > 0
+      ? db
+          .select({ id: crmAccounts.id, name: crmAccounts.name })
+          .from(crmAccounts)
+          .where(
+            and(
+              inArray(crmAccounts.id, parentIds),
+              // Exclude archived parents — a soft-deleted account is
+              // not a valid display target. FK ON DELETE SET NULL
+              // only fires on hard delete; archived rows keep their
+              // FK referenced and would otherwise render a stale
+              // name here.
+              eq(crmAccounts.isDeleted, false),
+            ),
+          )
+      : Promise.resolve([]),
+    primaryContactIds.length > 0
+      ? db
+          .select({
+            id: contacts.id,
+            firstName: contacts.firstName,
+            lastName: contacts.lastName,
+          })
+          .from(contacts)
+          .where(
+            and(
+              inArray(contacts.id, primaryContactIds),
+              eq(contacts.isDeleted, false),
+            ),
+          )
+      : Promise.resolve([]),
+  ]);
+
+  const parentNameById = new Map(parentRows.map((p) => [p.id, p.name]));
+  const primaryContactNameById = new Map(
+    primaryContactRows.map((c) => [
+      c.id,
+      [c.firstName, c.lastName].filter(Boolean).join(" ").trim() || "(unnamed)",
+    ]),
+  );
+
   const rows: AccountRow[] = trimmedRows.map((r) => ({
     ...r,
+    parentAccountName: r.parentAccountId
+      ? (parentNameById.get(r.parentAccountId) ?? null)
+      : null,
+    primaryContactName: r.primaryContactId
+      ? (primaryContactNameById.get(r.primaryContactId) ?? null)
+      : null,
   }));
 
   const columns = opts.columns ?? view.columns;

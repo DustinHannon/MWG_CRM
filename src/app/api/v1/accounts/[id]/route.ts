@@ -141,9 +141,18 @@ export const PATCH = withApi<{ id: string }>(
     const m = parsed.data;
     const patch: Record<string, unknown> = {};
     if (m.name !== undefined) patch.name = m.name;
+    if (m.account_number !== undefined) patch.accountNumber = m.account_number ?? null;
     if (m.industry !== undefined) patch.industry = m.industry ?? null;
     if (m.website !== undefined) patch.website = m.website ?? null;
+    if (m.email !== undefined) patch.email = m.email ?? null;
     if (m.phone !== undefined) patch.phone = m.phone ?? null;
+    if (m.number_of_employees !== undefined) {
+      patch.numberOfEmployees = m.number_of_employees ?? null;
+    }
+    if (m.annual_revenue !== undefined) {
+      patch.annualRevenue =
+        m.annual_revenue != null ? m.annual_revenue.toFixed(2) : null;
+    }
     if (m.street1 !== undefined) patch.street1 = m.street1 ?? null;
     if (m.street2 !== undefined) patch.street2 = m.street2 ?? null;
     if (m.city !== undefined) patch.city = m.city ?? null;
@@ -151,6 +160,12 @@ export const PATCH = withApi<{ id: string }>(
     if (m.postal_code !== undefined) patch.postalCode = m.postal_code ?? null;
     if (m.country !== undefined) patch.country = m.country ?? null;
     if (m.description !== undefined) patch.description = m.description ?? null;
+    if (m.parent_account_id !== undefined) {
+      patch.parentAccountId = m.parent_account_id ?? null;
+    }
+    if (m.primary_contact_id !== undefined) {
+      patch.primaryContactId = m.primary_contact_id ?? null;
+    }
     if (m.owner_id !== undefined) patch.ownerId = m.owner_id ?? null;
     try {
       await updateAccountForApi(

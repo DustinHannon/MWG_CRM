@@ -15,11 +15,22 @@ export function AccountForm() {
     <form action={formAction} className="mt-8 grid gap-6 lg:grid-cols-2">
       <Section title="Identity">
         <Input name="name" label="Account name *" required />
-        <Input name="industry" label="Industry" />
         <Row>
-          <Input name="website" label="Website" />
+          <Input name="accountNumber" label="Account number" />
+          <Input name="industry" label="Industry" />
+        </Row>
+        <Row>
+          <Input name="numberOfEmployees" label="Employees" type="number" />
+          <Input name="annualRevenue" label="Annual revenue ($)" type="number" />
+        </Row>
+      </Section>
+
+      <Section title="Contact info">
+        <Row>
+          <Input name="email" label="Email" type="email" />
           <Input name="phone" label="Phone" />
         </Row>
+        <Input name="website" label="Website" />
       </Section>
 
       <Section title="Address">

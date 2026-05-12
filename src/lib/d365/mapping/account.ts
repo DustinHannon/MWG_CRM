@@ -160,8 +160,10 @@ export function mapD365Account(
     description: parseString(raw.description),
     d365StateCode,
     d365StatusCode,
-    // FK to local rows is left null; the orchestrator resolves these
-    // by sourceId lookup in a post-pass once parents are committed.
+    // FK to local rows is left null at map time. commit-batch resolves
+    // via the `_parentAccountSourceId` / `_primaryContactSourceId`
+    // virtuals attached below, before the insert, and strips them via
+    // the underscore filter.
     parentAccountId: null,
     primaryContactId: null,
     isDeleted: isInactive,
@@ -174,6 +176,21 @@ export function mapD365Account(
     updatedAt,
     metadata,
   };
+
+  // Stash raw D365 GUIDs for FK resolution at commit time.
+  const parentSourceId = parseString(
+    (raw as Record<string, unknown>)._parentaccountid_value,
+  );
+  if (parentSourceId) {
+    (mapped as Record<string, unknown>)._parentAccountSourceId = parentSourceId;
+  }
+  const primaryContactSourceId = parseString(
+    (raw as Record<string, unknown>)._primarycontactid_value,
+  );
+  if (primaryContactSourceId) {
+    (mapped as Record<string, unknown>)._primaryContactSourceId =
+      primaryContactSourceId;
+  }
 
   const attached: AttachedActivity[] = [];
   return { mapped, attached, customFields, warnings };

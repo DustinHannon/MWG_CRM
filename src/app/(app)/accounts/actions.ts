@@ -163,7 +163,49 @@ const accountUpdateSchema = z.object({
   industry: z.string().trim().max(120).optional().nullable(),
   website: z.string().trim().max(200).optional().nullable(),
   phone: z.string().trim().max(40).optional().nullable(),
+  email: z
+    .string()
+    .trim()
+    .max(254)
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  accountNumber: z.string().trim().max(100).optional().nullable(),
+  numberOfEmployees: z
+    .union([z.string(), z.number()])
+    .optional()
+    .nullable()
+    .transform((v): number | null => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+    }),
+  annualRevenue: z
+    .union([z.string(), z.number()])
+    .optional()
+    .nullable()
+    .transform((v): string | null => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) && n >= 0 ? n.toFixed(2) : null;
+    }),
+  street1: z.string().trim().max(200).optional().nullable(),
+  street2: z.string().trim().max(200).optional().nullable(),
+  city: z.string().trim().max(120).optional().nullable(),
+  state: z.string().trim().max(120).optional().nullable(),
+  postalCode: z.string().trim().max(20).optional().nullable(),
+  country: z.string().trim().max(80).optional().nullable(),
   description: z.string().trim().max(4000).optional().nullable(),
+  parentAccountId: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  primaryContactId: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.length > 0 ? v : null)),
 });
 
 export async function updateAccountAction(
@@ -176,17 +218,11 @@ export async function updateAccountAction(
       const parsed = accountUpdateSchema.parse(
         Object.fromEntries(fd.entries()),
       );
-      // Access gate: load + verify the user owns or has admin/canViewAll.
+      // Access gate + full-row snapshot for audit. Selecting `*`
+      // captures every column (including the new D365-parity fields)
+      // so the audit_log `before` payload is complete.
       const [existing] = await db
-        .select({
-          id: crmAccounts.id,
-          ownerId: crmAccounts.ownerId,
-          name: crmAccounts.name,
-          industry: crmAccounts.industry,
-          website: crmAccounts.website,
-          phone: crmAccounts.phone,
-          description: crmAccounts.description,
-        })
+        .select()
         .from(crmAccounts)
         .where(eq(crmAccounts.id, parsed.id))
         .limit(1);
@@ -204,7 +240,19 @@ export async function updateAccountAction(
           industry: parsed.industry ?? null,
           website: parsed.website ?? null,
           phone: parsed.phone ?? null,
+          email: parsed.email,
+          accountNumber: parsed.accountNumber ?? null,
+          numberOfEmployees: parsed.numberOfEmployees,
+          annualRevenue: parsed.annualRevenue,
+          street1: parsed.street1 ?? null,
+          street2: parsed.street2 ?? null,
+          city: parsed.city ?? null,
+          state: parsed.state ?? null,
+          postalCode: parsed.postalCode ?? null,
+          country: parsed.country ?? null,
           description: parsed.description ?? null,
+          parentAccountId: parsed.parentAccountId,
+          primaryContactId: parsed.primaryContactId,
         },
         parsed.version,
         user.id,

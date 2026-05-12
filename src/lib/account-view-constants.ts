@@ -4,12 +4,18 @@
 
 export const AVAILABLE_ACCOUNT_COLUMNS = [
   { key: "name", label: "Name" },
+  { key: "accountNumber", label: "Account #" },
   { key: "industry", label: "Industry" },
   { key: "website", label: "Website" },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Phone" },
   { key: "city", label: "City" },
   { key: "state", label: "State" },
   { key: "country", label: "Country" },
-  { key: "phone", label: "Phone" },
+  { key: "primaryContact", label: "Primary contact" },
+  { key: "parentAccount", label: "Parent account" },
+  { key: "numberOfEmployees", label: "Employees" },
+  { key: "annualRevenue", label: "Revenue" },
   { key: "owner", label: "Owner" },
   { key: "wonDeals", label: "Won deals" },
   { key: "createdAt", label: "Created" },
@@ -34,10 +40,13 @@ export const DEFAULT_ACCOUNT_COLUMNS: AccountColumnKey[] = [
 
 export const ACCOUNT_SORT_FIELDS = [
   "name",
+  "accountNumber",
   "industry",
   "city",
   "state",
   "country",
+  "annualRevenue",
+  "numberOfEmployees",
   "createdAt",
   "updatedAt",
 ] as const;

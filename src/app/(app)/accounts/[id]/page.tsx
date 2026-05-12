@@ -34,13 +34,22 @@ export default async function AccountDetailPage({
     .select({
       id: crmAccounts.id,
       name: crmAccounts.name,
+      accountNumber: crmAccounts.accountNumber,
       industry: crmAccounts.industry,
       website: crmAccounts.website,
+      email: crmAccounts.email,
       phone: crmAccounts.phone,
+      numberOfEmployees: crmAccounts.numberOfEmployees,
+      annualRevenue: crmAccounts.annualRevenue,
+      street1: crmAccounts.street1,
+      street2: crmAccounts.street2,
       city: crmAccounts.city,
       state: crmAccounts.state,
+      postalCode: crmAccounts.postalCode,
       country: crmAccounts.country,
       description: crmAccounts.description,
+      parentAccountId: crmAccounts.parentAccountId,
+      primaryContactId: crmAccounts.primaryContactId,
       ownerId: crmAccounts.ownerId,
       ownerName: users.displayName,
       createdAt: crmAccounts.createdAt,
@@ -185,15 +194,31 @@ export default async function AccountDetailPage({
             Details
           </h2>
           <dl className="mt-3 space-y-2 text-sm">
+            <Row label="Account number" value={account.accountNumber} />
+            <Row label="Industry" value={account.industry} />
             <Row label="Website" value={account.website} />
+            <Row label="Email" value={account.email} mailto />
             <Row label="Phone" value={account.phone} />
             <Row
-              label="Location"
+              label="Employees"
               value={
-                [account.city, account.state, account.country]
-                  .filter(Boolean)
-                  .join(", ") || null
+                account.numberOfEmployees != null
+                  ? account.numberOfEmployees.toLocaleString()
+                  : null
               }
+            />
+            <Row
+              label="Annual revenue"
+              value={
+                account.annualRevenue != null
+                  ? `$${Number(account.annualRevenue).toLocaleString()}`
+                  : null
+              }
+            />
+            <Row
+              label="Address"
+              value={formatAddress(account)}
+              multiline
             />
             <Row label="Description" value={account.description} />
           </dl>
@@ -272,13 +297,53 @@ export default async function AccountDetailPage({
   );
 }
 
-function Row({ label, value }: { label: string; value: string | null }) {
+function Row({
+  label,
+  value,
+  mailto,
+  multiline,
+}: {
+  label: string;
+  value: string | null;
+  mailto?: boolean;
+  multiline?: boolean;
+}) {
   return (
     <div className="flex">
       <dt className="w-32 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
-      <dd>{value ?? "—"}</dd>
+      <dd className={multiline ? "whitespace-pre-line" : undefined}>
+        {mailto && value ? (
+          <a href={`mailto:${value}`} className="hover:underline">
+            {value}
+          </a>
+        ) : (
+          (value ?? "—")
+        )}
+      </dd>
     </div>
   );
+}
+
+function formatAddress(account: {
+  street1: string | null;
+  street2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+}): string | null {
+  const lines: string[] = [];
+  if (account.street1) lines.push(account.street1);
+  if (account.street2) lines.push(account.street2);
+  const cityLine = [
+    account.city,
+    [account.state, account.postalCode].filter(Boolean).join(" "),
+  ]
+    .filter((s) => s && s.length > 0)
+    .join(", ");
+  if (cityLine) lines.push(cityLine);
+  if (account.country) lines.push(account.country);
+  return lines.length > 0 ? lines.join("\n") : null;
 }

@@ -588,6 +588,59 @@ function renderCell(row: AccountRow, col: AccountColumnKey) {
       );
     case "phone":
       return <span className="text-muted-foreground">{row.phone ?? "—"}</span>;
+    case "email":
+      return row.email ? (
+        <a
+          href={`mailto:${row.email}`}
+          className="text-muted-foreground hover:text-foreground hover:underline"
+        >
+          {row.email}
+        </a>
+      ) : (
+        <span className="text-muted-foreground/80">—</span>
+      );
+    case "accountNumber":
+      return (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.accountNumber ?? "—"}
+        </span>
+      );
+    case "numberOfEmployees":
+      return (
+        <span className="tabular-nums text-muted-foreground">
+          {row.numberOfEmployees != null ? row.numberOfEmployees.toLocaleString() : "—"}
+        </span>
+      );
+    case "annualRevenue":
+      return (
+        <span className="tabular-nums text-muted-foreground">
+          {row.annualRevenue != null
+            ? `$${Number(row.annualRevenue).toLocaleString()}`
+            : "—"}
+        </span>
+      );
+    case "primaryContact":
+      return row.primaryContactId ? (
+        <Link
+          href={`/contacts/${row.primaryContactId}`}
+          className="text-muted-foreground hover:text-foreground hover:underline"
+        >
+          {row.primaryContactName ?? "(unnamed)"}
+        </Link>
+      ) : (
+        <span className="text-muted-foreground/80">—</span>
+      );
+    case "parentAccount":
+      return row.parentAccountId ? (
+        <Link
+          href={`/accounts/${row.parentAccountId}`}
+          className="text-muted-foreground hover:text-foreground hover:underline"
+        >
+          {row.parentAccountName ?? "(unnamed)"}
+        </Link>
+      ) : (
+        <span className="text-muted-foreground/80">—</span>
+      );
     case "owner":
       return row.ownerId ? (
         <UserChip

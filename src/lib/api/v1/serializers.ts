@@ -56,6 +56,17 @@ export function serializeLead(row: Record<string, unknown>) {
 }
 
 export function serializeAccount(row: Record<string, unknown>) {
+  const out0 = {
+    account_number: (row.accountNumber ?? null) as string | null,
+    email: (row.email ?? null) as string | null,
+    number_of_employees: (row.numberOfEmployees ?? null) as number | null,
+    annual_revenue: (row.annualRevenue ?? null) as string | null,
+    parent_account_id: (row.parentAccountId ?? null) as string | null,
+    primary_contact_id: (row.primaryContactId ?? null) as string | null,
+  };
+  return Object.assign(out0, _serializeAccountBase(row));
+}
+function _serializeAccountBase(row: Record<string, unknown>) {
   return {
     id: row.id as string,
     name: row.name as string,

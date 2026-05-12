@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
@@ -79,6 +79,13 @@ export async function commitBatch(
   batchId: string,
   actorId: string,
 ): Promise<CommitBatchResult> {
+  // Deterministic commit order so FK lookups via `lookupLocalId`
+  // succeed on the first pass:
+  //   account → contact → opportunity → activities → other
+  // Within a tier, ordered by createdAt so a parent account commits
+  // before any child account that lists it as `_parentaccountid_value`.
+  // If ordering still doesn't resolve (e.g., parent in a different
+  // batch entirely), the FK stays null and a re-import picks it up.
   const records = await db
     .select({
       id: importRecords.id,
@@ -90,7 +97,20 @@ export async function commitBatch(
       status: importRecords.status,
     })
     .from(importRecords)
-    .where(eq(importRecords.batchId, batchId));
+    .where(eq(importRecords.batchId, batchId))
+    .orderBy(
+      sql`CASE ${importRecords.sourceEntityType}
+            WHEN 'account' THEN 1
+            WHEN 'contact' THEN 2
+            WHEN 'opportunity' THEN 3
+            WHEN 'lead' THEN 4
+            ELSE 5
+          END`,
+      // Stable secondary order so identical-tier records commit in a
+      // consistent sequence run-to-run. importRecords.id is a UUID;
+      // ascending order is deterministic if not chronological.
+      asc(importRecords.id),
+    );
 
   let committed = 0;
   let skipped = 0;
@@ -200,7 +220,8 @@ async function commitOneRecord(
       : wrapper;
 
   // Extract `_`-prefixed virtuals BEFORE strip — commit-batch reads the
-  // parent FK from these for the activity path.
+  // parent FK from these for the activity path AND for account/contact
+  // FK resolution against external_ids.
   const parentEntityType =
     typeof mappedRaw._parentEntityType === "string"
       ? (mappedRaw._parentEntityType as string)
@@ -209,10 +230,26 @@ async function commitOneRecord(
     typeof mappedRaw._parentSourceId === "string"
       ? (mappedRaw._parentSourceId as string)
       : null;
+  // Contact mapper stashes the D365 parent-customer GUID here; resolved
+  // to a local crm_accounts.id below.
+  const accountSourceId =
+    typeof mappedRaw._accountSourceId === "string"
+      ? (mappedRaw._accountSourceId as string)
+      : null;
+  // Account mapper stashes these for the two account-level FKs.
+  const parentAccountSourceId =
+    typeof mappedRaw._parentAccountSourceId === "string"
+      ? (mappedRaw._parentAccountSourceId as string)
+      : null;
+  const primaryContactSourceId =
+    typeof mappedRaw._primaryContactSourceId === "string"
+      ? (mappedRaw._primaryContactSourceId as string)
+      : null;
 
   // Strip every `_`-prefixed virtual (`_meta`, `_parentEntityType`,
-  // `_parentSourceId`, `_qualityVerdict`, `_qualityReasons`, etc.) before
-  // Drizzle insert.
+  // `_parentSourceId`, `_qualityVerdict`, `_qualityReasons`,
+  // `_accountSourceId`, `_parentAccountSourceId`,
+  // `_primaryContactSourceId`, etc.) before Drizzle insert.
   const cleanPayload: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(mappedRaw)) {
     if (k.startsWith("_")) continue;
@@ -222,6 +259,34 @@ async function commitOneRecord(
   const entityType = rec.sourceEntityType as D365EntityType;
 
   return await db.transaction(async (tx) => {
+    // Resolve account/contact FKs from D365 source GUIDs into the
+    // local rows that have been previously imported. If the foreign
+    // record hasn't been imported yet, the FK stays null — the user
+    // can either re-run the import (which will resolve on second pass)
+    // or set the FK manually via the edit form.
+    if (entityType === "contact" && accountSourceId) {
+      const localAccountId = await lookupLocalId(tx, "account", accountSourceId);
+      if (localAccountId) cleanPayload.accountId = localAccountId;
+    }
+    if (entityType === "account") {
+      if (parentAccountSourceId) {
+        const localParentId = await lookupLocalId(
+          tx,
+          "account",
+          parentAccountSourceId,
+        );
+        if (localParentId) cleanPayload.parentAccountId = localParentId;
+      }
+      if (primaryContactSourceId) {
+        const localContactId = await lookupLocalId(
+          tx,
+          "contact",
+          primaryContactSourceId,
+        );
+        if (localContactId) cleanPayload.primaryContactId = localContactId;
+      }
+    }
+
     // Activities path — insert into `activities` and link parent FK.
     if (
       entityType === "annotation" ||
@@ -526,6 +591,30 @@ async function commitActivity(
 /* -------------------------------------------------------------------------- *
  * external_ids upsert *
  * -------------------------------------------------------------------------- */
+
+/**
+ * Resolve a D365 GUID for a related record to the local UUID using
+ * the external_ids table. Returns null when the foreign record hasn't
+ * been imported yet — callers leave the FK null in that case.
+ */
+async function lookupLocalId(
+  tx: Tx,
+  entityType: "account" | "contact" | "lead" | "opportunity",
+  sourceId: string,
+): Promise<string | null> {
+  const rows = await tx
+    .select({ localId: externalIds.localId })
+    .from(externalIds)
+    .where(
+      and(
+        eq(externalIds.source, "d365"),
+        eq(externalIds.sourceEntityType, entityType),
+        eq(externalIds.sourceId, sourceId),
+      ),
+    )
+    .limit(1);
+  return rows[0]?.localId ?? null;
+}
 
 async function upsertExternalId(
   tx: Tx,

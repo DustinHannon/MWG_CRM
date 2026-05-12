@@ -116,6 +116,13 @@ export function mapD365Contact(
   const createdById = ctx.resolvedCreatedById ?? ctx.resolvedOwnerId;
   const updatedById = ctx.resolvedUpdatedById ?? ctx.resolvedOwnerId;
 
+  // Stash the raw D365 GUID for the parent account on the mapped
+  // payload as a `_`-prefixed virtual. commit-batch resolves it to a
+  // local crm_accounts.id via external_ids before the contact insert
+  // and strips the virtual via the underscore filter.
+  const accountSourceId =
+    parseString(raw._parentcustomerid_value) ?? parseString(raw._accountid_value);
+
   const mapped: NewContact = {
     accountId: ctx.resolvedAccountId ?? null,
     firstName,
@@ -154,6 +161,11 @@ export function mapD365Contact(
     updatedAt,
     metadata,
   };
+
+  // Attach the parent-account virtual so commit-batch can resolve it.
+  if (accountSourceId) {
+    (mapped as Record<string, unknown>)._accountSourceId = accountSourceId;
+  }
 
   const attached: AttachedActivity[] = [];
   return { mapped, attached, customFields, warnings };

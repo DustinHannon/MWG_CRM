@@ -23,6 +23,17 @@ export const accountCreateSchema = z.object({
   industry: z.string().trim().max(100).optional().nullable(),
   website: urlField.or(z.literal("")).optional().nullable(),
   phone: z.string().trim().max(60).optional().nullable(),
+  email: z
+    .string()
+    .trim()
+    .email("Not a valid email")
+    .max(254)
+    .or(z.literal(""))
+    .optional()
+    .nullable(),
+  accountNumber: z.string().trim().max(100).optional().nullable(),
+  numberOfEmployees: z.coerce.number().int().min(0).max(10_000_000).optional().nullable(),
+  annualRevenue: z.coerce.number().min(0).optional().nullable(),
   street1: z.string().trim().max(200).optional().nullable(),
   street2: z.string().trim().max(200).optional().nullable(),
   city: z.string().trim().max(100).optional().nullable(),
@@ -30,6 +41,8 @@ export const accountCreateSchema = z.object({
   postalCode: z.string().trim().max(20).optional().nullable(),
   country: z.string().trim().max(100).optional().nullable(),
   description: z.string().trim().max(20_000).optional().nullable(),
+  parentAccountId: z.string().uuid().optional().nullable(),
+  primaryContactId: z.string().uuid().optional().nullable(),
 });
 
 export type AccountCreateInput = z.infer<typeof accountCreateSchema>;
@@ -50,6 +63,11 @@ export async function createAccount(
       industry: input.industry ?? null,
       website: input.website ? input.website : null,
       phone: input.phone ?? null,
+      email: input.email ? input.email : null,
+      accountNumber: input.accountNumber ?? null,
+      numberOfEmployees: input.numberOfEmployees ?? null,
+      annualRevenue:
+        input.annualRevenue != null ? input.annualRevenue.toFixed(2) : null,
       street1: input.street1 ?? null,
       street2: input.street2 ?? null,
       city: input.city ?? null,
@@ -57,6 +75,8 @@ export async function createAccount(
       postalCode: input.postalCode ?? null,
       country: input.country ?? null,
       description: input.description ?? null,
+      parentAccountId: input.parentAccountId ?? null,
+      primaryContactId: input.primaryContactId ?? null,
       ownerId: actorId,
       createdById: actorId,
     })
@@ -236,6 +256,10 @@ export async function updateAccountForApi(
     industry: string | null;
     website: string | null;
     phone: string | null;
+    email: string | null;
+    accountNumber: string | null;
+    numberOfEmployees: number | null;
+    annualRevenue: string | null;
     street1: string | null;
     street2: string | null;
     city: string | null;
@@ -244,6 +268,8 @@ export async function updateAccountForApi(
     country: string | null;
     description: string | null;
     ownerId: string | null;
+    parentAccountId: string | null;
+    primaryContactId: string | null;
   }>,
   expectedVersion: number | undefined,
   actorId: string,
