@@ -153,7 +153,7 @@ const ACTIVITY_FIELDS: FieldConfig[] = [
   { name: "createdAt", label: "Created at", section: "Audit", type: "date", sources: ["createdon"], readOnly: true },
 ];
 
-export const FIELD_CONFIGS: Record<string, FieldConfig[]> = {
+const FIELD_CONFIGS: Record<string, FieldConfig[]> = {
   contact: CONTACT_FIELDS,
   lead: LEAD_FIELDS,
   account: ACCOUNT_FIELDS,

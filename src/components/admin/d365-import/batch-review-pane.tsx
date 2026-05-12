@@ -129,7 +129,12 @@ export function BatchReviewPane({
       />
       <div className="flex flex-col gap-4">
         {selected ? (
-          <RecordDetail record={selected} readOnly={readOnly} />
+          // key={selected.id} resets all child useState defaults
+          // (tab, reject-reason draft, conflict-picker value, mapped
+          // fields editor draft) when the user clicks a different
+          // record in the left list. Without this, draft state bleeds
+          // across records and the editor inputs show stale data.
+          <RecordDetail key={selected.id} record={selected} readOnly={readOnly} />
         ) : (
           <div className="rounded-lg border border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
             No records in this batch.
