@@ -544,7 +544,7 @@ function SubscribeButton({
       if (res.ok) {
         toast.success(
           next
-            ? "Subscribed — digest will arrive at your Microsoft 365 mailbox."
+            ? "Subscribed. Digests sent to your Microsoft 365 mailbox."
             : "Unsubscribed.",
         );
         onChange();
