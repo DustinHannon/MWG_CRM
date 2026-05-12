@@ -204,6 +204,9 @@ export const adminCrumbs = {
     { label: "Migrations", href: "/admin/migrations" },
     { label: "ClickDimensions" },
   ],
+
+  // System tools — domain migration verification dashboard.
+  domainStatus: (): Breadcrumb[] => [ADMIN, { label: "Domain status" }],
 } as const;
 
 /**

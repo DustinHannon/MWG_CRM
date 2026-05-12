@@ -48,7 +48,7 @@ function loadConfig(): ScriptConfig {
   const cdBaseUrl =
     process.env.CD_BASE_URL ?? "https://mwgroup.crm.dynamics.com";
   const mwgApiBase =
-    process.env.MWG_API_BASE ?? "https://mwg-crm.vercel.app/api/v1";
+    process.env.MWG_API_BASE ?? "https://crm.morganwhite.com/api/v1";
   const mwgApiKey = process.env.MWG_API_KEY ?? "";
   if (mwgApiKey.length === 0) {
     throw new Error(

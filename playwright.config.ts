@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * Phase 12 — production-only Playwright suite.
  *
- * The CRM has one environment: https://mwg-crm.vercel.app. Tests run
+ * The CRM has one environment: https://crm.morganwhite.com. Tests run
  * against it with a real Entra account (configured without MFA per
  * user direction); credentials live in env vars
  * PLAYWRIGHT_LOGIN_EMAIL / PLAYWRIGHT_LOGIN_PASSWORD only — never in
@@ -27,7 +27,7 @@ export default defineConfig({
   globalSetup: require.resolve("./tests/e2e/global-setup.ts"),
   globalTeardown: require.resolve("./tests/e2e/global-teardown.ts"),
   use: {
-    baseURL: "https://mwg-crm.vercel.app",
+    baseURL: "https://crm.morganwhite.com",
     storageState: "tests/e2e/.auth/croom.json",
     trace: "on-first-retry",
     screenshot: "only-on-failure",

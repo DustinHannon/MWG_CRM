@@ -43,7 +43,7 @@ export async function sendDigestEmail(args: DigestArgs): Promise<void> {
     displayName: user.displayName,
     viewName: args.viewName,
     records: args.records,
-    appUrl: args.appUrl ?? "https://mwg-crm.vercel.app",
+    appUrl: args.appUrl ?? "https://crm.morganwhite.com",
   });
 
   const subject = `${args.records.length} new lead${args.records.length === 1 ? "" : "s"} in "${args.viewName}"`;

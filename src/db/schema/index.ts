@@ -29,3 +29,5 @@ export * from "./d365-imports";
 export * from "./clickdimensions-migrations";
 // Static-list Excel import runs (Sub-agent C)
 export * from "./list-import-runs";
+// Domain migration external-service verification tracker
+export * from "./domain-verification";

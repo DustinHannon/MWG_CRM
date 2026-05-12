@@ -6,7 +6,7 @@ import type { NextConfig } from "next";
  * Static directives that don't need a nonce stay here.
  *
  * verify after deploy:
- *   curl -sI https://mwg-crm.vercel.app | rg -i 'strict-transport|x-frame|x-content|referrer|permissions|content-security'
+ *   curl -sI https://crm.morganwhite.com | rg -i 'strict-transport|x-frame|x-content|referrer|permissions|content-security'
  */
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },

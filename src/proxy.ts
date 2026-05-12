@@ -149,6 +149,55 @@ async function geoBlockIfDisallowed(
   return NextResponse.rewrite(url, { status: 403 });
 }
 
+/**
+ * If the request arrived on the historical `.vercel.app` host, return a
+ * 301 redirect to the same path on the canonical host. Emits
+ * `infra.domain.legacy_redirect_hit` once per IP-hash per hour. Returns
+ * `null` when the host matches the canonical or is unrecognised — the
+ * proxy continues normally.
+ */
+async function redirectFromLegacyHostIfMatched(
+  req: NextRequest,
+): Promise<NextResponse | null> {
+  const host = (req.headers.get("host") ?? "").toLowerCase();
+  if (host !== env.LEGACY_VERCEL_HOST.toLowerCase()) return null;
+
+  const ip = extractCallerIp(req);
+  const ipHash = sha256Hex(ip);
+  try {
+    const rl = await rateLimit(
+      { kind: "legacy_domain_redirect", principal: ipHash },
+      env.GEO_BLOCK_AUDIT_RATE_LIMIT_PER_IP_PER_HOUR,
+      3600,
+    );
+    if (rl.allowed) {
+      await writeSystemAudit({
+        actorEmailSnapshot: "system@domain-redirect",
+        action: "infra.domain.legacy_redirect_hit",
+        targetType: "domain_redirect",
+        ipAddress: ip,
+        after: {
+          legacyHost: env.LEGACY_VERCEL_HOST,
+          canonicalHost: env.NEXT_PUBLIC_CANONICAL_HOST,
+          path: req.nextUrl.pathname,
+          ipHash,
+        },
+      });
+    }
+  } catch (err) {
+    // Never let an audit write block the redirect — log and continue.
+    logger.warn("infra.domain.legacy_redirect_audit_emit_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  const target = req.nextUrl.clone();
+  target.host = env.NEXT_PUBLIC_CANONICAL_HOST;
+  target.protocol = "https:";
+  target.port = "";
+  return NextResponse.redirect(target, 301);
+}
+
 const PUBLIC_PATH_PREFIXES = [
   "/auth/",
   "/api/auth/",
@@ -270,6 +319,17 @@ const REPORT_TO_HEADER = JSON.stringify({
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Legacy domain 301. Any request that arrived at the
+  // historical `.vercel.app` hostname is permanently redirected to the
+  // canonical host on the same path. Audit emission throttled per IP
+  // hash per hour (reusing GEO_BLOCK_AUDIT_RATE_LIMIT_PER_IP_PER_HOUR
+  // since this is the same defense-in-depth class of event) so a bot
+  // chasing redirects can't flood audit_log. Runs BEFORE geo-block so
+  // the redirect target carries through the same allowlist evaluation
+  // on the canonical host.
+  const legacyRedirect = await redirectFromLegacyHostIfMatched(req);
+  if (legacyRedirect) return legacyRedirect;
 
   // geo-block FIRST. A 403 for a non-allowlisted source
   // is more important than anything else this proxy does.

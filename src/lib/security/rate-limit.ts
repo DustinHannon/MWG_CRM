@@ -45,7 +45,8 @@ export type RateLimitKey =
   // raw IPs out of the limiter bucket. Used by `src/proxy.ts` to bound
   // audit_log volume when a non-allowlisted source retries in a tight
   // loop.
-  | { kind: "geo_block"; principal: string };
+  | { kind: "geo_block"; principal: string }
+  | { kind: "legacy_domain_redirect"; principal: string };
 
 export interface RateLimitResult {
   allowed: boolean;

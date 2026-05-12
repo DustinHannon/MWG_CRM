@@ -145,7 +145,7 @@ export default function ApiHelpPage() {
               header.
             </p>
             <pre className="mt-3 overflow-x-auto rounded-md border border-border bg-card p-3 font-mono text-xs leading-relaxed">
-              <code>{`curl https://mwg-crm.vercel.app/v1/leads \\\n  -H "Authorization: Bearer mwg_live_..."`}</code>
+              <code>{`curl https://crm.morganwhite.com/v1/leads \\\n  -H "Authorization: Bearer mwg_live_..."`}</code>
             </pre>
             <p className="mt-3 text-sm text-muted-foreground">
               Keys are scoped per-environment. Treat them like passwords —

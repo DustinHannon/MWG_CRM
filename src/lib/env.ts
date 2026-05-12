@@ -143,6 +143,18 @@ const envSchema = z.object({
     .positive()
     .default(5),
 
+  // Canonical hostname + legacy redirect target. `src/proxy.ts`
+  // redirects any request whose `Host` header matches LEGACY_VERCEL_HOST
+  // to the same path on NEXT_PUBLIC_CANONICAL_HOST with status 301. The
+  // audit event `infra.domain.legacy_redirect_hit` is throttled with
+  // GEO_BLOCK_AUDIT_RATE_LIMIT_PER_IP_PER_HOUR.
+  NEXT_PUBLIC_APP_URL: z
+    .string()
+    .url()
+    .default("https://crm.morganwhite.com"),
+  NEXT_PUBLIC_CANONICAL_HOST: z.string().min(3).default("crm.morganwhite.com"),
+  LEGACY_VERCEL_HOST: z.string().min(3).default("mwg-crm.vercel.app"),
+
   // / §5.2 — Better Stack SQL Query API. All optional so the
   // app still boots if a phase-26 prerequisite isn't provisioned yet;
   // the /admin/insights and /admin/server-logs pages render an empty

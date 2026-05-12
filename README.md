@@ -1,7 +1,7 @@
 # MWG CRM
 
 Internal customer relationship management for Morgan White Group.
-Production: <https://mwg-crm.vercel.app>
+Production: <https://crm.morganwhite.com>
 
 ## What it is
 
@@ -18,7 +18,7 @@ profile photos), and a public REST API for outside integrations.
   data tools, API keys, API usage log.
 - **Public API** — `/api/v1/*` Bearer-token REST surface for programmatic
   access. Per-key scopes, rate limits, expirations. Reference at
-  <https://mwg-crm.vercel.app/apihelp>.
+  <https://crm.morganwhite.com/apihelp>.
 
 ## Tech stack
 

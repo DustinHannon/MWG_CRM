@@ -51,7 +51,7 @@ export function buildOpenApiSpec() {
     },
     servers: [
       {
-        url: "https://mwg-crm.vercel.app/api/v1",
+        url: "https://crm.morganwhite.com/api/v1",
         description: "Production",
       },
     ],
