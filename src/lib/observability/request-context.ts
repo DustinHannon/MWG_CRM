@@ -53,21 +53,6 @@ export function getRequestId(): string | undefined {
 }
 
 /**
- * Read the current user id from the context, if set.
- */
-export function getContextUserId(): string | undefined {
-  return storage.getStore()?.userId;
-}
-
-/**
- * Read the full current context (for advanced cases that need both
- * fields at once).
- */
-export function getRequestContext(): RequestContext | undefined {
-  return storage.getStore();
-}
-
-/**
  * Run `fn` with the supplied context. Any async work spawned from
  * `fn` inherits the same context until completion.
  */

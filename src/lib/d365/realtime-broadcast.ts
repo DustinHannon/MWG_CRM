@@ -129,7 +129,3 @@ export async function broadcastRunEvent(
   }
 }
 
-/** Test hook — drop the cached client so re-probe runs on next call. */
-export function _resetD365Broadcast(): void {
-  cached = undefined;
-}

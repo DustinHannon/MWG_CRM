@@ -10,7 +10,6 @@ import { eq } from "drizzle-orm";
 import { ValidationError } from "@/lib/errors";
 import {
   graphFetchAs,
-  graphFetchBinaryAs,
   GraphRequestError,
 } from "@/lib/graph-token";
 
@@ -323,5 +322,3 @@ function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 200);
 }
 
-// Re-export for convenience
-export { graphFetchBinaryAs };

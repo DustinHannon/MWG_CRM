@@ -300,16 +300,6 @@ export async function jitProvisionD365Owner(
 }
 
 /**
- * Phase 25 §5.3 — test hook. Clears the in-process owner-lookup
- * cache so an admin force-rerun picks up newly-Entra-provisioned
- * users that didn't exist on the prior import attempt. Not used in
- * production hot paths.
- */
-export function clearOwnerLookupCacheForTesting(): void {
-  ownerLookupCache.clear();
-}
-
-/**
  * Returns the default-owner user (Q-05). Reads
  * D365_DEFAULT_OWNER_EMAIL from env (default
  * `dustin.hannon@morganwhite.com`) and looks up the matching row.

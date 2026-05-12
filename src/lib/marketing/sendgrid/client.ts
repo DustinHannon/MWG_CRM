@@ -33,20 +33,3 @@ export function getSendGrid(): { sgMail: typeof sgMail; sgClient: typeof sgClien
   return { sgMail, sgClient };
 }
 
-/**
- * Cheap probe — used by the admin debug page and CI smoke tests. Hits
- * /v3/user/account which is light and tied to API-key validity.
- */
-export async function probeSendGrid(): Promise<{ ok: boolean; statusCode?: number }> {
-  if (!sendgridConfigured) return { ok: false };
-  const { sgClient } = getSendGrid();
-  try {
-    const [response] = await sgClient.request({
-      method: "GET",
-      url: "/v3/user/account",
-    });
-    return { ok: response.statusCode >= 200 && response.statusCode < 300, statusCode: response.statusCode };
-  } catch {
-    return { ok: false };
-  }
-}

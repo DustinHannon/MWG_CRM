@@ -153,50 +153,6 @@ export async function rateLimit(
 }
 
 /**
- * Best-effort prune of old buckets. Called from the daily
- * retention-prune cron alongside the audit/api-usage/email-send sweeps.
- * Returns the number of rows deleted.
- */
-export async function pruneOldRateLimitBuckets(
-  olderThanHours = 24,
-): Promise<number> {
-  const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
-  const deleted = await db.execute(sql`
-    WITH d AS (
-      DELETE FROM ${rateLimitBuckets}
-      WHERE window_start < ${cutoff}
-      RETURNING 1
-    )
-    SELECT count(*)::int AS n FROM d
-  `);
-  const rows = (deleted as unknown as Array<{ n: number }>);
-  return Array.isArray(rows) && rows[0] ? Number(rows[0].n) : 0;
-}
-
-/**
- * Best-effort prune of webhook dedupe rows older than the SendGrid
- * retry window (24h with cushion → 7 days default). Called from
- * retention-prune.
- */
-export async function pruneOldWebhookDedupe(
-  olderThanDays = 7,
-): Promise<number> {
-  const cutoff = new Date(
-    Date.now() - olderThanDays * 24 * 60 * 60 * 1000,
-  );
-  const deleted = await db.execute(sql`
-    WITH d AS (
-      DELETE FROM webhook_event_dedupe
-      WHERE received_at < ${cutoff}
-      RETURNING 1
-    )
-    SELECT count(*)::int AS n FROM d
-  `);
-  const rows = (deleted as unknown as Array<{ n: number }>);
-  return Array.isArray(rows) && rows[0] ? Number(rows[0].n) : 0;
-}
-
-/**
  * Resolve a request's caller IP for rate-limit keying. Mirrors the
  * extraction pattern used by `src/lib/api/handler.ts:withApi` so the
  * webhook receiver and the public REST API agree on what counts as one

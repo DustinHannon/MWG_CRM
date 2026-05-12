@@ -342,18 +342,6 @@ export async function restoreActivity(
 }
 
 /**
- * Phase 10 — backwards-compat shim. Old call sites import deleteActivity;
- * forward to softDeleteActivity which now archives rather than dropping.
- */
-export async function deleteActivity(
-  activityId: string,
-  actorUserId: string,
-  isAdmin: boolean,
-): Promise<void> {
-  await softDeleteActivity(activityId, actorUserId, isAdmin);
-}
-
-/**
  * Phase 13 — public API parent-verification. Confirms the parent FK
  * exists AND is not soft-deleted. Returns:
  *  - { ok: true }  — parent exists, active.

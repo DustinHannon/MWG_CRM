@@ -43,7 +43,3 @@ export function getRealtimeClient(): SupabaseClient | null {
   return cached;
 }
 
-/** Invalidate the cached client (used in tests). */
-export function _resetRealtimeClient(): void {
-  cached = null;
-}

@@ -2,7 +2,6 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -60,17 +59,3 @@ export function useBreadcrumbs(): Breadcrumb[] {
   return useContext(BreadcrumbsCtx)?.crumbs ?? [];
 }
 
-/**
- * Imperative setter for places where the trail is computed by a parent
- * and pushed once (e.g., inside an effect that builds the trail from
- * props). Prefer `useSetBreadcrumbs` for declarative use.
- */
-export function useBreadcrumbsSetter(): (c: Breadcrumb[]) => void {
-  const setCrumbs = useContext(BreadcrumbsCtx)?.setCrumbs;
-  return useCallback(
-    (c: Breadcrumb[]) => {
-      setCrumbs?.(c);
-    },
-    [setCrumbs],
-  );
-}

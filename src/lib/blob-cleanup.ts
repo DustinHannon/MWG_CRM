@@ -34,26 +34,6 @@ async function deleteBlobs(pathnames: string[]): Promise<void> {
 }
 
 /**
- * Collect every blob pathname attached to the given lead's activities.
- * Call BEFORE deleting the lead — after the DB delete the join rows are
- * gone and we can no longer look them up.
- */
-export async function gatherBlobsForLead(leadId: string): Promise<string[]> {
-  const rows = await db
-    .select({ pathname: attachments.blobPathname })
-    .from(attachments)
-    .innerJoin(activities, eq(activities.id, attachments.activityId))
-    .where(eq(activities.leadId, leadId));
-  return rows.map((r) => r.pathname);
-}
-
-/** One-shot helper: gather + delete blobs for a single lead. */
-export async function cleanupBlobsForLead(leadId: string): Promise<void> {
-  const paths = await gatherBlobsForLead(leadId);
-  await deleteBlobs(paths);
-}
-
-/**
  * Phase 8D — gather every blob pathname attached to any of the given
  * leads' activities. Used by hard-delete and the purge-archived cron.
  * Call BEFORE the DB delete (after which the join rows are gone).
@@ -103,19 +83,3 @@ export async function cleanupBlobsForUser(userId: string): Promise<void> {
   await deleteBlobs(paths);
 }
 
-/**
- * Used by the admin "delete all activities" / "delete all leads" data
- * actions: collect every blob pathname currently in attachments. Heavier
- * than the per-lead version — only call from explicit admin flows.
- */
-export async function gatherAllAttachmentBlobs(): Promise<string[]> {
-  const rows = await db
-    .select({ pathname: attachments.blobPathname })
-    .from(attachments);
-  return rows.map((r) => r.pathname);
-}
-
-export async function cleanupAllAttachmentBlobs(): Promise<void> {
-  const paths = await gatherAllAttachmentBlobs();
-  await deleteBlobs(paths);
-}

@@ -69,31 +69,6 @@ export async function pushTemplateToSendGrid(
   return { sendgridTemplateId, sendgridVersionId };
 }
 
-/**
- * Hard-delete the template from SendGrid. The CRM-side soft-delete +
- * audit trail still owns the historical record. Tolerates 404 — if the
- * SendGrid template was already removed (manual console action), we
- * still consider this a successful no-op.
- */
-export async function deleteSendGridTemplate(
-  sendgridTemplateId: string,
-): Promise<void> {
-  const { sgClient } = getSendGrid();
-  await withRetry(async () => {
-    const [response] = await sgClient.request({
-      method: "DELETE",
-      url: `/v3/templates/${encodeURIComponent(sendgridTemplateId)}`,
-    });
-    if (response.statusCode === 404) {
-      // Already gone — tolerate. Don't bubble as an error.
-      return;
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw asSendGridError(response.statusCode, response.body);
-    }
-  });
-}
-
 async function createDynamicTemplate(
   sgClient: ReturnType<typeof getSendGrid>["sgClient"],
   name: string,

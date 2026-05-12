@@ -14,7 +14,6 @@ import {
 } from "@/lib/activities";
 import { writeAudit } from "@/lib/audit";
 import {
-  getPermissions,
   requireLeadAccess,
   requireSession,
 } from "@/lib/auth-helpers";
@@ -231,7 +230,3 @@ export async function deleteActivityAction(
   });
 }
 
-// Future Phase 7 placeholder for permission-gated email send.
-export async function _placeholderEmailAction() {
-  await getPermissions("");
-}

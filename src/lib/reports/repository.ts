@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import { db } from "@/db";
 import { savedReports, type SavedReport } from "@/db/schema/saved-reports";
 import { users } from "@/db/schema/users";
@@ -102,7 +102,3 @@ export async function listUserAndSharedReports(
   return rows;
 }
 
-/** Bumps `version` and `updated_at` atomically. Used by the PATCH route. */
-export function nextVersionExpr() {
-  return sql`${savedReports.version} + 1`;
-}

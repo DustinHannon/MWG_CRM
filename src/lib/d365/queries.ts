@@ -11,7 +11,6 @@ import type {
   D365Lead,
   D365Opportunity,
   D365PhoneCall,
-  D365SystemUser,
   D365Task,
 } from "./types";
 import { D365_ENTITY_PK, D365_ENTITY_SET } from "./types";
@@ -252,15 +251,6 @@ const EMAIL_SELECT = [
   "sender",
   "description_html",
   "directioncode",
-];
-
-const SYSTEMUSER_SELECT = [
-  "systemuserid",
-  "domainname",
-  "fullname",
-  "internalemailaddress",
-  "isdisabled",
-  "applicationid",
 ];
 
 /* -------------------------------------------------------------------------- *
@@ -554,52 +544,6 @@ export function fetchEmails(
     },
     opts,
   );
-}
-
-/* -------------------------------------------------------------------------- *
- *                           SystemUser lookup                                *
- * -------------------------------------------------------------------------- */
-
-/**
- * Fetch a single systemuser row by GUID. Used by `owner-mapping.ts`
- * to resolve `_ownerid_value` -> UPN.
- *
- * Returns `null` if not found (deleted application user, etc.).
- */
-export async function fetchSystemUserById(
-  client: D365Client,
-  systemUserId: string,
-  signal?: AbortSignal,
-): Promise<D365SystemUser | null> {
-  const filter = `systemuserid eq ${odataQuote(systemUserId)}`;
-  const page = await client.fetchPage<D365SystemUser>("systemusers", {
-    select: SYSTEMUSER_SELECT,
-    filter,
-    top: 1,
-    signal,
-  });
-  return page.value[0] ?? null;
-}
-
-/**
- * Bulk lookup: fetch multiple systemuser rows in one OData call. The
- * caller batches as needed; we cap at 100 ids per call.
- */
-export async function fetchSystemUsersByIds(
-  client: D365Client,
-  systemUserIds: string[],
-  signal?: AbortSignal,
-): Promise<D365SystemUser[]> {
-  if (!systemUserIds.length) return [];
-  const ids = systemUserIds.slice(0, 100).map(odataQuote).join(",");
-  const filter = `systemuserid in (${ids})`;
-  const page = await client.fetchPage<D365SystemUser>("systemusers", {
-    select: SYSTEMUSER_SELECT,
-    filter,
-    top: systemUserIds.length,
-    signal,
-  });
-  return page.value;
 }
 
 /* -------------------------------------------------------------------------- *

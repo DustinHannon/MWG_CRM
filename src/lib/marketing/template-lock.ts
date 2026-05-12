@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { templateLocks } from "@/db/schema/marketing-templates";
 import { users } from "@/db/schema/users";
@@ -158,20 +158,6 @@ export async function getLock(
   templateId: string,
 ): Promise<TemplateLockState | null> {
   return loadLockState(templateId);
-}
-
-/**
- * Sweep stale locks. Runs from the lock acquire path lazily and from the
- * cron `marketing-prune-locks` defensively. Cheap because the index on
- * heartbeat_at is partial-friendly (we only DELETE the few rows that
- * matter).
- */
-export async function pruneStaleLocks(): Promise<{ removed: number }> {
-  const result = await db
-    .delete(templateLocks)
-    .where(lt(templateLocks.heartbeatAt, sql`now() - ${TIMEOUT_SQL_INTERVAL}::interval`))
-    .returning({ templateId: templateLocks.templateId });
-  return { removed: result.length };
 }
 
 async function loadLockState(
