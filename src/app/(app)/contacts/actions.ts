@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts } from "@/db/schema/crm-records";
 import { requireSession } from "@/lib/auth-helpers";
-import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
@@ -223,4 +223,77 @@ export async function updateContactAction(
       revalidatePath("/contacts");
     },
   );
+}
+
+/**
+ * bulk soft-delete from the /contacts list page toolbar.
+ *
+ * The caller passes the selected row ids; this action filters down to
+ * those the actor is allowed to archive (own + admin) and applies the
+ * archive in a single batch. Each archived id emits a per-row audit
+ * event for forensic clarity. Forbidden ids surface in `denied` so
+ * the UI can show a partial-success toast.
+ */
+const bulkArchiveSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  reason: z.string().max(500).optional(),
+});
+
+export async function bulkArchiveContactsAction(
+  payload: z.infer<typeof bulkArchiveSchema>,
+): Promise<
+  ActionResult<{
+    archived: number;
+    denied: number;
+  }>
+> {
+  return withErrorBoundary({ action: "contact.bulk_archive" }, async () => {
+    const user = await requireSession();
+    const parsed = bulkArchiveSchema.parse(payload);
+    if (parsed.ids.length === 0) {
+      throw new ValidationError("No contacts selected.");
+    }
+    const rows = await db
+      .select({
+        id: contacts.id,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        ownerId: contacts.ownerId,
+      })
+      .from(contacts)
+      .where(inArray(contacts.id, parsed.ids));
+    const allowed: typeof rows = [];
+    const denied: string[] = [];
+    for (const row of rows) {
+      if (canDeleteContact(user, row)) allowed.push(row);
+      else denied.push(row.id);
+    }
+    if (allowed.length === 0) {
+      throw new ForbiddenError("You can't archive any of these contacts.");
+    }
+    const reason = parsed.reason?.trim() || undefined;
+    await archiveContactsById(
+      allowed.map((r) => r.id),
+      user.id,
+      reason,
+    );
+    await Promise.all(
+      allowed.map((row) =>
+        writeAudit({
+          actorId: user.id,
+          action: "contact.archive",
+          targetType: "contact",
+          targetId: row.id,
+          before: {
+            firstName: row.firstName,
+            lastName: row.lastName,
+            ownerId: row.ownerId,
+          },
+          after: { reason: reason ?? null, bulk: true },
+        }),
+      ),
+    );
+    revalidatePath("/contacts");
+    return { archived: allowed.length, denied: denied.length };
+  });
 }
