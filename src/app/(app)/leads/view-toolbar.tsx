@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { AVAILABLE_COLUMNS, type ColumnKey } from "@/lib/view-constants";
-import { StandardConfirmDialog } from "@/components/standard/standard-confirm-dialog";
+import { ModifiedBadge } from "@/components/saved-views";
 import {
   subscribeToViewAction,
   unsubscribeFromViewAction,
@@ -141,48 +141,33 @@ export function ViewToolbar({
         onPick={onPickView}
       />
 
-      {/* Modified badge + actions */}
-      {/*
-       * the MODIFIED badge is now a clickable button that
-       * opens a confirmation dialog to reset the view to its saved
-       * definition. Visual styling matches the prior <span> 1:1; the
-       * only additions are hover/focus/cursor affordances. `viewModified`
-       * is the broader flag (columns OR URL filter/sort/search drift).
-       */}
-      {viewModified ? (
-        <StandardConfirmDialog
-          trigger={
-            <button
-              type="button"
-              aria-label="Reset this view to its saved state"
-              className="rounded-full border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--priority-medium-fg)] transition hover:bg-[var(--priority-medium-bg)]/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
-            >
-              Modified
-            </button>
-          }
-          title="Reset to saved view?"
-          body={`This discards your column, filter, sort, and search changes to "${activeViewName}".`}
-          confirmLabel="Reset"
-          cancelLabel="Cancel"
-          tone="primary"
-          onConfirm={async () => {
-            // Fire-and-forget audit — don't block the navigation on the
-            // server round-trip; the action is best-effort.
-            void resetViewAction({
-              viewId: activeViewId,
-              viewName: activeViewName,
-              modifiedFields,
-            });
-            // Reset = navigate to the view with no other URL params. The
-            // page re-derives filters/columns/sort/search from the view's
-            // stored definition.
-            const params = new URLSearchParams();
-            params.set("view", activeViewId);
-            router.push(`/leads?${params.toString()}`);
-            toast.success("View reset.");
-          }}
-        />
-      ) : null}
+      {/* Modified badge — clickable pill that opens a confirm dialog
+          and, on confirm, navigates back to the canonical view URL.
+          `viewModified` covers column drift OR URL filter/sort/search
+          drift; the shared <ModifiedBadge> component renders nothing
+          when the flag is false. */}
+      <ModifiedBadge
+        isModified={viewModified}
+        savedViewName={activeViewName}
+        modifiedFields={modifiedFields}
+        onReset={() => {
+          // Fire-and-forget audit — don't block the navigation on the
+          // server round-trip; the action is best-effort.
+          void resetViewAction({
+            viewId: activeViewId,
+            viewName: activeViewName,
+            modifiedFields,
+          });
+          // Reset = navigate to the view with no other URL params. The
+          // page re-derives filters/columns/sort/search from the view's
+          // stored definition.
+          const params = new URLSearchParams();
+          params.set("view", activeViewId);
+          router.push(`/leads?${params.toString()}`);
+          toast.success("View reset.");
+        }}
+      />
+
 
       {savedDirtyId && columnsModified ? (
         <button

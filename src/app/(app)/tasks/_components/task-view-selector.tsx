@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { ModifiedBadge } from "@/components/saved-views";
 import type {
   TaskViewDefinition,
   TaskViewFilters,
@@ -11,6 +12,7 @@ import type {
 import {
   createTaskViewAction,
   deleteTaskViewAction,
+  resetTaskViewAction,
 } from "../view-actions";
 
 /**
@@ -22,16 +24,33 @@ import {
  */
 export function TaskViewSelector({
   activeViewId,
+  activeViewName,
   builtinViews,
   savedViews,
   currentFilters,
   currentSort,
+  viewModified,
+  modifiedFields,
 }: {
   activeViewId: string;
+  /**
+   * Display name of the active view. Surfaces in the reset confirm
+   * dialog body — passing undefined defaults to the first menu entry
+   * so first-paint never reads as blank.
+   */
+  activeViewName?: string;
   builtinViews: TaskViewDefinition[];
   savedViews: TaskViewDefinition[];
   currentFilters: TaskViewFilters;
   currentSort: TaskViewSort;
+  /**
+   * When true, the URL carries filter / sort / search params that
+   * override the active view's stored definition. Surfaces the
+   * shared <ModifiedBadge> with a reset affordance.
+   */
+  viewModified?: boolean;
+  /** Audit-event payload for the reset action. */
+  modifiedFields?: string[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -150,6 +169,29 @@ export function TaskViewSelector({
           </>
         ) : null}
       </div>
+
+      {/* Modified badge — clickable pill that opens a confirm dialog
+          and, on confirm, navigates back to the canonical view URL.
+          Renders nothing when the URL matches the saved definition. */}
+      <ModifiedBadge
+        isModified={Boolean(viewModified)}
+        savedViewName={activeViewName ?? active?.name ?? ""}
+        modifiedFields={modifiedFields}
+        onReset={() => {
+          // Fire-and-forget audit — don't block the navigation on the
+          // server round-trip; the action is best-effort.
+          void resetTaskViewAction({
+            viewId: activeViewId,
+            viewName: activeViewName ?? active?.name ?? "",
+            modifiedFields: modifiedFields ?? [],
+          });
+          // Reset = navigate to the view with no other URL params. The
+          // page re-derives filters/sort from the view's stored
+          // definition.
+          router.push(`/tasks?view=${encodeURIComponent(activeViewId)}`);
+          toast.success("View reset.");
+        }}
+      />
 
       <button
         type="button"

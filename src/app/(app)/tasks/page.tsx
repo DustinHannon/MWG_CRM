@@ -158,6 +158,37 @@ export default async function TasksPage({
     pageSize: 50,
   });
 
+  // Drift detection — surfaces the "Modified" badge when the URL
+  // carries filter / sort / search params that override the active
+  // view's stored definition. Mirrors the /leads detection pattern
+  // (presence of the override param = drift). On reset, the page
+  // re-derives filters/sort from the active view because navigation
+  // strips the override params.
+  const viewModified =
+    Boolean(sp.q) ||
+    Boolean(sp.status) ||
+    Boolean(sp.priority) ||
+    Boolean(sp.assignee) ||
+    Boolean(sp.relation) ||
+    Boolean(sp.related) ||
+    Boolean(sp.due) ||
+    Boolean(sp.sort) ||
+    Boolean(sp.dir);
+
+  const modifiedFields: string[] = [];
+  if (sp.q) modifiedFields.push("search");
+  if (
+    sp.status ||
+    sp.priority ||
+    sp.assignee ||
+    sp.relation ||
+    sp.related ||
+    sp.due
+  ) {
+    modifiedFields.push("filters");
+  }
+  if (sp.sort || sp.dir) modifiedFields.push("sort");
+
   // Saved views for the picker. Built-ins filtered by team perm.
   const savedViews = await listSavedTaskViewsForUser(session.id);
   const visibleBuiltins = canViewOthers
@@ -221,10 +252,13 @@ export default async function TasksPage({
       <div className="mt-5 space-y-3">
         <TaskViewSelector
           activeViewId={activeView.id}
+          activeViewName={activeView.name}
           builtinViews={visibleBuiltins}
           savedViews={savedViews}
           currentFilters={filters}
           currentSort={sort}
+          viewModified={viewModified}
+          modifiedFields={modifiedFields}
         />
         <FilterBar
           assignee={filters.assignee ?? "me"}

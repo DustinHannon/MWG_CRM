@@ -144,6 +144,50 @@ export async function deleteTaskViewAction(
 }
 
 // =============================================================================
+// View reset (Modified badge)
+// =============================================================================
+
+/**
+ * Reset the current /tasks view to its saved definition.
+ *
+ * The client owns the URL navigation (`router.push('/tasks?view=...')`);
+ * this action handles the server-side side-effect: emit the
+ * `view.reset_to_saved` audit event so the reset is forensically
+ * traceable. The `page: 'tasks'` discriminator in the audit `after`
+ * payload distinguishes this from the Leads emit.
+ */
+const resetTaskViewSchema = z.object({
+  viewId: z.string(),
+  viewName: z.string(),
+  modifiedFields: z.array(z.string()),
+});
+
+export async function resetTaskViewAction(
+  payload: z.infer<typeof resetTaskViewSchema>,
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "tasks.view.reset_to_saved" },
+    async () => {
+      const session = await requireSession();
+      const parsed = resetTaskViewSchema.parse(payload);
+      await writeAudit({
+        actorId: session.id,
+        action: "view.reset_to_saved",
+        targetType: "saved_views",
+        targetId: parsed.viewId.startsWith("saved:")
+          ? parsed.viewId.slice("saved:".length)
+          : parsed.viewId,
+        after: {
+          page: "tasks",
+          viewName: parsed.viewName,
+          modifiedFields: parsed.modifiedFields,
+        },
+      });
+    },
+  );
+}
+
+// =============================================================================
 // Bulk actions on selected rows
 // =============================================================================
 
