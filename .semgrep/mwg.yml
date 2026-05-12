@@ -14,7 +14,7 @@ rules:
       bodies, merge-tag substitutions); rendering it directly into the
       admin DOM is stored XSS into the admin session.
     severity: ERROR
-    languages: [tsx, typescript]
+    languages: [typescript]
     pattern: dangerouslySetInnerHTML={...}
     paths:
       include:
@@ -87,7 +87,7 @@ rules:
       allowlisted origin) before trusting the payload. Wildcards are
       not acceptable.
     severity: WARNING
-    languages: [tsx, typescript]
+    languages: [typescript]
     patterns:
       - pattern: |
           window.addEventListener('message', $FN)
@@ -106,7 +106,7 @@ rules:
       `logger` from `@/lib/logger` or an explicit `console.warn` /
       `console.error` with a comment justifying the diagnostic fallback.
     severity: WARNING
-    languages: [tsx, typescript]
+    languages: [typescript]
     pattern: console.log(...)
     paths:
       include:
