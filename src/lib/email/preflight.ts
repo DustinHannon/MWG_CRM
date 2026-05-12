@@ -171,7 +171,7 @@ function buildResult(kind: MailboxKind, cached: boolean): PreflightResult {
         kind: "unknown",
         cached,
         message:
-          "We couldn't verify your mailbox configuration. This may be temporary — please try again in a few minutes, or contact MWG IT if it persists.",
+          "Mailbox configuration could not be verified. Try again in a few minutes, or contact MWG IT if it persists.",
       };
   }
 }

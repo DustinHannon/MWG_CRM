@@ -119,8 +119,8 @@ export default async function MarketingAuditPage({ searchParams }: Props) {
       </Link>
 
       <StandardPageHeader
-        kicker="Marketing audit"
-        title="Marketing audit log"
+        kicker="Marketing"
+        title="Audit log"
         description={
           <>
             Forensic record of every marketing template, list, campaign, and

@@ -287,7 +287,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
     // rather than per-row owner scoping.
     ownerColumn: "created_by_id",
     softDeleteColumn: "is_deleted",
-    label: "Email Campaigns",
+    label: "Email campaigns",
     fields: [
       { column: "id", label: "ID", kind: "uuid" },
       { column: "name", label: "Name", kind: "string" },
@@ -321,7 +321,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
     ownerColumn: "campaign_id",
     // Append-only event log — no soft delete column on this table.
     softDeleteColumn: null,
-    label: "Email Events (raw)",
+    label: "Email events (raw)",
     fields: [
       { column: "id", label: "ID", kind: "uuid" },
       { column: "email", label: "Recipient email", kind: "string" },
@@ -349,7 +349,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
     ownerColumn: "from_user_id",
     // No soft delete; rows are pruned by the retention cron.
     softDeleteColumn: null,
-    label: "Transactional Email Log",
+    label: "Transactional email log",
     fields: [
       { column: "id", label: "ID", kind: "uuid" },
       { column: "from_user_id", label: "From user", kind: "uuid" },

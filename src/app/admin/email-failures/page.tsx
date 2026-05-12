@@ -234,7 +234,7 @@ export default async function EmailFailuresPage({
       <BreadcrumbsSetter
         crumbs={[
           { label: "Admin", href: "/admin" },
-          { label: "Email Failures" },
+          { label: "Email failures" },
         ]}
       />
       <h1 className="text-2xl font-semibold">Email failures</h1>

@@ -77,13 +77,13 @@ export default async function AdminApiKeysPage() {
       <BreadcrumbsSetter
         crumbs={[
           { label: "Admin", href: "/admin" },
-          { label: "API Keys" },
+          { label: "API keys" },
         ]}
       />
       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
         Admin
       </p>
-      <h1 className="mt-1 text-2xl font-semibold font-display">API Keys</h1>
+      <h1 className="mt-1 text-2xl font-semibold font-display">API keys</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         Bearer tokens for external integrations. Tokens act with org-wide
         visibility regardless of which user generated them.{" "}

@@ -259,7 +259,7 @@ export default function ApiHelpPage() {
               <code className="rounded bg-muted px-1 font-mono text-[0.85em]">
                 /v1
               </code>
-              . We commit to{" "}
+              . MWG commits to{" "}
               <strong className="font-medium text-foreground">
                 12 months notice
               </strong>{" "}
@@ -297,7 +297,7 @@ export default function ApiHelpPage() {
             /api/openapi.json
           </a>
           . Use the <em>Try it</em> panel on any operation — paste your own
-          bearer token; we never store credentials in the page.
+          bearer token; credentials are never stored in the page.
         </p>
       </section>
 

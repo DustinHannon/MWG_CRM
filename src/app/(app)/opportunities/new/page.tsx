@@ -54,8 +54,7 @@ export default async function NewOpportunityPage({
           title="Add opportunity"
           description={
             <>
-              Direct opportunity creation. Select the account first, then
-              fill in the deal details.
+              Select an account, then fill in the deal details.
             </>
           }
         />

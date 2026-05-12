@@ -76,7 +76,7 @@ export default async function TemplatesPage() {
       {rows.length === 0 ? (
         <StandardEmptyState
           title="No templates yet"
-          description="Create your first template to start sending campaigns."
+          description="Create a template to send campaigns."
         />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">

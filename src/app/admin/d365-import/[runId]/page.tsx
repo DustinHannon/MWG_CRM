@@ -173,7 +173,7 @@ export default async function RunDetailPage({ params }: PageProps) {
 
       <header className="space-y-2">
         <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-          Admin · D365 Import
+          Admin · D365 import
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground font-display">

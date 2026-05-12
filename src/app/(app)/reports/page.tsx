@@ -45,9 +45,8 @@ export default async function ReportsListPage() {
         fontFamily="display"
         description={
           <>
-            Built-in reports cover the common pipeline questions. Build
-            your own to slice the data your way — every report is scoped
-            to what you&apos;re allowed to see.
+            Built-in reports cover common pipeline questions. Build your own
+            to pivot the data — every report is scoped to what you can see.
           </>
         }
         actions={
@@ -73,7 +72,7 @@ export default async function ReportsListPage() {
         </h2>
         <ReportList
           reports={mine}
-          emptyMessage="You haven't saved a report yet. Click New report to get started."
+          emptyMessage="No saved reports yet. Create one from New report."
           showOwner
         />
       </section>

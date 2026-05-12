@@ -46,8 +46,7 @@ export default async function NewContactPage({
           title="Add contact"
           description={
             <>
-              Direct contact creation. Pick an account to attach this contact
-              to, or leave it blank to create a contact without an account.
+              Pick an account to attach this contact to, or leave it blank.
             </>
           }
         />

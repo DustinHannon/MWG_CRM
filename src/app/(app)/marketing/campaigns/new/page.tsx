@@ -101,11 +101,11 @@ export default async function NewCampaignPage({ searchParams }: Props) {
       <BreadcrumbsSetter crumbs={marketingCrumbs.campaignsNew()} />
       <StandardPageHeader
         kicker="New campaign"
-        title={existing ? `Resume — ${existing.name}` : "Compose a new campaign"}
+        title={existing ? `Resume — ${existing.name}` : "New campaign"}
         description={
           <>
-            Pick a template, choose your audience, set the schedule, then
-            review and send. Each step saves a draft so you can come back later.
+            Pick a template, choose an audience, set the schedule, then review
+            and send. Each step saves a draft.
           </>
         }
       />

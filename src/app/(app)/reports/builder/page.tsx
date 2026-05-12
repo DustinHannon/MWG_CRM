@@ -27,8 +27,8 @@ export default async function ReportBuilderPage() {
         fontFamily="display"
         description={
           <>
-            Pick an entity, choose fields and group-bys, and the preview
-            updates as you go. Save to share or come back to it later.
+            Pick an entity, choose fields and group-bys; the preview updates
+            as you go.
           </>
         }
       />

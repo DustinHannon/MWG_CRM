@@ -117,7 +117,7 @@ export function ScoringRulesTable({ rows }: { rows: RuleRow[] }) {
     <div className="mt-4">
       {rows.length === 0 ? (
         <p className="py-6 text-sm text-muted-foreground">
-          No rules yet. Create your first below.
+          No rules yet. Add one below.
         </p>
       ) : (
         <div className="overflow-hidden rounded-lg border border-glass-border">

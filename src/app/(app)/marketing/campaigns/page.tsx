@@ -47,7 +47,7 @@ export default async function CampaignsPage() {
       <BreadcrumbsSetter crumbs={marketingCrumbs.campaignsIndex()} />
       <StandardPageHeader
         title="Campaigns"
-        description="Sends of a template to a list. Schedule, send, and track."
+        description="Schedule, send, and track template sends to a list."
         actions={
           <Link
             href="/marketing/campaigns/new"
@@ -61,7 +61,7 @@ export default async function CampaignsPage() {
       {rows.length === 0 ? (
         <StandardEmptyState
           title="No campaigns yet"
-          description="Build a list and pick a template to launch your first campaign."
+          description="Create a list and template, then send a campaign."
         />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">

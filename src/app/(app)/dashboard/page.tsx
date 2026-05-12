@@ -177,14 +177,13 @@ export default async function DashboardPage() {
         <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
         <PageRealtime entities={["leads", "tasks", "notifications"]} />
         <PagePoll entities={["leads", "tasks", "notifications"]} />
-        <StandardPageHeader kicker="Welcome back" title={user.displayName} />
+        <StandardPageHeader kicker="Dashboard" title={user.displayName} />
         <section className="mt-10 rounded-2xl border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)]/40 p-10 text-center">
           <h2 className="text-lg font-semibold text-[var(--status-lost-fg)]">
             Dashboard temporarily unavailable
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            We couldn&apos;t load metrics. Try refreshing, or jump straight
-            to your leads.
+            Metrics did not load. Refresh, or go to leads.
           </p>
           <div className="mt-5 flex justify-center gap-2">
             <Link
@@ -208,13 +207,12 @@ export default async function DashboardPage() {
         <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
         <PageRealtime entities={["leads", "tasks", "notifications"]} />
         <PagePoll entities={["leads", "tasks", "notifications"]} />
-        <StandardPageHeader kicker="Welcome back" title={user.displayName} />
+        <StandardPageHeader kicker="Dashboard" title={user.displayName} />
 
         <GlassCard className="mt-10 p-10 text-center">
-          <h2 className="text-lg font-semibold">Nothing here yet</h2>
+          <h2 className="text-lg font-semibold">No leads yet</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            You haven&apos;t added any leads yet. Add your first lead to start
-            seeing metrics, or import a list.
+            Add a lead or import a list to start seeing metrics.
           </p>
           <div className="mt-5 flex justify-center gap-2">
             {perms.canCreateLeads || user.isAdmin ? (
@@ -267,7 +265,7 @@ export default async function DashboardPage() {
       <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
       <PageRealtime entities={["leads", "tasks", "notifications"]} />
       <PagePoll entities={["leads", "tasks", "notifications"]} />
-      <StandardPageHeader kicker="Welcome back" title={user.displayName} />
+      <StandardPageHeader kicker="Dashboard" title={user.displayName} />
 
       <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Kpi label="Open leads" value={k?.open_leads ?? 0} />
@@ -288,10 +286,10 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Leads by Status">
+        <ChartCard title="Leads by status">
           <StatusDonut data={statusData} />
         </ChartCard>
-        <ChartCard title="Leads by Source">
+        <ChartCard title="Leads by source">
           <SourceBars data={sourceData} />
         </ChartCard>
         <ChartCard title="Leads created (last 30 days)">

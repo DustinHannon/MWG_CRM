@@ -8,12 +8,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   domain_not_allowed:
     "Your email domain isn't allowed to sign in. Contact IT.",
   signin_failed:
-    "Sign-in failed. Please try again, or use the breakglass account.",
+    "Sign-in failed. Try again, or use the breakglass account.",
   missing_token:
-    "Microsoft didn't grant the required permissions. Re-try and consent to all scopes.",
+    "Microsoft didn't grant the required permissions. Retry and consent to all scopes.",
   // Auth.js standard error codes:
   Configuration:
-    "Auth is not fully configured yet — try the breakglass account.",
+    "Auth is not fully configured — try the breakglass account.",
   AccessDenied: "Access denied.",
   Verification: "Verification link expired. Try signing in again.",
 };

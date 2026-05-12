@@ -143,7 +143,7 @@ export default async function ApiUsageLogPage({
       <BreadcrumbsSetter
         crumbs={[
           { label: "Admin", href: "/admin" },
-          { label: "API Usage" },
+          { label: "API usage" },
         ]}
       />
       <h1 className="text-2xl font-semibold">API usage</h1>

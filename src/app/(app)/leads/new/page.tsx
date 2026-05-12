@@ -26,8 +26,8 @@ export default async function NewLeadPage() {
         title="Add lead"
         description={
           <>
-            Required fields are marked with an asterisk. Most fields are
-            optional — fill them in as you learn more about the lead.
+            Required fields are marked with an asterisk. All other fields
+            are optional.
           </>
         }
       />

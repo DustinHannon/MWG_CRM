@@ -164,14 +164,14 @@ export function ListForm({ mode, initial }: Props) {
             }
             disabled={mode === "edit"}
             className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:opacity-60"
-            title="Available in a future phase"
+            title="Not yet available"
           >
             <option value="leads">Leads</option>
             <option value="contacts" disabled>
-              Contacts (available in a future phase)
+              Contacts (not yet available)
             </option>
             <option value="accounts" disabled>
-              Accounts (available in a future phase)
+              Accounts (not yet available)
             </option>
             <option value="opportunities" disabled>
               Opportunities (available in a future phase)

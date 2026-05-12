@@ -103,6 +103,6 @@ export const marketingCrumbs = {
 
   auditIndex: (): Breadcrumb[] => [
     ROOT,
-    { label: "Audit Log" },
+    { label: "Audit log" },
   ],
 } as const;

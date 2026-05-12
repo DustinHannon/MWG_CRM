@@ -40,9 +40,9 @@ const TIMEZONES = [
 
 const LANDING_OPTIONS = [
   { value: "/dashboard", label: "Dashboard (default)" },
-  { value: "/leads?view=builtin:my-open", label: "My Open Leads" },
-  { value: "/leads?view=builtin:all-mine", label: "All My Leads" },
-  { value: "/leads?view=builtin:recent", label: "Recently Modified" },
+  { value: "/leads?view=builtin:my-open", label: "My open leads" },
+  { value: "/leads?view=builtin:all-mine", label: "All my leads" },
+  { value: "/leads?view=builtin:recent", label: "Recently modified" },
   { value: "/custom", label: "Custom URL" },
 ];
 

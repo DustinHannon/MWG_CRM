@@ -51,7 +51,7 @@ export default async function AdminScoringPage() {
       <BreadcrumbsSetter
         crumbs={[
           { label: "Admin", href: "/admin" },
-          { label: "Lead Scoring" },
+          { label: "Lead scoring" },
         ]}
       />
       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
@@ -75,9 +75,9 @@ export default async function AdminScoringPage() {
       <GlassCard className="mt-6 p-6">
         <h2 className="text-base font-semibold">Scoring rules</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Toggle <em>Active</em> to include / exclude a rule from the next
-          recompute. Editing the predicate is via raw JSON for now — see
-          the help page for shape.
+          Toggle <em>Active</em> to include or exclude a rule from the next
+          recompute. Predicate is edited as raw JSON — see the help page
+          for shape.
         </p>
         <ScoringRulesTable
           rows={rules.map((r) => ({

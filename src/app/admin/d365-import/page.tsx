@@ -163,14 +163,13 @@ export default async function D365ImportPage({
           Admin
         </p>
         <h1 className="text-2xl font-semibold text-foreground font-display">
-          D365 CRM Import
+          D365 CRM import
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Human-in-the-loop import from Dynamics 365 Sales. Pull batches of 100
-          records at a time, review per-record, and approve before commit.
-          Source <code>createdon</code> / <code>modifiedon</code> timestamps
-          are preserved so historical records do not surface as new in
-          recency reports.
+          Import from Dynamics 365 Sales in 100-record batches. Review and
+          approve each batch before commit. Source <code>createdon</code> /{" "}
+          <code>modifiedon</code> timestamps are preserved so historical
+          records do not surface as new in recency reports.
         </p>
       </header>
 

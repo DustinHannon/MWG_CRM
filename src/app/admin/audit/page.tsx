@@ -143,7 +143,7 @@ export default async function AuditLogPage({
       <BreadcrumbsSetter
         crumbs={[
           { label: "Admin", href: "/admin" },
-          { label: "Audit Log" },
+          { label: "Audit log" },
         ]}
       />
       <h1 className="text-2xl font-semibold">Audit log</h1>

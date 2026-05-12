@@ -38,9 +38,9 @@ export default async function InsightsPage() {
       <BreadcrumbsSetter crumbs={breadcrumbs.admin.insights()} />
       <StandardPageHeader
         kicker="Admin"
-        title="Platform Insights"
+        title="Platform insights"
         fontFamily="display"
-        description="Real-time view of platform health, traffic, and deployments. Data is cached for 60 seconds; click Refresh to pull fresh metrics."
+        description="Platform health, traffic, and deployments. Cached 60s; refresh to pull fresh metrics."
         actions={<RefreshButton />}
       />
 

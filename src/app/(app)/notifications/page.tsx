@@ -34,8 +34,7 @@ export default async function NotificationsPage({
       */}
       <PagePoll entities={["notifications"]} />
       <StandardPageHeader
-        kicker="Notifications"
-        title="All notifications"
+        title="Notifications"
         fontFamily="display"
       />
 

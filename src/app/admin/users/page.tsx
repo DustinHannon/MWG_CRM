@@ -76,8 +76,7 @@ export default async function UsersListPage({
           <h1 className="text-2xl font-semibold">Users</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {rows.length} {rows.length === 1 ? "user" : "users"}
-            {isRecentFilter ? " joined in the last 7 days" : ""}. Click a
-            row to manage permissions and admin flags.
+            {isRecentFilter ? " joined in the last 7 days" : ""}.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

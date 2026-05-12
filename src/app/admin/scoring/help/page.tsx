@@ -12,7 +12,7 @@ export default async function ScoringHelpPage() {
       <BreadcrumbsSetter
         crumbs={[
           { label: "Admin", href: "/admin" },
-          { label: "Lead Scoring", href: "/admin/scoring" },
+          { label: "Lead scoring", href: "/admin/scoring" },
           { label: "Help" },
         ]}
       />
