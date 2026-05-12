@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { opportunities } from "@/db/schema/crm-records";
 import { requireSession } from "@/lib/auth-helpers";
-import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
@@ -230,6 +230,80 @@ export async function updateOpportunityAction(
 
       revalidatePath(`/opportunities/${parsed.id}`);
       revalidatePath("/opportunities");
+    },
+  );
+}
+
+/**
+ * bulk soft-delete from the /opportunities list page toolbar.
+ *
+ * The caller passes the selected row ids; this action filters down to
+ * those the actor is allowed to archive (own + admin) and applies the
+ * archive in a single batch. Each archived id emits a per-row audit
+ * event for forensic clarity. Forbidden ids surface in `denied` so
+ * the UI can show a partial-success toast.
+ */
+const bulkArchiveOpportunitiesSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  reason: z.string().max(500).optional(),
+});
+
+export async function bulkArchiveOpportunitiesAction(
+  payload: z.infer<typeof bulkArchiveOpportunitiesSchema>,
+): Promise<
+  ActionResult<{
+    archived: number;
+    denied: number;
+  }>
+> {
+  return withErrorBoundary(
+    { action: "opportunity.bulk_archive" },
+    async () => {
+      const user = await requireSession();
+      const parsed = bulkArchiveOpportunitiesSchema.parse(payload);
+      if (parsed.ids.length === 0) {
+        throw new ValidationError("No opportunities selected.");
+      }
+      const rows = await db
+        .select({
+          id: opportunities.id,
+          name: opportunities.name,
+          ownerId: opportunities.ownerId,
+        })
+        .from(opportunities)
+        .where(inArray(opportunities.id, parsed.ids));
+      const allowed: typeof rows = [];
+      const denied: string[] = [];
+      for (const row of rows) {
+        if (canDeleteOpportunity(user, row)) allowed.push(row);
+        else denied.push(row.id);
+      }
+      if (allowed.length === 0) {
+        throw new ForbiddenError(
+          "You can't archive any of these opportunities.",
+        );
+      }
+      const reason = parsed.reason?.trim() || undefined;
+      await archiveOpportunitiesById(
+        allowed.map((r) => r.id),
+        user.id,
+        reason,
+      );
+      await Promise.all(
+        allowed.map((row) =>
+          writeAudit({
+            actorId: user.id,
+            action: "opportunity.archive",
+            targetType: "opportunity",
+            targetId: row.id,
+            before: { name: row.name, ownerId: row.ownerId },
+            after: { reason: reason ?? null, bulk: true },
+          }),
+        ),
+      );
+      revalidatePath("/opportunities");
+      revalidatePath("/opportunities/pipeline");
+      return { archived: allowed.length, denied: denied.length };
     },
   );
 }
