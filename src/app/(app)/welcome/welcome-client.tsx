@@ -31,9 +31,7 @@ export function WelcomeClient({ firstName }: WelcomeClientProps) {
           Welcome to MWG CRM, {firstName}
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">
-          Manage your leads, accounts, contacts, opportunities, tasks, and
-          reports — all in one place. Here&apos;s a quick orientation before
-          you dive in.
+          Manage leads, accounts, contacts, opportunities, tasks, and reports.
         </p>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -41,19 +39,19 @@ export function WelcomeClient({ firstName }: WelcomeClientProps) {
             href="/leads"
             icon={<Users className="h-5 w-5" aria-hidden />}
             title="Leads"
-            description="Track every prospective relationship from first touch through conversion."
+            description="Prospects and pipeline."
           />
           <FeatureCard
             href="/reports"
             icon={<BarChart3 className="h-5 w-5" aria-hidden />}
             title="Reports"
-            description="Pivot pipeline, activity, and outcome data the way you need to see it."
+            description="Pivot pipeline, activity, and outcome data."
           />
           <FeatureCard
             href="/settings"
             icon={<Settings className="h-5 w-5" aria-hidden />}
             title="Settings"
-            description="Personalize your timezone, notifications, and Outlook integration."
+            description="Timezone, notifications, and Outlook integration."
           />
         </div>
 
@@ -66,13 +64,13 @@ export function WelcomeClient({ firstName }: WelcomeClientProps) {
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-foreground">
-              Your access level: Standard
+              Access level: Standard
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              You can view, create, and edit leads across the organization,
-              and you can send email from the lead detail pages. Need
-              broader access — imports, exports, or admin tooling? Ask your
-              manager or IT to elevate your permissions.
+              View, create, and edit leads across the organization. Send
+              email from lead detail pages. For imports, exports, or admin
+              tooling, ask your manager or IT to grant additional
+              permissions.
             </p>
           </div>
         </GlassCard>
