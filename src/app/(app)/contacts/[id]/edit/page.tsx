@@ -62,7 +62,18 @@ export default async function EditContactPage({
           jobTitle: contact.jobTitle,
           email: contact.email,
           phone: contact.phone,
+          mobilePhone: contact.mobilePhone,
           description: contact.description,
+          street1: contact.street1,
+          street2: contact.street2,
+          city: contact.city,
+          state: contact.state,
+          postalCode: contact.postalCode,
+          country: contact.country,
+          birthdate: contact.birthdate ?? null,
+          doNotEmail: contact.doNotEmail,
+          doNotCall: contact.doNotCall,
+          doNotMail: contact.doNotMail,
         }}
       />
     </div>

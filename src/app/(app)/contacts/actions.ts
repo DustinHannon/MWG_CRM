@@ -162,7 +162,35 @@ const contactUpdateSchema = z.object({
     .nullable()
     .transform((v) => (v && v.length > 0 ? v : null)),
   phone: z.string().trim().max(40).optional().nullable(),
+  mobilePhone: z.string().trim().max(40).optional().nullable(),
   description: z.string().trim().max(4000).optional().nullable(),
+  // Address
+  street1: z.string().trim().max(200).optional().nullable(),
+  street2: z.string().trim().max(200).optional().nullable(),
+  city: z.string().trim().max(120).optional().nullable(),
+  state: z.string().trim().max(120).optional().nullable(),
+  postalCode: z.string().trim().max(20).optional().nullable(),
+  country: z.string().trim().max(80).optional().nullable(),
+  birthdate: z
+    .string()
+    .trim()
+    .max(10)
+    .optional()
+    .nullable()
+    .transform((v) => (v && /^\d{4}-\d{2}-\d{2}$/u.test(v) ? v : null)),
+  // Preferences (checkboxes submit "on" or absent)
+  doNotEmail: z
+    .union([z.literal("on"), z.literal("true"), z.literal("false"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on" || v === "true"),
+  doNotCall: z
+    .union([z.literal("on"), z.literal("true"), z.literal("false"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on" || v === "true"),
+  doNotMail: z
+    .union([z.literal("on"), z.literal("true"), z.literal("false"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on" || v === "true"),
 });
 
 export async function updateContactAction(
@@ -175,17 +203,11 @@ export async function updateContactAction(
       const parsed = contactUpdateSchema.parse(
         Object.fromEntries(fd.entries()),
       );
+      // Full-row snapshot for audit `before` — captures every column
+      // that the update action may modify, so the audit trail shows
+      // the complete pre-change state including new D365-parity fields.
       const [existing] = await db
-        .select({
-          id: contacts.id,
-          ownerId: contacts.ownerId,
-          firstName: contacts.firstName,
-          lastName: contacts.lastName,
-          jobTitle: contacts.jobTitle,
-          email: contacts.email,
-          phone: contacts.phone,
-          description: contacts.description,
-        })
+        .select()
         .from(contacts)
         .where(eq(contacts.id, parsed.id))
         .limit(1);
@@ -204,7 +226,19 @@ export async function updateContactAction(
           jobTitle: parsed.jobTitle ?? null,
           email: parsed.email,
           phone: parsed.phone ?? null,
+          mobilePhone: parsed.mobilePhone ?? null,
           description: parsed.description ?? null,
+          street1: parsed.street1 ?? null,
+          street2: parsed.street2 ?? null,
+          city: parsed.city ?? null,
+          state: parsed.state ?? null,
+          postalCode: parsed.postalCode ?? null,
+          country: parsed.country ?? null,
+          birthdate: parsed.birthdate ?? null,
+          doNotEmail: parsed.doNotEmail,
+          doNotCall: parsed.doNotCall,
+          doNotMail: parsed.doNotMail,
+          doNotContact: parsed.doNotEmail && parsed.doNotCall,
         },
         parsed.version,
         user.id,

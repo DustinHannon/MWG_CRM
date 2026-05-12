@@ -58,6 +58,10 @@ interface SearchParams {
   doNotContact?: string;
   doNotEmail?: string;
   doNotCall?: string;
+  doNotMail?: string;
+  city?: string;
+  state?: string;
+  country?: string;
   recentlyUpdatedDays?: string;
   page?: string;
   cols?: string;
@@ -128,6 +132,10 @@ export default async function ContactsPage({
     doNotContact: sp.doNotContact === "1" ? true : undefined,
     doNotEmail: sp.doNotEmail === "1" ? true : undefined,
     doNotCall: sp.doNotCall === "1" ? true : undefined,
+    doNotMail: sp.doNotMail === "1" ? true : undefined,
+    city: sp.city || undefined,
+    state: sp.state || undefined,
+    country: sp.country || undefined,
     recentlyUpdatedDays: sp.recentlyUpdatedDays
       ? Number(sp.recentlyUpdatedDays) || undefined
       : undefined,
@@ -659,6 +667,30 @@ function renderCell(row: ContactRow, col: ContactColumnKey) {
         </span>
       ) : (
         <span className="text-muted-foreground/80">—</span>
+      );
+    case "doNotMail":
+      return row.doNotMail ? (
+        <span className="inline-flex items-center rounded-full border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--status-lost-fg)]">
+          No mail
+        </span>
+      ) : (
+        <span className="text-muted-foreground/80">—</span>
+      );
+    case "city":
+      return <span className="text-muted-foreground">{row.city ?? "—"}</span>;
+    case "state":
+      return <span className="text-muted-foreground">{row.state ?? "—"}</span>;
+    case "postalCode":
+      return (
+        <span className="text-muted-foreground">{row.postalCode ?? "—"}</span>
+      );
+    case "country":
+      return (
+        <span className="text-muted-foreground">{row.country ?? "—"}</span>
+      );
+    case "birthdate":
+      return (
+        <span className="text-muted-foreground">{row.birthdate ?? "—"}</span>
       );
     case "owner":
       return row.ownerId ? (

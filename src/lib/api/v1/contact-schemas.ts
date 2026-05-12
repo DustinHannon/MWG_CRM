@@ -28,9 +28,17 @@ export const ContactSchema = registry.register(
     phone: z.string().nullable().openapi({ example: "+1-555-0100" }),
     mobile_phone: z.string().nullable().openapi({ example: null }),
     description: z.string().nullable().openapi({ example: null }),
+    street1: z.string().nullable().openapi({ example: "189 Pinckney St." }),
+    street2: z.string().nullable().openapi({ example: null }),
+    city: z.string().nullable().openapi({ example: "Chester" }),
+    state: z.string().nullable().openapi({ example: "SC" }),
+    postal_code: z.string().nullable().openapi({ example: "29706" }),
+    country: z.string().nullable().openapi({ example: "USA" }),
+    birthdate: z.string().nullable().openapi({ example: "1958-04-16" }),
     do_not_contact: z.boolean().openapi({ example: false }),
     do_not_email: z.boolean().openapi({ example: false }),
     do_not_call: z.boolean().openapi({ example: false }),
+    do_not_mail: z.boolean().openapi({ example: false }),
     owner_id: z
       .string()
       .uuid()
@@ -101,6 +109,21 @@ export const ContactCreateSchema = registry.register(
     phone: z.string().max(60).nullable().optional().openapi({ example: "+1-555-0100" }),
     mobile_phone: z.string().max(60).nullable().optional(),
     description: z.string().max(20_000).nullable().optional(),
+    street1: z.string().max(200).nullable().optional(),
+    street2: z.string().max(200).nullable().optional(),
+    city: z.string().max(120).nullable().optional(),
+    state: z.string().max(120).nullable().optional(),
+    postal_code: z.string().max(20).nullable().optional(),
+    country: z.string().max(80).nullable().optional(),
+    birthdate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u, "Use YYYY-MM-DD")
+      .nullable()
+      .optional()
+      .openapi({ example: "1958-04-16" }),
+    do_not_email: z.boolean().optional(),
+    do_not_call: z.boolean().optional(),
+    do_not_mail: z.boolean().optional(),
   }),
 );
 

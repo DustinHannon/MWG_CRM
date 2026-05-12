@@ -38,6 +38,37 @@ export function ContactForm({
           <Input name="phone" label="Phone" />
           <Input name="mobilePhone" label="Mobile" />
         </Row>
+        <Input name="birthdate" label="Birthdate" type="date" />
+      </Section>
+
+      <Section title="Address" wide>
+        <Input name="street1" label="Street 1" />
+        <Input name="street2" label="Street 2" />
+        <Row>
+          <Input name="city" label="City" />
+          <Input name="state" label="State" />
+        </Row>
+        <Row>
+          <Input name="postalCode" label="Postal code" />
+          <Input name="country" label="Country" />
+        </Row>
+      </Section>
+
+      <Section title="Preferences" wide>
+        <div className="flex flex-wrap gap-3 text-sm">
+          <label className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5">
+            <input type="checkbox" name="doNotEmail" className="h-4 w-4" />
+            Do not email
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5">
+            <input type="checkbox" name="doNotCall" className="h-4 w-4" />
+            Do not call
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5">
+            <input type="checkbox" name="doNotMail" className="h-4 w-4" />
+            Do not postal mail
+          </label>
+        </div>
       </Section>
 
       <Section title="Account" wide>

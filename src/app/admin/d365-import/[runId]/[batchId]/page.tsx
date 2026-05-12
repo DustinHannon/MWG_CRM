@@ -12,6 +12,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { requireAdmin } from "@/lib/auth-helpers";
 import {
   BatchReviewPane,
+  type BatchChildView,
   type BatchRecordView,
   type ConflictResolution,
   type RecordStatus,
@@ -80,21 +81,62 @@ export default async function BatchReviewPage({ params }: PageProps) {
     .where(eq(importRecords.batchId, batchId))
     .orderBy(asc(importRecords.id));
 
-  // Build the BatchRecordView shapes the client component expects.
-  // Detect "default-owner" resolution by inspecting mappedPayload.
-  // Sub-agent B's mapper writes `{ ownerResolutionSource: "default_owner" }`
-  // into `mappedPayload._meta`; we read it defensively here.
+  // mapped_payload from map-batch.ts is a wrapper:
+  //   { mapped, attached, customFields }
+  // The actual insertable lives at `.mapped`; `attached` is an array of
+  // children pre-built by the mapper; `customFields` is the D365 custom
+  // field passthrough kept around for transparency in the UI.
   const records: BatchRecordView[] = recordRows.map((r) => {
     const raw = (r.rawPayload ?? {}) as Record<string, unknown>;
-    const mapped = (r.mappedPayload ?? null) as
+    const wrapper = (r.mappedPayload ?? null) as
       | (Record<string, unknown> & {
-          _meta?: { ownerResolutionSource?: string };
+          mapped?: Record<string, unknown>;
+          attached?: Array<Record<string, unknown>>;
+          customFields?: Record<string, unknown>;
         })
       | null;
+
+    const mapped: Record<string, unknown> | null =
+      wrapper && typeof wrapper === "object"
+        ? wrapper.mapped && typeof wrapper.mapped === "object"
+          ? wrapper.mapped
+          : // Defensive: if the wrapper shape was bypassed and the
+            // insertable was written flat, treat it as the mapped object.
+            wrapper
+        : null;
+
+    const attached: Array<Record<string, unknown>> = Array.isArray(
+      wrapper?.attached,
+    )
+      ? (wrapper!.attached as Array<Record<string, unknown>>)
+      : [];
+    const customFields: Record<string, unknown> =
+      wrapper?.customFields && typeof wrapper.customFields === "object"
+        ? (wrapper.customFields as Record<string, unknown>)
+        : {};
+
     const warnings = Array.isArray(r.validationWarnings)
       ? (r.validationWarnings as ValidationWarning[])
       : [];
+
     const summary = buildSummary(r.sourceEntityType, raw, mapped);
+    const meta = (mapped?._meta ?? null) as
+      | { ownerResolutionSource?: string }
+      | null;
+
+    const children: BatchChildView[] = attached.map((a, idx) => ({
+      id: `${r.id}-attached-${idx}`,
+      sourceEntityType: typeof a.kind === "string" ? `activity (${a.kind})` : "activity",
+      sourceId: typeof a.externalId === "string" ? (a.externalId as string) : "",
+      summary:
+        typeof a.subject === "string" && a.subject.length > 0
+          ? (a.subject as string)
+          : typeof a.body === "string"
+            ? (a.body as string).slice(0, 80)
+            : "(no summary)",
+      status: "mapped",
+    }));
+
     return {
       id: r.id,
       sourceEntityType: r.sourceEntityType,
@@ -102,13 +144,15 @@ export default async function BatchReviewPage({ params }: PageProps) {
       status: r.status as RecordStatus,
       rawPayload: raw,
       mappedPayload: mapped,
+      customFields,
       validationWarnings: warnings,
       conflictResolution:
         (r.conflictResolution as ConflictResolution | null) ?? null,
       conflictWith: r.conflictWith,
       resolvedFromDefaultOwner:
-        mapped?._meta?.ownerResolutionSource === "default_owner",
+        meta?.ownerResolutionSource === "default_owner",
       summary,
+      children,
       error: r.error,
     };
   });
@@ -191,15 +235,15 @@ function buildSummary(
       const email = pickStr(m, ["email"]) ?? pickStr(raw, ["emailaddress1"]);
       return {
         primary: full || pickStr(raw, ["fullname"]) || "(unnamed)",
-        secondary: company,
-        tertiary: email,
+        secondary: company ?? email,
+        tertiary: company && email ? email : pickStr(m, ["city"]) ?? pickStr(raw, ["address1_city"]),
       };
     }
     case "account": {
       return {
         primary: pickStr(m, ["name"]) ?? pickStr(raw, ["name"]) ?? "(unnamed)",
-        secondary: pickStr(raw, ["industrycode"])?.toString() ?? null,
-        tertiary: pickStr(raw, ["websiteurl"]),
+        secondary: pickStr(m, ["industry"]) ?? pickStr(raw, ["industrycode"])?.toString() ?? null,
+        tertiary: pickStr(m, ["website"]) ?? pickStr(raw, ["websiteurl"]),
       };
     }
     case "opportunity": {

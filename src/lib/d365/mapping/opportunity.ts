@@ -150,6 +150,10 @@ export function mapD365Opportunity(
     probability,
     expectedCloseDate,
     description: parseString(raw.description),
+    d365StateCode:
+      typeof raw.statecode === "number" ? raw.statecode : null,
+    d365StatusCode:
+      typeof raw.statuscode === "number" ? raw.statuscode : null,
     ownerId: ctx.resolvedOwnerId,
     createdById: ctx.resolvedOwnerId,
     updatedById: ctx.resolvedOwnerId,

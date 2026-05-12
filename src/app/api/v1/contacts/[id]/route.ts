@@ -147,6 +147,22 @@ export const PATCH = withApi<{ id: string }>(
     if (m.phone !== undefined) patch.phone = m.phone ?? null;
     if (m.mobile_phone !== undefined) patch.mobilePhone = m.mobile_phone ?? null;
     if (m.description !== undefined) patch.description = m.description ?? null;
+    if (m.street1 !== undefined) patch.street1 = m.street1 ?? null;
+    if (m.street2 !== undefined) patch.street2 = m.street2 ?? null;
+    if (m.city !== undefined) patch.city = m.city ?? null;
+    if (m.state !== undefined) patch.state = m.state ?? null;
+    if (m.postal_code !== undefined) patch.postalCode = m.postal_code ?? null;
+    if (m.country !== undefined) patch.country = m.country ?? null;
+    if (m.birthdate !== undefined) patch.birthdate = m.birthdate ?? null;
+    if (m.do_not_email !== undefined) {
+      patch.doNotEmail = m.do_not_email;
+      // Keep doNotContact derivation consistent with the (app) action.
+      if (m.do_not_call !== undefined) {
+        patch.doNotContact = m.do_not_email && m.do_not_call;
+      }
+    }
+    if (m.do_not_call !== undefined) patch.doNotCall = m.do_not_call;
+    if (m.do_not_mail !== undefined) patch.doNotMail = m.do_not_mail;
     try {
       await updateContactForApi(
         params.id,

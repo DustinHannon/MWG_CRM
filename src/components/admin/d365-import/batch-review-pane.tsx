@@ -19,18 +19,21 @@ import {
   setConflictResolutionAction,
 } from "@/app/admin/d365-import/actions";
 import { cn } from "@/lib/utils";
+import { configFor, SECTION_ORDER, type FieldConfig } from "./field-config";
 
 /**
- * Batch review split-pane component.
+ * Batch review split-pane.
  *
- * Left: scrollable record list with bulk actions header + per-row
- * status icons, summary, warning/conflict/default-owner badges.
+ * Left: scrollable record list with bulk actions + per-row status, summary,
+ * warning / conflict / default-owner badges.
  *
- * Right: tabbed detail (Mapped fields editor / Raw payload / Activities)
- * with per-record Approve / Reject / Conflict-resolution / Inline edit.
+ * Right: tabbed detail
+ *   - Mapped fields: section-grouped, type-aware inputs, side-by-side D365 source
+ *   - Raw D365 payload: JSON viewer
+ *   - Custom fields: D365 custom-field passthrough (preserved as `metadata`)
+ *   - Activities: child records (notes, tasks, calls, appointments, emails)
  *
- * Bottom: Commit batch (disabled until every record is approved or
- * rejected) and Save & exit (returns to run detail).
+ * Bottom: Commit batch + Save & exit.
  */
 
 export type RecordStatus =
@@ -63,18 +66,16 @@ export interface BatchRecordView {
   status: RecordStatus;
   rawPayload: Record<string, unknown>;
   mappedPayload: Record<string, unknown> | null;
+  customFields: Record<string, unknown>;
   validationWarnings: ValidationWarning[];
   conflictResolution: ConflictResolution | null;
   conflictWith: string | null;
-  /** Q-05 — true when the resolved owner came from the default-owner fallback. */
   resolvedFromDefaultOwner: boolean;
-  /** Optional summary fields used by the left-hand list. */
   summary: {
     primary: string;
     secondary?: string | null;
     tertiary?: string | null;
   };
-  /** Children attached to a parent entity (notes, activities, etc.). */
   children?: BatchChildView[];
   error: string | null;
 }
@@ -91,7 +92,6 @@ interface BatchReviewPaneProps {
   runId: string;
   batchId: string;
   records: BatchRecordView[];
-  /** Whether the batch is still open for review (controls submit buttons). */
   readOnly?: boolean;
 }
 
@@ -205,11 +205,16 @@ function RecordList({
             type="button"
             disabled={pending}
             onClick={() =>
-              bulkApprove((r) => !r.conflictWith || r.conflictResolution !== null)
+              // Approve only rows that either have no conflict, or have a
+              // conflict with an explicit resolution selected. (Previously
+              // an OR-bug let unresolved conflicts through.)
+              bulkApprove(
+                (r) => !r.conflictWith || r.conflictResolution !== null,
+              )
             }
             className="rounded border border-border bg-background px-2 py-0.5 hover:bg-muted/60 disabled:opacity-50"
           >
-            Approve without conflicts
+            Approve resolved
           </button>
           <button
             type="button"
@@ -253,6 +258,11 @@ function RecordList({
                   {r.resolvedFromDefaultOwner ? (
                     <Badge tone="info">Default owner</Badge>
                   ) : null}
+                  {r.children && r.children.length > 0 ? (
+                    <Badge tone="info">
+                      {r.children.length} activit{r.children.length === 1 ? "y" : "ies"}
+                    </Badge>
+                  ) : null}
                 </div>
               </div>
             </button>
@@ -284,7 +294,6 @@ function RecordStatusIcon({ status }: { status: RecordStatus }) {
     return (
       <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
     );
-  // pending / mapped / review
   return (
     <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--status-default-fg)]/60" />
   );
@@ -319,7 +328,7 @@ function Badge({
  * Right pane *
  * -------------------------------------------------------------------------- */
 
-type DetailTab = "mapped" | "raw" | "activities";
+type DetailTab = "mapped" | "raw" | "custom" | "activities";
 
 function RecordDetail({
   record,
@@ -330,10 +339,11 @@ function RecordDetail({
 }) {
   const [tab, setTab] = useState<DetailTab>("mapped");
   const hasChildren = (record.children?.length ?? 0) > 0;
+  const hasCustom = Object.keys(record.customFields).length > 0;
 
   return (
     <div className="rounded-lg border border-border bg-background">
-      <div className="flex items-center gap-2 border-b border-border p-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
         <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
           {record.sourceEntityType}
         </span>
@@ -341,11 +351,23 @@ function RecordDetail({
           {record.sourceId}
         </span>
         <RecordStatusIcon status={record.status} />
+        {record.error ? (
+          <span className="text-[11px] text-destructive">{record.error}</span>
+        ) : null}
       </div>
 
       <div className="flex border-b border-border text-xs">
-        {(["mapped", "raw", "activities"] as DetailTab[]).map((t) => {
+        {(["mapped", "raw", "custom", "activities"] as DetailTab[]).map((t) => {
           if (t === "activities" && !hasChildren) return null;
+          if (t === "custom" && !hasCustom) return null;
+          const label =
+            t === "mapped"
+              ? "Mapped fields"
+              : t === "raw"
+                ? "Raw D365 payload"
+                : t === "custom"
+                  ? `Custom fields (${Object.keys(record.customFields).length})`
+                  : `Activities (${record.children?.length ?? 0})`;
           return (
             <button
               key={t}
@@ -358,11 +380,7 @@ function RecordDetail({
                   : "text-muted-foreground",
               )}
             >
-              {t === "mapped"
-                ? "Mapped fields"
-                : t === "raw"
-                  ? "Raw D365 payload"
-                  : `Activities (${record.children?.length ?? 0})`}
+              {label}
             </button>
           );
         })}
@@ -375,6 +393,8 @@ function RecordDetail({
           <pre className="max-h-[60vh] overflow-auto rounded bg-muted/50 p-3 text-[11px] leading-relaxed text-foreground">
             {JSON.stringify(record.rawPayload, null, 2)}
           </pre>
+        ) : tab === "custom" ? (
+          <CustomFieldsView fields={record.customFields} />
         ) : (
           <ChildrenList items={record.children ?? []} />
         )}
@@ -395,6 +415,10 @@ function RecordDetail({
   );
 }
 
+/* -------------------------------------------------------------------------- *
+ * Mapped fields editor — section-grouped, type-aware *
+ * -------------------------------------------------------------------------- */
+
 function MappedFieldsEditor({
   record,
   readOnly,
@@ -402,32 +426,12 @@ function MappedFieldsEditor({
   record: BatchRecordView;
   readOnly: boolean;
 }) {
-  const [draft, setDraft] = useState<Record<string, unknown>>(
-    record.mappedPayload ?? {},
-  );
+  const config = configFor(record.sourceEntityType);
+  const initial = record.mappedPayload ?? {};
+  const [draft, setDraft] = useState<Record<string, unknown>>(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const fields = Object.keys(draft);
-
-  function onSave() {
-    setError(null);
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("recordId", record.id);
-      fd.set("mappedPayloadJson", JSON.stringify(draft));
-      const res = await editRecordFieldsAction(fd);
-      if (!res.ok) setError(res.error);
-    });
-  }
-
-  if (fields.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        No mapped payload yet. The mapper has not produced output for this
-        record.
-      </p>
-    );
-  }
+  const [saved, setSaved] = useState(false);
 
   const warningsByField = new Map<string, ValidationWarning[]>();
   for (const w of record.validationWarnings) {
@@ -436,53 +440,96 @@ function MappedFieldsEditor({
     warningsByField.set(w.field, arr);
   }
 
+  // Build per-section lists. Fields in config are listed in their declared
+  // order; "Other" gets every key from `draft` that isn't in the config
+  // (including `_meta` etc., which we hide via the underscore check).
+  const configByName = new Map(config.map((f) => [f.name, f]));
+  const sections = new Map<string, FieldConfig[]>();
+  for (const f of config) {
+    const list = sections.get(f.section) ?? [];
+    list.push(f);
+    sections.set(f.section, list);
+  }
+  const otherKeys = Object.keys(draft).filter(
+    (k) => !configByName.has(k) && !k.startsWith("_"),
+  );
+  if (otherKeys.length > 0) {
+    sections.set(
+      "Other",
+      otherKeys.map<FieldConfig>((name) => ({
+        name,
+        label: name,
+        section: "Other",
+        type: inferTypeFromValue(draft[name]),
+      })),
+    );
+  }
+
+  function setField(name: string, value: unknown) {
+    setDraft((prev) => ({ ...prev, [name]: value }));
+    setSaved(false);
+  }
+
+  function onSave() {
+    setError(null);
+    setSaved(false);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("recordId", record.id);
+      fd.set("mappedPayloadJson", JSON.stringify(draft));
+      const res = await editRecordFieldsAction(fd);
+      if (!res.ok) setError(res.error);
+      else setSaved(true);
+    });
+  }
+
+  if (Object.keys(draft).length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        No mapped payload yet. The mapper has not produced output for this record.
+      </p>
+    );
+  }
+
+  const orderedSections = SECTION_ORDER.filter((s) => sections.has(s));
   return (
-    <div className="space-y-3">
-      <div className="grid gap-2 sm:grid-cols-2">
-        {fields.map((field) => {
-          const value = draft[field];
-          const sourceField = (record.rawPayload[field] ?? "") as string;
-          const warns = warningsByField.get(field);
-          return (
-            <label key={field} className="flex flex-col gap-1 text-xs">
-              <span className="flex items-center gap-2 text-muted-foreground">
-                <span className="font-medium text-foreground">{field}</span>
-                <span className="text-[10px] text-muted-foreground/60">
-                  {String(sourceField).slice(0, 40)}
-                </span>
-              </span>
-              <input
-                type="text"
-                disabled={readOnly}
-                value={value == null ? "" : String(value)}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, [field]: e.target.value }))
-                }
-                className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-              />
-              {warns?.map((w) => (
-                <span
-                  key={`${field}-${w.code}`}
-                  className="flex items-center gap-1 text-[10px] text-[var(--status-proposal-fg)]"
-                >
-                  <TriangleAlert className="h-3 w-3" />
-                  {w.message}
-                </span>
+    <div className="space-y-5">
+      {orderedSections.map((sectionName) => {
+        const fields = sections.get(sectionName) ?? [];
+        return (
+          <section key={sectionName} className="space-y-2">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              {sectionName}
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {fields.map((f) => (
+                <FieldRow
+                  key={f.name}
+                  field={f}
+                  value={draft[f.name]}
+                  sourceValue={resolveSource(record.rawPayload, f.sources)}
+                  warnings={warningsByField.get(f.name)}
+                  readOnly={readOnly || f.readOnly === true}
+                  onChange={(v) => setField(f.name, v)}
+                />
               ))}
-            </label>
-          );
-        })}
-      </div>
+            </div>
+          </section>
+        );
+      })}
       {!readOnly ? (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 border-t border-border pt-3">
           <button
             type="button"
             onClick={onSave}
             disabled={pending}
-            className="rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-muted/60 disabled:opacity-50"
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/60 disabled:opacity-50"
           >
             {pending ? "Saving…" : "Save edits"}
           </button>
+          {saved ? (
+            <span className="text-[11px] text-[var(--status-won-fg)]">Saved.</span>
+          ) : null}
           {error ? (
             <span className="text-[11px] text-destructive">{error}</span>
           ) : null}
@@ -491,6 +538,216 @@ function MappedFieldsEditor({
     </div>
   );
 }
+
+function FieldRow({
+  field,
+  value,
+  sourceValue,
+  warnings,
+  readOnly,
+  onChange,
+}: {
+  field: FieldConfig;
+  value: unknown;
+  sourceValue: string | null;
+  warnings: ValidationWarning[] | undefined;
+  readOnly: boolean;
+  onChange: (v: unknown) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-xs">
+      <span className="flex items-baseline justify-between gap-2 text-muted-foreground">
+        <span className="font-medium text-foreground">{field.label}</span>
+        {field.sources && field.sources.length > 0 ? (
+          <span
+            className="truncate font-mono text-[10px] text-muted-foreground/60"
+            title={`D365: ${field.sources.join(" / ")}`}
+          >
+            {field.sources[0]}
+            {sourceValue !== null ? ` = ${truncate(sourceValue, 24)}` : ""}
+          </span>
+        ) : null}
+      </span>
+      <FieldInput
+        type={field.type}
+        value={value}
+        readOnly={readOnly}
+        onChange={onChange}
+      />
+      {warnings?.map((w) => (
+        <span
+          key={`${field.name}-${w.code}`}
+          className="flex items-center gap-1 text-[10px] text-[var(--status-proposal-fg)]"
+        >
+          <TriangleAlert className="h-3 w-3" />
+          {w.message}
+        </span>
+      ))}
+    </label>
+  );
+}
+
+function FieldInput({
+  type,
+  value,
+  readOnly,
+  onChange,
+}: {
+  type: FieldConfig["type"];
+  value: unknown;
+  readOnly: boolean;
+  onChange: (v: unknown) => void;
+}) {
+  const baseInput =
+    "rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-70";
+
+  if (type === "boolean") {
+    return (
+      <input
+        type="checkbox"
+        disabled={readOnly}
+        checked={value === true}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 rounded border border-border bg-background text-primary focus:ring-ring/40 disabled:opacity-70"
+      />
+    );
+  }
+  if (type === "date") {
+    // Accept either an ISO timestamp (D365 createdon) or YYYY-MM-DD.
+    const dateValue =
+      typeof value === "string"
+        ? value.length >= 10
+          ? value.slice(0, 10)
+          : value
+        : value instanceof Date
+          ? value.toISOString().slice(0, 10)
+          : "";
+    return (
+      <input
+        type="date"
+        disabled={readOnly}
+        value={dateValue}
+        onChange={(e) => onChange(e.target.value || null)}
+        className={baseInput}
+      />
+    );
+  }
+  if (type === "number") {
+    return (
+      <input
+        type="number"
+        disabled={readOnly}
+        value={value == null ? "" : Number(value)}
+        onChange={(e) =>
+          onChange(e.target.value === "" ? null : Number(e.target.value))
+        }
+        className={baseInput}
+      />
+    );
+  }
+  if (type === "long_text") {
+    return (
+      <textarea
+        disabled={readOnly}
+        value={value == null ? "" : String(value)}
+        onChange={(e) => onChange(e.target.value || null)}
+        rows={3}
+        className={cn(baseInput, "resize-y")}
+      />
+    );
+  }
+  if (type === "uuid_ref") {
+    return (
+      <input
+        type="text"
+        disabled={readOnly}
+        value={value == null ? "" : String(value)}
+        onChange={(e) => onChange(e.target.value || null)}
+        placeholder="uuid"
+        className={cn(baseInput, "font-mono")}
+      />
+    );
+  }
+  // text
+  return (
+    <input
+      type="text"
+      disabled={readOnly}
+      value={value == null ? "" : String(value)}
+      onChange={(e) => onChange(e.target.value || null)}
+      className={baseInput}
+    />
+  );
+}
+
+function inferTypeFromValue(v: unknown): FieldConfig["type"] {
+  if (typeof v === "boolean") return "boolean";
+  if (typeof v === "number") return "number";
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v)) return "date";
+  return "text";
+}
+
+function resolveSource(
+  raw: Record<string, unknown>,
+  sources: string[] | undefined,
+): string | null {
+  if (!sources || sources.length === 0) return null;
+  for (const s of sources) {
+    const v = raw[s];
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string") return v.length > 0 ? v : null;
+    return String(v);
+  }
+  return null;
+}
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Custom fields panel *
+ * -------------------------------------------------------------------------- */
+
+function CustomFieldsView({ fields }: { fields: Record<string, unknown> }) {
+  const entries = Object.entries(fields);
+  if (entries.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">No custom fields.</p>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] text-muted-foreground">
+        D365 custom fields preserved as <code>metadata</code> on the imported row.
+      </p>
+      <div className="overflow-hidden rounded border border-border">
+        <table className="w-full text-xs">
+          <tbody className="divide-y divide-border">
+            {entries.map(([key, val]) => (
+              <tr key={key} className="bg-background">
+                <td className="border-r border-border px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                  {key}
+                </td>
+                <td className="px-2 py-1 font-mono text-[11px] text-foreground">
+                  {val === null || val === undefined
+                    ? "—"
+                    : typeof val === "object"
+                      ? JSON.stringify(val)
+                      : String(val)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- *
+ * Children list (attached activities) *
+ * -------------------------------------------------------------------------- */
 
 function ChildrenList({ items }: { items: BatchChildView[] }) {
   if (items.length === 0) {
@@ -510,61 +767,20 @@ function ChildrenList({ items }: { items: BatchChildView[] }) {
           <RecordStatusIcon status={c.status} />
           <span className="font-medium text-foreground">{c.sourceEntityType}</span>
           <span className="grow truncate text-muted-foreground">{c.summary}</span>
-          <ChildDecisionButtons recordId={c.id} status={c.status} />
+          {c.sourceId ? (
+            <span className="font-mono text-[10px] text-muted-foreground/70">
+              {c.sourceId}
+            </span>
+          ) : null}
         </li>
       ))}
     </ul>
   );
 }
 
-function ChildDecisionButtons({
-  recordId,
-  status,
-}: {
-  recordId: string;
-  status: RecordStatus;
-}) {
-  const [pending, startTransition] = useTransition();
-
-  function approve() {
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("recordId", recordId);
-      await approveRecordAction(fd);
-    });
-  }
-  function reject() {
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("recordId", recordId);
-      await rejectRecordAction(fd);
-    });
-  }
-
-  if (status === "committed" || status === "skipped" || status === "failed") {
-    return null;
-  }
-  return (
-    <div className="flex gap-1">
-      <button
-        type="button"
-        onClick={approve}
-        disabled={pending || status === "approved"}
-        className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] hover:bg-muted/60 disabled:opacity-50"
-      >
-        Approve
-      </button>
-      <button
-        type="button"
-        onClick={reject}
-        disabled={pending || status === "rejected"}
-        className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] hover:bg-muted/60 disabled:opacity-50"
-      >
-        Reject
-      </button>
-    </div>
-  );
-}
+/* -------------------------------------------------------------------------- *
+ * Decision + conflict + footer (unchanged behavior) *
+ * -------------------------------------------------------------------------- */
 
 function DecisionButtons({
   recordId,
@@ -709,10 +925,6 @@ function ConflictResolutionPicker({
     </div>
   );
 }
-
-/* -------------------------------------------------------------------------- *
- * Footer *
- * -------------------------------------------------------------------------- */
 
 function BatchFooter({
   runId,

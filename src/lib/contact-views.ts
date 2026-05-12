@@ -37,6 +37,10 @@ export interface ContactViewFilters {
   doNotContact?: boolean;
   doNotEmail?: boolean;
   doNotCall?: boolean;
+  doNotMail?: boolean;
+  city?: string;
+  state?: string;
+  country?: string;
   recentlyUpdatedDays?: number;
 }
 
@@ -135,6 +139,10 @@ export const contactViewSchema = z.object({
       doNotContact: z.boolean().optional(),
       doNotEmail: z.boolean().optional(),
       doNotCall: z.boolean().optional(),
+      doNotMail: z.boolean().optional(),
+      city: z.string().trim().max(120).optional(),
+      state: z.string().trim().max(120).optional(),
+      country: z.string().trim().max(80).optional(),
       recentlyUpdatedDays: z.number().int().min(1).max(3650).optional(),
     })
     .default({}),
@@ -402,9 +410,15 @@ export interface ContactRow {
   email: string | null;
   phone: string | null;
   mobilePhone: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  birthdate: string | null;
   doNotContact: boolean;
   doNotEmail: boolean;
   doNotCall: boolean;
+  doNotMail: boolean;
   accountId: string | null;
   accountName: string | null;
   ownerId: string | null;
@@ -483,6 +497,18 @@ export async function runContactView(
   if (merged.doNotCall === true) {
     wheres.push(eq(contacts.doNotCall, true));
   }
+  if (merged.doNotMail === true) {
+    wheres.push(eq(contacts.doNotMail, true));
+  }
+  if (merged.city) {
+    wheres.push(ilike(contacts.city, `%${merged.city}%`));
+  }
+  if (merged.state) {
+    wheres.push(eq(contacts.state, merged.state));
+  }
+  if (merged.country) {
+    wheres.push(eq(contacts.country, merged.country));
+  }
   if (merged.recentlyUpdatedDays && merged.recentlyUpdatedDays > 0) {
     wheres.push(
       gte(
@@ -503,6 +529,10 @@ export async function runContactView(
         return contacts.jobTitle;
       case "email":
         return contacts.email;
+      case "city":
+        return contacts.city;
+      case "state":
+        return contacts.state;
       case "createdAt":
         return contacts.createdAt;
       case "updatedAt":
@@ -544,9 +574,15 @@ export async function runContactView(
         email: contacts.email,
         phone: contacts.phone,
         mobilePhone: contacts.mobilePhone,
+        city: contacts.city,
+        state: contacts.state,
+        postalCode: contacts.postalCode,
+        country: contacts.country,
+        birthdate: contacts.birthdate,
         doNotContact: contacts.doNotContact,
         doNotEmail: contacts.doNotEmail,
         doNotCall: contacts.doNotCall,
+        doNotMail: contacts.doNotMail,
         accountId: contacts.accountId,
         accountName: crmAccounts.name,
         ownerId: contacts.ownerId,

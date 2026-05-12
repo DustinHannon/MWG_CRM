@@ -606,6 +606,7 @@ async function loadRecord(recordId: string): Promise<{
   batchId: string;
   status: string;
   runId: string;
+  mappedPayload: unknown;
 }> {
   const rows = await db
     .select({
@@ -613,6 +614,7 @@ async function loadRecord(recordId: string): Promise<{
       batchId: importRecords.batchId,
       status: importRecords.status,
       runId: importBatches.runId,
+      mappedPayload: importRecords.mappedPayload,
     })
     .from(importRecords)
     .innerJoin(importBatches, eq(importBatches.id, importRecords.batchId))
@@ -727,9 +729,28 @@ export async function editRecordFieldsAction(
         );
       }
 
+      // The UI edits the unwrapped `mapped` object. Re-wrap into the
+      // `{ mapped, attached, customFields }` shape that commit-batch
+      // expects so `attached` activities and custom-field passthrough
+      // survive the edit.
+      const existingWrapper = (rec.mappedPayload ?? {}) as Record<string, unknown>;
+      const existingAttached = Array.isArray(existingWrapper.attached)
+        ? existingWrapper.attached
+        : [];
+      const existingCustom =
+        existingWrapper.customFields &&
+        typeof existingWrapper.customFields === "object"
+          ? (existingWrapper.customFields as Record<string, unknown>)
+          : {};
+      const newWrapper = {
+        mapped: parsed as Record<string, unknown>,
+        attached: existingAttached,
+        customFields: existingCustom,
+      };
+
       await db
         .update(importRecords)
-        .set({ mappedPayload: parsed as Record<string, unknown> })
+        .set({ mappedPayload: newWrapper })
         .where(eq(importRecords.id, recordId));
 
       // No dedicated audit event — bundles into approve/commit history.

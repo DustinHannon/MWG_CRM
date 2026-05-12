@@ -106,6 +106,10 @@ export const leads = pgTable(
     score: integer("score").notNull().default(0),
     scoreBand: text("score_band").notNull().default("cold"),
     scoredAt: timestamp("scored_at", { withTimezone: true }),
+    // D365 lifecycle codes preserved verbatim for forensic completeness.
+    // The lead status enum is derived from these at import time.
+    d365StateCode: integer("d365_state_code"),
+    d365StatusCode: integer("d365_status_code"),
     // D365 custom-field passthrough. Mappers route any
     // non-native field (D365 `new_*`, `cr*_*`, `mwg_*`) into this
     // JSONB so the review UI surfaces it without re-fetching the raw

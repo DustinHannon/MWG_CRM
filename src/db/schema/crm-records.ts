@@ -30,6 +30,10 @@ export const crmAccounts = pgTable(
     industry: text("industry"),
     website: text("website"),
     phone: text("phone"),
+    email: text("email"),
+    accountNumber: text("account_number"),
+    numberOfEmployees: integer("number_of_employees"),
+    annualRevenue: numeric("annual_revenue", { precision: 18, scale: 2 }),
     street1: text("street1"),
     street2: text("street2"),
     city: text("city"),
@@ -37,6 +41,13 @@ export const crmAccounts = pgTable(
     postalCode: text("postal_code"),
     country: text("country"),
     description: text("description"),
+    d365StateCode: integer("d365_state_code"),
+    d365StatusCode: integer("d365_status_code"),
+    // FK enforced at the DB level; Drizzle treats these as plain uuid
+    // columns to avoid the circular-reference dance between
+    // crm_accounts and contacts.
+    parentAccountId: uuid("parent_account_id"),
+    primaryContactId: uuid("primary_contact_id"),
     ownerId: uuid("owner_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -96,6 +107,19 @@ export const contacts = pgTable(
     doNotContact: boolean("do_not_contact").notNull().default(false),
     doNotEmail: boolean("do_not_email").notNull().default(false),
     doNotCall: boolean("do_not_call").notNull().default(false),
+    doNotMail: boolean("do_not_mail").notNull().default(false),
+    // D365 contact address1_* and birthdate.
+    street1: text("street1"),
+    street2: text("street2"),
+    city: text("city"),
+    state: text("state"),
+    postalCode: text("postal_code"),
+    country: text("country"),
+    birthdate: date("birthdate"),
+    // D365 state + status codes preserved verbatim. statecode=1
+    // (Inactive) is mirrored as is_deleted=true at import time.
+    d365StateCode: integer("d365_state_code"),
+    d365StatusCode: integer("d365_status_code"),
     ownerId: uuid("owner_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -134,6 +158,10 @@ export const contacts = pgTable(
     index("contacts_updated_at_id_idx")
       .on(t.updatedAt.desc(), t.id.desc())
       .where(sql`is_deleted = false`),
+    // city filter (lowercase-folded) for future "contacts in X" filters.
+    index("contacts_city_idx")
+      .on(sql`lower(${t.city})`)
+      .where(sql`is_deleted = false`),
   ],
 );
 
@@ -164,6 +192,8 @@ export const opportunities = pgTable(
     probability: integer("probability"),
     expectedCloseDate: date("expected_close_date"),
     description: text("description"),
+    d365StateCode: integer("d365_state_code"),
+    d365StatusCode: integer("d365_status_code"),
     ownerId: uuid("owner_id").references(() => users.id, {
       onDelete: "set null",
     }),

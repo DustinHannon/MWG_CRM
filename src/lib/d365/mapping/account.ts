@@ -121,11 +121,36 @@ export function mapD365Account(
   );
   const metadata = Object.keys(customFields).length > 0 ? customFields : null;
 
+  const d365StateCode =
+    typeof raw.statecode === "number" ? raw.statecode : null;
+  const d365StatusCode =
+    typeof raw.statuscode === "number" ? raw.statuscode : null;
+  // D365 account statecode=1 means Inactive. Mirror as is_deleted at
+  // import time but preserve the raw code on the row for forensics.
+  const isInactive = d365StateCode === 1;
+
+  const numberOfEmployees =
+    typeof (raw as Record<string, unknown>).numberofemployees === "number"
+      ? ((raw as Record<string, unknown>).numberofemployees as number)
+      : null;
+  const annualRevenue = ((): string | null => {
+    const v = (raw as Record<string, unknown>).revenue;
+    if (v == null) return null;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n.toFixed(2) : null;
+  })();
+
   const mapped: NewAccount = {
     name,
     industry,
     website: parseString(raw.websiteurl),
     phone: parseString(raw.telephone1),
+    email: parseString(raw.emailaddress1),
+    accountNumber: parseString(
+      (raw as Record<string, unknown>).accountnumber,
+    ),
+    numberOfEmployees,
+    annualRevenue,
     street1: parseString(raw.address1_line1),
     street2: parseString(raw.address1_line2),
     city: parseString(raw.address1_city),
@@ -133,6 +158,15 @@ export function mapD365Account(
     postalCode: parseString(raw.address1_postalcode),
     country: parseString(raw.address1_country),
     description: parseString(raw.description),
+    d365StateCode,
+    d365StatusCode,
+    // FK to local rows is left null; the orchestrator resolves these
+    // by sourceId lookup in a post-pass once parents are committed.
+    parentAccountId: null,
+    primaryContactId: null,
+    isDeleted: isInactive,
+    deletedAt: isInactive ? updatedAt : null,
+    deleteReason: isInactive ? "d365_inactive" : null,
     ownerId: ctx.resolvedOwnerId,
     createdById: ctx.resolvedOwnerId,
     updatedById: ctx.resolvedOwnerId,

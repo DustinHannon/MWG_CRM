@@ -16,6 +16,14 @@ export type NewContact = InferInsertModel<typeof contacts>;
 export interface ContactMapContext {
   resolvedOwnerId: string;
   /**
+   * Optional — distinct resolved users for `_createdby_value` and
+   * `_modifiedby_value`. When the orchestrator can't resolve them to a
+   * local users row it falls back to `resolvedOwnerId` so audit
+   * attribution stays consistent.
+   */
+  resolvedCreatedById?: string | null;
+  resolvedUpdatedById?: string | null;
+  /**
    * Optional — when the contact's `_parentcustomerid_value` /
    * `_accountid_value` resolves to a local crm_accounts row at orchestrator
    * time, that local UUID lands on `contacts.account_id`. Mapper returns
@@ -83,13 +91,30 @@ export function mapD365Contact(
 
   const doNotEmail = !!raw.donotemail;
   const doNotCall = !!raw.donotphone;
+  const doNotMail = !!raw.donotpostalmail;
+  // doNotContact remains the OR-pair of email+call so existing UI badges
+  // continue to read "do not contact" the same way; mail-only suppression
+  // surfaces via doNotMail.
   const doNotContact = doNotEmail && doNotCall;
+
+  // statecode/statuscode mirror: D365 statecode=1 means Inactive. We
+  // soft-delete inactive contacts at import time so they don't appear in
+  // default lists, but preserve the raw codes on the row for forensics
+  // and so a future re-activation flow can find them.
+  const d365StateCode =
+    typeof raw.statecode === "number" ? raw.statecode : null;
+  const d365StatusCode =
+    typeof raw.statuscode === "number" ? raw.statuscode : null;
+  const isInactive = d365StateCode === 1;
 
   const customFields = extractCustomFields(
     raw as unknown as Record<string, unknown>,
     NATIVE_CONTACT_FIELDS,
   );
   const metadata = Object.keys(customFields).length > 0 ? customFields : null;
+
+  const createdById = ctx.resolvedCreatedById ?? ctx.resolvedOwnerId;
+  const updatedById = ctx.resolvedUpdatedById ?? ctx.resolvedOwnerId;
 
   const mapped: NewContact = {
     accountId: ctx.resolvedAccountId ?? null,
@@ -106,9 +131,25 @@ export function mapD365Contact(
     doNotContact,
     doNotEmail,
     doNotCall,
+    doNotMail,
+    street1: parseString(raw.address1_line1),
+    street2: parseString(raw.address1_line2),
+    city: parseString(raw.address1_city),
+    state: parseString(raw.address1_stateorprovince),
+    postalCode: parseString(raw.address1_postalcode),
+    country: parseString(raw.address1_country),
+    // birthdate is a DATE column; D365 emits ISO with a midnight or
+    // 05:00Z stamp. Store the YYYY-MM-DD prefix; drizzle's `date` column
+    // accepts a string.
+    birthdate: parseISODateOnly(raw.birthdate),
+    d365StateCode,
+    d365StatusCode,
+    isDeleted: isInactive,
+    deletedAt: isInactive ? updatedAt : null,
+    deleteReason: isInactive ? "d365_inactive" : null,
     ownerId: ctx.resolvedOwnerId,
-    createdById: ctx.resolvedOwnerId,
-    updatedById: ctx.resolvedOwnerId,
+    createdById,
+    updatedById,
     createdAt,
     updatedAt,
     metadata,
@@ -116,4 +157,13 @@ export function mapD365Contact(
 
   const attached: AttachedActivity[] = [];
   return { mapped, attached, customFields, warnings };
+}
+
+function parseISODateOnly(v: unknown): string | null {
+  if (typeof v !== "string" || v.length === 0) return null;
+  // D365 birthdate is typically "1958-04-16T05:00:00Z" or
+  // "1958-04-16" — split on T and keep the date prefix. Validate the
+  // YYYY-MM-DD shape so a malformed string drops instead of crashing.
+  const datePart = v.split("T", 1)[0];
+  return /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart : null;
 }

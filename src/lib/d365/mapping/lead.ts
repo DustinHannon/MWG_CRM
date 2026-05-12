@@ -356,6 +356,10 @@ export function mapD365Lead(
     updatedById: ctx.resolvedOwnerId,
     createdAt,
     updatedAt,
+    d365StateCode:
+      typeof raw.statecode === "number" ? raw.statecode : null,
+    d365StatusCode:
+      typeof raw.statuscode === "number" ? raw.statuscode : null,
     estimatedValue: ((): string | null => {
       const v = (raw as Record<string, unknown>)["estimatedamount"];
       if (v == null || v === "") return null;

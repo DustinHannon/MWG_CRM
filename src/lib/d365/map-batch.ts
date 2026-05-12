@@ -159,6 +159,8 @@ async function dispatchMap(
     case "contact":
       return mapper(raw as unknown as D365Contact, {
         resolvedOwnerId: ctx.resolvedOwnerId,
+        resolvedCreatedById: ctx.resolvedUserId,
+        resolvedUpdatedById: ctx.resolvedUserId,
       }) as MapResult<unknown>;
     case "account":
       return mapper(raw as unknown as D365Account, {

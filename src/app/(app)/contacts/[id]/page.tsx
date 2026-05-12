@@ -38,6 +38,14 @@ export default async function ContactDetailPage({
       email: contacts.email,
       phone: contacts.phone,
       mobilePhone: contacts.mobilePhone,
+      description: contacts.description,
+      birthdate: contacts.birthdate,
+      street1: contacts.street1,
+      street2: contacts.street2,
+      city: contacts.city,
+      state: contacts.state,
+      postalCode: contacts.postalCode,
+      country: contacts.country,
       accountId: contacts.accountId,
       accountName: crmAccounts.name,
       ownerId: contacts.ownerId,
@@ -45,6 +53,8 @@ export default async function ContactDetailPage({
       doNotContact: contacts.doNotContact,
       doNotEmail: contacts.doNotEmail,
       doNotCall: contacts.doNotCall,
+      doNotMail: contacts.doNotMail,
+      d365StateCode: contacts.d365StateCode,
     })
     .from(contacts)
     .leftJoin(crmAccounts, eq(crmAccounts.id, contacts.accountId))
@@ -122,8 +132,8 @@ export default async function ContactDetailPage({
           <Row label="Email" value={contact.email} mailto />
           <Row label="Phone" value={contact.phone} />
           <Row label="Mobile" value={contact.mobilePhone} />
-          {/* Owner row uses the canonical UserChip with a
-              hover card on this single-record detail page. */}
+          <Row label="Birthdate" value={contact.birthdate ?? null} />
+          <Row label="Address" value={formatAddress(contact)} />
           <div className="flex">
             <dt className="w-32 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
               Owner
@@ -149,10 +159,14 @@ export default async function ContactDetailPage({
               contact.doNotContact ? "Do not contact" : null,
               contact.doNotEmail ? "Do not email" : null,
               contact.doNotCall ? "Do not call" : null,
+              contact.doNotMail ? "Do not postal mail" : null,
             ]
               .filter(Boolean)
               .join(", ") || null}
           />
+          {contact.description ? (
+            <Row label="Description" value={contact.description} />
+          ) : null}
         </dl>
       </GlassCard>
 
@@ -190,7 +204,7 @@ function Row({
       <dt className="w-32 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
-      <dd>
+      <dd className="whitespace-pre-line">
         {mailto && value ? (
           <a href={`mailto:${value}`} className="hover:underline">
             {value}
@@ -201,4 +215,26 @@ function Row({
       </dd>
     </div>
   );
+}
+
+function formatAddress(contact: {
+  street1: string | null;
+  street2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+}): string | null {
+  const lines: string[] = [];
+  if (contact.street1) lines.push(contact.street1);
+  if (contact.street2) lines.push(contact.street2);
+  const cityLine = [
+    contact.city,
+    [contact.state, contact.postalCode].filter(Boolean).join(" "),
+  ]
+    .filter((s) => s && s.length > 0)
+    .join(", ");
+  if (cityLine) lines.push(cityLine);
+  if (contact.country) lines.push(contact.country);
+  return lines.length > 0 ? lines.join("\n") : null;
 }

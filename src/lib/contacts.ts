@@ -33,6 +33,26 @@ export const contactCreateSchema = z.object({
   phone: z.string().trim().max(60).optional().nullable(),
   mobilePhone: z.string().trim().max(60).optional().nullable(),
   description: z.string().trim().max(20_000).optional().nullable(),
+  // Address
+  street1: z.string().trim().max(200).optional().nullable(),
+  street2: z.string().trim().max(200).optional().nullable(),
+  city: z.string().trim().max(120).optional().nullable(),
+  state: z.string().trim().max(120).optional().nullable(),
+  postalCode: z.string().trim().max(20).optional().nullable(),
+  country: z.string().trim().max(80).optional().nullable(),
+  // Birthdate stored as YYYY-MM-DD; accept ISO timestamp prefix too.
+  birthdate: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}/u, "Use YYYY-MM-DD")
+    .max(10)
+    .or(z.literal(""))
+    .optional()
+    .nullable(),
+  // Preferences
+  doNotEmail: z.coerce.boolean().optional(),
+  doNotCall: z.coerce.boolean().optional(),
+  doNotMail: z.coerce.boolean().optional(),
 });
 
 export type ContactCreateInput = z.infer<typeof contactCreateSchema>;
@@ -52,6 +72,17 @@ export async function createContact(
       phone: input.phone ?? null,
       mobilePhone: input.mobilePhone ?? null,
       description: input.description ?? null,
+      street1: input.street1 ?? null,
+      street2: input.street2 ?? null,
+      city: input.city ?? null,
+      state: input.state ?? null,
+      postalCode: input.postalCode ?? null,
+      country: input.country ?? null,
+      birthdate: input.birthdate ? input.birthdate.slice(0, 10) : null,
+      doNotEmail: input.doNotEmail ?? false,
+      doNotCall: input.doNotCall ?? false,
+      doNotMail: input.doNotMail ?? false,
+      doNotContact: (input.doNotEmail ?? false) && (input.doNotCall ?? false),
       ownerId: actorId,
       createdById: actorId,
     })
@@ -200,6 +231,18 @@ export async function updateContactForApi(
     phone: string | null;
     mobilePhone: string | null;
     description: string | null;
+    // Phase-31 D365 parity additions.
+    street1: string | null;
+    street2: string | null;
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+    country: string | null;
+    birthdate: string | null;
+    doNotEmail: boolean;
+    doNotCall: boolean;
+    doNotMail: boolean;
+    doNotContact: boolean;
   }>,
   expectedVersion: number | undefined,
   actorId: string,
