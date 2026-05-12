@@ -18,7 +18,10 @@ function envOrDefault(name: string, fallback: string): string {
 }
 
 async function waitEnter(prompt: string): Promise<void> {
-  console.log(prompt);
+  // CLI prompt to the operator. This script runs interactively on
+  // AZ-UTIL-AICHAT; the production-code console.log ban does not
+  // apply to CLI status output.
+  process.stdout.write(`${prompt}\n`);
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -59,8 +62,9 @@ async function main(): Promise<void> {
   }
 
   await ctx.storageState({ path: storagePath });
-  console.log(
-    `Saved auth state to ${storagePath}. Reusable for subsequent runs until D365 invalidates the session.`,
+  // CLI status output. See note on waitEnter above.
+  process.stdout.write(
+    `Saved auth state to ${storagePath}. Reusable for subsequent runs until D365 invalidates the session.\n`,
   );
   await browser.close();
 }

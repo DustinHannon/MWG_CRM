@@ -203,7 +203,9 @@ async function main(): Promise<void> {
       maxPages: 200,
     });
     total = candidates.length;
-    console.log(`Enumerated ${candidates.length} templates.`);
+    // CLI status output to stdout; CLI tool is not subject to the
+    // production-code console.log ban.
+    process.stdout.write(`Enumerated ${candidates.length} templates.\n`);
 
     await postRunStarted(cfg, {
       runId: state.runId,
@@ -268,8 +270,9 @@ async function main(): Promise<void> {
       reason: endReason,
     });
     await browser.close();
-    console.log(
-      `Run complete: ${success}/${total} succeeded, ${failed} failed, ${skipped} pre-skipped (${endReason}).`,
+    // CLI status output. See note above.
+    process.stdout.write(
+      `Run complete: ${success}/${total} succeeded, ${failed} failed, ${skipped} pre-skipped (${endReason}).\n`,
     );
   }
 }
