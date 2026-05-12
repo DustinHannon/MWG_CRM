@@ -98,6 +98,12 @@ export const userPreferences = pgTable("user_preferences", {
     () => savedViews.id,
     { onDelete: "set null" },
   ),
+  // Per-user default saved view for /accounts. Mirrors
+  // defaultLeadsViewId; cleared on view delete via ON DELETE SET NULL.
+  defaultAccountViewId: uuid("default_account_view_id").references(
+    () => savedViews.id,
+    { onDelete: "set null" },
+  ),
   customLandingPath: text("custom_landing_path"),
   notifyTasksDue: boolean("notify_tasks_due").notNull().default(true),
   notifyTasksAssigned: boolean("notify_tasks_assigned").notNull().default(true),

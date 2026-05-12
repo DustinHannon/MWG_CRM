@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
 import { requireSession } from "@/lib/auth-helpers";
-import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
@@ -223,4 +223,72 @@ export async function updateAccountAction(
       revalidatePath("/accounts");
     },
   );
+}
+
+/**
+ * bulk soft-delete from the /accounts list page toolbar.
+ *
+ * The caller passes the selected row ids; this action filters down to
+ * those the actor is allowed to archive (own + admin) and applies the
+ * archive in a single batch. Each archived id emits a per-row audit
+ * event for forensic clarity. Forbidden ids surface in `denied` so
+ * the UI can show a partial-success toast.
+ */
+const bulkArchiveSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  reason: z.string().max(500).optional(),
+});
+
+export async function bulkArchiveAccountsAction(
+  payload: z.infer<typeof bulkArchiveSchema>,
+): Promise<
+  ActionResult<{
+    archived: number;
+    denied: number;
+  }>
+> {
+  return withErrorBoundary({ action: "account.bulk_archive" }, async () => {
+    const user = await requireSession();
+    const parsed = bulkArchiveSchema.parse(payload);
+    if (parsed.ids.length === 0) {
+      throw new ValidationError("No accounts selected.");
+    }
+    const rows = await db
+      .select({
+        id: crmAccounts.id,
+        name: crmAccounts.name,
+        ownerId: crmAccounts.ownerId,
+      })
+      .from(crmAccounts)
+      .where(inArray(crmAccounts.id, parsed.ids));
+    const allowed: typeof rows = [];
+    const denied: string[] = [];
+    for (const row of rows) {
+      if (canDeleteAccount(user, row)) allowed.push(row);
+      else denied.push(row.id);
+    }
+    if (allowed.length === 0) {
+      throw new ForbiddenError("You can't archive any of these accounts.");
+    }
+    const reason = parsed.reason?.trim() || undefined;
+    await archiveAccountsById(
+      allowed.map((r) => r.id),
+      user.id,
+      reason,
+    );
+    await Promise.all(
+      allowed.map((row) =>
+        writeAudit({
+          actorId: user.id,
+          action: "account.archive",
+          targetType: "account",
+          targetId: row.id,
+          before: { name: row.name, ownerId: row.ownerId },
+          after: { reason: reason ?? null, bulk: true },
+        }),
+      ),
+    );
+    revalidatePath("/accounts");
+    return { archived: allowed.length, denied: denied.length };
+  });
 }
