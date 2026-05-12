@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { ImportWizard } from "@/components/import/import-wizard";
+import type { ImportWizardConfig } from "@/components/import/types";
 import {
   cancelImportAction,
   commitImportAction,
@@ -12,121 +12,22 @@ import {
 } from "./actions";
 import type { ActionResult } from "@/lib/server-action";
 
-type Stage = "upload" | "preview" | "result";
-
+/**
+ * Phase 29 §6 — Thin shell that wires the generic `<ImportWizard>` to
+ * the leads-specific preview / commit / cancel actions and renders the
+ * leads-specific preview + result panes. The visible behavior is
+ * unchanged from the original Phase 6E wizard; only the surrounding
+ * state machine has moved to `@/components/import/import-wizard.tsx`.
+ */
 export function ImportClient() {
-  const [stage, setStage] = useState<Stage>("upload");
-  const [previewState, setPreviewState] = useState<PreviewSuccessData | null>(
-    null,
-  );
-  const [commitState, setCommitState] = useState<
-    ActionResult<CommitSuccessData> | null
-  >(null);
-  const [pending, startTransition] = useTransition();
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
-  function onUpload(formData: FormData) {
-    setUploadError(null);
-    startTransition(async () => {
-      const res = await previewImportAction(formData);
-      if (!res.ok) {
-        setUploadError(res.error ?? "Upload failed.");
-        return;
-      }
-      setPreviewState(res.data);
-      setStage("preview");
-    });
-  }
-
-  function onCommit() {
-    if (!previewState?.jobId) return;
-    startTransition(async () => {
-      const res = await commitImportAction(previewState.jobId);
-      setCommitState(res);
-      setStage("result");
-      if (!res.ok) {
-        toast.error(res.error ?? "Commit failed.", {
-          duration: Infinity,
-          dismissible: true,
-        });
-      } else {
-        toast.success("Import committed.");
-      }
-    });
-  }
-
-  function onCancel() {
-    if (!previewState?.jobId) {
-      setStage("upload");
-      setPreviewState(null);
-      return;
-    }
-    startTransition(async () => {
-      await cancelImportAction(previewState.jobId);
-      setStage("upload");
-      setPreviewState(null);
-    });
-  }
-
-  return (
-    <div>
-      {stage === "upload" ? (
-        <UploadForm
-          pending={pending}
-          uploadError={uploadError}
-          onSubmit={onUpload}
-        />
-      ) : null}
-      {stage === "preview" && previewState?.preview ? (
-        <PreviewView
-          preview={previewState.preview}
-          fileName={previewState.fileName}
-          smartDetect={previewState.smartDetect}
-          pending={pending}
-          onCommit={onCommit}
-          onCancel={onCancel}
-        />
-      ) : null}
-      {stage === "result" && commitState ? (
-        <ResultView state={commitState} />
-      ) : null}
-    </div>
-  );
-}
-
-function UploadForm({
-  pending,
-  uploadError,
-  onSubmit,
-}: {
-  pending: boolean;
-  uploadError: string | null;
-  onSubmit: (fd: FormData) => void;
-}) {
-  return (
-    <form
-      action={onSubmit}
-      className="mt-8 flex flex-col gap-4 rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl"
-    >
-      <div className="flex items-center justify-between gap-4">
-        <label className="flex-1 text-xs uppercase tracking-wide text-muted-foreground">
-          Upload .xlsx file
-          <input
-            type="file"
-            name="file"
-            accept=".xlsx"
-            required
-            className="mt-2 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
-          />
-        </label>
-        <Link
-          href="/api/leads/import-template"
-          className="self-end rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground/90 transition hover:bg-muted"
-        >
-          Download template (.xlsx)
-        </Link>
-      </div>
-
+  const config: ImportWizardConfig<PreviewSuccessData, CommitSuccessData> = {
+    destinationLabel: "Leads",
+    templateDownloadUrl: "/api/leads/import-template",
+    previewAction: previewImportAction,
+    commitAction: commitImportAction,
+    cancelAction: cancelImportAction,
+    successToastMessage: "Import committed.",
+    renderUploadFormExtras: () => (
       <label className="flex items-start gap-2 text-xs text-foreground/80">
         <input type="checkbox" name="smartDetect" className="mt-0.5" />
         <span>
@@ -140,37 +41,36 @@ function UploadForm({
           instead.
         </span>
       </label>
+    ),
+    renderPreview: ({ preview, pending, onCommit, onCancel }) => (
+      <LeadPreviewView
+        previewData={preview}
+        pending={pending}
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />
+    ),
+    renderResult: ({ state }) => <LeadResultView state={state} />,
+  };
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="self-start rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {pending ? "Parsing…" : "Preview import"}
-      </button>
-
-      {uploadError ? (
-        <p className="text-sm text-[var(--status-lost-fg)]">{uploadError}</p>
-      ) : null}
-    </form>
-  );
+  return <ImportWizard config={config} />;
 }
 
-function PreviewView({
-  preview,
-  fileName,
-  smartDetect,
+function LeadPreviewView({
+  previewData,
   pending,
   onCommit,
   onCancel,
 }: {
-  preview: PreviewSuccessData["preview"];
-  fileName: string;
-  smartDetect: boolean;
+  previewData: PreviewSuccessData;
   pending: boolean;
   onCommit: () => void;
   onCancel: () => void;
 }) {
+  const preview = previewData.preview;
+  const fileName = previewData.fileName;
+  const smartDetect = previewData.smartDetect;
+
   return (
     <div className="mt-8 space-y-6">
       <div className="rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
@@ -225,7 +125,9 @@ function PreviewView({
           items={preview.warnings.map((w) => ({
             primary: w.message,
             secondary:
-              w.rows.length > 0 ? `Rows: ${w.rows.slice(0, 25).join(", ")}${w.rows.length > 25 ? `, +${w.rows.length - 25} more` : ""}` : null,
+              w.rows.length > 0
+                ? `Rows: ${w.rows.slice(0, 25).join(", ")}${w.rows.length > 25 ? `, +${w.rows.length - 25} more` : ""}`
+                : null,
           }))}
         />
       ) : null}
@@ -263,7 +165,7 @@ function PreviewView({
   );
 }
 
-function ResultView({
+function LeadResultView({
   state,
 }: {
   state: ActionResult<CommitSuccessData>;

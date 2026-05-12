@@ -17,13 +17,18 @@ import {
 interface Props {
   listId: string;
   listName: string;
+  // Phase 29 §5 — static lists don't have a filter to refresh, so the
+  // "Refresh now" affordance is hidden for them.
+  listType?: "dynamic" | "static_imported";
 }
 
-export function ListDetailActions({ listId, listName }: Props) {
+export function ListDetailActions({ listId, listName, listType }: Props) {
   const router = useRouter();
   const [pendingRefresh, startRefreshTransition] = useTransition();
   const [pendingDelete, startDeleteTransition] = useTransition();
   const [open, setOpen] = useState(false);
+
+  const isStatic = listType === "static_imported";
 
   function handleRefresh() {
     startRefreshTransition(async () => {
@@ -56,20 +61,22 @@ export function ListDetailActions({ listId, listName }: Props) {
 
   return (
     <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={handleRefresh}
-        disabled={pendingRefresh}
-        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 text-sm text-foreground/90 transition hover:bg-muted disabled:opacity-50"
-      >
-        <RefreshCw
-          className={
-            pendingRefresh ? "h-4 w-4 animate-spin" : "h-4 w-4"
-          }
-          aria-hidden
-        />
-        {pendingRefresh ? "Refreshing…" : "Refresh now"}
-      </button>
+      {!isStatic ? (
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={pendingRefresh}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 text-sm text-foreground/90 transition hover:bg-muted disabled:opacity-50"
+        >
+          <RefreshCw
+            className={
+              pendingRefresh ? "h-4 w-4 animate-spin" : "h-4 w-4"
+            }
+            aria-hidden
+          />
+          {pendingRefresh ? "Refreshing…" : "Refresh now"}
+        </button>
+      ) : null}
 
       <AlertDialog.Root open={open} onOpenChange={setOpen}>
         <AlertDialog.Trigger asChild>

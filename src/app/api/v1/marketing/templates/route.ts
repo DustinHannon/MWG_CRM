@@ -5,6 +5,7 @@ import { withApi } from "@/lib/api/handler";
 import { errorResponse } from "@/lib/api/errors";
 import { writeAudit } from "@/lib/audit";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
+import { templateVisibilityWhere } from "@/lib/marketing/templates";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,10 @@ const createSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   subject: z.string().trim().min(1).max(998),
   preheader: z.string().trim().max(255).optional(),
+  // Phase 29 §4 — Visibility scope. API clients default to 'global'
+  // (same as the in-app create form) so backward-compatible callers
+  // continue to produce visible-to-everyone templates.
+  scope: z.enum(["global", "personal"]).optional(),
 });
 
 interface SerializedTemplate {
@@ -41,6 +46,8 @@ interface SerializedTemplate {
   subject: string;
   preheader: string | null;
   status: "draft" | "ready" | "archived";
+  scope: "global" | "personal";
+  source: string;
   sendgrid_template_id: string | null;
   sendgrid_version_id: string | null;
   created_by_id: string;
@@ -57,6 +64,8 @@ function serialize(t: typeof marketingTemplates.$inferSelect): SerializedTemplat
     subject: t.subject,
     preheader: t.preheader ?? null,
     status: t.status,
+    scope: t.scope,
+    source: t.source,
     sendgrid_template_id: t.sendgridTemplateId ?? null,
     sendgrid_version_id: t.sendgridVersionId ?? null,
     created_by_id: t.createdById,
@@ -68,7 +77,7 @@ function serialize(t: typeof marketingTemplates.$inferSelect): SerializedTemplat
 
 export const GET = withApi(
   { scope: "admin", action: "marketing.templates.list" },
-  async (req) => {
+  async (req, { key }) => {
     const url = new URL(req.url);
     const parsed = listQuerySchema.safeParse(
       Object.fromEntries(url.searchParams.entries()),
@@ -83,12 +92,20 @@ export const GET = withApi(
     }
     const { status, page, pageSize } = parsed.data;
 
+    // Phase 29 §4 — Visibility filter. API keys are scoped to the
+    // user who created them (`key.createdById`); applying the same
+    // visibility rule that the in-app list page uses means a
+    // marketing user's API key can't enumerate another user's
+    // personal templates by listing.
+    const visibility = templateVisibilityWhere(key.createdById);
+
     const where = status
       ? and(
           eq(marketingTemplates.isDeleted, false),
           eq(marketingTemplates.status, status),
+          visibility,
         )
-      : eq(marketingTemplates.isDeleted, false);
+      : and(eq(marketingTemplates.isDeleted, false), visibility);
 
     const offset = (page - 1) * pageSize;
 
@@ -147,6 +164,13 @@ export const POST = withApi(
         unlayerDesignJson: {},
         renderedHtml: "",
         status: "draft",
+        // Phase 29 §4 — Honor the API caller's chosen scope (default
+        // 'global' for parity with the in-app form). The `source`
+        // column tracks API-driven provenance so the migration
+        // worklist can distinguish manual / api / clickdimensions
+        // imports.
+        scope: parsed.data.scope ?? "global",
+        source: "api",
         // API keys carry a creator id; mirror the lead-create pattern
         // and use the key's owner as the audited actor.
         createdById: key.createdById,
@@ -168,6 +192,7 @@ export const POST = withApi(
         name: row.name,
         subject: row.subject,
         status: row.status,
+        scope: row.scope,
         source: "api",
       },
     });

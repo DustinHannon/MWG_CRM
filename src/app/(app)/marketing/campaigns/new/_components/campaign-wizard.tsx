@@ -43,7 +43,13 @@ export interface WizardList {
 export interface ExistingDraft {
   id: string;
   name: string;
-  templateId: string;
+  /**
+   * Phase 29 §4.8 — Nullable because a personal-template delete
+   * unlinks any draft campaigns referencing it. The wizard renders
+   * the template picker with no selection in that case so the user
+   * can choose a replacement.
+   */
+  templateId: string | null;
   listId: string;
   fromEmail: string;
   fromName: string;

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { FilterDslBuilder } from "@/components/marketing/filter-dsl-builder";
 import { LivePreviewPanel } from "@/components/marketing/live-preview-panel";
 import type { FilterDsl } from "@/lib/security/filter-dsl";
+import type { MarketingListSourceEntity } from "@/db/schema/marketing-lists";
 import {
   createListAction,
   updateListAction,
@@ -26,6 +27,7 @@ interface Props {
     filterDsl: FilterDsl;
     /** Phase 27 §4.8 — OCC version captured at load time. */
     version: number;
+    sourceEntity?: MarketingListSourceEntity | null;
   };
 }
 
@@ -37,6 +39,12 @@ export function ListForm({ mode, initial }: Props) {
   );
   const [dsl, setDsl] = useState<FilterDsl | null>(
     initial?.filterDsl ?? null,
+  );
+  // Phase 29 §5 — source entity for dynamic lists. Only 'leads' is wired
+  // today; the picker shows the others greyed out for forward
+  // compatibility.
+  const [sourceEntity, setSourceEntity] = useState<MarketingListSourceEntity>(
+    initial?.sourceEntity ?? "leads",
   );
   const [errors, setErrors] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
@@ -57,6 +65,7 @@ export function ListForm({ mode, initial }: Props) {
           name,
           description: description.trim() || undefined,
           filterDsl: dsl,
+          sourceEntity,
         });
         if (!result.ok) {
           toast.error(result.error);
@@ -138,6 +147,42 @@ export function ListForm({ mode, initial }: Props) {
             className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
             placeholder="Why this segment exists (optional)"
           />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="list-source-entity"
+            className="text-xs uppercase tracking-[0.05em] text-muted-foreground"
+          >
+            Source entity
+          </label>
+          <select
+            id="list-source-entity"
+            value={sourceEntity}
+            onChange={(e) =>
+              setSourceEntity(e.target.value as MarketingListSourceEntity)
+            }
+            disabled={mode === "edit"}
+            className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:opacity-60"
+            title="Available in a future phase"
+          >
+            <option value="leads">Leads</option>
+            <option value="contacts" disabled>
+              Contacts (available in a future phase)
+            </option>
+            <option value="accounts" disabled>
+              Accounts (available in a future phase)
+            </option>
+            <option value="opportunities" disabled>
+              Opportunities (available in a future phase)
+            </option>
+            <option value="mixed" disabled>
+              Mixed (available in a future phase)
+            </option>
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Filter rules evaluate against this entity. Only leads are wired today.
+          </p>
         </div>
 
         <div className="flex flex-col gap-2">

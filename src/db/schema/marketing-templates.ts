@@ -4,12 +4,38 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
+
+/**
+ * Phase 29 §4 — Template visibility scope.
+ *
+ *   global   — visible to anyone with template-view permissions.
+ *   personal — visible only to the creator (and admins via the same
+ *              creator-id match? no — admins have read access to
+ *              everything in this CRM; the personal-vs-global split
+ *              is a non-admin privacy convenience, not a security
+ *              boundary).
+ *
+ * Edit gates layer on top of scope:
+ *   personal → only the creator may edit.
+ *   global   → creator OR `canMarketingTemplatesEdit` may edit.
+ *
+ * Cloning a global template into a personal copy is the cheap way for
+ * a marketer to draft a variant without overwriting the shared
+ * version; promote/demote moves a row between scopes (creator-only).
+ */
+export const marketingTemplateScopeEnum = pgEnum(
+  "marketing_template_scope",
+  ["global", "personal"],
+);
+
+export type MarketingTemplateScope = "global" | "personal";
 
 /**
  * Phase 19 — Marketing email templates.
@@ -57,6 +83,24 @@ export const marketingTemplates = pgTable(
     })
       .notNull()
       .default("draft"),
+    /**
+     * Phase 29 §4 — Visibility scope. See `marketingTemplateScopeEnum`
+     * above for the rationale. Backfilled to 'global' for existing rows
+     * so the pre-Phase-29 behavior (everyone sees everything) is
+     * preserved on day one.
+     */
+    scope: marketingTemplateScopeEnum("scope").notNull().default("global"),
+    /**
+     * Phase 29 §4 — Provenance marker.
+     *
+     *   manual                   — created via the in-app /new flow.
+     *   clickdimensions_migration — created via the Phase 29 ClickDimensions
+     *                               migration importer (Sub-agent D).
+     *
+     * Stored as free-form text rather than an enum so future importers
+     * (e.g. mailchimp_migration) can be added without a schema bump.
+     */
+    source: text("source").notNull().default("manual"),
     createdById: uuid("created_by_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -85,6 +129,10 @@ export const marketingTemplates = pgTable(
     index("mkt_tpl_sg_template_idx")
       .on(t.sendgridTemplateId)
       .where(sql`sendgrid_template_id IS NOT NULL`),
+    // Phase 29 §4 — visibility filter index. Every list/detail query
+    // selects on `(scope = 'global' OR (scope = 'personal' AND
+    // created_by_id = $user))`; the composite supports both arms.
+    index("mkt_tpl_scope_created_by_idx").on(t.scope, t.createdById),
   ],
 );
 

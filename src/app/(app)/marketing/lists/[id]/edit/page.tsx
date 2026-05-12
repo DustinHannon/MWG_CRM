@@ -13,8 +13,11 @@ import { ListForm } from "../../_components/list-form";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 21 — Edit a marketing list. Loads the existing record and
- * pre-populates the same form used by /marketing/lists/new.
+ * Phase 21 / Phase 29 §5 — Edit a marketing list (dynamic only).
+ *
+ * Loads the existing record and pre-populates the same form used by
+ * /marketing/lists/new. Static-imported lists do not surface this
+ * edit page; the detail page is the canonical editor for them.
  */
 export default async function EditListPage({
   params,
@@ -28,6 +31,8 @@ export default async function EditListPage({
       name: marketingLists.name,
       description: marketingLists.description,
       filterDsl: marketingLists.filterDsl,
+      listType: marketingLists.listType,
+      sourceEntity: marketingLists.sourceEntity,
       isDeleted: marketingLists.isDeleted,
       version: marketingLists.version,
     })
@@ -35,6 +40,10 @@ export default async function EditListPage({
     .where(eq(marketingLists.id, id))
     .limit(1);
   if (!row || row.isDeleted) notFound();
+  // Static lists are edited from their detail page.
+  if (row.listType === "static_imported") {
+    notFound();
+  }
 
   return (
     <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -59,6 +68,7 @@ export default async function EditListPage({
           description: row.description,
           filterDsl: row.filterDsl as FilterDsl,
           version: row.version,
+          sourceEntity: row.sourceEntity,
         }}
       />
     </div>

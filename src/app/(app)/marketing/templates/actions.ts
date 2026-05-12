@@ -24,6 +24,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { forceReleaseLock, getLock } from "@/lib/marketing/template-lock";
+import { canEditTemplate, canViewTemplate } from "@/lib/marketing/templates";
 import { rateLimit } from "@/lib/security/rate-limit";
 import {
   withErrorBoundary,
@@ -54,6 +55,20 @@ const createTemplateSchema = z.object({
     .max(255)
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
+  // Phase 29 §4 — Visibility scope chosen by the creator. Defaults to
+  // 'global' to match pre-Phase-29 behavior; form submissions that
+  // omit the field also fall through to 'global'.
+  scope: z.enum(["global", "personal"]).optional().default("global"),
+});
+
+const cloneTemplateSchema = z.object({
+  id: z.string().uuid(),
+});
+
+const changeScopeSchema = z.object({
+  id: z.string().uuid(),
+  version: z.coerce.number().int().positive(),
+  newScope: z.enum(["global", "personal"]),
 });
 
 const updateTemplateSchema = z.object({
@@ -137,6 +152,8 @@ export async function createTemplateAction(
         unlayerDesignJson: {},
         renderedHtml: "",
         status: "draft",
+        scope: parsed.data.scope,
+        source: "manual",
         createdById: user.id,
         updatedById: user.id,
       })
@@ -154,6 +171,8 @@ export async function createTemplateAction(
       after: {
         name: parsed.data.name,
         subject: parsed.data.subject,
+        scope: parsed.data.scope,
+        source: "manual",
       },
     });
 
@@ -205,6 +224,39 @@ export async function updateTemplateAction(input: {
       )
       .limit(1);
     if (!existing) throw new NotFoundError("template");
+
+    // Phase 29 §4.4 — Visibility gate: a 'personal' template that you
+    // don't own appears not to exist (404 rather than 403 to avoid
+    // leaking existence).
+    if (
+      !canViewTemplate({
+        template: { scope: existing.scope, createdById: existing.createdById },
+        userId: user.id,
+        isAdmin: user.isAdmin,
+      })
+    ) {
+      throw new NotFoundError("template");
+    }
+
+    // Phase 29 §4.5 — Edit gate:
+    //   personal → creator-only.
+    //   global   → creator OR canMarketingTemplatesEdit.
+    // (Admins bypass; the existing super-admin model is unchanged.)
+    const perms = user.isAdmin ? null : await getPermissions(user.id);
+    if (
+      !canEditTemplate({
+        template: { scope: existing.scope, createdById: existing.createdById },
+        userId: user.id,
+        canMarketingTemplatesEdit: perms?.canMarketingTemplatesEdit ?? false,
+        isAdmin: user.isAdmin,
+      })
+    ) {
+      throw new ForbiddenError(
+        existing.scope === "personal"
+          ? "Only the creator can edit a personal template."
+          : "You don't have permission to edit this template.",
+      );
+    }
 
     // Lock fence — the editor must still hold the lock for this
     // session id. A force-unlock by an admin transfers the lock to a
@@ -325,6 +377,8 @@ export async function archiveTemplateAction(
         name: marketingTemplates.name,
         status: marketingTemplates.status,
         isDeleted: marketingTemplates.isDeleted,
+        scope: marketingTemplates.scope,
+        createdById: marketingTemplates.createdById,
       })
       .from(marketingTemplates)
       .where(eq(marketingTemplates.id, parsed.data.id))
@@ -333,6 +387,34 @@ export async function archiveTemplateAction(
     if (existing.isDeleted) {
       // Idempotent — already archived.
       return;
+    }
+
+    // Phase 29 §4.4/4.5 — Visibility + edit gate. Personal templates
+    // are creator-only for any mutation including delete; global
+    // templates require canMarketingTemplatesEdit OR creator.
+    if (
+      !canViewTemplate({
+        template: { scope: existing.scope, createdById: existing.createdById },
+        userId: user.id,
+        isAdmin: user.isAdmin,
+      })
+    ) {
+      throw new NotFoundError("template");
+    }
+    const perms = user.isAdmin ? null : await getPermissions(user.id);
+    if (
+      !canEditTemplate({
+        template: { scope: existing.scope, createdById: existing.createdById },
+        userId: user.id,
+        canMarketingTemplatesEdit: perms?.canMarketingTemplatesEdit ?? false,
+        isAdmin: user.isAdmin,
+      })
+    ) {
+      throw new ForbiddenError(
+        existing.scope === "personal"
+          ? "Only the creator can delete a personal template."
+          : "You don't have permission to delete this template.",
+      );
     }
 
     // Phase 24 §6.5.2 — refuse to archive a template referenced by any
@@ -369,6 +451,59 @@ export async function archiveTemplateAction(
       );
     }
 
+    // Phase 29 §4.8 — Deletion cascade. Draft campaigns referencing
+    // this template are unlinked (template_id → NULL) so the delete
+    // can proceed. Scheduled/sending campaigns are caught by the
+    // §6.5.2 block above; sent campaigns retain their FK because the
+    // history needs the original template id to render audit views.
+    //
+    // We cascade for BOTH personal and global templates: a global
+    // template can also be deleted by the creator (or an editor) and
+    // any in-progress drafts still need to be unlinked rather than
+    // FK-pinned. This is a slight broadening of the brief (the brief
+    // names "personal"), but the safer behavior — and the cascade
+    // never silently DELETES a campaign; it just clears the FK.
+    const unlinkedCampaigns = await db
+      .select({ id: marketingCampaigns.id, name: marketingCampaigns.name })
+      .from(marketingCampaigns)
+      .where(
+        and(
+          eq(marketingCampaigns.templateId, parsed.data.id),
+          eq(marketingCampaigns.status, "draft"),
+          eq(marketingCampaigns.isDeleted, false),
+        ),
+      );
+    if (unlinkedCampaigns.length > 0) {
+      await db
+        .update(marketingCampaigns)
+        .set({
+          templateId: null,
+          updatedById: user.id,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(marketingCampaigns.templateId, parsed.data.id),
+            eq(marketingCampaigns.status, "draft"),
+            eq(marketingCampaigns.isDeleted, false),
+          ),
+        );
+      // Audit one row per cleared FK — granular forensic trail.
+      for (const c of unlinkedCampaigns) {
+        await writeAudit({
+          actorId: user.id,
+          action: MARKETING_AUDIT_EVENTS.CAMPAIGN_TEMPLATE_UNLINKED,
+          targetType: "marketing_campaign",
+          targetId: c.id,
+          after: {
+            unlinkedFromTemplateId: parsed.data.id,
+            templateName: existing.name,
+            reason: "template_archived",
+          },
+        });
+      }
+    }
+
     await db
       .update(marketingTemplates)
       .set({
@@ -386,8 +521,12 @@ export async function archiveTemplateAction(
       action: MARKETING_AUDIT_EVENTS.TEMPLATE_DELETE,
       targetType: "marketing_template",
       targetId: parsed.data.id,
-      before: { name: existing.name, status: existing.status },
-      after: { status: "archived", isDeleted: true },
+      before: { name: existing.name, status: existing.status, scope: existing.scope },
+      after: {
+        status: "archived",
+        isDeleted: true,
+        unlinkedDraftCampaignIds: unlinkedCampaigns.map((c) => c.id),
+      },
     });
 
     revalidatePath("/marketing/templates");
@@ -443,6 +582,21 @@ export async function sendTestTemplateAction(input: {
         .limit(1);
       if (!existing) throw new NotFoundError("template");
 
+      // Phase 29 §4 — Visibility gate: sending a test on a personal
+      // template you can't see returns 404, same as the read path.
+      if (
+        !canViewTemplate({
+          template: {
+            scope: existing.scope,
+            createdById: existing.createdById,
+          },
+          userId: user.id,
+          isAdmin: user.isAdmin,
+        })
+      ) {
+        throw new NotFoundError("template");
+      }
+
       const result = await sendTestEmail({
         templateId: existing.id,
         recipientEmail: parsed.data.recipientEmail,
@@ -461,6 +615,233 @@ export async function sendTestTemplateAction(input: {
       });
 
       return { messageId: result.messageId };
+    },
+  );
+}
+
+/**
+ * Phase 29 §4.6 — Clone an existing template into a new personal
+ * row owned by the current user. The source must be visible to the
+ * caller (global, or personal-owned-by-caller); the destination is
+ * always `scope='personal'` so a casual marketer can iterate on a
+ * shared template without overwriting it.
+ *
+ * Requires `canMarketingTemplatesCreate`.
+ */
+export async function cloneTemplateAction(
+  formData: FormData,
+): Promise<ActionResult<{ id: string }>> {
+  return withErrorBoundary(
+    { action: "marketing.template.clone" },
+    async () => {
+      const user = await requireSession();
+      const perms = user.isAdmin ? null : await getPermissions(user.id);
+      if (
+        !user.isAdmin &&
+        !perms?.canMarketingTemplatesCreate &&
+        !perms?.canManageMarketing
+      ) {
+        throw new ForbiddenError(
+          "You don't have permission to create marketing templates.",
+        );
+      }
+
+      const parsed = cloneTemplateSchema.safeParse(formToObject(formData));
+      if (!parsed.success) {
+        throw new ValidationError("Invalid template id.");
+      }
+
+      const [source] = await db
+        .select()
+        .from(marketingTemplates)
+        .where(
+          and(
+            eq(marketingTemplates.id, parsed.data.id),
+            eq(marketingTemplates.isDeleted, false),
+          ),
+        )
+        .limit(1);
+      if (!source) throw new NotFoundError("template");
+
+      // Visibility — same gate as a read; a personal template you
+      // don't own can't be cloned (and shouldn't even be enumerable).
+      if (
+        !canViewTemplate({
+          template: { scope: source.scope, createdById: source.createdById },
+          userId: user.id,
+          isAdmin: user.isAdmin,
+        })
+      ) {
+        throw new NotFoundError("template");
+      }
+
+      // The clone is always 'draft' / 'personal' regardless of the
+      // source state — the marketer is iterating on a copy and the
+      // SendGrid template-id is intentionally cleared so first save
+      // mints a new SG template. Empty SG ids avoid an accidental
+      // overwrite of the source's SendGrid version on the next push.
+      const [row] = await db
+        .insert(marketingTemplates)
+        .values({
+          name: `${source.name} (copy)`,
+          description: source.description,
+          subject: source.subject,
+          preheader: source.preheader,
+          unlayerDesignJson: source.unlayerDesignJson,
+          renderedHtml: source.renderedHtml,
+          status: "draft",
+          scope: "personal",
+          source: "manual",
+          sendgridTemplateId: null,
+          sendgridVersionId: null,
+          createdById: user.id,
+          updatedById: user.id,
+        })
+        .returning({ id: marketingTemplates.id });
+
+      if (!row) {
+        throw new ValidationError("Failed to clone template.");
+      }
+
+      await writeAudit({
+        actorId: user.id,
+        action: MARKETING_AUDIT_EVENTS.TEMPLATE_CLONED,
+        targetType: "marketing_template",
+        targetId: row.id,
+        after: {
+          sourceTemplateId: source.id,
+          sourceTemplateName: source.name,
+          newScope: "personal",
+        },
+      });
+
+      revalidatePath("/marketing/templates");
+      return { id: row.id };
+    },
+  );
+}
+
+/**
+ * Phase 29 §4.7 — Promote or demote a template's visibility scope.
+ *
+ *   personal → global  : creator-only. (Anyone can publish their
+ *                         own personal work; the canMarketingTemplatesEdit
+ *                         gate is intentionally NOT required here
+ *                         because the user is already allowed to edit
+ *                         their own creator-owned content.)
+ *   global   → personal : creator-only AND canMarketingTemplatesEdit.
+ *                         Demoting hides a template from everyone
+ *                         else, so we require both the ownership
+ *                         signal AND the edit-others permission to
+ *                         avoid a non-editor accidentally hiding a
+ *                         shared template they happen to own.
+ *
+ * OCC version check fences against a concurrent edit. The lock is
+ * NOT consulted — scope changes are a metadata-only operation and
+ * shouldn't be blocked by an open Unlayer editor.
+ */
+export async function changeTemplateScopeAction(
+  formData: FormData,
+): Promise<ActionResult<never>> {
+  return withErrorBoundary(
+    { action: "marketing.template.scope_change" },
+    async () => {
+      const user = await requireSession();
+      if (!user.isAdmin) await requireMarketingPermission(user.id);
+
+      const parsed = changeScopeSchema.safeParse(formToObject(formData));
+      if (!parsed.success) {
+        const first = parsed.error.issues[0];
+        throw new ValidationError(
+          first
+            ? `${first.path.join(".") || "input"}: ${first.message}`
+            : "Validation failed.",
+        );
+      }
+      const data = parsed.data;
+
+      const [existing] = await db
+        .select()
+        .from(marketingTemplates)
+        .where(
+          and(
+            eq(marketingTemplates.id, data.id),
+            eq(marketingTemplates.isDeleted, false),
+          ),
+        )
+        .limit(1);
+      if (!existing) throw new NotFoundError("template");
+
+      // Visibility check first so a personal template you can't see
+      // 404s instead of 403s.
+      if (
+        !canViewTemplate({
+          template: {
+            scope: existing.scope,
+            createdById: existing.createdById,
+          },
+          userId: user.id,
+          isAdmin: user.isAdmin,
+        })
+      ) {
+        throw new NotFoundError("template");
+      }
+
+      // No-op short-circuit — preserves OCC version semantics.
+      if (existing.scope === data.newScope) {
+        return;
+      }
+
+      // Creator gate. Admins bypass.
+      if (!user.isAdmin && existing.createdById !== user.id) {
+        throw new ForbiddenError(
+          "Only the creator can change a template's visibility.",
+        );
+      }
+
+      // Demote requires canMarketingTemplatesEdit on top of creator.
+      if (data.newScope === "personal" && !user.isAdmin) {
+        const perms = await getPermissions(user.id);
+        if (!perms.canMarketingTemplatesEdit) {
+          throw new ForbiddenError(
+            "You don't have permission to make a global template personal.",
+          );
+        }
+      }
+
+      // OCC fence — refuse if a concurrent edit changed the row.
+      if (existing.version !== data.version) {
+        throw new ConflictError(
+          "Template was changed by someone else. Refresh and try again.",
+        );
+      }
+
+      await db
+        .update(marketingTemplates)
+        .set({
+          scope: data.newScope,
+          updatedById: user.id,
+          updatedAt: new Date(),
+          version: existing.version + 1,
+        })
+        .where(eq(marketingTemplates.id, data.id));
+
+      await writeAudit({
+        actorId: user.id,
+        action: MARKETING_AUDIT_EVENTS.TEMPLATE_SCOPE_CHANGED,
+        targetType: "marketing_template",
+        targetId: data.id,
+        before: { scope: existing.scope, version: existing.version },
+        after: {
+          from: existing.scope,
+          to: data.newScope,
+          version: existing.version + 1,
+        },
+      });
+
+      revalidatePath("/marketing/templates");
+      revalidatePath(`/marketing/templates/${data.id}`);
+      revalidatePath(`/marketing/templates/${data.id}/edit`);
     },
   );
 }

@@ -22,6 +22,20 @@ export const MARKETING_AUDIT_EVENTS = {
   TEMPLATE_PUSHED_TO_SENDGRID: "marketing.template.pushed_to_sendgrid",
   TEMPLATE_TEST_SEND: "marketing.template.test_send",
   TEMPLATE_FORCE_UNLOCK: "marketing.template.force_unlock",
+  // Phase 29 §4 — Template visibility scoping.
+  // SCOPE_CHANGED: promote (personal → global) or demote (global →
+  // personal); creator-only with the demote case also requiring
+  // `canMarketingTemplatesEdit`. `after: { from, to }` carries the
+  // transition.
+  // CLONED: creator copied an existing visible template into a new
+  // `scope='personal'` row. `after: { sourceTemplateId, newScope: 'personal' }`.
+  TEMPLATE_SCOPE_CHANGED: "marketing.template.scope_changed",
+  TEMPLATE_CLONED: "marketing.template.cloned",
+  // Phase 29 §4.8 — When a personal template is deleted, any draft
+  // campaigns still referencing it have their template_id cleared so
+  // the delete can proceed. Each unlinked campaign is audited
+  // individually so the forensic trail captures the cascade.
+  CAMPAIGN_TEMPLATE_UNLINKED: "marketing.campaign.template_unlinked",
 
   LIST_CREATE: "marketing.list.create",
   LIST_UPDATE: "marketing.list.update",
@@ -31,6 +45,17 @@ export const MARKETING_AUDIT_EVENTS = {
   LIST_DELETE_BLOCKED: "marketing.list.delete_blocked",
   LIST_REFRESH: "marketing.list.refresh",
   LIST_MEMBER_BULK_ADD: "marketing.list.member_bulk_add",
+  // Phase 29 §5 — Static-list member events. Static lists are populated
+  // by Excel import (Sub-agent C) and mass-edited from the static-list
+  // detail page. Each per-row mutation writes one audit row so the
+  // forensic trail stays granular even for bulk operations.
+  LIST_MEMBER_ADDED: "marketing.list.member_added",
+  LIST_MEMBER_EDITED: "marketing.list.member_edited",
+  LIST_MEMBER_REMOVED: "marketing.list.member_removed",
+  LIST_BULK_EDITED: "marketing.list.bulk_edited",
+  // Phase 29 §5 — list import success summary; written by Sub-agent C
+  // after a commit. `after: { runId, total, success, failed, skipped }`.
+  LIST_IMPORTED: "marketing.list.imported",
 
   CAMPAIGN_CREATE: "marketing.campaign.create",
   CAMPAIGN_UPDATE: "marketing.campaign.update",
@@ -44,6 +69,20 @@ export const MARKETING_AUDIT_EVENTS = {
 
   SUPPRESSION_ADDED: "marketing.suppression.added",
   SUPPRESSION_REMOVED: "marketing.suppression.removed",
+
+  // Phase 29 §7 — ClickDimensions template-migration worklist events.
+  // Fired both by the receiving API endpoints (extracted/imported/
+  // session_expired/run_started/run_completed) and by the admin
+  // worklist UI (fallback_manual when an admin chooses to skip a
+  // template the extractor couldn't handle).
+  MIGRATION_TEMPLATE_EXTRACTED: "marketing.template.migration.extracted",
+  MIGRATION_TEMPLATE_IMPORTED: "marketing.template.migration.imported",
+  MIGRATION_TEMPLATE_FAILED: "marketing.template.migration.failed",
+  MIGRATION_TEMPLATE_FALLBACK_MANUAL:
+    "marketing.template.migration.fallback_manual",
+  MIGRATION_SESSION_EXPIRED: "marketing.template.migration.session_expired",
+  MIGRATION_RUN_STARTED: "marketing.template.migration.run_started",
+  MIGRATION_RUN_COMPLETED: "marketing.template.migration.run_completed",
 } as const;
 
 export type MarketingAuditEvent =

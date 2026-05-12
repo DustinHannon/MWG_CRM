@@ -194,6 +194,16 @@ export const adminCrumbs = {
     { label: `Run ${runShortId}`, href: `/admin/d365-import/${runId}` },
     { label: `Batch #${batchNumber}` },
   ],
+
+  // Migrations (Phase 29 §7) — ClickDimensions template-migration
+  // worklist. Index page is a thin landing surface; the meaningful
+  // surface is the ClickDimensions sub-page.
+  migrationsIndex: (): Breadcrumb[] => [ADMIN, { label: "Migrations" }],
+  migrationsClickDimensions: (): Breadcrumb[] => [
+    ADMIN,
+    { label: "Migrations", href: "/admin/migrations" },
+    { label: "ClickDimensions" },
+  ],
 } as const;
 
 /**

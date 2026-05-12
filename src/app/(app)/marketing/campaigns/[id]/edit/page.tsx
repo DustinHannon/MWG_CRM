@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, or } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingLists } from "@/db/schema/marketing-lists";
+import { requireSession } from "@/lib/auth-helpers";
 import { env } from "@/lib/env";
+import { templateVisibilityWhere } from "@/lib/marketing/templates";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 import { CampaignWizard } from "../../new/_components/campaign-wizard";
 
@@ -26,6 +28,7 @@ interface Props {
  */
 export default async function EditCampaignPage({ params }: Props) {
   const { id } = await params;
+  const user = await requireSession();
 
   const [campaign] = await db
     .select()
@@ -72,6 +75,29 @@ export default async function EditCampaignPage({ params }: Props) {
 
   // Load the candidate templates + lists so the wizard can re-render
   // selection grids if the user wants to swap.
+  //
+  // Phase 29 §4 — visibility filter. Admin bypasses. We deliberately
+  // include the campaign's currently-selected template_id in the
+  // result even if the visibility filter would otherwise hide it:
+  // the wizard needs to render that selection so the user can see
+  // what they had picked before swapping.
+  const visibility = user.isAdmin
+    ? undefined
+    : templateVisibilityWhere(user.id);
+  const baseTemplateWhere = and(
+    eq(marketingTemplates.isDeleted, false),
+    eq(marketingTemplates.status, "ready"),
+  );
+  const templateWhere = visibility
+    ? // Include the currently-selected template id even if the
+      // visibility predicate would normally exclude it.
+      and(
+        baseTemplateWhere,
+        campaign.templateId
+          ? or(visibility, eq(marketingTemplates.id, campaign.templateId))
+          : visibility,
+      )
+    : baseTemplateWhere;
   const templates = await db
     .select({
       id: marketingTemplates.id,
@@ -82,12 +108,7 @@ export default async function EditCampaignPage({ params }: Props) {
       updatedAt: marketingTemplates.updatedAt,
     })
     .from(marketingTemplates)
-    .where(
-      and(
-        eq(marketingTemplates.isDeleted, false),
-        eq(marketingTemplates.status, "ready"),
-      ),
-    )
+    .where(templateWhere)
     .orderBy(desc(marketingTemplates.updatedAt))
     .limit(200);
 

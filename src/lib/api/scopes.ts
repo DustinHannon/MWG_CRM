@@ -33,6 +33,10 @@ export const ALL_SCOPES = [
   ...DELETE_SCOPES,
   "read:users",
   "admin",
+  // Phase 29 §7 — ClickDimensions migration receiving endpoints. The
+  // local Playwright extraction script authenticates with an API key
+  // carrying this scope. `admin` also satisfies it via `hasScope`.
+  "marketing.migrations.api",
 ] as const;
 
 export type Scope = (typeof ALL_SCOPES)[number];

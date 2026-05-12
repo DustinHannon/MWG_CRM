@@ -46,6 +46,23 @@ export const marketingCrumbs = {
     { label: "Lists", href: "/marketing/lists" },
     { label: "New list" },
   ],
+  // Phase 29 §5 — distinct breadcrumbs for the two new-list variants.
+  listsNewDynamic: (): Breadcrumb[] => [
+    ROOT,
+    { label: "Lists", href: "/marketing/lists" },
+    { label: "New dynamic list" },
+  ],
+  listsNewStatic: (): Breadcrumb[] => [
+    ROOT,
+    { label: "Lists", href: "/marketing/lists" },
+    { label: "New static list" },
+  ],
+  listsImport: (listName: string): Breadcrumb[] => [
+    ROOT,
+    { label: "Lists", href: "/marketing/lists" },
+    { label: listName },
+    { label: "Import" },
+  ],
   listsDetail: (name: string): Breadcrumb[] => [
     ROOT,
     { label: "Lists", href: "/marketing/lists" },

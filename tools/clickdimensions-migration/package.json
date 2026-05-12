@@ -1,0 +1,28 @@
+{
+  "name": "mwg-clickdimensions-migration",
+  "version": "1.0.0",
+  "description": "Standalone Playwright extraction script for migrating ClickDimensions email templates into MWG CRM. Phase 29 §7.",
+  "private": true,
+  "type": "module",
+  "main": "dist/extract.js",
+  "scripts": {
+    "auth": "tsx src/auth.ts",
+    "extract": "tsx src/extract.ts",
+    "build": "tsc -p .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import=tsx tests/editor-handlers.spec.ts"
+  },
+  "dependencies": {
+    "dotenv": "16.4.5",
+    "playwright": "1.50.0",
+    "undici": "7.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.0",
+    "tsx": "^4.21.0",
+    "typescript": "5.7.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

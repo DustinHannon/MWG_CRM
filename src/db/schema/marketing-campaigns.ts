@@ -37,9 +37,18 @@ export const marketingCampaigns = pgTable(
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
     name: text("name").notNull(),
-    templateId: uuid("template_id")
-      .notNull()
-      .references(() => marketingTemplates.id, { onDelete: "restrict" }),
+    /**
+     * Phase 29 §4 — Made nullable to support the personal-template
+     * deletion cascade: when a creator deletes a personal template
+     * that's still referenced by a draft campaign, the campaign's
+     * `template_id` is cleared (the user must pick a new template
+     * before that draft can be scheduled). Pre-Phase-29 rows are all
+     * non-null; the validation/runtime layer continues to require a
+     * template for scheduled/sending/sent campaigns.
+     */
+    templateId: uuid("template_id").references(() => marketingTemplates.id, {
+      onDelete: "restrict",
+    }),
     listId: uuid("list_id")
       .notNull()
       .references(() => marketingLists.id, { onDelete: "restrict" }),

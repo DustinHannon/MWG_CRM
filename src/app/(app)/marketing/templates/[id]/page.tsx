@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Copy, Pencil } from "lucide-react";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
@@ -10,7 +10,9 @@ import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { users } from "@/db/schema/users";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLock } from "@/lib/marketing/template-lock";
+import { canEditTemplate, canViewTemplate } from "@/lib/marketing/templates";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
+import { CloneTemplateButton } from "./_components/clone-template-button";
 
 export const dynamic = "force-dynamic";
 
@@ -39,11 +41,13 @@ export default async function TemplateDetailPage({
       preheader: marketingTemplates.preheader,
       renderedHtml: marketingTemplates.renderedHtml,
       status: marketingTemplates.status,
+      scope: marketingTemplates.scope,
       sendgridTemplateId: marketingTemplates.sendgridTemplateId,
       sendgridVersionId: marketingTemplates.sendgridVersionId,
       createdAt: marketingTemplates.createdAt,
       updatedAt: marketingTemplates.updatedAt,
       version: marketingTemplates.version,
+      createdById: marketingTemplates.createdById,
       createdByName: users.displayName,
     })
     .from(marketingTemplates)
@@ -57,9 +61,37 @@ export default async function TemplateDetailPage({
     .limit(1);
   if (!row) notFound();
 
+  // Phase 29 §4.4 — visibility 404. A personal template owned by
+  // someone else simply doesn't exist for this viewer.
+  if (
+    !canViewTemplate({
+      template: { scope: row.scope, createdById: row.createdById },
+      userId: user.id,
+      isAdmin: user.isAdmin,
+    })
+  ) {
+    notFound();
+  }
+
   const lock = await getLock(row.id);
   const lockedByOther = lock !== null && lock.userId !== user.id;
-  const canEdit = (user.isAdmin || perms.canManageMarketing) && !lockedByOther;
+  // Phase 29 §4.5 — Edit gate combines marketing perm + visibility-
+  // aware edit rule. Casts to a real check via the helper so the
+  // detail page's "Edit" button matches what /edit allows.
+  const editGate = canEditTemplate({
+    template: { scope: row.scope, createdById: row.createdById },
+    userId: user.id,
+    canMarketingTemplatesEdit: perms.canMarketingTemplatesEdit,
+    isAdmin: user.isAdmin,
+  });
+  const canEdit =
+    (user.isAdmin || perms.canManageMarketing) && editGate && !lockedByOther;
+  // Phase 29 §4.6 — Clone is gated on canMarketingTemplatesCreate
+  // (or canManageMarketing for backward compat). Visible regardless
+  // of whether the user can edit the source — that's the whole
+  // point: a non-editor can take a private copy and iterate.
+  const canClone =
+    user.isAdmin || perms.canMarketingTemplatesCreate || perms.canManageMarketing;
 
   return (
     <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -82,7 +114,13 @@ export default async function TemplateDetailPage({
             </p>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canClone ? (
+            <CloneTemplateButton
+              templateId={row.id}
+              icon={<Copy className="h-3.5 w-3.5" aria-hidden />}
+            />
+          ) : null}
           {canEdit ? (
             <Link
               href={`/marketing/templates/${row.id}/edit`}
@@ -123,6 +161,19 @@ export default async function TemplateDetailPage({
         <aside className="flex flex-col gap-4">
           <SidebarBlock title="Status">
             <StatusPillLocal status={row.status} />
+          </SidebarBlock>
+          <SidebarBlock title="Visibility">
+            <ScopePillLocal scope={row.scope} />
+            <p className="mt-1 text-xs text-muted-foreground/80">
+              {row.scope === "global"
+                ? "Visible to everyone with template permissions."
+                : "Visible only to you."}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground/80">
+              {row.createdById === user.id || user.isAdmin
+                ? "Change visibility from the editor."
+                : null}
+            </p>
           </SidebarBlock>
           <SidebarBlock title="Created by">
             <p className="text-sm text-foreground/90">
@@ -212,6 +263,18 @@ function StatusPillLocal({
   return (
     <span
       className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${className}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ScopePillLocal({ scope }: { scope: "global" | "personal" }) {
+  const label = scope === "global" ? "Global" : "Personal";
+  return (
+    <span
+      className="inline-flex items-center rounded-md border border-border bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+      data-scope={scope}
     >
       {label}
     </span>

@@ -8,6 +8,7 @@ import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { env, unlayerConfigured } from "@/lib/env";
 import { getLock } from "@/lib/marketing/template-lock";
+import { canEditTemplate, canViewTemplate } from "@/lib/marketing/templates";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 import { TemplateEditor } from "./_components/template-editor";
 
@@ -17,6 +18,12 @@ export const dynamic = "force-dynamic";
  * Phase 21 — Full template editor page. Server-component shell that
  * gates on permission and the soft-lock, then hands off to the
  * client `<TemplateEditor>` which mounts Unlayer and the lock hook.
+ *
+ * Phase 29 §4.3/4.4/4.5 — Visibility-aware:
+ *   - A personal template that the user can't see returns 404.
+ *   - The edit gate (creator-only for personal; creator OR
+ *     canMarketingTemplatesEdit for global) is applied here; users
+ *     without edit rights bounce back to the read-only detail page.
  */
 export default async function EditTemplatePage({
   params,
@@ -41,6 +48,32 @@ export default async function EditTemplatePage({
     )
     .limit(1);
   if (!row) notFound();
+
+  // Phase 29 §4.4 — visibility 404. Don't leak existence of personal
+  // templates the caller can't see.
+  if (
+    !canViewTemplate({
+      template: { scope: row.scope, createdById: row.createdById },
+      userId: user.id,
+      isAdmin: user.isAdmin,
+    })
+  ) {
+    notFound();
+  }
+
+  // Phase 29 §4.5 — edit gate. If the user can SEE but not EDIT, drop
+  // them back at the read-only detail page rather than rendering an
+  // editor that would 403 on save.
+  if (
+    !canEditTemplate({
+      template: { scope: row.scope, createdById: row.createdById },
+      userId: user.id,
+      canMarketingTemplatesEdit: perms.canMarketingTemplatesEdit,
+      isAdmin: user.isAdmin,
+    })
+  ) {
+    redirect(`/marketing/templates/${row.id}`);
+  }
 
   const initialLock = await getLock(row.id);
   const initiallyLockedByOther =
@@ -67,6 +100,10 @@ export default async function EditTemplatePage({
         initialDescription={row.description ?? ""}
         initialDesign={row.unlayerDesignJson}
         initialStatus={row.status}
+        initialScope={row.scope}
+        initialVersion={row.version}
+        isCreator={row.createdById === user.id}
+        canMarketingTemplatesEdit={perms.canMarketingTemplatesEdit}
         currentUserEmail={user.email}
         unlayerProjectId={env.NEXT_PUBLIC_UNLAYER_PROJECT_ID ?? null}
         unlayerConfigured={unlayerConfigured}

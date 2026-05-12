@@ -80,6 +80,17 @@ export const POST = withApi<{ id: string }>(
     if (!campaign) {
       return errorResponse(404, "NOT_FOUND", "Campaign not found");
     }
+    // Phase 29 §4.8 — campaign.templateId is now nullable: a draft
+    // unlinked by a personal-template delete cascade can't render a
+    // test send. Refuse with VALIDATION_ERROR so the caller knows
+    // the campaign needs a new template before the test will work.
+    if (!campaign.templateId) {
+      return errorResponse(
+        422,
+        "VALIDATION_ERROR",
+        "Campaign has no template. Pick one before sending a test.",
+      );
+    }
 
     const [tpl] = await db
       .select({

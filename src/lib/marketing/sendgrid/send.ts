@@ -1,24 +1,20 @@
 import "server-only";
-import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { emailSendLog } from "@/db/schema/email-send-log";
-import { leads } from "@/db/schema/leads";
 import {
   campaignRecipients,
   marketingCampaigns,
 } from "@/db/schema/marketing-campaigns";
-import {
-  marketingListMembers,
-  marketingLists,
-} from "@/db/schema/marketing-lists";
+import { marketingLists } from "@/db/schema/marketing-lists";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
-import { marketingSuppressions } from "@/db/schema/marketing-events";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
 import { env } from "@/lib/env";
 import { ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
+import { resolveListRecipients } from "@/lib/marketing/lists/resolution";
 import { withRetry } from "@/lib/marketing/with-retry";
 import { getSendGrid } from "./client";
 
@@ -143,8 +139,14 @@ interface TemplateRow {
   sendgridTemplateId: string | null;
 }
 
+/**
+ * Phase 29 §5 — leadId is nullable so static-imported list members can
+ * flow through the same send path. The `rowKey` getter below produces
+ * a stable lookup key for the recipientByLead map (formerly keyed
+ * solely on leadId).
+ */
 interface RecipientCandidate {
-  leadId: string;
+  leadId: string | null;
   email: string;
   firstName: string;
   lastName: string | null;
@@ -152,6 +154,17 @@ interface RecipientCandidate {
   jobTitle: string | null;
   city: string | null;
   state: string | null;
+}
+
+/**
+ * Phase 29 §5 — Stable key for mapping a candidate row to its inserted
+ * `marketing_campaign_recipients` row. Uses leadId when available
+ * (dynamic-list path) and falls back to email (static-imported path).
+ * Within a single campaign send, both leadId and email are unique
+ * within the candidate set so the key collision risk is nil.
+ */
+function recipientKey(c: { leadId: string | null; email: string }): string {
+  return c.leadId ?? `email:${c.email.toLowerCase()}`;
 }
 
 /**
@@ -185,33 +198,22 @@ export async function sendCampaign(
     );
   }
 
-  // Filter suppressions inline via NOT IN subquery — Drizzle expression,
-  // not a raw SQL string.
-  const suppressedSubq = db
-    .select({ email: marketingSuppressions.email })
-    .from(marketingSuppressions);
-
-  const candidateRows: RecipientCandidate[] = await db
-    .select({
-      leadId: leads.id,
-      email: marketingListMembers.email,
-      firstName: leads.firstName,
-      lastName: leads.lastName,
-      companyName: leads.companyName,
-      jobTitle: leads.jobTitle,
-      city: leads.city,
-      state: leads.state,
-    })
-    .from(marketingListMembers)
-    .innerJoin(leads, eq(leads.id, marketingListMembers.leadId))
-    .where(
-      and(
-        eq(marketingListMembers.listId, campaign.listId),
-        eq(leads.isDeleted, false),
-        eq(leads.doNotEmail, false),
-        notInArray(marketingListMembers.email, suppressedSubq),
-      ),
-    );
+  // Phase 29 §5 — unified resolution. `resolveListRecipients` branches
+  // on `marketing_lists.list_type`: dynamic lists join through
+  // `marketing_list_members` + leads; static lists pull directly from
+  // `marketing_static_list_members`. Both paths filter suppressions at
+  // the SQL layer.
+  const resolved = await resolveListRecipients(campaign.listId);
+  const candidateRows: RecipientCandidate[] = resolved.recipients.map((r) => ({
+    leadId: r.leadId,
+    email: r.email,
+    firstName: r.firstName,
+    lastName: r.lastName,
+    companyName: r.companyName,
+    jobTitle: r.jobTitle,
+    city: r.city,
+    state: r.state,
+  }));
 
   const totalAttempted = candidateRows.length;
   const totalFiltered = Math.max(
@@ -271,11 +273,13 @@ export async function sendCampaign(
   // (recipient_id) on each event.
   const inserted = await insertRecipientRows(campaign.id, candidateRows);
 
-  // Build a leadId → recipientId map so personalizations can carry
-  // custom_args.recipient_id for webhook reconciliation.
+  // Build a rowKey → recipientId map so personalizations can carry
+  // custom_args.recipient_id for webhook reconciliation. Phase 29 §5 —
+  // key is leadId for dynamic-list rows, `email:<lowercase>` for
+  // static-imported rows (which have no lead row backing them).
   const recipientByLead = new Map<string, string>();
   for (const row of inserted) {
-    recipientByLead.set(row.leadId, row.id);
+    recipientByLead.set(row.rowKey, row.id);
   }
 
   let totalAccepted = 0;
@@ -302,7 +306,7 @@ export async function sendCampaign(
       // marked `sent` BEFORE the API call (so a failed send left
       // recipients incorrectly stamped).
       const slicedRecipientIds = slice
-        .map((c) => recipientByLead.get(c.leadId))
+        .map((c) => recipientByLead.get(recipientKey(c)))
         .filter((id): id is string => typeof id === "string");
       await markRecipientsSent(slicedRecipientIds);
 
@@ -362,7 +366,7 @@ export async function sendCampaign(
       // sent). Recipients in successfully-sent earlier batches are
       // already `sent` via markRecipientsSent above.
       const failedRecipientIds = failingSlice
-        .map((c) => recipientByLead.get(c.leadId))
+        .map((c) => recipientByLead.get(recipientKey(c)))
         .filter((id): id is string => typeof id === "string");
       await markRecipientsDropped(
         failedRecipientIds,
@@ -674,6 +678,16 @@ async function loadCampaignContext(
   if (campaignRow.listIsDeleted) {
     throw new ValidationError("Campaign list has been archived.");
   }
+  // Phase 29 §4.8 — campaign.templateId is now nullable: a draft can
+  // be left dangling after a personal-template delete. The send path
+  // explicitly refuses dangling campaigns (an unlinked draft can't
+  // reach 'scheduled' through the wizard either, but the validation
+  // here is the last defense).
+  if (!campaignRow.templateId) {
+    throw new ValidationError(
+      "Campaign has no template. Pick one before sending.",
+    );
+  }
 
   const [templateRow] = await db
     .select({
@@ -716,8 +730,8 @@ async function loadCampaignContext(
 async function insertRecipientRows(
   campaignId: string,
   candidates: RecipientCandidate[],
-): Promise<{ id: string; leadId: string }[]> {
-  const out: { id: string; leadId: string }[] = [];
+): Promise<{ id: string; rowKey: string }[]> {
+  const out: { id: string; rowKey: string }[] = [];
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
     const slice = candidates.slice(i, i + BATCH_SIZE);
     // Recipients enter `queued` — the canonical pre-send state. Rolled
@@ -730,6 +744,12 @@ async function insertRecipientRows(
     // queued, subsequent edits to the source lead (rename, company
     // change) do NOT affect what this recipient receives. The send
     // batch reads from snapshot_merge_data.
+    //
+    // Phase 29 §5 — leadId may be null for static-imported list
+    // members (no lead row backs them). The campaignRecipients schema
+    // already allows nullable leadId; the rowKey returned below uses
+    // email-based fallback when leadId is null so the in-memory
+    // recipientByLead map stays consistent across both source types.
     const inserted = await db
       .insert(campaignRecipients)
       .values(
@@ -744,12 +764,13 @@ async function insertRecipientRows(
       .returning({
         id: campaignRecipients.id,
         leadId: campaignRecipients.leadId,
+        email: campaignRecipients.email,
       });
     for (const row of inserted) {
-      // `leadId` is nullable in the schema but always set here.
-      if (row.leadId) {
-        out.push({ id: row.id, leadId: row.leadId });
-      }
+      out.push({
+        id: row.id,
+        rowKey: recipientKey({ leadId: row.leadId, email: row.email }),
+      });
     }
   }
   return out;
@@ -814,14 +835,17 @@ async function sendBatch(input: SendBatchInput): Promise<number> {
   if (input.recipients.length === 0) return 0;
   const { sgMail } = getSendGrid();
   const personalizations = input.recipients.map((r) => {
-    const recipientId = input.recipientByLead.get(r.leadId) ?? "";
+    const recipientId = input.recipientByLead.get(recipientKey(r)) ?? "";
     return {
       to: [{ email: r.email }],
       dynamic_template_data: buildMergeData(r),
       custom_args: {
         campaign_id: input.campaign.id,
         recipient_id: recipientId,
-        lead_id: r.leadId,
+        // Phase 29 §5 — leadId may be null for static-imported
+        // recipients. Webhook reconciliation uses recipient_id; lead_id
+        // is informational.
+        lead_id: r.leadId ?? "",
       },
     };
   });

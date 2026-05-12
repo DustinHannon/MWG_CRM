@@ -9,6 +9,8 @@ import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import {
   marketingListMembers,
   marketingLists,
+  marketingStaticListMembers,
+  type MarketingListSourceEntity,
 } from "@/db/schema/marketing-lists";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -25,6 +27,12 @@ import {
 } from "@/lib/auth-helpers";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { refreshList } from "@/lib/marketing/lists/refresh";
+import {
+  bulkUpdateStaticListMembers,
+  deleteStaticListMembersById,
+  getStaticListMemberById,
+  updateStaticListMember,
+} from "@/lib/marketing/lists/static-members";
 import {
   type FilterDsl,
   filterDslSchema,
@@ -53,13 +61,52 @@ const listInputBaseSchema = z.object({
   filterDsl: filterDslSchema,
 });
 
-const listCreateSchema = listInputBaseSchema;
+const listCreateSchema = listInputBaseSchema.extend({
+  // Phase 29 §5 — caller may specify the source entity for dynamic
+  // lists. Defaults to 'leads' (the only wired source today).
+  sourceEntity: z
+    .enum(["leads", "contacts", "accounts", "opportunities", "mixed"])
+    .optional()
+    .default("leads"),
+});
 const listUpdateSchema = listInputBaseSchema.extend({
   id: z.string().uuid(),
   // Phase 27 §4.8 — OCC on list edits. List-edit UI passes the version
   // it loaded; the UPDATE refuses to write if another writer bumped it.
   // Optional only for programmatic API callers; the UI always passes.
   expectedVersion: z.number().int().nonnegative().optional(),
+  sourceEntity: z
+    .enum(["leads", "contacts", "accounts", "opportunities", "mixed"])
+    .optional(),
+});
+
+// Phase 29 §5 — static-imported list creation. No filter DSL needed;
+// members are populated by a separate import flow (Sub-agent C).
+const staticListCreateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .transform((v) => (v === "" || v === undefined ? null : v)),
+});
+
+const staticMemberUpdateSchema = z.object({
+  memberId: z.string().uuid(),
+  field: z.enum(["name", "email"]),
+  value: z.string().trim().max(500),
+});
+
+const staticMemberBulkUpdateSchema = z.object({
+  memberIds: z.array(z.string().uuid()).min(1).max(5000),
+  field: z.literal("name"),
+  value: z.string().trim().max(500).optional(),
+});
+
+const staticMemberRemoveSchema = z.object({
+  listId: z.string().uuid(),
+  memberIds: z.array(z.string().uuid()).min(1).max(5000),
 });
 
 const idSchema = z.string().uuid();
@@ -85,6 +132,9 @@ export async function createListAction(input: {
   name: string;
   description?: string;
   filterDsl: FilterDsl;
+  // Phase 29 §5 — explicit source entity for dynamic lists. Defaults
+  // to 'leads' if omitted, matching Phase 19 behavior.
+  sourceEntity?: MarketingListSourceEntity;
 }): Promise<ActionResult<{ id: string }>> {
   return withErrorBoundary({ action: "marketing.list.create" }, async () => {
     const user = await requireMarketingManager();
@@ -104,6 +154,10 @@ export async function createListAction(input: {
         name: parsed.data.name,
         description: parsed.data.description,
         filterDsl: parsed.data.filterDsl,
+        // Phase 29 §5 — explicit type tagging. Existing rows
+        // back-filled to 'dynamic' by the migration.
+        listType: "dynamic",
+        sourceEntity: parsed.data.sourceEntity,
         createdById: user.id,
         updatedById: user.id,
       })
@@ -441,6 +495,310 @@ export async function bulkAddLeadsToListAction(input: {
       revalidatePath(`/marketing/lists/${parsed.data.listId}`);
       revalidatePath("/marketing/lists");
       return { added };
+    },
+  );
+}
+
+// =============================================================================
+// Phase 29 §5 — Static-imported list actions
+//
+// Static lists are seeded by the Excel import flow (Sub-agent C) and
+// mass-edited from the static-list detail page. Each mutation gates on
+// `canMarketingListsEdit` OR creator-match per the brief's "edit own"
+// semantic (existing schema is single-boolean; creator check is
+// inline). Each per-row mutation writes one audit row so the forensic
+// trail stays granular even for bulk operations.
+// =============================================================================
+
+/**
+ * Permission gate for static-list member mutations. Mirrors the
+ * dynamic-list gate but additionally allows the list's creator to edit
+ * their own static lists without holding `canMarketingListsEdit`.
+ */
+async function requireStaticListEditAccess(
+  user: SessionUser,
+  listId: string,
+): Promise<{ id: string; createdById: string; isDeleted: boolean }> {
+  const [list] = await db
+    .select({
+      id: marketingLists.id,
+      createdById: marketingLists.createdById,
+      isDeleted: marketingLists.isDeleted,
+      listType: marketingLists.listType,
+    })
+    .from(marketingLists)
+    .where(eq(marketingLists.id, listId))
+    .limit(1);
+  if (!list || list.isDeleted) throw new NotFoundError("marketing list");
+  if (list.listType !== "static_imported") {
+    throw new ValidationError(
+      "This action is only valid for static-imported lists.",
+    );
+  }
+  if (user.isAdmin) return list;
+  const perms = await getPermissions(user.id);
+  const isCreator = list.createdById === user.id;
+  const hasEditAll = perms.canMarketingListsEdit || perms.canManageMarketing;
+  if (!hasEditAll && !isCreator) {
+    throw new ForbiddenError(
+      "You don't have permission to edit this list.",
+    );
+  }
+  return list;
+}
+
+/**
+ * Phase 29 §5 — Create a static-imported list row (no members yet).
+ * Sub-agent C's import flow inserts members afterwards via the
+ * `createStaticListMembers` lib helper.
+ *
+ * The list is created with an empty filter_dsl placeholder because
+ * the column is NOT NULL; resolution.ts branches on list_type before
+ * touching it.
+ */
+export async function createStaticListAction(input: {
+  name: string;
+  description?: string;
+}): Promise<ActionResult<{ id: string }>> {
+  return withErrorBoundary(
+    { action: "marketing.list.create" },
+    async () => {
+      const user = await requireMarketingManager();
+      const perms = await getPermissions(user.id);
+      if (
+        !user.isAdmin &&
+        !perms.canMarketingListsImport &&
+        !perms.canMarketingListsCreate
+      ) {
+        throw new ForbiddenError(
+          "You don't have permission to import static lists.",
+        );
+      }
+      const parsed = staticListCreateSchema.safeParse(input);
+      if (!parsed.success) {
+        const first = parsed.error.issues[0];
+        throw new ValidationError(
+          first
+            ? `${first.path.join(".") || "input"}: ${first.message}`
+            : "Invalid input.",
+        );
+      }
+
+      const [row] = await db
+        .insert(marketingLists)
+        .values({
+          name: parsed.data.name,
+          description: parsed.data.description,
+          // Placeholder DSL — never evaluated for static lists.
+          filterDsl: { combinator: "AND", rules: [] },
+          listType: "static_imported",
+          sourceEntity: null,
+          memberCount: 0,
+          createdById: user.id,
+          updatedById: user.id,
+        })
+        .returning({ id: marketingLists.id });
+      if (!row) throw new ValidationError("Failed to create list.");
+
+      await writeAudit({
+        actorId: user.id,
+        action: MARKETING_AUDIT_EVENTS.LIST_CREATE,
+        targetType: "marketing_list",
+        targetId: row.id,
+        after: {
+          name: parsed.data.name,
+          listType: "static_imported",
+        },
+      });
+
+      revalidatePath("/marketing/lists");
+      return { id: row.id };
+    },
+  );
+}
+
+/**
+ * Phase 29 §5 — Inline edit of a single static-list member's name or
+ * email. Triggered from the detail page after a 600ms debounce on
+ * blur.
+ */
+export async function updateStaticListMemberAction(input: {
+  memberId: string;
+  field: "name" | "email";
+  value: string;
+}): Promise<ActionResult<{ memberId: string }>> {
+  return withErrorBoundary(
+    { action: "marketing.list.member_edit" },
+    async () => {
+      const user = await requireSession();
+      const parsed = staticMemberUpdateSchema.safeParse(input);
+      if (!parsed.success) {
+        const first = parsed.error.issues[0];
+        throw new ValidationError(
+          first
+            ? `${first.path.join(".") || "input"}: ${first.message}`
+            : "Invalid input.",
+        );
+      }
+
+      const existing = await getStaticListMemberById(parsed.data.memberId);
+      if (!existing) throw new NotFoundError("static list member");
+
+      const list = await requireStaticListEditAccess(user, existing.listId);
+
+      const patch =
+        parsed.data.field === "email"
+          ? { email: parsed.data.value }
+          : { name: parsed.data.value };
+      const updated = await updateStaticListMember({
+        memberId: parsed.data.memberId,
+        patch,
+        actorId: user.id,
+      });
+      if (!updated) throw new NotFoundError("static list member");
+
+      await writeAudit({
+        actorId: user.id,
+        action: MARKETING_AUDIT_EVENTS.LIST_MEMBER_EDITED,
+        targetType: "marketing_static_list_member",
+        targetId: updated.id,
+        before: {
+          email: existing.email,
+          name: existing.name,
+        },
+        after: {
+          listId: list.id,
+          field: parsed.data.field,
+          value: parsed.data.value,
+        },
+      });
+
+      revalidatePath(`/marketing/lists/${list.id}`);
+      return { memberId: updated.id };
+    },
+  );
+}
+
+/**
+ * Phase 29 §5 — Bulk edit a single field across many static-list
+ * members. Only `name` is exposed for bulk write (bulk email rewrites
+ * risk uniqueness conflicts and are restricted to the per-row inline
+ * path).
+ */
+export async function bulkUpdateStaticListMembersAction(input: {
+  listId: string;
+  memberIds: string[];
+  field: "name";
+  value: string | null;
+}): Promise<ActionResult<{ updated: number }>> {
+  return withErrorBoundary(
+    { action: "marketing.list.bulk_edit" },
+    async () => {
+      const user = await requireSession();
+      const parsed = staticMemberBulkUpdateSchema.safeParse({
+        memberIds: input.memberIds,
+        field: input.field,
+        value: input.value ?? undefined,
+      });
+      if (!parsed.success) {
+        const first = parsed.error.issues[0];
+        throw new ValidationError(
+          first
+            ? `${first.path.join(".") || "input"}: ${first.message}`
+            : "Invalid input.",
+        );
+      }
+      const list = await requireStaticListEditAccess(user, input.listId);
+
+      const { updated } = await bulkUpdateStaticListMembers({
+        memberIds: parsed.data.memberIds,
+        field: "name",
+        value: parsed.data.value ?? null,
+        actorId: user.id,
+      });
+
+      await writeAudit({
+        actorId: user.id,
+        action: MARKETING_AUDIT_EVENTS.LIST_BULK_EDITED,
+        targetType: "marketing_list",
+        targetId: list.id,
+        after: {
+          fieldChanged: "name",
+          count: updated,
+        },
+      });
+
+      revalidatePath(`/marketing/lists/${list.id}`);
+      return { updated };
+    },
+  );
+}
+
+/**
+ * Phase 29 §5 — Remove one or many static-list members. Single-row
+ * delete + bulk delete share this action. Writes one audit row per
+ * removed member so the forensic trail captures every email that
+ * left the list.
+ */
+export async function removeStaticListMembersAction(input: {
+  listId: string;
+  memberIds: string[];
+}): Promise<ActionResult<{ removed: number }>> {
+  return withErrorBoundary(
+    { action: "marketing.list.member_remove" },
+    async () => {
+      const user = await requireSession();
+      const parsed = staticMemberRemoveSchema.safeParse(input);
+      if (!parsed.success) {
+        const first = parsed.error.issues[0];
+        throw new ValidationError(
+          first
+            ? `${first.path.join(".") || "input"}: ${first.message}`
+            : "Invalid input.",
+        );
+      }
+      const list = await requireStaticListEditAccess(user, parsed.data.listId);
+
+      // Fetch the rows up-front so the audit trail carries the email
+      // values that are about to disappear.
+      const existingRows = await db
+        .select({
+          id: marketingStaticListMembers.id,
+          email: marketingStaticListMembers.email,
+          name: marketingStaticListMembers.name,
+        })
+        .from(marketingStaticListMembers)
+        .where(
+          and(
+            eq(marketingStaticListMembers.listId, parsed.data.listId),
+            inArray(marketingStaticListMembers.id, parsed.data.memberIds),
+          ),
+        );
+
+      const { removed } = await deleteStaticListMembersById({
+        listId: parsed.data.listId,
+        memberIds: parsed.data.memberIds,
+      });
+
+      // Audit per row so bulk removes still produce forensic-grade
+      // entries. Best-effort: writeAudit swallows failures.
+      for (const row of existingRows) {
+        await writeAudit({
+          actorId: user.id,
+          action: MARKETING_AUDIT_EVENTS.LIST_MEMBER_REMOVED,
+          targetType: "marketing_static_list_member",
+          targetId: row.id,
+          before: {
+            listId: list.id,
+            email: row.email,
+            name: row.name,
+          },
+        });
+      }
+
+      revalidatePath(`/marketing/lists/${list.id}`);
+      revalidatePath("/marketing/lists");
+      return { removed };
     },
   );
 }

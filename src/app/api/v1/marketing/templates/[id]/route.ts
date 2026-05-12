@@ -6,6 +6,7 @@ import { withApi } from "@/lib/api/handler";
 import { errorResponse } from "@/lib/api/errors";
 import { writeAudit } from "@/lib/audit";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
+import { canEditTemplate, canViewTemplate } from "@/lib/marketing/templates";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,6 +31,10 @@ const updateSchema = z.object({
   unlayerDesignJson: z.record(z.unknown()).optional(),
   renderedHtml: z.string().optional(),
   status: z.enum(["draft", "ready", "archived"]).optional(),
+  // Phase 29 §4 — Scope is read-only on this surface; promote/demote
+  // goes through the in-app `changeTemplateScopeAction` so the OCC
+  // gate + audit-event are uniform. API callers wanting to flip
+  // visibility should re-create.
 });
 
 interface SerializedTemplate {
@@ -39,6 +44,8 @@ interface SerializedTemplate {
   subject: string;
   preheader: string | null;
   status: "draft" | "ready" | "archived";
+  scope: "global" | "personal";
+  source: string;
   sendgrid_template_id: string | null;
   sendgrid_version_id: string | null;
   created_by_id: string;
@@ -55,6 +62,8 @@ function serialize(t: typeof marketingTemplates.$inferSelect): SerializedTemplat
     subject: t.subject,
     preheader: t.preheader ?? null,
     status: t.status,
+    scope: t.scope,
+    source: t.source,
     sendgrid_template_id: t.sendgridTemplateId ?? null,
     sendgrid_version_id: t.sendgridVersionId ?? null,
     created_by_id: t.createdById,
@@ -66,7 +75,7 @@ function serialize(t: typeof marketingTemplates.$inferSelect): SerializedTemplat
 
 export const GET = withApi<{ id: string }>(
   { scope: "admin", action: "marketing.templates.get" },
-  async (_req, { params }) => {
+  async (_req, { key, params }) => {
     const [row] = await db
       .select()
       .from(marketingTemplates)
@@ -78,6 +87,18 @@ export const GET = withApi<{ id: string }>(
       )
       .limit(1);
     if (!row) return errorResponse(404, "NOT_FOUND", "Template not found");
+
+    // Phase 29 §4.4 — Visibility 404 for personal templates owned by
+    // someone other than the API key's owner. We deliberately return
+    // NOT_FOUND rather than FORBIDDEN to avoid leaking existence.
+    if (
+      !canViewTemplate({
+        template: { scope: row.scope, createdById: row.createdById },
+        userId: key.createdById,
+      })
+    ) {
+      return errorResponse(404, "NOT_FOUND", "Template not found");
+    }
     return Response.json(serialize(row));
   },
 );
@@ -113,6 +134,41 @@ export const PUT = withApi<{ id: string }>(
       .limit(1);
     if (!existing) {
       return errorResponse(404, "NOT_FOUND", "Template not found");
+    }
+
+    // Phase 29 §4.4/4.5 — visibility + edit gates. The API surface
+    // has no `canMarketingTemplatesEdit` of its own; it inherits the
+    // permission of the key's creator (the in-app user's
+    // permissions are the source of truth). For now we treat API
+    // keys as having the same edit rights their owner has — the
+    // simplest mapping that preserves the principle of least
+    // surprise.
+    if (
+      !canViewTemplate({
+        template: { scope: existing.scope, createdById: existing.createdById },
+        userId: key.createdById,
+      })
+    ) {
+      return errorResponse(404, "NOT_FOUND", "Template not found");
+    }
+    if (
+      !canEditTemplate({
+        template: { scope: existing.scope, createdById: existing.createdById },
+        userId: key.createdById,
+        // API keys carry no per-key edit permission; treat the
+        // creator-id match as the only edit signal at this layer.
+        // To "edit others" via API, the user must promote the
+        // template to global through the in-app flow first.
+        canMarketingTemplatesEdit: false,
+      })
+    ) {
+      return errorResponse(
+        403,
+        "FORBIDDEN",
+        existing.scope === "personal"
+          ? "Only the creator's API key can edit a personal template."
+          : "API keys cannot edit templates they didn't create. Use the in-app editor.",
+      );
     }
 
     // Mass-assignment guard — only the documented fields can be
@@ -183,12 +239,39 @@ export const DELETE = withApi<{ id: string }>(
       .select({
         id: marketingTemplates.id,
         isDeleted: marketingTemplates.isDeleted,
+        scope: marketingTemplates.scope,
+        createdById: marketingTemplates.createdById,
       })
       .from(marketingTemplates)
       .where(eq(marketingTemplates.id, params.id))
       .limit(1);
     if (!existing) {
       return errorResponse(404, "NOT_FOUND", "Template not found");
+    }
+    // Phase 29 §4 — same gates as PUT. Soft-delete is a write; only
+    // the creator (or admin in-app) can issue it via API.
+    if (
+      !canViewTemplate({
+        template: { scope: existing.scope, createdById: existing.createdById },
+        userId: key.createdById,
+      })
+    ) {
+      return errorResponse(404, "NOT_FOUND", "Template not found");
+    }
+    if (
+      !canEditTemplate({
+        template: { scope: existing.scope, createdById: existing.createdById },
+        userId: key.createdById,
+        canMarketingTemplatesEdit: false,
+      })
+    ) {
+      return errorResponse(
+        403,
+        "FORBIDDEN",
+        existing.scope === "personal"
+          ? "Only the creator's API key can delete a personal template."
+          : "API keys cannot delete templates they didn't create. Use the in-app editor.",
+      );
     }
     if (!existing.isDeleted) {
       await db

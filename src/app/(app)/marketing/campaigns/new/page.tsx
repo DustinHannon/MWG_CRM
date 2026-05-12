@@ -5,7 +5,9 @@ import { StandardPageHeader } from "@/components/standard";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingLists } from "@/db/schema/marketing-lists";
+import { requireSession } from "@/lib/auth-helpers";
 import { env } from "@/lib/env";
+import { templateVisibilityWhere } from "@/lib/marketing/templates";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 import { CampaignWizard } from "./_components/campaign-wizard";
 
@@ -29,6 +31,26 @@ interface Props {
  */
 export default async function NewCampaignPage({ searchParams }: Props) {
   const sp = await searchParams;
+  const user = await requireSession();
+
+  // Phase 29 §4 — Visibility filter on the template picker. Admins
+  // see everything; everyone else sees globals + their own personal
+  // rows. The visibility filter is composed in alongside the
+  // existing "ready" status gate so non-ready templates remain
+  // hidden from the picker regardless of scope.
+  const visibility = user.isAdmin
+    ? undefined
+    : templateVisibilityWhere(user.id);
+  const templateWhere = visibility
+    ? and(
+        eq(marketingTemplates.isDeleted, false),
+        eq(marketingTemplates.status, "ready"),
+        visibility,
+      )
+    : and(
+        eq(marketingTemplates.isDeleted, false),
+        eq(marketingTemplates.status, "ready"),
+      );
 
   // Templates the user can pick — only "ready" status is sendable.
   const templates = await db
@@ -41,12 +63,7 @@ export default async function NewCampaignPage({ searchParams }: Props) {
       updatedAt: marketingTemplates.updatedAt,
     })
     .from(marketingTemplates)
-    .where(
-      and(
-        eq(marketingTemplates.isDeleted, false),
-        eq(marketingTemplates.status, "ready"),
-      ),
-    )
+    .where(templateWhere)
     .orderBy(desc(marketingTemplates.updatedAt))
     .limit(200);
 

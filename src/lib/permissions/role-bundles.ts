@@ -40,6 +40,8 @@ const CREATOR_PERMS: MarketingPermissionKey[] = [
   "canMarketingListsDelete",
   "canMarketingListsRefresh",
   "canMarketingListsBulkAdd",
+  // Phase 29 §5 — Creators can import static lists from Excel.
+  "canMarketingListsImport",
   "canMarketingCampaignsCreate",
   "canMarketingCampaignsEdit",
   "canMarketingCampaignsSendTest",
@@ -57,6 +59,8 @@ const ADMIN_PERMS: MarketingPermissionKey[] = [
   ...CAMPAIGNER_PERMS,
   "canMarketingSuppressionsAdd",
   "canMarketingSuppressionsRemove",
+  // Phase 29 §7 — Admins can run the ClickDimensions template migration.
+  "canMarketingMigrationsRun",
 ];
 
 const SENDER_PERMS: MarketingPermissionKey[] = [
@@ -106,6 +110,9 @@ export const ALL_MARKETING_KEYS: MarketingPermissionKey[] = [
   "canMarketingSuppressionsRemove",
   "canMarketingReportsView",
   "canMarketingAuditView",
+  // Phase 29 §5 + §7 — static-list import + CD migrations admin.
+  "canMarketingListsImport",
+  "canMarketingMigrationsRun",
 ];
 
 /**

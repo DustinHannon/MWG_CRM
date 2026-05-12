@@ -710,6 +710,17 @@ export async function sendCampaignTestAction(input: {
       const campaign = await loadCampaign(parsed.data.id);
       if (campaign.isDeleted) throw new NotFoundError("campaign");
 
+      // Phase 29 §4.8 — campaign.templateId is now nullable (a draft
+      // can be left dangling after a personal-template delete). A
+      // test send against a dangling campaign has nothing to render;
+      // surface a Validation error so the wizard prompts the user to
+      // pick a new template before retrying.
+      if (!campaign.templateId) {
+        throw new ValidationError(
+          "This campaign has no template. Pick one before sending a test.",
+        );
+      }
+
       const [tpl] = await db
         .select({
           subject: marketingTemplates.subject,

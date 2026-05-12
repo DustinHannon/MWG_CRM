@@ -16,19 +16,29 @@ import { StandardEmptyState } from "@/components/standard";
 import type { FilterDsl } from "@/lib/security/filter-dsl";
 import { DslSummary } from "../_components/dsl-summary";
 import { ListDetailActions } from "../_components/list-detail-actions";
+import { StaticListMembersPanel } from "../_components/static-list-members-panel";
+import { listStaticListMembersForList } from "@/lib/marketing/lists/static-members";
 
 export const dynamic = "force-dynamic";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE_DYNAMIC = 25;
+const PAGE_SIZE_STATIC = 50;
 
 interface SearchParams {
   page?: string;
+  q?: string;
+  sort?: string;
+  dir?: string;
 }
 
 /**
- * Phase 21 — Marketing list detail. Header, DSL summary, member preview
- * table (paginated), and detail-page actions (refresh, edit, delete,
- * use in campaign).
+ * Phase 21 / Phase 29 §5 — Marketing list detail.
+ *
+ * Branches on `list_type`:
+ *   • 'dynamic'          → header pill "Dynamic", DSL summary, lead-joined
+ *                          member preview (existing Phase 21 behavior).
+ *   • 'static_imported'  → header pill "Static", inline-editable member
+ *                          table with mass-edit toolbar.
  */
 export default async function ListDetailPage({
   params,
@@ -47,6 +57,8 @@ export default async function ListDetailPage({
       name: marketingLists.name,
       description: marketingLists.description,
       filterDsl: marketingLists.filterDsl,
+      listType: marketingLists.listType,
+      sourceEntity: marketingLists.sourceEntity,
       memberCount: marketingLists.memberCount,
       lastRefreshedAt: marketingLists.lastRefreshedAt,
       isDeleted: marketingLists.isDeleted,
@@ -61,29 +73,7 @@ export default async function ListDetailPage({
 
   if (!list || list.isDeleted) notFound();
 
-  const offset = (page - 1) * PAGE_SIZE;
-  const memberRows = await db
-    .select({
-      leadId: marketingListMembers.leadId,
-      memberEmail: marketingListMembers.email,
-      addedAt: marketingListMembers.addedAt,
-      firstName: leads.firstName,
-      lastName: leads.lastName,
-      status: leads.status,
-      companyName: leads.companyName,
-    })
-    .from(marketingListMembers)
-    .leftJoin(leads, eq(leads.id, marketingListMembers.leadId))
-    .where(eq(marketingListMembers.listId, list.id))
-    .orderBy(desc(marketingListMembers.addedAt))
-    .limit(PAGE_SIZE)
-    .offset(offset);
-
-  const [{ total }] = await db
-    .select({ total: sql<number>`count(*)::int` })
-    .from(marketingListMembers)
-    .where(eq(marketingListMembers.listId, list.id));
-  const totalPages = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE));
+  const isStatic = list.listType === "static_imported";
 
   return (
     <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -97,9 +87,12 @@ export default async function ListDetailPage({
 
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">
-            {list.name}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold text-foreground">
+              {list.name}
+            </h1>
+            <ListTypePill listType={list.listType} />
+          </div>
           {list.description ? (
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               {list.description}
@@ -112,14 +105,24 @@ export default async function ListDetailPage({
               </span>{" "}
               {list.memberCount === 1 ? "recipient" : "recipients"}
             </span>
-            <span>
-              Last refreshed:{" "}
-              {list.lastRefreshedAt ? (
-                <UserTime value={list.lastRefreshedAt} />
-              ) : (
-                "Never"
-              )}
-            </span>
+            {!isStatic ? (
+              <span>
+                Last refreshed:{" "}
+                {list.lastRefreshedAt ? (
+                  <UserTime value={list.lastRefreshedAt} />
+                ) : (
+                  "Never"
+                )}
+              </span>
+            ) : null}
+            {!isStatic && list.sourceEntity ? (
+              <span>
+                Source:{" "}
+                <span className="font-medium text-foreground">
+                  {labelForSourceEntity(list.sourceEntity)}
+                </span>
+              </span>
+            ) : null}
             <span>Created by {list.createdByName ?? "—"}</span>
             <span>
               Updated <UserTime value={list.updatedAt} />
@@ -135,71 +138,171 @@ export default async function ListDetailPage({
             <Send className="h-4 w-4" aria-hidden />
             Use in campaign
           </Link>
-          <Link
-            href={`/marketing/lists/${list.id}/edit`}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 text-sm text-foreground/90 whitespace-nowrap transition hover:bg-muted"
-          >
-            <Pencil className="h-4 w-4" aria-hidden />
-            Edit
-          </Link>
-          <ListDetailActions listId={list.id} listName={list.name} />
+          {!isStatic ? (
+            <Link
+              href={`/marketing/lists/${list.id}/edit`}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 text-sm text-foreground/90 whitespace-nowrap transition hover:bg-muted"
+            >
+              <Pencil className="h-4 w-4" aria-hidden />
+              Edit
+            </Link>
+          ) : null}
+          <ListDetailActions
+            listId={list.id}
+            listName={list.name}
+            listType={list.listType}
+          />
         </div>
       </div>
 
-      <DslSummary dsl={list.filterDsl as FilterDsl} />
+      {isStatic ? (
+        <StaticListDetailBody
+          listId={list.id}
+          page={page}
+          search={sp.q ?? ""}
+          sort={sp.sort ?? "added"}
+          dir={sp.dir ?? "desc"}
+        />
+      ) : (
+        <DynamicListDetailBody
+          listId={list.id}
+          filterDsl={list.filterDsl as FilterDsl}
+          page={page}
+        />
+      )}
+    </div>
+  );
+}
+
+function ListTypePill({
+  listType,
+}: {
+  listType: "dynamic" | "static_imported";
+}) {
+  const label = listType === "dynamic" ? "Dynamic" : "Static";
+  return (
+    <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      {label}
+    </span>
+  );
+}
+
+function labelForSourceEntity(entity: string): string {
+  switch (entity) {
+    case "leads":
+      return "Leads";
+    case "contacts":
+      return "Contacts";
+    case "accounts":
+      return "Accounts";
+    case "opportunities":
+      return "Opportunities";
+    case "mixed":
+      return "Mixed";
+    default:
+      return entity;
+  }
+}
+
+async function DynamicListDetailBody({
+  listId,
+  filterDsl,
+  page,
+}: {
+  listId: string;
+  filterDsl: FilterDsl;
+  page: number;
+}) {
+  const offset = (page - 1) * PAGE_SIZE_DYNAMIC;
+  const memberRows = await db
+    .select({
+      leadId: marketingListMembers.leadId,
+      memberEmail: marketingListMembers.email,
+      addedAt: marketingListMembers.addedAt,
+      firstName: leads.firstName,
+      lastName: leads.lastName,
+      status: leads.status,
+      companyName: leads.companyName,
+    })
+    .from(marketingListMembers)
+    .leftJoin(leads, eq(leads.id, marketingListMembers.leadId))
+    .where(eq(marketingListMembers.listId, listId))
+    .orderBy(desc(marketingListMembers.addedAt))
+    .limit(PAGE_SIZE_DYNAMIC)
+    .offset(offset);
+
+  const [{ total }] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(marketingListMembers)
+    .where(eq(marketingListMembers.listId, listId));
+  const totalPages = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE_DYNAMIC));
+
+  return (
+    <>
+      <DslSummary dsl={filterDsl} />
 
       <div className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold text-foreground">Members</h2>
         {memberRows.length === 0 ? (
           <StandardEmptyState
             title="No members yet"
-            description="Click Refresh now to evaluate the filter against current leads."
+            description="Refresh now to evaluate the filter against current leads."
           />
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-muted/50 text-xs uppercase tracking-[0.05em] text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Name</th>
-                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Email</th>
-                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Company</th>
-                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Status</th>
-                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Added</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {memberRows.map((m) => {
-                  const name = m.firstName
-                    ? `${m.firstName}${m.lastName ? ` ${m.lastName}` : ""}`
-                    : "—";
-                  return (
-                    <tr key={m.leadId} className="hover:bg-accent/20">
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/leads/${m.leadId}`}
-                          className="font-medium text-foreground hover:underline"
-                        >
-                          {name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {m.memberEmail}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {m.companyName ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {m.status ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        <UserTime value={m.addedAt} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="bg-muted/50 text-xs uppercase tracking-[0.05em] text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                      Name
+                    </th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                      Email
+                    </th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                      Company
+                    </th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                      Added
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {memberRows.map((m) => {
+                    const name = m.firstName
+                      ? `${m.firstName}${m.lastName ? ` ${m.lastName}` : ""}`
+                      : "—";
+                    return (
+                      <tr key={m.leadId} className="hover:bg-accent/20">
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/leads/${m.leadId}`}
+                            className="font-medium text-foreground hover:underline"
+                          >
+                            {name}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {m.memberEmail}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {m.companyName ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {m.status ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          <UserTime value={m.addedAt} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -212,24 +315,71 @@ export default async function ListDetailPage({
             <div className="flex gap-2">
               {page > 1 ? (
                 <Link
-                  href={`/marketing/lists/${list.id}?page=${page - 1}`}
+                  href={`/marketing/lists/${listId}?page=${page - 1}`}
                   className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
                 >
-                  ← Previous
+                  Previous
                 </Link>
               ) : null}
               {page < totalPages ? (
                 <Link
-                  href={`/marketing/lists/${list.id}?page=${page + 1}`}
+                  href={`/marketing/lists/${listId}?page=${page + 1}`}
                   className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
                 >
-                  Next →
+                  Next
                 </Link>
               ) : null}
             </div>
           </nav>
         ) : null}
       </div>
-    </div>
+    </>
+  );
+}
+
+async function StaticListDetailBody({
+  listId,
+  page,
+  search,
+  sort,
+  dir,
+}: {
+  listId: string;
+  page: number;
+  search: string;
+  sort: string;
+  dir: string;
+}) {
+  const sortKey =
+    sort === "name" || sort === "email" || sort === "added"
+      ? (sort as "name" | "email" | "added")
+      : "added";
+  const sortDir = dir === "asc" ? "asc" : "desc";
+
+  const result = await listStaticListMembersForList(listId, {
+    page,
+    pageSize: PAGE_SIZE_STATIC,
+    search,
+    sortKey,
+    sortDir,
+  });
+
+  return (
+    <StaticListMembersPanel
+      listId={listId}
+      initialRows={result.rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        name: r.name,
+        createdAt: r.createdAt.toISOString(),
+      }))}
+      total={result.total}
+      page={result.page}
+      pageSize={result.pageSize}
+      totalPages={result.totalPages}
+      search={search}
+      sortKey={sortKey}
+      sortDir={sortDir}
+    />
   );
 }

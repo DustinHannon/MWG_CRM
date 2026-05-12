@@ -77,6 +77,10 @@ export async function GET(req: Request) {
           id: marketingLists.id,
           name: marketingLists.name,
           description: marketingLists.description,
+          // Phase 29 §5 — surface list_type + source_entity so the
+          // internal list-picker and integrations can branch UI.
+          listType: marketingLists.listType,
+          sourceEntity: marketingLists.sourceEntity,
           memberCount: marketingLists.memberCount,
           lastRefreshedAt: marketingLists.lastRefreshedAt,
           updatedAt: marketingLists.updatedAt,

@@ -1,0 +1,16 @@
+services:
+  extractor:
+    build: .
+    image: mwg-clickdimensions-migration:latest
+    container_name: mwg-cd-extractor
+    env_file:
+      - .env
+    volumes:
+      - ./storage.json:/app/storage.json
+      - ./extraction-state.json:/app/extraction-state.json
+    # Headed Playwright on Linux requires DISPLAY. Map the host's X
+    # socket in on AZ-UTIL-AICHAT, or run under xvfb-run.
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+    stdin_open: true
+    tty: true

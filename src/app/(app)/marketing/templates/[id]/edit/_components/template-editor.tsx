@@ -8,11 +8,13 @@ import { UnlayerEditor } from "@/components/marketing/unlayer-editor";
 import { useTemplateLock } from "@/hooks/marketing/use-template-lock";
 import {
   archiveTemplateAction,
+  changeTemplateScopeAction,
   sendTestTemplateAction,
   updateTemplateAction,
 } from "../../../actions";
 
 type TemplateStatus = "draft" | "ready" | "archived";
+type TemplateScope = "global" | "personal";
 
 interface InitialHolder {
   userId: string;
@@ -31,6 +33,14 @@ interface TemplateEditorProps {
   // skip `loadDesign` when the column is empty/null.
   initialDesign: unknown;
   initialStatus: TemplateStatus;
+  /** Phase 29 §4.3 — current visibility for the inline scope toggle. */
+  initialScope: TemplateScope;
+  /** Phase 29 §4.7 — OCC version for the scope-change action. */
+  initialVersion: number;
+  /** Phase 29 §4.7 — only the creator can change scope. */
+  isCreator: boolean;
+  /** Phase 29 §4.7 — global→personal demote needs this on top of creator. */
+  canMarketingTemplatesEdit: boolean;
   currentUserEmail: string;
   unlayerProjectId: number | null;
   unlayerConfigured: boolean;
@@ -53,12 +63,23 @@ export function TemplateEditor(props: TemplateEditorProps) {
   const [preheader, setPreheader] = useState(props.initialPreheader);
   const [description, setDescription] = useState(props.initialDescription);
   const [status, setStatus] = useState<TemplateStatus>(props.initialStatus);
+  // Phase 29 §4.3/4.7 — visibility radio state. `currentScope` is
+  // what's persisted; `pendingScope` is what the user has selected
+  // but not yet saved via the "Save visibility" button.
+  const [currentScope, setCurrentScope] = useState<TemplateScope>(
+    props.initialScope,
+  );
+  const [pendingScope, setPendingScope] = useState<TemplateScope>(
+    props.initialScope,
+  );
+  const [scopeVersion, setScopeVersion] = useState(props.initialVersion);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
   const [savePending, startSaveTransition] = useTransition();
   const [archivePending, startArchiveTransition] = useTransition();
   const [testPending, startTestTransition] = useTransition();
+  const [scopePending, startScopeTransition] = useTransition();
 
   const [testOpen, setTestOpen] = useState(false);
   const [testRecipient, setTestRecipient] = useState(props.currentUserEmail);
@@ -173,6 +194,49 @@ export function TemplateEditor(props: TemplateEditorProps) {
     });
   }
 
+  // Phase 29 §4.7 — Promote/demote handler. Server enforces the
+  // creator + canMarketingTemplatesEdit gates; the UI just hides the
+  // controls when the local props say they don't apply.
+  function handleSaveScope() {
+    setError(null);
+    setInfo(null);
+    if (pendingScope === currentScope) {
+      setInfo("Visibility is already set to that value.");
+      return;
+    }
+    startScopeTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", props.templateId);
+      fd.set("version", String(scopeVersion));
+      fd.set("newScope", pendingScope);
+      const result = await changeTemplateScopeAction(fd);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setCurrentScope(pendingScope);
+      setScopeVersion(scopeVersion + 1);
+      setInfo(
+        pendingScope === "global"
+          ? "Template is now visible to everyone with template permissions."
+          : "Template is now visible only to you.",
+      );
+      router.refresh();
+    });
+  }
+
+  // Visibility section visibility rules:
+  //   - Creator always sees the section (read-only display if they
+  //     can't toggle to the other side, e.g. trying to demote without
+  //     canMarketingTemplatesEdit).
+  //   - Non-creator non-admin sees only the current value (no radio).
+  //   - Admin always sees the radio.
+  const canChangeScope =
+    props.isAdmin || props.isCreator;
+  const canDemoteToPersonal =
+    props.isAdmin ||
+    (props.isCreator && props.canMarketingTemplatesEdit);
+
   // Replace editor mount with banner when locked.
   if (showInitialBanner && initialHolder) {
     return (
@@ -211,6 +275,16 @@ export function TemplateEditor(props: TemplateEditorProps) {
         savePending={savePending}
         onArchive={handleArchive}
         onOpenTest={() => setTestOpen(true)}
+      />
+
+      <VisibilitySection
+        currentScope={currentScope}
+        pendingScope={pendingScope}
+        onChangePending={setPendingScope}
+        onSave={handleSaveScope}
+        pending={scopePending}
+        canChange={canChangeScope}
+        canDemoteToPersonal={canDemoteToPersonal}
       />
 
       {error ? (
@@ -458,6 +532,128 @@ function TestSendModal({
         </div>
       </div>
     </div>
+  );
+}
+
+interface VisibilitySectionProps {
+  currentScope: TemplateScope;
+  pendingScope: TemplateScope;
+  onChangePending: (next: TemplateScope) => void;
+  onSave: () => void;
+  pending: boolean;
+  canChange: boolean;
+  canDemoteToPersonal: boolean;
+}
+
+/**
+ * Phase 29 §4.3/4.7 — Inline scope toggle on the editor page.
+ *
+ * Read-only when the viewer can't change scope (renders the current
+ * value with explanatory hint). Otherwise renders the radio + Save
+ * button. The "Global → Personal" option is disabled when the user
+ * lacks `canMarketingTemplatesEdit` (creator can promote freely, but
+ * demoting hides a shared template from everyone else and requires
+ * the edit gate).
+ */
+function VisibilitySection(props: VisibilitySectionProps) {
+  const dirty = props.pendingScope !== props.currentScope;
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Visibility
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground/80">
+            Controls who can see this template in the list and pick it
+            for a campaign.
+          </p>
+        </div>
+        {props.canChange && dirty ? (
+          <button
+            type="button"
+            onClick={props.onSave}
+            disabled={props.pending}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-60"
+          >
+            {props.pending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : null}
+            {props.pending ? "Saving…" : "Save visibility"}
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <VisibilityOption
+          value="global"
+          checked={props.pendingScope === "global"}
+          onChange={() => props.onChangePending("global")}
+          disabled={!props.canChange || props.pending}
+          label="Global"
+          hint="Visible to everyone with template permissions."
+        />
+        <VisibilityOption
+          value="personal"
+          checked={props.pendingScope === "personal"}
+          onChange={() => props.onChangePending("personal")}
+          // Demote disabled if the user can't demote. Promote-only
+          // creators get a visible-but-locked Personal option so they
+          // see why the toggle is unavailable.
+          disabled={
+            !props.canChange ||
+            props.pending ||
+            (props.currentScope === "global" && !props.canDemoteToPersonal)
+          }
+          label="Personal"
+          hint={
+            props.currentScope === "global" && !props.canDemoteToPersonal
+              ? "Requires edit permission to hide a global template."
+              : "Only you can see and use this template."
+          }
+        />
+      </div>
+    </section>
+  );
+}
+
+interface VisibilityOptionProps {
+  value: TemplateScope;
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  label: string;
+  hint: string;
+}
+
+function VisibilityOption(props: VisibilityOptionProps) {
+  return (
+    <label
+      className={`flex items-start gap-2 rounded-md border px-3 py-2 transition ${
+        props.checked
+          ? "border-ring/60 bg-accent/30"
+          : "border-border bg-input"
+      } ${
+        props.disabled
+          ? "cursor-not-allowed opacity-60"
+          : "cursor-pointer hover:bg-accent/15"
+      }`}
+    >
+      <input
+        type="radio"
+        name="visibility-scope"
+        value={props.value}
+        checked={props.checked}
+        onChange={props.onChange}
+        disabled={props.disabled}
+        className="mt-0.5 h-4 w-4 border-border text-primary focus:ring-ring/40"
+      />
+      <span className="flex flex-col gap-0.5">
+        <span className="text-sm font-medium text-foreground">
+          {props.label}
+        </span>
+        <span className="text-xs text-muted-foreground/80">{props.hint}</span>
+      </span>
+    </label>
   );
 }
 

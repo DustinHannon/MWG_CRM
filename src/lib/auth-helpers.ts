@@ -85,7 +85,11 @@ export type MarketingPermissionKey =
   | "canMarketingSuppressionsAdd"
   | "canMarketingSuppressionsRemove"
   | "canMarketingReportsView"
-  | "canMarketingAuditView";
+  | "canMarketingAuditView"
+  // Phase 29 §5 — gates the static-list Excel import path.
+  | "canMarketingListsImport"
+  // Phase 29 §7 — gates the ClickDimensions migrations admin UI.
+  | "canMarketingMigrationsRun";
 
 export type PermissionKey =
   | "canViewAllRecords"
@@ -250,6 +254,9 @@ export async function getPermissions(
       canMarketingSuppressionsRemove: false,
       canMarketingReportsView: false,
       canMarketingAuditView: false,
+      // Phase 29 §5 + §7 — static-list import + CD migrations admin.
+      canMarketingListsImport: false,
+      canMarketingMigrationsRun: false,
     };
   }
   const r = row[0];
@@ -291,5 +298,7 @@ export async function getPermissions(
     canMarketingSuppressionsRemove: r.canMarketingSuppressionsRemove,
     canMarketingReportsView: r.canMarketingReportsView,
     canMarketingAuditView: r.canMarketingAuditView,
+    canMarketingListsImport: r.canMarketingListsImport,
+    canMarketingMigrationsRun: r.canMarketingMigrationsRun,
   };
 }

@@ -156,6 +156,18 @@ export const permissions = pgTable("permissions", {
   canMarketingSuppressionsRemove: boolean("can_marketing_suppressions_remove").notNull().default(false),
   canMarketingReportsView: boolean("can_marketing_reports_view").notNull().default(false),
   canMarketingAuditView: boolean("can_marketing_audit_view").notNull().default(false),
+  // Phase 29 §5 — gates the static-list Excel import path on
+  // /marketing/lists/new/import. Granted by Creator / Campaigner /
+  // Admin role bundles.
+  canMarketingListsImport: boolean("can_marketing_lists_import")
+    .notNull()
+    .default(false),
+  // Phase 29 §7 — gates the ClickDimensions migrations admin UI at
+  // /admin/migrations. Added in Sub-agent B's migration for atomicity;
+  // wired by Sub-agent D's role-bundle update.
+  canMarketingMigrationsRun: boolean("can_marketing_migrations_run")
+    .notNull()
+    .default(false),
 });
 
 // =============================================================================
