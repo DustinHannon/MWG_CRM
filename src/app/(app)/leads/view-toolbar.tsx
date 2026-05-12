@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { AVAILABLE_COLUMNS, type ColumnKey } from "@/lib/view-constants";
+import { StandardConfirmDialog } from "@/components/standard/standard-confirm-dialog";
 import {
   subscribeToViewAction,
   unsubscribeFromViewAction,
@@ -12,6 +13,7 @@ import {
 import {
   createViewAction,
   deleteViewAction,
+  resetViewAction,
   setAdhocColumnsAction,
   trackViewSelection,
   updateViewAction,
@@ -30,12 +32,25 @@ export interface ViewSummary {
 export interface ViewToolbarProps {
   views: ViewSummary[];
   activeViewId: string;
+  /** Phase 28 §5 — name of the currently-active view, for the reset dialog. */
+  activeViewName: string;
   activeColumns: ColumnKey[];
   baseColumns: ColumnKey[];
   /** "saved:<uuid>" if active view is saved AND user has dirty state, else null. */
   savedDirtyId: string | null;
   /** True when activeColumns differs from baseColumns. */
   columnsModified: boolean;
+  /**
+   * Phase 28 §5 — broader modification flag covering URL-driven filter,
+   * sort, and search changes in addition to column drift. Drives the
+   * MODIFIED reset button's visibility.
+   */
+  viewModified: boolean;
+  /**
+   * Phase 28 §5 — which fields are modified (columns / search / filters /
+   * sort), for the audit-event payload emitted by `resetViewAction`.
+   */
+  modifiedFields: string[];
   /** Phase 25 §7.2 — saved-view ids the current user is subscribed to. */
   subscribedViewIds?: string[];
 }
@@ -53,10 +68,13 @@ export interface ViewToolbarProps {
 export function ViewToolbar({
   views,
   activeViewId,
+  activeViewName,
   activeColumns,
   baseColumns,
   savedDirtyId,
   columnsModified,
+  viewModified,
+  modifiedFields,
   subscribedViewIds,
 }: ViewToolbarProps) {
   const router = useRouter();
@@ -124,10 +142,46 @@ export function ViewToolbar({
       />
 
       {/* Modified badge + actions */}
-      {columnsModified ? (
-        <span className="rounded-full border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--priority-medium-fg)]">
-          Modified
-        </span>
+      {/*
+       * Phase 28 §5 — the MODIFIED badge is now a clickable button that
+       * opens a confirmation dialog to reset the view to its saved
+       * definition. Visual styling matches the prior <span> 1:1; the
+       * only additions are hover/focus/cursor affordances. `viewModified`
+       * is the broader flag (columns OR URL filter/sort/search drift).
+       */}
+      {viewModified ? (
+        <StandardConfirmDialog
+          trigger={
+            <button
+              type="button"
+              aria-label="Reset this view to its saved state"
+              className="rounded-full border border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--priority-medium-fg)] transition hover:bg-[var(--priority-medium-bg)]/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+            >
+              Modified
+            </button>
+          }
+          title="Reset to saved view?"
+          body={`This discards your column, filter, sort, and search changes to "${activeViewName}".`}
+          confirmLabel="Reset"
+          cancelLabel="Cancel"
+          tone="primary"
+          onConfirm={async () => {
+            // Fire-and-forget audit — don't block the navigation on the
+            // server round-trip; the action is best-effort.
+            void resetViewAction({
+              viewId: activeViewId,
+              viewName: activeViewName,
+              modifiedFields,
+            });
+            // Reset = navigate to the view with no other URL params. The
+            // page re-derives filters/columns/sort/search from the view's
+            // stored definition.
+            const params = new URLSearchParams();
+            params.set("view", activeViewId);
+            router.push(`/leads?${params.toString()}`);
+            toast.success("View reset.");
+          }}
+        />
       ) : null}
 
       {savedDirtyId && columnsModified ? (

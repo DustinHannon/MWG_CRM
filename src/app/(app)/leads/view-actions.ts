@@ -160,3 +160,44 @@ export async function setAdhocColumnsAction(
     await setAdhocColumns(user.id, result.columns);
   });
 }
+
+/**
+ * Phase 28 §5 — reset the current view to its saved definition.
+ *
+ * The client owns the URL navigation (`router.push('/leads?view=...')`);
+ * this action handles the server-side side-effects: clear adhoc columns
+ * when the active view is a built-in, and emit the audit event so the
+ * reset is forensically traceable.
+ */
+const resetSchema = z.object({
+  viewId: z.string(),
+  viewName: z.string(),
+  modifiedFields: z.array(z.string()),
+});
+
+export async function resetViewAction(
+  payload: z.infer<typeof resetSchema>,
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "view.reset_to_saved" }, async () => {
+    const user = await requireSession();
+    const parsed = resetSchema.parse(payload);
+    // Built-in views store user-side column choices in
+    // user_preferences.adhoc_columns. Clearing it here ensures the next
+    // render of the built-in view sees its native column defaults.
+    if (parsed.viewId.startsWith("builtin:")) {
+      await setAdhocColumns(user.id, null);
+    }
+    await writeAudit({
+      actorId: user.id,
+      action: "view.reset_to_saved",
+      targetType: "saved_view",
+      targetId: parsed.viewId.startsWith("saved:")
+        ? parsed.viewId.slice("saved:".length)
+        : parsed.viewId,
+      after: {
+        viewName: parsed.viewName,
+        modifiedFields: parsed.modifiedFields,
+      },
+    });
+  });
+}

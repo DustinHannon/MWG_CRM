@@ -208,6 +208,29 @@ export default async function LeadsPage({
     activeColumns.length !== baseColumns.length ||
     activeColumns.some((c, i) => baseColumns[i] !== c);
 
+  // Phase 28 §5 — broader modification detection covers URL-driven filter,
+  // sort, and search changes in addition to column drift. Used by the
+  // MODIFIED reset button so a click reverts the entire view state to the
+  // saved definition.
+  const viewModified =
+    columnsModified ||
+    Boolean(sp.q) ||
+    Boolean(sp.status) ||
+    Boolean(sp.rating) ||
+    Boolean(sp.source) ||
+    Boolean(sp.tag) ||
+    Boolean(sp.sort) ||
+    Boolean(sp.dir);
+
+  // Phase 28 §5 — which fields are modified, for the audit-event payload.
+  const modifiedFields: string[] = [];
+  if (columnsModified) modifiedFields.push("columns");
+  if (sp.q) modifiedFields.push("search");
+  if (sp.status || sp.rating || sp.source || sp.tag) {
+    modifiedFields.push("filters");
+  }
+  if (sp.sort || sp.dir) modifiedFields.push("sort");
+
   const savedDirtyId = activeView.source === "saved" ? activeView.id : null;
 
   return (
@@ -306,10 +329,13 @@ export default async function LeadsPage({
         <ViewToolbar
           views={allViews}
           activeViewId={activeViewParam}
+          activeViewName={activeView.name}
           activeColumns={activeColumns}
           baseColumns={baseColumns}
           savedDirtyId={savedDirtyId}
           columnsModified={columnsModified}
+          viewModified={viewModified}
+          modifiedFields={modifiedFields}
           subscribedViewIds={subscribedViewIds}
         />
       </div>
