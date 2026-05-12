@@ -13,5 +13,3 @@ export const OPPORTUNITY_STAGES = [
   "closed_won",
   "closed_lost",
 ] as const;
-
-export type OpportunityStage = (typeof OPPORTUNITY_STAGES)[number];

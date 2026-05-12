@@ -130,5 +130,3 @@ export function UserPanel({
   );
 }
 
-/** Re-export Lock for parent uses (settings page profile icons). */
-export { Lock };

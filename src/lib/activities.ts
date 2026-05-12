@@ -8,10 +8,6 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 
-export const ACTIVITY_KINDS_USER = ["note", "call", "task"] as const;
-// "email" and "meeting" are wired in Phase 7 via Graph.
-export type UserActivityKind = (typeof ACTIVITY_KINDS_USER)[number];
-
 export const noteSchema = z.object({
   leadId: z.string().uuid(),
   body: z.string().trim().min(1, "Note body is required").max(20_000),

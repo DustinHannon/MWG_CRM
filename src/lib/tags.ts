@@ -1,15 +1,9 @@
 import "server-only";
 import { and, eq, ilike, inArray, sql } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "@/db";
-import { leadTags, tags, TAG_COLORS, type TagColor } from "@/db/schema/tags";
+import { leadTags, tags, type TagColor } from "@/db/schema/tags";
 import { writeAudit } from "@/lib/audit";
 import { ValidationError } from "@/lib/errors";
-
-export const tagInputSchema = z.object({
-  name: z.string().trim().min(1).max(60),
-  color: z.enum(TAG_COLORS).optional(),
-});
 
 export type TagRow = typeof tags.$inferSelect;
 

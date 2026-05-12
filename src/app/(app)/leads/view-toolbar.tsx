@@ -513,8 +513,6 @@ function SaveViewDialog({
   );
 }
 
-// Re-export Link in case the toolbar grows (keeps tree-shaking happy).
-export { Link };
 
 /**
  * Phase 25 §7.2 — Subscribe / Unsubscribe affordance for the active
