@@ -238,7 +238,7 @@ function RadioRow({ name, value, options, onChange, disabled }: RadioRowProps) {
         <label
           key={o.value}
           className={
-            "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition " +
+            "relative flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition " +
             (value === o.value
               ? "border-primary/40 bg-primary/15 text-foreground"
               : "border-glass-border bg-input/40 text-muted-foreground hover:border-glass-border hover:bg-accent/30")
