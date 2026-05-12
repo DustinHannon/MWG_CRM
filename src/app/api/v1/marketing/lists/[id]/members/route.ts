@@ -29,7 +29,7 @@ const querySchema = z.object({
 });
 
 /**
- * Phase 21 — Paginated members of a marketing list. JOINs leads so the
+ * Paginated members of a marketing list. JOINs leads so the
  * caller gets first/last name and status without a second round trip.
  */
 export async function GET(

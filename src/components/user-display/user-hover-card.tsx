@@ -8,7 +8,7 @@ interface UserHoverCardProps {
 }
 
 /**
- * Phase 9B — hover-card body shown when a UserChip is hovered. Server
+ * hover-card body shown when a UserChip is hovered. Server
  * component: fetched on demand, in-process cached for 60s in
  * getUserProfileSummary, so dozens of chips on one page issue at most
  * one DB hit per user during the cache window.

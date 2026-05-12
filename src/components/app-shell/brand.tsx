@@ -4,9 +4,9 @@ import { MWG_LOGO_SVG } from "./mwg-logo-svg";
 
 /**
  * Brand header at the top of the sidebar. Renders
- *   [MWG corporate logo — silhouette in currentColor + navy accent]
- *   MORGAN WHITE GROUP
- *   MWG CRM[ <subtitle>]
+ * [MWG corporate logo — silhouette in currentColor + navy accent]
+ * MORGAN WHITE GROUP
+ * MWG CRM[ <subtitle>]
  *
  * The logo asset (`public/brand/mwg-logo.svg`) ships with white
  * silhouette paths PLUS a #00205C navy accent. An `<img>` rendering
@@ -24,7 +24,7 @@ import { MWG_LOGO_SVG } from "./mwg-logo-svg";
  * and a left-aligned 64 px logo with a centered title underneath
  * looks unbalanced.
  *
- * Phase 13 — when the sidebar is collapsed (`collapsed=true`) only
+ * when the sidebar is collapsed (`collapsed=true`) only
  * the logo glyph renders at a smaller size; the wordmark and subtitle
  * are hidden so the 64px rail stays compact.
  */

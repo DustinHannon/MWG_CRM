@@ -3,7 +3,7 @@ import { openapiZ as z, registry } from "@/lib/openapi/registry";
 import { paginatedListSchema } from "./schemas";
 
 /**
- * Phase 13 — Task schemas for /api/v1/tasks. Synthetic examples only.
+ * Task schemas for /api/v1/tasks. Synthetic examples only.
  */
 
 export const TASK_STATUSES = [

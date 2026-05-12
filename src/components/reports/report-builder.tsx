@@ -22,7 +22,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { ReportRunner } from "./report-runner";
 
 /**
- * Phase 11 — report builder client. Single page; sections gated by
+ * report builder client. Single page; sections gated by
  * entity selection. Live preview is debounced 300ms via the preview
  * API (the same executeReport path the saved runner uses).
  */
@@ -219,7 +219,7 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_1fr]">
-      {/* Phase 12 Sub-E — desktop-first banner. The builder is
+      {/* desktop-first banner. The builder is
           authored against >=1024px viewports; below lg the grid
           collapses to a single column but the side-by-side preview
           loses its value. The banner sets expectations rather than

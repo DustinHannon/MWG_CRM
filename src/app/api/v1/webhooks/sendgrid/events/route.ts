@@ -18,28 +18,28 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * Phase 19 + 20 — SendGrid Event Webhook receiver.
+ * SendGrid Event Webhook receiver.
  *
  * Public endpoint at /api/v1/webhooks/sendgrid/events. Auth is by ECDSA
  * signature (Signed Event Webhook). The CSP and proxy auth bypass for
- * /api/v1/* are already in place from Phase 13.
+ * /api/v1/* are already in place.
  *
- * Phase 20 hardening on every request:
- *   1. Body cap — Content-Length and read length both ≤ 1 MiB. SendGrid
- *      batches well under 100 KB; the cap exists to bound malicious
- *      payloads and prevent function-time exhaustion.
- *   2. Per-IP sliding-window rate limit at
- *      `RATE_LIMIT_WEBHOOK_PER_MINUTE`. Signature verification remains
- *      authoritative; the limit just prevents an unauthenticated client
- *      from forcing us to do ECDSA work in a tight loop.
- *   3. Timestamp freshness window of
- *      `WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS` (default 300s). The
- *      signature alone does NOT prevent replay; this does.
- *   4. ECDSA signature verification (existing).
- *   5. Per-event idempotency on `sg_event_id` via
- *      `webhook_event_dedupe`. SendGrid retries non-2xx for 24h; this
- *      ensures a transient downstream failure cannot inflate counters
- *      or audit-log noise on retry.
+ * hardening on every request:
+ * 1. Body cap — Content-Length and read length both ≤ 1 MiB. SendGrid
+ * batches well under 100 KB; the cap exists to bound malicious
+ * payloads and prevent function-time exhaustion.
+ * 2. Per-IP sliding-window rate limit at
+ * `RATE_LIMIT_WEBHOOK_PER_MINUTE`. Signature verification remains
+ * authoritative; the limit just prevents an unauthenticated client
+ * from forcing us to do ECDSA work in a tight loop.
+ * 3. Timestamp freshness window of
+ * `WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS` (default 300s). The
+ * signature alone does NOT prevent replay; this does.
+ * 4. ECDSA signature verification (existing).
+ * 5. Per-event idempotency on `sg_event_id` via
+ * `webhook_event_dedupe`. SendGrid retries non-2xx for 24h; this
+ * ensures a transient downstream failure cannot inflate counters
+ * or audit-log noise on retry.
  *
  * Every reject path emits a `marketing.security.webhook.*` audit row
  * via `writeSystemAudit` so SOC 2 has a forensic trail.
@@ -53,7 +53,7 @@ export const maxDuration = 60;
 const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
 
 export async function POST(req: Request): Promise<Response> {
-  // Phase 22 F-D2 — top-level safety net. Anything thrown that escapes
+  // D2 — top-level safety net. Anything thrown that escapes
   // the typed reject paths below becomes a 500 with audit row, not an
   // uncaught Vercel function exception (which would skip our forensic
   // trail and surface as an opaque infra error in SendGrid's retry queue).
@@ -150,7 +150,7 @@ async function handlePost(req: Request): Promise<Response> {
   const { signature, timestamp } = readSignatureHeaders(req.headers);
 
   // 3. Timestamp freshness — independent of signature so a bogus
-  //    timestamp is rejected before we spend ECDSA cycles.
+  // timestamp is rejected before we spend ECDSA cycles.
   try {
     verifyTimestampFreshness(timestamp);
   } catch (err) {
@@ -222,8 +222,8 @@ async function handlePost(req: Request): Promise<Response> {
   }
 
   // 5. Per-event idempotency. Claim each `sg_event_id` exactly once.
-  //    Duplicate events return success without reprocessing — SendGrid
-  //    treats anything 2xx as acked, so this halts retry storms cleanly.
+  // Duplicate events return success without reprocessing — SendGrid
+  // treats anything 2xx as acked, so this halts retry storms cleanly.
   let succeeded = 0;
   let failed = 0;
   let duplicates = 0;

@@ -6,17 +6,17 @@ import { withRetry } from "@/lib/marketing/with-retry";
 import { getSendGrid } from "./client";
 
 /**
- * Phase 21 — Push the template designer's exported HTML to SendGrid as a
+ * Push the template designer's exported HTML to SendGrid as a
  * Dynamic Template version. The CRM keeps the canonical `unlayer_design_json`
  * + `rendered_html`; SendGrid keeps the Dynamic Template id + version id so
  * the marketing send path can use `template_id` + `dynamic_template_data`
  * instead of inlining HTML on every send.
  *
  * Flow:
- *   - First save: POST /v3/templates → captures `id` (template id),
- *     then POST /v3/templates/{id}/versions → captures the version id.
- *   - Subsequent saves: POST /v3/templates/{id}/versions only. The
- *     existing template id is preserved.
+ * First save: POST /v3/templates → captures `id` (template id),
+ * then POST /v3/templates/{id}/versions → captures the version id.
+ * Subsequent saves: POST /v3/templates/{id}/versions only. The
+ * existing template id is preserved.
  *
  * Auditing: callers (sub-agent B's actions) own the `writeAudit` for
  * `marketing.template.pushed_to_sendgrid` so the actor + before/after

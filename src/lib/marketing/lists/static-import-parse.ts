@@ -4,7 +4,7 @@ import ExcelJS from "exceljs";
 import { z } from "zod";
 
 /**
- * Phase 29 §6 — Static-list Excel import parser.
+ * Static-list Excel import parser.
  *
  * Reads a 2-column workbook (`email` required, `name` optional),
  * validates each row, and returns a structured payload that the
@@ -46,11 +46,11 @@ const NAME_ALIASES = new Set(
 
 /**
  * Per-row import status:
- *   • `ok`        — passes validation; inserted at commit time.
- *   • `invalid`   — bad email or other validation failure; skipped at
- *                   commit time (already counted in `failedRows`).
- *   • `duplicate` — collides with another row in this file OR with an
- *                   existing list member; skipped at commit time.
+ * • `ok` — passes validation; inserted at commit time.
+ * • `invalid` — bad email or other validation failure; skipped at
+ * commit time (already counted in `failedRows`).
+ * • `duplicate` — collides with another row in this file OR with an
+ * existing list member; skipped at commit time.
  */
 export type StaticImportRowStatus = "ok" | "invalid" | "duplicate";
 

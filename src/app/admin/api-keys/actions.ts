@@ -19,7 +19,7 @@ import {
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
- * Phase 13 — admin server actions for /admin/api-keys.
+ * admin server actions for /admin/api-keys.
  *
  * Plaintext tokens are returned ONCE from `generateApiKeyAction`. They
  * are never persisted or returned again; the caller must capture the

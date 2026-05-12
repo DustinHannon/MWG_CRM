@@ -13,7 +13,7 @@ import {
 import { FilterRuleRow } from "./filter-rule-row";
 
 /**
- * Phase 21 — Top-level filter DSL builder.
+ * Top-level filter DSL builder.
  *
  * Holds local state for combinator + rules, validates via
  * `filterDslSchema.safeParse` on every change, and emits the parsed DSL

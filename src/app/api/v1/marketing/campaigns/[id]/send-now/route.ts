@@ -15,10 +15,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — POST /api/v1/marketing/campaigns/{id}/send-now
+ * POST /api/v1/marketing/campaigns/{id}/send-now
  *
  * State transition: draft|scheduled → sending. Kicks off the SendGrid
- * batch via Sub-agent A's `sendCampaign(id)` helper. Rate-limited per
+ * batch via Sub-agent A's `sendCampaign(id)` helper. Rate-limited
  * caller key by the env budget.
  */
 

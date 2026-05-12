@@ -10,7 +10,7 @@ import { RemapClient } from "./_components/remap-client";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 25 §7.5 — admin claim-and-remap tool for
+ * admin claim-and-remap tool for
  * activities.imported_by_name.
  *
  * Imported D365 activities sometimes carry a "By: <name>" string
@@ -54,7 +54,7 @@ export default async function ClaimAndRemapPage() {
       <BreadcrumbsSetter
         crumbs={[
           { label: "Admin", href: "/admin" },
-          // Phase 25 §7.5 follow-up — /admin/imports parent route
+          // /admin/imports parent route
           // doesn't exist yet; render the segment as plain text so
           // RSC prefetch doesn't 404 against a nonexistent path.
           { label: "Imports" },

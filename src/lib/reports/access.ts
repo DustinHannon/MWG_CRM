@@ -12,17 +12,17 @@ import { getPermissions } from "@/lib/auth-helpers";
 import { isValidField, REPORT_ENTITIES } from "./schemas";
 
 /**
- * Phase 11 — report execution.
+ * report execution.
  *
  * Three rules, in priority order:
  *
- *   1. **Access:** the viewer must be allowed to view the report
- *      definition (owner, builtin, or shared+enabled).
- *   2. **Soft-delete:** archived rows are never returned.
- *   3. **Scope:** the result set is limited to rows the *viewer* is
- *      allowed to see — never the report author's broader scope. A
- *      salesperson opening an admin's "All Pipeline" report sees only
- *      their own pipeline.
+ * 1. **Access:** the viewer must be allowed to view the report
+ * definition (owner, builtin, or shared+enabled).
+ * 2. **Soft-delete:** archived rows are never returned.
+ * 3. **Scope:** the result set is limited to rows the *viewer* is
+ * allowed to see — never the report author's broader scope. A
+ * salesperson opening an admin's "All Pipeline" report sees only
+ * their own pipeline.
  *
  * Returns either a flat array (no group_by) or aggregated rows.
  *
@@ -48,7 +48,7 @@ const MAX_ROWS = 5000;
 const PREVIEW_ROWS = 100;
 
 /* ---------------------------------------------------------------------- */
-/* Identifier safety                                                      */
+/* Identifier safety */
 /* ---------------------------------------------------------------------- */
 
 function escapeIdent(s: string): string {
@@ -60,7 +60,7 @@ function quote(ident: string): string {
 }
 
 /* ---------------------------------------------------------------------- */
-/* Public API                                                             */
+/* Public API */
 /* ---------------------------------------------------------------------- */
 
 export async function executeReport(
@@ -116,7 +116,7 @@ export async function executeReport(
 }
 
 /* ---------------------------------------------------------------------- */
-/* Access gating                                                          */
+/* Access gating */
 /* ---------------------------------------------------------------------- */
 
 /**
@@ -136,7 +136,7 @@ export async function assertCanViewReport(
 ): Promise<void> {
   if (report.isDeleted) throw new ForbiddenError("Report unavailable.");
 
-  // Phase 24 — marketing-entity gate. Applied BEFORE owner/builtin/shared
+  // marketing-entity gate. Applied BEFORE owner/builtin/shared
   // checks so a non-marketing user can't bypass via a shared-report or
   // builtin marketing report.
   const entityType = report.entityType as ReportEntityType;
@@ -165,7 +165,7 @@ export async function assertCanEditReport(
     throw new ForbiddenError("Built-in reports cannot be edited.");
   }
   // Marketing-entity reports require the marketing permission to edit
-  // — same gate as view.
+  // same gate as view.
   const entityType = report.entityType as ReportEntityType;
   if (
     (MARKETING_REPORT_ENTITY_TYPES as readonly string[]).includes(entityType)
@@ -194,7 +194,7 @@ export async function assertCanDeleteReport(
 }
 
 /* ---------------------------------------------------------------------- */
-/* Where-clause builders                                                  */
+/* Where-clause builders */
 /* ---------------------------------------------------------------------- */
 
 async function buildViewerScope(
@@ -230,7 +230,7 @@ async function buildViewerScope(
 /**
  * Filter shape we accept (matches the builder UI for v1):
  *
- *   { status: { in: ["new", "contacted"] }, amount: { gte: 1000 } }
+ * { status: { in: ["new", "contacted"] }, amount: { gte: 1000 } }
  *
  * Each filter key must be a whitelisted column on the entity. Values
  * are pushed onto the shared `params` array; the returned strings
@@ -286,7 +286,7 @@ function buildFilterClauses(
 }
 
 /* ---------------------------------------------------------------------- */
-/* Flat query (no group_by, no aggregations)                              */
+/* Flat query (no group_by, no aggregations) */
 /* ---------------------------------------------------------------------- */
 
 async function runFlatQuery(
@@ -321,7 +321,7 @@ async function runFlatQuery(
 }
 
 /* ---------------------------------------------------------------------- */
-/* Aggregate query (group_by + metrics)                                   */
+/* Aggregate query (group_by + metrics) */
 /* ---------------------------------------------------------------------- */
 
 async function runAggregateQuery(

@@ -12,15 +12,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Single-template REST.
+ * Single-template REST.
  *
- *   GET     read one
- *   PUT     update — mass-assignment guard limits the patch surface
- *           to name/description/subject/preheader/unlayerDesignJson/
- *           renderedHtml/status. Lock fence and audit live in the
- *           server-action equivalent; this REST surface is a
- *           lightweight admin tool for scripting.
- *   DELETE  soft-delete (sets isDeleted, deletedAt, archives)
+ * GET read one
+ * PUT update — mass-assignment guard limits the patch surface
+ * to name/description/subject/preheader/unlayerDesignJson/
+ * renderedHtml/status. Lock fence and audit live in the
+ * server-action equivalent; this REST surface is a
+ * lightweight admin tool for scripting.
+ * DELETE soft-delete (sets isDeleted, deletedAt, archives)
  */
 
 const updateSchema = z.object({
@@ -31,7 +31,7 @@ const updateSchema = z.object({
   unlayerDesignJson: z.record(z.unknown()).optional(),
   renderedHtml: z.string().optional(),
   status: z.enum(["draft", "ready", "archived"]).optional(),
-  // Phase 29 §4 — Scope is read-only on this surface; promote/demote
+  // Scope is read-only on this surface; promote/demote
   // goes through the in-app `changeTemplateScopeAction` so the OCC
   // gate + audit-event are uniform. API callers wanting to flip
   // visibility should re-create.
@@ -88,7 +88,7 @@ export const GET = withApi<{ id: string }>(
       .limit(1);
     if (!row) return errorResponse(404, "NOT_FOUND", "Template not found");
 
-    // Phase 29 §4.4 — Visibility 404 for personal templates owned by
+    // Visibility 404 for personal templates owned by
     // someone other than the API key's owner. We deliberately return
     // NOT_FOUND rather than FORBIDDEN to avoid leaking existence.
     if (
@@ -136,7 +136,7 @@ export const PUT = withApi<{ id: string }>(
       return errorResponse(404, "NOT_FOUND", "Template not found");
     }
 
-    // Phase 29 §4.4/4.5 — visibility + edit gates. The API surface
+    // visibility + edit gates. The API surface
     // has no `canMarketingTemplatesEdit` of its own; it inherits the
     // permission of the key's creator (the in-app user's
     // permissions are the source of truth). For now we treat API
@@ -202,7 +202,7 @@ export const PUT = withApi<{ id: string }>(
     if (!updated) {
       return errorResponse(500, "INTERNAL_ERROR", "Failed to update template");
     }
-    // Phase 22 — audit parity with the (app)/marketing/templates server
+    // audit parity with the (app)/marketing/templates server
     // action. Diff captured as before/after of the patched fields only;
     // the full row is not snapshot to keep audit_log JSONB compact.
     await writeAudit({
@@ -248,7 +248,7 @@ export const DELETE = withApi<{ id: string }>(
     if (!existing) {
       return errorResponse(404, "NOT_FOUND", "Template not found");
     }
-    // Phase 29 §4 — same gates as PUT. Soft-delete is a write; only
+    // same gates as PUT. Soft-delete is a write; only
     // the creator (or admin in-app) can issue it via API.
     if (
       !canViewTemplate({
@@ -285,7 +285,7 @@ export const DELETE = withApi<{ id: string }>(
           updatedAt: new Date(),
         })
         .where(eq(marketingTemplates.id, params.id));
-      // Phase 22 — audit parity with the (app)/marketing/templates
+      // audit parity with the (app)/marketing/templates
       // server action. The single-template GET selects only id +
       // isDeleted, so we don't carry a name into `before`.
       await writeAudit({

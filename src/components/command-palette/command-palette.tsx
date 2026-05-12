@@ -39,7 +39,7 @@ const TYPE_ICONS = {
 } as const;
 
 /**
- * Phase 3I — Cmd+K palette mounted at the app shell. Shows quick
+ * Cmd+K palette mounted at the app shell. Shows quick
  * actions + recent records when query is empty; cross-entity search
  * results when query is non-empty.
  */
@@ -143,7 +143,7 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
 
   // The portal mounts on document.body, but globals.css has
   //
-  //   body > * { position: relative; z-index: 1; }
+  // body > * { position: relative; z-index: 1; }
   //
   // (a sibling rule for the `body::before` noise overlay). That
   // selector overrides our `position: fixed`, which is why the

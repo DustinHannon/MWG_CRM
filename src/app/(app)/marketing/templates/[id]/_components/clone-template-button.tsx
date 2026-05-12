@@ -11,7 +11,7 @@ interface CloneTemplateButtonProps {
 }
 
 /**
- * Phase 29 §4.6 — "Clone to personal" trigger on the template detail
+ * "Clone to personal" trigger on the template detail
  * page. Posts to the clone server action and, on success, navigates
  * to the editor for the new (personal) row so the marketer can start
  * iterating immediately.

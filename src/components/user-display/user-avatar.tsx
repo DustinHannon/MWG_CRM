@@ -25,16 +25,16 @@ interface UserAvatarProps {
 }
 
 /**
- * Phase 9B canonical user avatar. Wraps the existing `<Avatar>` primitive
+ * canonical user avatar. Wraps the existing `<Avatar>` primitive
  * (which already handles the `/api/users/[id]/avatar` proxy URL when
  * `src` is non-null and the deterministic-color initials fallback when
  * `src` is null).
  *
  * Use semantic sizes:
- *  - xs (20px): Kanban card chips, dense pills
- *  - sm (28px): table rows, default chip
- *  - md (40px): hover-card header, "Owned by" feature card
- *  - lg (80px): /users/[id] profile header
+ * xs (20px): Kanban card chips, dense pills
+ * sm (28px): table rows, default chip
+ * md (40px): hover-card header, "Owned by" feature card
+ * lg (80px): /users/[id] profile header
  */
 export function UserAvatar({
   user,

@@ -6,7 +6,7 @@ import {
 } from "@/db/schema/saved-reports";
 
 /**
- * Phase 11 — Zod request schemas for the report API surface.
+ * Zod request schemas for the report API surface.
  *
  * Kept in a separate file from `schemas.ts` (which holds entity-field
  * metadata) to avoid bundling Zod into client components that only need

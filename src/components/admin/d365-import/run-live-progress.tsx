@@ -13,18 +13,18 @@ import {
 } from "./use-run-realtime";
 
 /**
- * Phase 23 — Sticky live-progress panel for the run detail page.
+ * Sticky live-progress panel for the run detail page.
  *
  * Subscribes to `d365-import-run:<runId>` Realtime broadcasts via
  * `useRunRealtime`. Falls back to 5-second polling on Realtime
  * failure (no Supabase env, channel error, etc.).
  *
  * Layout (top→bottom):
- *   1. Status pill + halt-reason chip (if paused)
- *   2. Current operation text (e.g. "Mapping batch #3 — 42/100")
- *   3. 7-counter records row
- *      (fetched / mapped / approved / rejected / committed / skipped / failed)
- *   4. Log scroll (last 10, expand to detail; errors persist until dismissed)
+ * 1. Status pill + halt-reason chip (if paused)
+ * 2. Current operation text (e.g. "Mapping batch #3 — 42/100")
+ * 3. 7-counter records row
+ * (fetched / mapped / approved / rejected / committed / skipped / failed)
+ * 4. Log scroll (last 10, expand to detail; errors persist until dismissed)
  *
  * Server passes the initial snapshot (from DB) so the panel renders
  * instantly; Realtime takes over for subsequent updates.

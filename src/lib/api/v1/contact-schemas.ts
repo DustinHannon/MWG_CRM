@@ -3,7 +3,7 @@ import { openapiZ as z, registry } from "@/lib/openapi/registry";
 import { paginatedListSchema } from "./schemas";
 
 /**
- * Phase 13 — Contact schemas for /api/v1/contacts. Synthetic examples only.
+ * Contact schemas for /api/v1/contacts. Synthetic examples only.
  */
 
 export const ContactSchema = registry.register(

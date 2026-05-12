@@ -13,7 +13,7 @@ import { marketingLists } from "./marketing-lists";
 import { users } from "./users";
 
 /**
- * Phase 29 §6 — Status for static-list Excel/CSV imports. Mirrors the
+ * Status for static-list Excel/CSV imports. Mirrors the
  * existing `import_status` enum in `imports.ts` but kept distinct so
  * the leads-import lifecycle and the static-list-import lifecycle can
  * evolve independently.
@@ -34,18 +34,18 @@ export const listImportRunStatusEnum = pgEnum("list_import_run_status", [
 ]);
 
 /**
- * Phase 29 §6 — Static-list Excel import worklog.
+ * Static-list Excel import worklog.
  *
  * Mirrors `import_jobs` columns but FK'd to a specific
  * `marketing_lists` row so a list can have multiple imports over time
  * and an in-progress run can be resumed by the originating user.
  *
  * `errors` JSONB shape (per failed / flagged row):
- *   { row: number, field: 'email'|'name'|null, code: string, message: string }
+ * { row: number, field: 'email'|'name'|null, code: string, message: string }
  *
  * `parsed_rows` JSONB shape (persisted at preview-time so commit does
  * NOT re-parse the workbook):
- *   { row: number, email: string, name: string|null, status: 'ok'|'skip'|'invalid', reason?: string }[]
+ * { row: number, email: string, name: string|null, status: 'ok'|'skip'|'invalid', reason?: string }[]
  */
 export const listImportRuns = pgTable(
   "list_import_runs",

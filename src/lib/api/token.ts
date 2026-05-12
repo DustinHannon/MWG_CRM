@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 
 /**
- * Phase 13 — token generation. Uses base32 (Crockford alphabet,
+ * token generation. Uses base32 (Crockford alphabet,
  * minus ambiguous I/L/O/U) over 32 chars. ~5 bits per char × 32 =
  * 160 bits of entropy, well above the 128-bit threshold for HMAC-
  * style API keys.

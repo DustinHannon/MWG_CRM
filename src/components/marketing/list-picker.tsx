@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/popover";
 
 /**
- * Phase 21 — Marketing list picker.
+ * Marketing list picker.
  *
  * Used by the leads bulk-action surface and (future) campaign composer
  * to pick a list. Fetches from `/api/v1/marketing/lists?search=` with

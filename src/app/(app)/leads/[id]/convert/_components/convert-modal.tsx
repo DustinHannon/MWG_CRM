@@ -7,7 +7,7 @@ import { convertLeadAction } from "../actions";
 interface ConvertModalProps {
   leadId: string;
   /**
-   * Phase 9C (workflow) — display name used in the modal intro line.
+   * display name used in the modal intro line.
    * Falls back to "this lead" when blank so the copy still reads.
    */
   leadDisplayName: string | null;

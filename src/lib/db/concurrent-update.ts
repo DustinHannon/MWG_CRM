@@ -10,9 +10,9 @@ import { ConflictError, NotFoundError } from "@/lib/errors";
  * empty, this probes whether the row exists and throws the appropriate
  * typed error.
  *
- *  - empty rows + row exists → `ConflictError` (version mismatch / stale write).
- *  - empty rows + row absent → `NotFoundError`.
- *  - non-empty rows → no-op.
+ * empty rows + row exists → `ConflictError` (version mismatch / stale write).
+ * empty rows + row absent → `NotFoundError`.
+ * non-empty rows → no-op.
  */
 export async function expectAffected(
   rowsReturned: unknown[],

@@ -11,13 +11,13 @@ import {
 } from "@/app/(app)/marketing/lists/actions";
 
 /**
- * Phase 21 — Client island for detail-page actions: refresh now,
+ * Client island for detail-page actions: refresh now,
  * archive. Edit is a plain link rendered by the server page.
  */
 interface Props {
   listId: string;
   listName: string;
-  // Phase 29 §5 — static lists don't have a filter to refresh, so the
+  // static lists don't have a filter to refresh, so the
   // "Refresh now" affordance is hidden for them.
   listType?: "dynamic" | "static_imported";
 }

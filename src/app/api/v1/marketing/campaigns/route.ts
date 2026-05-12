@@ -14,14 +14,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Marketing campaigns (list + create draft).
+ * Marketing campaigns (list + create draft).
  *
  * Read scope: `read:marketing` (falls through to admin).
  * Write scope: `write:marketing`.
  *
  * Mirrors the leads route shape but without registering OpenAPI paths
  * (the public /apihelp page intentionally hides marketing endpoints
- * pending a separate Phase 22 surface for them).
+ * pending a separate surface for them).
  */
 
 const ListQuery = z.object({

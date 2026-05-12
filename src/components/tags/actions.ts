@@ -64,7 +64,7 @@ export async function getOrCreateTagAction(
       const session = await requireSession();
       const trimmed = name.trim();
       if (trimmed.length === 0) return null;
-      // Phase 8D Wave 7 (FIX-018) — apply the tagName primitive at the
+      // apply the tagName primitive at the
       // boundary. Throws ValidationError via withErrorBoundary on bad
       // length/charset; closes F-038's lack of length/charset gates.
       const validated = tagName.parse(trimmed);
@@ -92,7 +92,7 @@ export async function updateTagAction(
 }
 
 /**
- * Phase 4E — bulk add or remove a list of tags across many leads.
+ * bulk add or remove a list of tags across many leads.
  * Refuses the entire batch if the user lacks access to any of the leads.
  *
  * @actor signed-in user with edit access to every lead in the list.
@@ -133,7 +133,7 @@ export async function bulkTagLeadsAction(
         parsed.operation,
         session.id,
       );
-      // Phase 8D Wave 7 (FIX-019) — collapse N sequential writeAudit
+      // collapse N sequential writeAudit
       // calls into a single bulk INSERT. Resolves the actor email
       // snapshot once up front and constructs the row array, then
       // commits in one round-trip. Same per-lead audit shape; just

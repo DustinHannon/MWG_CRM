@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 23 — status pill for D365 import runs. Mirrors the
+ * status pill for D365 import runs. Mirrors the
  * `--status-*` CSS variables used by the global StatusPill and
  * widens the variant set for the eight run statuses, with explicit
  * red for `paused_for_review`, green for `completed`, gray for

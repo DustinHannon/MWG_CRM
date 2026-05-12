@@ -11,7 +11,7 @@ import { leads } from "./leads";
 import { campaignRecipients, marketingCampaigns } from "./marketing-campaigns";
 
 /**
- * Phase 19 — Raw event stream from SendGrid Event Webhook.
+ * Raw event stream from SendGrid Event Webhook.
  *
  * Append-only. Every event we receive — even ones we can't immediately
  * match to a recipient/campaign — gets a row so a forensic replay is

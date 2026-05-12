@@ -1,4 +1,4 @@
-// Phase 6E — value-level normalisation for imported cells. Phone is
+// value-level normalisation for imported cells. Phone is
 // the only one with substantial logic; the rest are trims and
 // lowercasings that keep the schema's CHECK constraints happy.
 

@@ -2,19 +2,19 @@ import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
- * Phase 25 §4.3 — Per-request context propagated via AsyncLocalStorage.
+ * Per-request context propagated via AsyncLocalStorage.
  *
  * Covered surfaces (as of 62039fc):
- *   - Server actions via `withErrorBoundary` (src/lib/server-action.ts)
- *   - Public REST routes via `withApi` (src/lib/api/handler.ts)
+ * Server actions via `withErrorBoundary` (src/lib/server-action.ts)
+ * Public REST routes via `withApi` (src/lib/api/handler.ts)
  *
  * NOT covered yet — direct route handlers in these paths still write
  * audit rows with `request_id = null`:
- *   - /api/cron/* — cron jobs
- *   - /api/admin/* — admin route handlers (e.g. email-failures retry)
- *   - /api/health — health probe
- *   - /api/v1/security/csp-report — CSP violation receiver
- *   - /api/v1/webhooks/sendgrid/events — SendGrid webhook
+ * /api/cron/* cron jobs
+ * /api/admin/* admin route handlers (e.g. email-failures retry)
+ * /api/health — health probe
+ * /api/v1/security/csp-report — CSP violation receiver
+ * /api/v1/webhooks/sendgrid/events — SendGrid webhook
  *
  * Extending coverage is mechanical: wrap the handler body with
  * `runWithRequestContext({ requestId: newRequestId() }, () => ...)`.

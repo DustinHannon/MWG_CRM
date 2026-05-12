@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — GET /api/v1/marketing/campaigns/{id}/recipients
+ * GET /api/v1/marketing/campaigns/{id}/recipients
  *
  * Paginated recipient roster. Optional `?status=` filters by recipient
  * row status. Default page size 50.

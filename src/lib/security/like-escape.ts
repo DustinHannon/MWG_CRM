@@ -1,5 +1,5 @@
 /**
- * Phase 20 / Phase 21 — Escape user input for use in SQL LIKE / ILIKE
+ * Escape user input for use in SQL LIKE / ILIKE
  * patterns. Postgres LIKE treats `%` and `_` as wildcards, so user
  * input destined for the value half of a `column LIKE pattern` clause
  * must be escaped before the surrounding `%` are concatenated.

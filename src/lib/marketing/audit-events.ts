@@ -1,9 +1,9 @@
 /**
- * Phase 21 — Marketing flow audit-event names.
+ * Marketing flow audit-event names.
  *
- * Used as the `action` arg to `writeAudit({ action, ... })`. Phase 20
+ * Used as the `action` arg to `writeAudit({ action,... })`.
  * already shipped `marketing.security.*` event names for webhook signature
- * failures, replay rejects, and force-unlocks. Phase 21 adds the regular
+ * failures, replay rejects, and force-unlocks. adds the regular
  * flow events for normal user-driven CRUD.
  *
  * Convention: `marketing.<entity>.<verb>` matching the CRM-wide audit
@@ -14,7 +14,7 @@ export const MARKETING_AUDIT_EVENTS = {
   TEMPLATE_CREATE: "marketing.template.create",
   TEMPLATE_UPDATE: "marketing.template.update",
   TEMPLATE_DELETE: "marketing.template.delete",
-  // Phase 24 §6.5.2 — deletion of a template referenced by an active
+  // deletion of a template referenced by an active
   // (scheduled / sending) campaign is refused at the action layer.
   // The block is forensic-grade: every attempt audits the campaigns
   // that blocked it.
@@ -22,7 +22,7 @@ export const MARKETING_AUDIT_EVENTS = {
   TEMPLATE_PUSHED_TO_SENDGRID: "marketing.template.pushed_to_sendgrid",
   TEMPLATE_TEST_SEND: "marketing.template.test_send",
   TEMPLATE_FORCE_UNLOCK: "marketing.template.force_unlock",
-  // Phase 29 §4 — Template visibility scoping.
+  // Template visibility scoping.
   // SCOPE_CHANGED: promote (personal → global) or demote (global →
   // personal); creator-only with the demote case also requiring
   // `canMarketingTemplatesEdit`. `after: { from, to }` carries the
@@ -31,7 +31,7 @@ export const MARKETING_AUDIT_EVENTS = {
   // `scope='personal'` row. `after: { sourceTemplateId, newScope: 'personal' }`.
   TEMPLATE_SCOPE_CHANGED: "marketing.template.scope_changed",
   TEMPLATE_CLONED: "marketing.template.cloned",
-  // Phase 29 §4.8 — When a personal template is deleted, any draft
+  // When a personal template is deleted, any draft
   // campaigns still referencing it have their template_id cleared so
   // the delete can proceed. Each unlinked campaign is audited
   // individually so the forensic trail captures the cascade.
@@ -40,12 +40,12 @@ export const MARKETING_AUDIT_EVENTS = {
   LIST_CREATE: "marketing.list.create",
   LIST_UPDATE: "marketing.list.update",
   LIST_DELETE: "marketing.list.delete",
-  // Phase 24 §6.5.2 — list deletion blocked when referenced by an
+  // list deletion blocked when referenced by an
   // active (scheduled / sending) campaign.
   LIST_DELETE_BLOCKED: "marketing.list.delete_blocked",
   LIST_REFRESH: "marketing.list.refresh",
   LIST_MEMBER_BULK_ADD: "marketing.list.member_bulk_add",
-  // Phase 29 §5 — Static-list member events. Static lists are populated
+  // Static-list member events. Static lists are populated
   // by Excel import (Sub-agent C) and mass-edited from the static-list
   // detail page. Each per-row mutation writes one audit row so the
   // forensic trail stays granular even for bulk operations.
@@ -53,7 +53,7 @@ export const MARKETING_AUDIT_EVENTS = {
   LIST_MEMBER_EDITED: "marketing.list.member_edited",
   LIST_MEMBER_REMOVED: "marketing.list.member_removed",
   LIST_BULK_EDITED: "marketing.list.bulk_edited",
-  // Phase 29 §5 — list import success summary; written by Sub-agent C
+  // list import success summary; written by Sub-agent C
   // after a commit. `after: { runId, total, success, failed, skipped }`.
   LIST_IMPORTED: "marketing.list.imported",
 
@@ -70,7 +70,7 @@ export const MARKETING_AUDIT_EVENTS = {
   SUPPRESSION_ADDED: "marketing.suppression.added",
   SUPPRESSION_REMOVED: "marketing.suppression.removed",
 
-  // Phase 29 §7 — ClickDimensions template-migration worklist events.
+  // ClickDimensions template-migration worklist events.
   // Fired both by the receiving API endpoints (extracted/imported/
   // session_expired/run_started/run_completed) and by the admin
   // worklist UI (fallback_manual when an admin chooses to skip a

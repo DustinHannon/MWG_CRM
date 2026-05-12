@@ -18,14 +18,14 @@ import { WebhookSignatureError } from "@/lib/marketing/errors";
 import { ValidationError } from "@/lib/errors";
 
 /**
- * Phase 19 — SendGrid Event Webhook ingest.
+ * SendGrid Event Webhook ingest.
  *
  * The webhook route handler does THREE things:
- *   1. Verify the ECDSA signature against SENDGRID_WEBHOOK_PUBLIC_KEY.
- *      Drop on mismatch — never trust unsigned events.
- *   2. Append every event to `marketing_email_events` (forensic record).
- *   3. Reconcile state on `marketing_campaign_recipients` and bump the
- *      counters on `marketing_campaigns`.
+ * 1. Verify the ECDSA signature against SENDGRID_WEBHOOK_PUBLIC_KEY.
+ * Drop on mismatch — never trust unsigned events.
+ * 2. Append every event to `marketing_email_events` (forensic record).
+ * 3. Reconcile state on `marketing_campaign_recipients` and bump the
+ * counters on `marketing_campaigns`.
  *
  * The reconcile step is best-effort. If a webhook fires before our send
  * loop has inserted the recipient row (race), the event still lands in
@@ -72,10 +72,10 @@ export function verifySendGridSignature(
   }
   // The library accepts the raw base64 form returned by SendGrid's
   // signed-webhook settings endpoint. Some envs strip the PEM markers
-  // — `convertPublicKeyToECDSA` handles both. Any failure to convert
+  // `convertPublicKeyToECDSA` handles both. Any failure to convert
   // OR verify is treated as a signature failure (401), not a 500 —
   // a malformed signature header or unparseable public key from a
-  // forged request is by definition an auth failure, and Phase 22 D-1
+  // forged request is by definition an auth failure, and D-1
   // showed the raw Error path leaking to a 500 broke the audit trail.
   const ew = new EventWebhook();
   let valid = false;
@@ -109,7 +109,7 @@ export function readSignatureHeaders(headers: Headers): {
 }
 
 /**
- * Phase 20 — Validate the SendGrid timestamp header is within an
+ * Validate the SendGrid timestamp header is within an
  * acceptable freshness window (default ±300s, configurable via
  * `WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS`). The signature alone does not
  * prevent replay — a captured signed payload remains valid forever
@@ -145,13 +145,13 @@ export function verifyTimestampFreshness(
 }
 
 /**
- * Phase 20 — Try to claim a `sg_event_id` for first-time processing.
+ * Try to claim a `sg_event_id` for first-time processing.
  *
  * INSERT…ON CONFLICT DO NOTHING returns the row on insert and zero rows
  * on conflict. We use the row count as the discriminator:
  *
- *   - 1 row returned → first time; caller should run `processEvent`.
- *   - 0 rows         → already seen; caller should skip.
+ * 1 row returned → first time; caller should run `processEvent`.
+ * 0 rows → already seen; caller should skip.
  *
  * Events without `sg_event_id` (rare, legacy or non-standard) bypass
  * dedupe and are processed every time. We log them rather than reject
@@ -195,11 +195,11 @@ export function parseEvents(rawBody: string): SendGridEvent[] {
 
 /**
  * Process one event:
- *   1. Insert into marketing_email_events (always).
- *   2. Lookup recipient by sg_message_id (or custom_args).
- *   3. UPDATE campaign_recipients status / first*At / counters.
- *   4. UPDATE campaign-level counter (atomic: total_X = total_X + 1).
- *   5. For unsubscribe / spamreport / bounce: UPSERT into marketing_suppressions.
+ * 1. Insert into marketing_email_events (always).
+ * 2. Lookup recipient by sg_message_id (or custom_args).
+ * 3. UPDATE campaign_recipients status / first*At / counters.
+ * 4. UPDATE campaign-level counter (atomic: total_X = total_X + 1).
+ * 5. For unsubscribe / spamreport / bounce: UPSERT into marketing_suppressions.
  *
  * Counter increments are scoped to "first time we see this transition"
  * via the recipient status flag, so duplicate webhook deliveries
@@ -408,7 +408,7 @@ async function upsertSuppression(
 
 function snakeCaseCol(camel: string): string {
   // Drizzle TS keys → SQL column names. Only used for the campaign
-  // counter columns which have predictable shapes. Phase 22 — the
+  // counter columns which have predictable shapes. the
   // fallback regex was removed: the value is fed through `sql.raw`
   // and any non-allowlisted key would land directly in the UPDATE
   // statement. Defense in depth: throw on unknown keys so a future

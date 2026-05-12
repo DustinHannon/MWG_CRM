@@ -80,7 +80,7 @@ export async function ActivityFeed({
                 >
                   {relative}
                 </p>
-                {/* Phase 9C — author surface uses the canonical
+                {/* author surface uses the canonical
                     UserChip. Hover card omitted because a noisy lead
                     can have many activities. */}
                 {r.userId ? (

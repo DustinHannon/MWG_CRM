@@ -9,19 +9,19 @@ import { writeSystemAudit } from "@/lib/audit";
 /**
  * Next.js 16 proxy (formerly "middleware"). Three responsibilities:
  *
- *   1. Phase 26 §6 — geo-block requests outside `GEO_ALLOWED_COUNTRIES`
- *      (default US, JM, PR). Runs FIRST, before auth/CSP, so a hostile
- *      source from a non-allowlisted region never reaches a route
- *      handler. WAF rule in front is the primary defense; this is the
- *      fallback for traffic that bypasses or precedes WAF eval.
+ * 1. geo-block requests outside `GEO_ALLOWED_COUNTRIES`
+ * (default US, JM, PR). Runs FIRST, before auth/CSP, so a hostile
+ * source from a non-allowlisted region never reaches a route
+ * handler. WAF rule in front is the primary defense; this is the
+ * fallback for traffic that bypasses or precedes WAF eval.
  *
- *   2. Phase 1/2 — lightweight auth cookie check. If no session cookie
- *      is present, redirect non-public paths to /auth/signin.
+ * 2. /2 — lightweight auth cookie check. If no session cookie
+ * is present, redirect non-public paths to /auth/signin.
  *
- *   3. Phase 3J — generate a per-request CSP nonce, attach it to the
- *      request via `x-nonce` so server components can read it, and set
- *      the strict CSP on the response. This replaces the permissive CSP
- *      that lived in next.config.ts (now removed from there).
+ * 3. generate a per-request CSP nonce, attach it to the
+ * request via `x-nonce` so server components can read it, and set
+ * the strict CSP on the response. This replaces the permissive CSP
+ * that lived in next.config.ts (now removed from there).
  *
  * Auth.js v5's full session decoding requires the Node runtime because
  * our JWT callback queries the DB; doing that here would force a heavy
@@ -33,7 +33,7 @@ import { writeSystemAudit } from "@/lib/audit";
  * Node-only) and for `@vercel/functions` `geolocation()`.
  */
 
-// Phase 26 §6 — paths that must never be geo-blocked regardless of
+// paths that must never be geo-blocked regardless of
 // source country. /api/health for external uptime monitors, /blocked
 // for the destination page itself, CSP report endpoint so a blocked
 // page can still report any CSP violation, plus Next.js static and
@@ -89,7 +89,7 @@ function sha256Hex(input: string): string {
 }
 
 /**
- * Phase 26 §6 — Edge geo-block check. Returns a 403 rewrite to
+ * Edge geo-block check. Returns a 403 rewrite to
  * `/blocked` for non-allowlisted countries; returns `null` to let the
  * proxy continue (allowed country, bypass path, or missing/unknown
  * country which we treat as allow).
@@ -152,12 +152,12 @@ async function geoBlockIfDisallowed(
 const PUBLIC_PATH_PREFIXES = [
   "/auth/",
   "/api/auth/",
-  // Phase 8 (FIX-021) — cron endpoints authenticate via Bearer token
+  // cron endpoints authenticate via Bearer token
   // (CRON_SECRET) inside the route handler; bypass the session-cookie
   // redirect so a missing/bad bearer returns a clean 401 instead of a
   // 307 redirect to /auth/signin.
   "/api/cron/",
-  // Phase 13 — public REST API and its docs. The /api/v1/* routes
+  // public REST API and its docs. The /api/v1/* routes
   // authenticate via Bearer-token API key (mwg_live_*) inside the
   // route handler; the proxy must NOT redirect missing-cookie
   // requests away. Same goes for the OpenAPI spec endpoint and the
@@ -165,13 +165,13 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/v1/",
   "/api/openapi.json",
   "/apihelp",
-  // Phase 25 §4.2 — public health-check endpoint. Probes DB + Graph
+  // public health-check endpoint. Probes DB + Graph
   // + Blob; external uptime monitors need to reach it without a
   // session cookie. No auth: failures are non-secret; success is
   // non-secret. Rate-limit isn't necessary since the endpoint caches
   // in-process for HEALTH_CHECK_CACHE_TTL_SECONDS (default 30s).
   "/api/health",
-  // Phase 26 §6 — geo-block destination page. Public so an
+  // geo-block destination page. Public so an
   // unauthenticated source from a non-allowlisted country sees the
   // 403 page directly instead of being redirected to /auth/signin
   // (which would defeat the block by exposing the auth surface).
@@ -208,7 +208,7 @@ function buildCspHeader(nonce: string): string {
   // would require deep framework integration. Documented in
   // docs/architecture/SECURITY-NOTES.md.
   //
-  // Phase 19 — Unlayer (react-email-editor) loads its editor JS bundle
+  // Unlayer (react-email-editor) loads its editor JS bundle
   // from editor.unlayer.com and renders the editor inside an iframe
   // (frame-src). The editor calls api.unlayer.com for asset uploads and
   // template gallery. img-src includes *.unlayer.com for stock images
@@ -216,7 +216,7 @@ function buildCspHeader(nonce: string): string {
   // server-to-server only; the connect-src entry stays defensive in
   // case a future admin debug page calls it directly.
   //
-  // Phase 25 §6.1 — 'unsafe-eval' removed from script-src. Previously
+  // 'unsafe-eval' removed from script-src. Previously
   // present for Unlayer's editor bundle; the editor itself runs inside
   // an iframe (frame-src https://editor.unlayer.com) so its script
   // context is the unlayer.com origin, not ours — its eval needs do
@@ -225,7 +225,7 @@ function buildCspHeader(nonce: string): string {
   // regresses, revert this commit; report-uri below will surface the
   // violation in audit_log within minutes.
   //
-  // Failure-mode note (Phase 25 §6.1 P2 follow-up): if editor.unlayer.com
+  // Failure-mode note: if editor.unlayer.com
   // itself goes down or the bundle is blocked, the iframe simply
   // fails to render — there's no CSP violation to report, so our
   // telemetry stays silent. Detection in that scenario must come
@@ -233,7 +233,7 @@ function buildCspHeader(nonce: string): string {
   // endpoint. The /marketing/templates/[id]/edit page renders the
   // empty iframe shell but no editor controls.
   //
-  // Phase 25 §6.2 — report-uri + report-to point at the audited
+  // report-uri + report-to point at the audited
   // endpoint. Browsers send violation reports via either the legacy
   // report-uri (Chrome, Firefox) or the Reporting API report-to
   // (Edge, newer Chrome). Both are wired so the audit catches both
@@ -257,7 +257,7 @@ function buildCspHeader(nonce: string): string {
   ].join("; ");
 }
 
-// Phase 25 §6.2 — the Reporting API's group definition. 12-week
+// the Reporting API's group definition. 12-week
 // max_age (10886400 seconds) matches MDN's recommended longevity for
 // security-reporting endpoints; the value is informative for the
 // browser cache. Reports land at /api/v1/security/csp-report which
@@ -271,7 +271,7 @@ const REPORT_TO_HEADER = JSON.stringify({
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Phase 26 §6 — geo-block FIRST. A 403 for a non-allowlisted source
+  // geo-block FIRST. A 403 for a non-allowlisted source
   // is more important than anything else this proxy does.
   const blocked = await geoBlockIfDisallowed(req);
   if (blocked) return blocked;
@@ -295,7 +295,7 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  // Phase 3J — mint nonce, attach to request, set CSP on response.
+  // mint nonce, attach to request, set CSP on response.
   const nonce = generateNonce();
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-nonce", nonce);
@@ -307,27 +307,27 @@ export async function proxy(req: NextRequest) {
   response.headers.set("Content-Security-Policy", buildCspHeader(nonce));
   response.headers.set("Report-To", REPORT_TO_HEADER);
 
-  // Phase 20 — additional defense-in-depth response headers. CSP
+  // additional defense-in-depth response headers. CSP
   // already covers script/style/connect/frame; these cover the bits
   // CSP doesn't:
-  //   - COOP `same-origin` isolates the browsing context group so a
-  //     window opened by us (or that opens us) can't reach back via
-  //     `window.opener` / cross-origin DOM access. Critical when we
-  //     later embed Unlayer's editor iframe.
-  //   - COEP is intentionally NOT set. `require-corp` would block
-  //     cross-origin embeds (Unlayer editor iframe, SendGrid pixels)
-  //     unless those origins serve CORP headers. `credentialless`
-  //     would force credential-stripped fetches that may break OAuth
-  //     callback flows. Revisit when Unlayer compatibility is confirmed.
-  //   - Referrer-Policy `strict-origin-when-cross-origin` matches the
-  //     modern browser default; setting it explicitly avoids relying
-  //     on user-agent defaults.
-  //   - Permissions-Policy denies device features the CRM never uses
-  //     so a future feature can't accidentally turn them on without an
-  //     explicit grant. Camera/microphone/geolocation are obvious; we
-  //     also deny payment, usb, midi, magnetometer, gyroscope, and
-  //     accelerometer so a marketing template iframe cannot probe
-  //     hardware sensors.
+  // COOP `same-origin` isolates the browsing context group so a
+  // window opened by us (or that opens us) can't reach back via
+  // `window.opener` / cross-origin DOM access. Critical when we
+  // later embed Unlayer's editor iframe.
+  // COEP is intentionally NOT set. `require-corp` would block
+  // cross-origin embeds (Unlayer editor iframe, SendGrid pixels)
+  // unless those origins serve CORP headers. `credentialless`
+  // would force credential-stripped fetches that may break OAuth
+  // callback flows. Revisit when Unlayer compatibility is confirmed.
+  // Referrer-Policy `strict-origin-when-cross-origin` matches the
+  // modern browser default; setting it explicitly avoids relying
+  // on user-agent defaults.
+  // Permissions-Policy denies device features the CRM never uses
+  // so a future feature can't accidentally turn them on without an
+  // explicit grant. Camera/microphone/geolocation are obvious; we
+  // also deny payment, usb, midi, magnetometer, gyroscope, and
+  // accelerometer so a marketing template iframe cannot probe
+  // hardware sensors.
   response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set(

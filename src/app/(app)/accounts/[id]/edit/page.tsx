@@ -11,7 +11,7 @@ import { AccountEditForm } from "./_components/account-edit-form";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 25 §7.4 — dedicated edit form for accounts. Mirrors the
+ * dedicated edit form for accounts. Mirrors the
  * shape of /leads/[id]/edit: server-loaded entity, client form,
  * submit-by-server-action. OCC token is the row's `version` passed
  * through a hidden field.

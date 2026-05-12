@@ -167,7 +167,7 @@ export const PATCH = withApi<{ id: string }>(
       }
       throw err;
     }
-    // Phase 22 — `updateOpportunityForApi` lib helper does NOT emit
+    // `updateOpportunityForApi` lib helper does NOT emit
     // audit (the (app)/opportunities server action does). Mirror the
     // action's audit emit so API-key driven updates land in audit_log.
     await writeAudit({

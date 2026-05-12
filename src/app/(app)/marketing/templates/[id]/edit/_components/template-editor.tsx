@@ -33,13 +33,13 @@ interface TemplateEditorProps {
   // skip `loadDesign` when the column is empty/null.
   initialDesign: unknown;
   initialStatus: TemplateStatus;
-  /** Phase 29 §4.3 — current visibility for the inline scope toggle. */
+  /** current visibility for the inline scope toggle. */
   initialScope: TemplateScope;
-  /** Phase 29 §4.7 — OCC version for the scope-change action. */
+  /** OCC version for the scope-change action. */
   initialVersion: number;
-  /** Phase 29 §4.7 — only the creator can change scope. */
+  /** only the creator can change scope. */
   isCreator: boolean;
-  /** Phase 29 §4.7 — global→personal demote needs this on top of creator. */
+  /** global→personal demote needs this on top of creator. */
   canMarketingTemplatesEdit: boolean;
   currentUserEmail: string;
   unlayerProjectId: number | null;
@@ -49,7 +49,7 @@ interface TemplateEditorProps {
 }
 
 /**
- * Phase 21 — Template editor client. Owns the metadata form, mounts
+ * Template editor client. Owns the metadata form, mounts
  * the Unlayer canvas, runs the soft-lock heartbeat, and routes the
  * Save / Send-test / Archive actions through the server actions in
  * `../actions.ts`.
@@ -63,7 +63,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
   const [preheader, setPreheader] = useState(props.initialPreheader);
   const [description, setDescription] = useState(props.initialDescription);
   const [status, setStatus] = useState<TemplateStatus>(props.initialStatus);
-  // Phase 29 §4.3/4.7 — visibility radio state. `currentScope` is
+  // visibility radio state. `currentScope` is
   // what's persisted; `pendingScope` is what the user has selected
   // but not yet saved via the "Save visibility" button.
   const [currentScope, setCurrentScope] = useState<TemplateScope>(
@@ -194,7 +194,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
     });
   }
 
-  // Phase 29 §4.7 — Promote/demote handler. Server enforces the
+  // Promote/demote handler. Server enforces the
   // creator + canMarketingTemplatesEdit gates; the UI just hides the
   // controls when the local props say they don't apply.
   function handleSaveScope() {
@@ -226,11 +226,11 @@ export function TemplateEditor(props: TemplateEditorProps) {
   }
 
   // Visibility section visibility rules:
-  //   - Creator always sees the section (read-only display if they
-  //     can't toggle to the other side, e.g. trying to demote without
-  //     canMarketingTemplatesEdit).
-  //   - Non-creator non-admin sees only the current value (no radio).
-  //   - Admin always sees the radio.
+  // Creator always sees the section (read-only display if they
+  // can't toggle to the other side, e.g. trying to demote without
+  // canMarketingTemplatesEdit).
+  // Non-creator non-admin sees only the current value (no radio).
+  // Admin always sees the radio.
   const canChangeScope =
     props.isAdmin || props.isCreator;
   const canDemoteToPersonal =
@@ -546,7 +546,7 @@ interface VisibilitySectionProps {
 }
 
 /**
- * Phase 29 §4.3/4.7 — Inline scope toggle on the editor page.
+ * Inline scope toggle on the editor page.
  *
  * Read-only when the viewer can't change scope (renders the current
  * value with explanatory hint). Otherwise renders the radio + Save

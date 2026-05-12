@@ -6,7 +6,7 @@ import { logger } from "@/lib/logger";
 import { getSendGrid } from "./client";
 
 /**
- * Phase 19 — Suppression list sync.
+ * Suppression list sync.
  *
  * Called by /api/cron/marketing-sync-suppressions hourly. Pulls
  * SendGrid's authoritative suppression lists (unsubscribes, bounces,

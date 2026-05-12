@@ -10,7 +10,7 @@ import type {
 } from "./types";
 
 /**
- * Phase 29 §6 — Generic Excel import wizard.
+ * Generic Excel import wizard.
  *
  * Preserves the 3-stage flow from the lead-import wizard
  * (upload → preview → result) while parameterizing the surface
@@ -18,17 +18,17 @@ import type {
  * static-list import path mount this component with their own config.
  *
  * The wizard owns:
- *   • Stage state machine (upload / preview / result).
- *   • Upload form chrome (file picker + Preview-import button + template
- *     download link).
- *   • Commit / cancel button wiring and pending state.
- *   • Toast surfacing of success / failure.
+ * • Stage state machine (upload / preview / result).
+ * • Upload form chrome (file picker + Preview-import button + template
+ * download link).
+ * • Commit / cancel button wiring and pending state.
+ * • Toast surfacing of success / failure.
  *
  * The config owns:
- *   • What the preview pane looks like (`renderPreview`).
- *   • What the result pane looks like (`renderResult`).
- *   • Any extras inside / above the upload form (smart-detect checkbox,
- *     resume-from-run CTA, etc.).
+ * • What the preview pane looks like (`renderPreview`).
+ * • What the result pane looks like (`renderResult`).
+ * • Any extras inside / above the upload form (smart-detect checkbox,
+ * resume-from-run CTA, etc.).
  */
 type Stage = "upload" | "preview" | "result";
 

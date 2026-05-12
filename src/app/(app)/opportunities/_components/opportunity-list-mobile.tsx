@@ -4,7 +4,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { StatusPill } from "@/components/ui/status-pill";
 
 /**
- * Phase 12 — dense single-line mobile list for /opportunities (and the
+ * dense single-line mobile list for /opportunities (and the
  * archived view). Mirrors the lead/account/contact mobile lists.
  *
  * Stage pill renders inline on the right edge — it's the most useful

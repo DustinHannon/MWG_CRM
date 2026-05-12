@@ -12,7 +12,7 @@ import {
 import { users } from "./users";
 
 /**
- * Phase 11 — saved_reports.
+ * saved_reports.
  *
  * Reports are shared at the *definition* level: an admin can create a
  * report and toggle is_shared=true, but the rows the report returns are
@@ -80,7 +80,7 @@ export const REPORT_ENTITY_TYPES = [
   "opportunity",
   "activity",
   "task",
-  // Phase 21+ marketing/email entities. Visible to admins +
+  // + marketing/email entities. Visible to admins +
   // users with canManageMarketing only — see access.ts assertCanViewReport.
   "marketing_campaign",
   "marketing_email_event",

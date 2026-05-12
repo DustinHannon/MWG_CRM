@@ -1,14 +1,14 @@
 import type { Breadcrumb } from "@/components/breadcrumbs";
 
 /**
- * Phase 21 §3.7 — Marketing route → breadcrumb trail registry.
+ * Marketing route → breadcrumb trail registry.
  *
  * Sub-agents render `<BreadcrumbsSetter crumbs={marketingCrumbs.<route>(...)} />`
  * (or the static array variant) in their server-component pages. Adding a new
  * marketing route requires adding it here so the breadcrumb pattern stays
  * consistent across the marketing tab.
  *
- * The Phase 11 `<Breadcrumbs />` component renders these via the topbar.
+ * The `<Breadcrumbs />` component renders these via the topbar.
  */
 
 const ROOT: Breadcrumb = { label: "Marketing", href: "/marketing" };
@@ -46,7 +46,7 @@ export const marketingCrumbs = {
     { label: "Lists", href: "/marketing/lists" },
     { label: "New list" },
   ],
-  // Phase 29 §5 — distinct breadcrumbs for the two new-list variants.
+  // distinct breadcrumbs for the two new-list variants.
   listsNewDynamic: (): Breadcrumb[] => [
     ROOT,
     { label: "Lists", href: "/marketing/lists" },

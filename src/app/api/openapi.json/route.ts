@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 13 — public OpenAPI 3.1 document. The Scalar docs page at
+ * public OpenAPI 3.1 document. The Scalar docs page at
  * /apihelp fetches from this URL. No authentication required —
  * the spec describes the API contract; secrets it does not contain.
  */

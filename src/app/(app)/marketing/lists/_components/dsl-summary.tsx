@@ -5,7 +5,7 @@ import {
 } from "@/lib/security/filter-dsl";
 
 /**
- * Phase 21 — Read-only formatted view of a saved list's filter DSL.
+ * Read-only formatted view of a saved list's filter DSL.
  *
  * Server component. Pure rendering — no validation here, the DSL was
  * already validated by `compileFilterDsl` on every refresh.

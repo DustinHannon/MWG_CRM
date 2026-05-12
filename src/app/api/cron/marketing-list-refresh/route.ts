@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Phase 21 — Daily refresh of marketing-list membership.
+ * Daily refresh of marketing-list membership.
  *
  * Picks up to MAX_LISTS_PER_RUN active lists ordered by least-recently
  * refreshed, then re-evaluates each filter against the current leads

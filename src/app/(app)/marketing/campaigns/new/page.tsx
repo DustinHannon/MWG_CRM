@@ -22,7 +22,7 @@ interface Props {
 }
 
 /**
- * Phase 21 — Campaign composer. Server-component shell that loads the
+ * Campaign composer. Server-component shell that loads the
  * candidate templates + lists and any in-progress draft (when `?id=`
  * is present), then mounts the client-side wizard.
  *
@@ -33,7 +33,7 @@ export default async function NewCampaignPage({ searchParams }: Props) {
   const sp = await searchParams;
   const user = await requireSession();
 
-  // Phase 29 §4 — Visibility filter on the template picker. Admins
+  // Visibility filter on the template picker. Admins
   // see everything; everyone else sees globals + their own personal
   // rows. The visibility filter is composed in alongside the
   // existing "ready" status gate so non-ready templates remain

@@ -3,7 +3,7 @@ import { openapiZ as z, registry } from "@/lib/openapi/registry";
 import { paginatedListSchema } from "./schemas";
 
 /**
- * Phase 13 — Activity schemas for /api/v1/activities.
+ * Activity schemas for /api/v1/activities.
  *
  * Activities have a CHECK-constrained "exactly one parent" rule —
  * exactly one of {lead_id, account_id, contact_id, opportunity_id}

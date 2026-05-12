@@ -6,7 +6,7 @@ import { env } from "@/lib/env";
 import { writeSystemAudit } from "@/lib/audit";
 
 /**
- * Phase 26 §3.3 — Read-only Vercel REST API helper.
+ * Read-only Vercel REST API helper.
  *
  * Used by /admin/insights for the "Recent deployments" panel. Auth via
  * env.VERCEL_API_TOKEN; team + project scoped via env.VERCEL_TEAM_ID

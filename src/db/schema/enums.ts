@@ -41,11 +41,11 @@ export const activityDirectionEnum = pgEnum("activity_direction", [
 export const importStatusEnum = pgEnum("import_status", [
   "pending",
   "processing",
-  // Phase 6E — parsed and shown to the user; awaiting commit decision.
+  // parsed and shown to the user; awaiting commit decision.
   "preview",
   "completed",
   "failed",
-  // Phase 6E — user dismissed without committing.
+  // user dismissed without committing.
   "cancelled",
 ]);
 

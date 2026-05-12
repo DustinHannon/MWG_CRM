@@ -21,7 +21,7 @@ const TOOLTIP_STYLE = {
 } as const;
 
 /**
- * Phase 26 §4 — daily request count line chart, last 7 days.
+ * daily request count line chart, last 7 days.
  *
  * Recharts `LineChart` driven by the server-fetched `TrafficDay[]`.
  * Color via `var(--chart-1)` matching the existing dashboard charts.

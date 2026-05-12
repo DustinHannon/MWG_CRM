@@ -10,13 +10,13 @@ interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * GlassCard — Phase 3A primitive. Renders a translucent, blurred surface
+ * GlassCard — primitive. Renders a translucent, blurred surface
  * matching the brand-navy aesthetic.
  *
  * Three weights:
- *   1 — default cards/panels (translucent).
- *   2 — elevated cards (hover, active, user panel).
- *   3 — near-opaque (modals, popovers).
+ * 1 — default cards/panels (translucent).
+ * 2 — elevated cards (hover, active, user panel).
+ * 3 — near-opaque (modals, popovers).
  *
  * Do NOT use for form inputs or data table cells (readability). Use for
  * panels, KPI cards, modals, popovers, sidebar shell, top bar.

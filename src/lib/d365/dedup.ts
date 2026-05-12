@@ -10,18 +10,18 @@ import type { NewLead } from "./mapping/lead";
 import type { NewOpportunity } from "./mapping/opportunity";
 
 /**
- * Phase 23 — Dedup helpers.
+ * Dedup helpers.
  *
  * Q-03 default conflict resolution is `dedup_merge`: mwg-crm wins
  * where conflicting; D365 fills in nulls. The reviewer can override
  * per record from the admin UI.
  *
  * Dedup precedence (every entity):
- *   1. external_ids row matching (source='d365', sourceEntityType, sourceId).
- *      → re-import is idempotent; same record always lands on the same
- *        local row.
- *   2. Entity-specific natural-key fallback (email, name+domain, etc.).
- *      Only applied when no external_ids row exists.
+ * 1. external_ids row matching (source='d365', sourceEntityType, sourceId).
+ * → re-import is idempotent; same record always lands on the same
+ * local row.
+ * 2. Entity-specific natural-key fallback (email, name+domain, etc.).
+ * Only applied when no external_ids row exists.
  *
  * Leaving (1) but no (2) match means the record is a brand-new import.
  *
@@ -50,7 +50,7 @@ export interface DedupResult {
 }
 
 /* -------------------------------------------------------------------------- *
- *                             external_ids match                             *
+ * external_ids match *
  * -------------------------------------------------------------------------- */
 
 async function findByExternalId(
@@ -72,7 +72,7 @@ async function findByExternalId(
 }
 
 /* -------------------------------------------------------------------------- *
- *                                 Lead                                       *
+ * Lead *
  * -------------------------------------------------------------------------- */
 
 export async function dedupLead(
@@ -113,7 +113,7 @@ export async function dedupLead(
 }
 
 /* -------------------------------------------------------------------------- *
- *                                Contact                                     *
+ * Contact *
  * -------------------------------------------------------------------------- */
 
 export async function dedupContact(
@@ -154,7 +154,7 @@ export async function dedupContact(
 }
 
 /* -------------------------------------------------------------------------- *
- *                                Account                                     *
+ * Account *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -225,7 +225,7 @@ export async function dedupAccount(
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Opportunity                                   *
+ * Opportunity *
  * -------------------------------------------------------------------------- */
 
 export async function dedupOpportunity(
@@ -244,7 +244,7 @@ export async function dedupOpportunity(
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Activities                                    *
+ * Activities *
  * -------------------------------------------------------------------------- */
 
 /**

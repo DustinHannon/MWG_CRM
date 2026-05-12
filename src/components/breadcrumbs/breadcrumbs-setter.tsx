@@ -4,7 +4,7 @@ import { useSetBreadcrumbs } from "./provider";
 import type { Breadcrumb } from "./types";
 
 /**
- * Phase 11 — small client wrapper that registers a breadcrumb trail
+ * small client wrapper that registers a breadcrumb trail
  * for the current page. Intended for direct use from Server Component
  * pages: render `<BreadcrumbsSetter crumbs={[...]} />` once near the
  * top of the page subtree. The trail unregisters on unmount so the

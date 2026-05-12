@@ -7,28 +7,28 @@ import {
 } from "./betterstack";
 
 /**
- * Phase 26 §4 — typed Better Stack query functions for the
+ * typed Better Stack query functions for the
  * /admin/insights dashboard. Every panel on the page has a single
  * exported function here. All queries flow through `queryBetterStack`
  * so that:
- *   - Auth, transport, and JSONEachRow parsing are centralised.
- *   - Results are wrapped in `unstable_cache` keyed on the panel name.
- *   - Failures emit a `observability.insights.query.failed` system
- *     audit and surface as `BetterStackQueryError`.
+ * Auth, transport, and JSONEachRow parsing are centralised.
+ * Results are wrapped in `unstable_cache` keyed on the panel name.
+ * Failures emit a `observability.insights.query.failed` system
+ * audit and surface as `BetterStackQueryError`.
  *
  * Schema notes (verified from Better Stack source `mwg_crm`):
- *   raw.vercel.proxy.path        Nullable(String)
- *   raw.vercel.proxy.status_code Nullable(Int64)
- *   raw.vercel.proxy.method      Nullable(String)
- *   raw.vercel.proxy.region      Nullable(String)   // execution region
- *   raw.vercel.proxy.referer     Nullable(String)
- *   raw.vercel.proxy.user_agent  Array(Nullable(String))
- *   raw.vercel.proxy.client_ip   Nullable(String)
- *   raw.vercel.source            Nullable(String)
- *   raw.vercel.level             Nullable(String)
- *   raw.vercel.projectName       Nullable(String)
- *   raw.message                  Nullable(String)
- *   dt                           DateTime
+ * raw.vercel.proxy.path Nullable(String)
+ * raw.vercel.proxy.status_code Nullable(Int64)
+ * raw.vercel.proxy.method Nullable(String)
+ * raw.vercel.proxy.region Nullable(String) // execution region
+ * raw.vercel.proxy.referer Nullable(String)
+ * raw.vercel.proxy.user_agent Array(Nullable(String))
+ * raw.vercel.proxy.client_ip Nullable(String)
+ * raw.vercel.source Nullable(String)
+ * raw.vercel.level Nullable(String)
+ * raw.vercel.projectName Nullable(String)
+ * raw.message Nullable(String)
+ * dt DateTime
  *
  * Hot collection covers the last ~30 minutes. Anything older needs
  * `s3Cluster(primary, <s3>) WHERE _row_type = 1` UNION'd in.
@@ -55,7 +55,7 @@ const PUBLIC_PATH_FILTER = `${PATH} IS NOT NULL
   AND ${PATH} != '/sitemap.xml'`;
 
 // ----------------------------------------------------------------------------
-// Speed Insights + Analytics drain aliases (Phase 26 follow-up).
+// Speed Insights + Analytics drain aliases.
 // Once the dedicated drains are configured these records flow into the
 // SAME Better Stack source as runtime logs; the `vercel.schema` field
 // distinguishes them.
@@ -428,7 +428,7 @@ export async function getTopReferrers(): Promise<TopReferrerRow[]> {
 }
 
 // ----------------------------------------------------------------------------
-// Visitors by country — powered by the Web Analytics drain (Phase 26 follow-up).
+// Visitors by country — powered by the Web Analytics drain.
 // Returns a country-code → unique-visitor-count map keyed by ISO 3166-1
 // alpha-2. Falls back to an empty record if the analytics drain hasn't
 // produced any samples in the last 24h.

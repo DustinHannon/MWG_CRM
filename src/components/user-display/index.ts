@@ -1,5 +1,5 @@
 /**
- * Phase 9B — canonical user-display primitives. Sub-agent A in Phase 9C
+ * canonical user-display primitives. Sub-agent A
  * replaces every text-only "owner email" / "owner name" rendering site
  * with these. Sub-agent A is the ONLY consumer pattern; the components
  * themselves stay locked.

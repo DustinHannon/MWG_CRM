@@ -77,7 +77,7 @@ export async function undoArchiveOpportunityAction(input: {
       .from(opportunities)
       .where(eq(opportunities.id, payload.id))
       .limit(1);
-    // Phase 12C — BUG-003: row may have been hard-deleted by an admin
+    // BUG-003: row may have been hard-deleted by an admin
     // between soft-delete and Undo. Surface a clear NotFound.
     if (!row) {
       throw new NotFoundError(
@@ -145,7 +145,7 @@ export async function hardDeleteOpportunityAction(
 }
 
 /**
- * Phase 25 §7.4 — dedicated edit form for opportunities. Thin
+ * dedicated edit form for opportunities. Thin
  * wrapper around `updateOpportunityForApi`; OCC via expectedVersion.
  */
 const opportunityUpdateSchema = z.object({

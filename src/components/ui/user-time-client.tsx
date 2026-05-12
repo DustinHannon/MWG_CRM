@@ -7,7 +7,7 @@ import {
 } from "@/lib/format-time";
 
 /**
- * Phase 5A — client-side `<UserTime>`. Identical to the server component
+ * client-side `<UserTime>`. Identical to the server component
  * except `prefs` is required (client components can't reach into the DB
  * cache). Pass it down from the closest server boundary.
  */

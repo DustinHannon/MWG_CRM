@@ -22,7 +22,7 @@ const STAGES = z.enum([
 ]);
 
 /**
- * Phase 8D Wave 4 (FIX-004) — OCC on opportunity-pipeline DnD. Compare-
+ * OCC on opportunity-pipeline DnD. Compare-
  * and-set against `version` so two reps dragging the same opportunity
  * to different stages can't trample each other; the loser sees a
  * ConflictError and rolls back. closed_at handling is preserved inside
@@ -67,7 +67,7 @@ export async function updateOpportunityStageAction(
         .set({
           stage: parsed,
           closedAt,
-          // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+          // actor stamping for skip-self in Supabase Realtime.
           updatedById: session.id,
           updatedAt: new Date(),
           version: version + 1,

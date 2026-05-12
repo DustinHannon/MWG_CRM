@@ -12,7 +12,7 @@ import { savedViews } from "./views";
 import { users } from "./users";
 
 /**
- * Phase 3H — saved-search subscriptions. Cron runs daily; for each
+ * saved-search subscriptions. Cron runs daily; for each
  * active sub, scans new records (created_at > last_seen_max_created_at)
  * matching the saved view's filters. Always creates an in-app
  * notification; sends email digest if user_preferences.email_digest_frequency

@@ -1,5 +1,5 @@
 /**
- * Phase 13 — sidebar navigation primitives.
+ * sidebar navigation primitives.
  *
  * IMPORTANT: nav arrays are built in server components (`(app)/layout.tsx`,
  * `admin/layout.tsx`) and consumed by client components (`Sidebar`,
@@ -125,7 +125,7 @@ export function isLink(item: NavItem): item is NavLink {
 }
 
 /**
- * Phase 13 + post-Phase 25 — the admin section's nav items. Exported so
+ * the admin section's nav items. Exported so
  * both the (app) shell (renders this as a collapsible group) and the
  * /admin shell (renders this as flat siblings under an "Admin" header)
  * consume the same source list.

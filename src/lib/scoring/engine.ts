@@ -10,7 +10,7 @@ import { leads } from "@/db/schema/leads";
 import { logger } from "@/lib/logger";
 
 /**
- * Phase 4C — lead scoring engine.
+ * lead scoring engine.
  *
  * Predicate format mirrors saved-views filters so admins can use the same
  * UI to build rules. Each rule has a `predicate` (JSONB), a `points` value
@@ -19,26 +19,26 @@ import { logger } from "@/lib/logger";
  * a band defined in `lead_scoring_settings` (defaults: hot ≥ 70, warm
  * 40–69, cool 15–39, cold < 15).
  *
- * Phase 5B —
- *   - Thresholds now read from `lead_scoring_settings` (single-row),
- *     cached for 60s in-process to keep the rescore loop fast.
- *   - Activity aggregation is restricted to counting kinds (note, call,
- *     email, meeting, task) explicitly. Imports + lead-create no longer
- *     touch `leads.last_activity_at`, so freshly-imported leads have
- *     `activity_count=0` and don't match recency rules.
- *   - New pseudo-field `has_no_activity` for explicit "no activity ever"
- *     rules.
+ *
+ * Thresholds now read from `lead_scoring_settings` (single-row),
+ * cached for 60s in-process to keep the rescore loop fast.
+ * Activity aggregation is restricted to counting kinds (note, call,
+ * email, meeting, task) explicitly. Imports + lead-create no longer
+ * touch `leads.last_activity_at`, so freshly-imported leads have
+ * `activity_count=0` and don't match recency rules.
+ * New pseudo-field `has_no_activity` for explicit "no activity ever"
+ * rules.
  *
  * Supported operators:
- *   eq, neq, lt, lte, gt, gte, in, not_in, contains (string),
- *   is_null, is_not_null
+ * eq, neq, lt, lte, gt, gte, in, not_in, contains (string),
+ * is_null, is_not_null
  *
  * Pseudo-fields (joined data):
- *   last_activity_within_days (number | null) — days since last counting
- *     activity. `null` when no counting activities; `<=` / `>=` clauses
- *     against null return false.
- *   activity_count (number)  — total counting-activity count.
- *   has_no_activity (boolean) — true iff `activity_count === 0`.
+ * last_activity_within_days (number | null) — days since last counting
+ * activity. `null` when no counting activities; `<=` / `>=` clauses
+ * against null return false.
+ * activity_count (number) — total counting-activity count.
+ * has_no_activity (boolean) — true iff `activity_count === 0`.
  */
 
 type Op =
@@ -165,7 +165,7 @@ function predicateMatches(p: Predicate, fact: LeadFact): boolean {
  * Score a single lead. Loads the lead, joins activity stats, runs every
  * active rule, persists the score + band + scored_at.
  *
- * @param leadId  UUID of the lead to score.
+ * @param leadId UUID of the lead to score.
  * @returns The new {score, band} or null if the lead doesn't exist.
  */
 export async function evaluateLead(leadId: string): Promise<

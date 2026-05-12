@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Admin-only proxy to GET /v3/templates on SendGrid.
+ * Admin-only proxy to GET /v3/templates on SendGrid.
  *
  * Used by the admin marketing surface to reconcile our `marketing_templates`
  * table with what's actually stored in SendGrid (orphan detection,

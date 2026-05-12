@@ -38,10 +38,10 @@ export interface ViewDefinition {
   filters: ViewFilters;
   columns: ColumnKey[];
   sort: { field: SortField; direction: "asc" | "desc" };
-  /** Phase 6B — present on saved views only. */
+  /** present on saved views only. */
   version?: number;
   /**
-   * Phase 9C (workflow) — implicit status exclusion applied when the
+   * implicit status exclusion applied when the
    * caller hasn't explicitly filtered by status. Built-in default views
    * (`all-mine`, `all`, `recent`, `imported`, `hot`) hide converted (and
    * for `hot`, also lost/unqualified) so default lists feel like a "live
@@ -78,7 +78,7 @@ export interface ViewFilters {
 }
 
 /**
- * Phase 9C (workflow) — implicit status exclusions for default views.
+ * implicit status exclusions for default views.
  * `my-open` is unchanged because it already pins status explicitly.
  * `all-incl-converted` is the explicit escape hatch when admins / power
  * users need to see the entire history.
@@ -216,7 +216,7 @@ export const savedViewSchema = z.object({
 
 export type SavedViewInput = z.infer<typeof savedViewSchema>;
 
-// Phase 25 §7.3 — every leads-domain saved-view query now scopes by
+// every leads-domain saved-view query now scopes by
 // entityType='lead' so it ignores task views that share the same
 // table. Existing rows pre-migration default to 'lead' so behaviour
 // is unchanged.
@@ -433,7 +433,7 @@ export interface RunViewOptions {
   /** Allow the user to widen / narrow filters on top of the view base. */
   extraFilters?: ViewFilters;
   /**
-   * Phase 9C — cursor pagination. Cursor format is
+   * cursor pagination. Cursor format is
    * `<iso8601-or-"null">:<uuid>`. When set on the default sort
    * (lastActivityAt DESC), runView seeks via the composite index
    * `leads_last_activity_id_idx` instead of OFFSET. For non-default
@@ -447,7 +447,7 @@ export interface RunViewResult {
   total: number;
   columns: ColumnKey[];
   sort: { field: SortField; direction: "asc" | "desc" };
-  /** Phase 9C — null when no further rows; otherwise the next cursor. */
+  /** null when no further rows; otherwise the next cursor. */
   nextCursor: string | null;
 }
 
@@ -485,7 +485,7 @@ export interface LeadRow {
 
 export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
   const { view, user, canViewAll, page, pageSize } = opts;
-  // Phase 9C — merge only DEFINED keys from extraFilters. Callers
+  // merge only DEFINED keys from extraFilters. Callers
   // (e.g. /leads/page.tsx) build extraFilters with always-present keys
   // set to undefined when missing, so a naive spread overwrites the
   // view's defaults (status / rating / source / tags). That broke
@@ -499,7 +499,7 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
 
   const wheres = [];
 
-  // Phase 9C — exclude soft-deleted leads from every list view by
+  // exclude soft-deleted leads from every list view by
   // default. Archived leads are reachable only via /leads/archived,
   // which queries directly without runView.
   wheres.push(eq(leads.isDeleted, false));
@@ -548,7 +548,7 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
     );
   }
   if (merged.tags?.length) {
-    // Phase 8D — legacy `leads.tags text[]` was dropped. Tag membership
+    // legacy `leads.tags text[]` was dropped. Tag membership
     // resolves via the relational lead_tags table joined to tags.name.
     wheres.push(
       sql`EXISTS (
@@ -582,7 +582,7 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
     );
   }
 
-  // Phase 9C (workflow) — default-view status exclusion. Built-in
+  // default-view status exclusion. Built-in
   // views that declare `defaultExcludeStatuses` get an implicit
   // NOT-IN filter when the caller hasn't explicitly chosen a status
   // (so converted leads stop polluting "All", "Hot", etc.). Saved
@@ -623,7 +623,7 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
   })();
   const order = sort.direction === "asc" ? asc(sortColumn) : desc(sortColumn);
 
-  // Phase 9C — cursor pagination on the default sort
+  // cursor pagination on the default sort
   // (lastActivityAt DESC). Custom sorts fall back to OFFSET because
   // we don't have composite (col, id) indexes for every column.
   // Pre-cursor `whereExpr` powers the COUNT query (cursor mode skips
@@ -670,7 +670,7 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
         ownerId: leads.ownerId,
         ownerDisplayName: users.displayName,
         ownerPhotoUrl: users.photoBlobUrl,
-        // Phase 8D — hydrate tag names from the relational lead_tags
+        // hydrate tag names from the relational lead_tags
         // join. Legacy `leads.tags text[]` column was dropped.
         tags: sql<string[] | null>`(
           SELECT array_agg(t.name ORDER BY t.name)
@@ -692,12 +692,12 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
       .from(leads)
       .leftJoin(users, eq(leads.ownerId, users.id))
       .where(finalWhere)
-      // Phase 9C — `id DESC` tiebreak matches the composite index
+      // `id DESC` tiebreak matches the composite index
       // `leads_last_activity_id_idx (last_activity_at DESC NULLS LAST, id DESC)`.
       .orderBy(order, desc(leads.id))
       .limit(sliceLimit)
       .offset(offset),
-    // Phase 9C — skip the COUNT in cursor mode. The +1 row trick on
+    // skip the COUNT in cursor mode. The +1 row trick on
     // sliceLimit gives the UI everything it needs to show "Load more".
     useCursor
       ? Promise.resolve([{ count: 0 }])

@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 const idSchema = z.string().uuid();
 
 /**
- * Phase 21 — Trigger an on-demand refresh of a list's membership.
+ * Trigger an on-demand refresh of a list's membership.
  * Mirrors the daily cron's call but attributes the audit row to the
  * acting user.
  */

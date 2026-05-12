@@ -1,4 +1,4 @@
-// Phase 6A — Lead/contact last_name became nullable. UI must render person
+// Lead/contact last_name became nullable. UI must render person
 // names through this helper so that NULL last_name doesn't produce stray
 // whitespace or break alignment.
 

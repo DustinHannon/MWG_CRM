@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useTheme } from "next-themes";
 
 /**
- * Phase 5A — DB is the source of truth for a user's theme preference.
+ * DB is the source of truth for a user's theme preference.
  * Mounted in the authenticated app layout, this client component reads
  * the theme value the server fetched from `user_preferences.theme` and
  * pushes it into next-themes if they disagree. That way, changing the

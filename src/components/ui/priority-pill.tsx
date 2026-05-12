@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 11 — colored priority pill. Spec sketches a 5-step scale
+ * colored priority pill. Spec sketches a 5-step scale
  * (very low → very high). The DB only has a 4-step task_priority enum
  * (low/normal/high/urgent), but the lead_rating enum (cold/warm/hot)
  * is also rendered here so we can lift it out of plain text. Pass any

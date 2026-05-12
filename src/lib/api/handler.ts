@@ -31,7 +31,7 @@ interface WithApiOptions {
 }
 
 /**
- * Phase 13 — bundles the entire request lifecycle for an /api/v1
+ * bundles the entire request lifecycle for an /api/v1
  * route: auth → scope → rate limit → handler → log. Every outcome
  * (including failures) writes a row to `api_usage_log`.
  *
@@ -47,7 +47,7 @@ export function withApi<P = unknown>(
     req: Request,
     routeArgs?: { params: Promise<P> | P },
   ): Promise<Response> => {
-    // Phase 25 §4.3 — establish the request context as early as
+    // establish the request context as early as
     // possible so the auth phase, rate-limit phase, and handler all
     // share one correlation id. Honor an upstream `x-request-id`
     // header when provided (so request ids match across a reverse
@@ -154,7 +154,7 @@ async function runApiHandler<P>(
     }
 
     // 4. Resolve route params (Next 16 passes params as a Promise).
-    // Phase 25 §4.3 P2 follow-up — refuse to fall through with empty
+    // refuse to fall through with empty
     // params on rejection. A framework-side failure here used to
     // silently route the handler with `{} as P`, which can cascade
     // into 200s on what should be 500s (e.g. /api/v1/leads/[id]

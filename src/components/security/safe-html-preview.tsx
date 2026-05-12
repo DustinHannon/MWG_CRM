@@ -11,22 +11,22 @@ interface SafeHtmlPreviewProps {
 }
 
 /**
- * Phase 20 / Phase 21 — Renders untrusted HTML (e.g. a marketing
+ * Renders untrusted HTML (e.g. a marketing
  * template's exported HTML, or an inbound webhook payload) inside a
  * sandboxed iframe via `srcDoc`.
  *
  * Sandbox flags:
- *   • `allow-same-origin` is OMITTED. The iframe is opaque to the
- *     parent and cannot read parent cookies, localStorage, or DOM.
- *   • `allow-scripts` is OMITTED. The HTML cannot execute JS at all.
- *   • The result: a static render-only preview suitable for marketing
- *     template HTML and any other untrusted content.
+ * • `allow-same-origin` is OMITTED. The iframe is opaque to the
+ * parent and cannot read parent cookies, localStorage, or DOM.
+ * • `allow-scripts` is OMITTED. The HTML cannot execute JS at all.
+ * • The result: a static render-only preview suitable for marketing
+ * template HTML and any other untrusted content.
  *
  * If a future caller needs script execution (e.g. to render Unlayer's
  * own preview iframe contents), they should mount the editor's preview
  * directly — NOT loosen the sandbox here.
  *
- * Rationale (per Phase 20 §6.5): we never render untrusted HTML via
+ * Rationale (by design): we never render untrusted HTML via
  * `dangerouslySetInnerHTML` outside of this single component. The custom
  * Semgrep rule in `.semgrep/mwg.yml` flags any other `dangerouslySetInnerHTML`
  * site as a finding.

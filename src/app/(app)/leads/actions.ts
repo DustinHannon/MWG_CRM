@@ -34,7 +34,7 @@ function formToObject(formData: FormData): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
   for (const [k, v] of formData.entries()) {
     if (k === "id") continue;
-    // Phase 8D Wave 6 (FIX-016) — `tagIds` (combobox) and the legacy
+    // `tagIds` (combobox) and the legacy
     // `tags` key are extracted separately by parseTagIds; skip them
     // here so they don't reach the leadCreate / leadPartial schema.
     if (k === "tagIds" || k === "tags") continue;
@@ -49,7 +49,7 @@ function formToObject(formData: FormData): Record<string, unknown> {
 }
 
 /**
- * Phase 8D Wave 6 (FIX-016) — TagInput emits a single hidden input
+ * TagInput emits a single hidden input
  * `tagIds` whose value is a comma-separated list of tag UUIDs (the
  * tags themselves were either already-selected or just created via
  * getOrCreateTagAction with tagName validation from Wave 7). Parse
@@ -90,7 +90,7 @@ export async function createLeadAction(
       }
 
       const { id } = await createLead(user, parsed.data);
-      // Phase 8D Wave 6 (FIX-016) — persist tag selections from the
+      // persist tag selections from the
       // combobox into the relational lead_tags table. setLeadTags is
       // idempotent (full-replace inside a tx); empty list is a no-op.
       const tagIds = parseTagIds(formData);
@@ -120,7 +120,7 @@ export async function updateLeadAction(
       const user = await requireSession();
 
       const id = z.string().uuid().parse(formData.get("id"));
-      // Phase 6B — version travels through the form as a hidden input. The
+      // version travels through the form as a hidden input. The
       // server action requires it so concurrentUpdate can refuse stale writes.
       const version = z.coerce
         .number()
@@ -155,7 +155,7 @@ export async function updateLeadAction(
 
       await updateLead(user, id, version, parsed.data);
 
-      // Phase 8D Wave 6 (FIX-016) — sync tag selections from the
+      // sync tag selections from the
       // combobox. setLeadTags is full-replace, so removing all chips
       // and submitting clears the lead's tags. The hidden tagIds input
       // is always present in the form (even when empty) so we can
@@ -180,11 +180,11 @@ export async function updateLeadAction(
 }
 
 /**
- * Phase 4G — what was "delete" is now "archive". Sets `is_deleted=true`;
+ * what was "delete" is now "archive". Sets `is_deleted=true`;
  * the row is preserved for 30 days, then `cron/purge-archived` hard-deletes.
  * Admins can hard-delete from /leads/archived.
  *
- * Phase 10 — kept for backwards compatibility on the existing detail-page
+ * kept for backwards compatibility on the existing detail-page
  * form action. New callers should prefer `softDeleteLeadAction`.
  *
  * @actor signed-in user with delete permission and lead access
@@ -219,9 +219,9 @@ export async function deleteLeadAction(
 }
 
 /**
- * Phase 10 — JSON-input variant for the new client UI. Returns an
+ * JSON-input variant for the new client UI. Returns an
  * `undoToken` that the toast Undo button can replay. Permission gate
- * is strict ownership-or-admin per the Phase 10 matrix.
+ * is strict ownership-or-admin per the matrix.
  *
  * @actor lead owner or admin
  */
@@ -277,7 +277,7 @@ export async function softDeleteLeadAction(input: {
 }
 
 /**
- * Phase 10 — toast-Undo replay. Re-checks the HMAC, then restores. Same
+ * toast-Undo replay. Re-checks the HMAC, then restores. Same
  * ownership/admin check applies (the user must still be allowed to act
  * on this lead, even if 2 seconds ago they were).
  *
@@ -299,7 +299,7 @@ export async function undoArchiveLeadAction(input: {
         .from(leads)
         .where(eq(leads.id, payload.id))
         .limit(1);
-      // Phase 12C — BUG-003: row may have been hard-deleted by an admin
+      // BUG-003: row may have been hard-deleted by an admin
       // between soft-delete and Undo. Surface a clear NotFound.
       if (!row) {
         throw new NotFoundError(
@@ -323,7 +323,7 @@ export async function undoArchiveLeadAction(input: {
 }
 
 /**
- * Phase 4G — admin-only restore from the archive view.
+ * admin-only restore from the archive view.
  *
  * @actor admin
  */
@@ -350,8 +350,8 @@ export async function restoreLeadAction(
 }
 
 /**
- * Phase 4G — admin-only hard delete from the archive view.
- * Cascades through children. Phase 8D — Vercel Blob cleanup now runs
+ * admin-only hard delete from the archive view.
+ * Cascades through children. Vercel Blob cleanup now runs
  * fire-and-forget after the DB delete commits (Audit E F-024).
  *
  * @actor admin
@@ -365,7 +365,7 @@ export async function hardDeleteLeadAction(
       const user = await requireSession();
       if (!user.isAdmin) throw new ForbiddenError("Admin only.");
       const id = z.string().uuid().parse(formData.get("id"));
-      // Phase 8D F-024 — collect attachment blob pathnames BEFORE the DB
+      // 024 — collect attachment blob pathnames BEFORE the DB
       // delete; after CASCADE the join rows are gone and the blobs are
       // unrecoverable. Failure to gather is non-fatal.
       let blobPathnames: string[] = [];
@@ -384,7 +384,7 @@ export async function hardDeleteLeadAction(
         targetType: "lead",
         targetId: id,
       });
-      // Phase 8D F-024 — fire-and-forget blob cleanup. cleanupBlobsForLeads
+      // 024 — fire-and-forget blob cleanup. cleanupBlobsForLeads
       // already swallows internal errors; this catch is belt-and-suspenders
       // for an unhandled throw that would otherwise unhandle-reject.
       if (blobPathnames.length > 0) {

@@ -23,7 +23,7 @@ interface MobileSidebarProps {
 }
 
 /**
- * Phase 12 Sub-E — slide-out drawer that reproduces the desktop
+ * slide-out drawer that reproduces the desktop
  * sidebar at <1024px. Trigger is a hamburger button in the top bar.
  * Auto-closes on route change so the user lands on the new page
  * without a stale overlay.

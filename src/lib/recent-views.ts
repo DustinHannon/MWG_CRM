@@ -7,7 +7,7 @@ import { recentViews } from "@/db/schema/recent-views";
 export type EntityType = "lead" | "contact" | "account" | "opportunity";
 
 /**
- * Phase 3I — fire-and-forget upsert from any detail page. Failure is
+ * fire-and-forget upsert from any detail page. Failure is
  * silent (it's just an MRU cache, never load-bearing).
  */
 export async function trackView(

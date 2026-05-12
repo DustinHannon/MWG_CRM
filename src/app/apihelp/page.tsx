@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Phase 13 Sub-B — Public API documentation page (`/apihelp`).
+ * Public API documentation page (`/apihelp`).
  *
  * Renders Scalar's interactive API reference against the live
  * OpenAPI 3.1 spec served at `/api/openapi.json`. The Scalar

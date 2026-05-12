@@ -2,7 +2,7 @@ import { getTopReferrers } from "@/lib/observability/insights-queries";
 import { StandardEmptyState } from "@/components/standard";
 
 /**
- * Phase 26 §4 — top 10 referrers by request count, last 24h.
+ * top 10 referrers by request count, last 24h.
  *
  * Excludes empty/null referrers. Useful for spotting unexpected
  * inbound traffic sources.

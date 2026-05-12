@@ -13,11 +13,11 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Phase 13 — daily retention sweep. Hard-deletes rows older than the
+ * daily retention sweep. Hard-deletes rows older than the
  * configured retention window. Currently:
- *   - audit_log:        730 days
- *   - api_usage_log:    730 days
- *   - email_send_log:   730 days  (Phase 15 — added alongside foundation)
+ * audit_log: 730 days
+ * api_usage_log: 730 days
+ * email_send_log: 730 days (added alongside foundation)
  *
  * All windows are explicit constants below so future tuning is a
  * single-line edit. The cron writes its own audit entry recording how
@@ -31,7 +31,7 @@ export const maxDuration = 300;
 const AUDIT_RETENTION_DAYS = 730;
 const API_USAGE_RETENTION_DAYS = 730;
 const EMAIL_SEND_RETENTION_DAYS = 730;
-// Phase 20 — security primitives (rate-limit + webhook idempotency).
+// security primitives (rate-limit + webhook idempotency).
 // Both have short, bounded retention: the limiter only needs a 1-day
 // horizon to evaluate sliding windows; the dedupe table only needs to
 // outlive SendGrid's 24h retry window with cushion.
@@ -59,7 +59,7 @@ export async function GET(req: Request) {
       )
       SELECT count(*)::int AS n FROM d
     `);
-    // Phase 15 — email_send_log retains forensic records of every
+    // email_send_log retains forensic records of every
     // send attempt (success, failure, blocked). Same 730d window as
     // audit_log so admins can correlate failure rows with the audit
     // entry that triggered them.
@@ -71,7 +71,7 @@ export async function GET(req: Request) {
       )
       SELECT count(*)::int AS n FROM d
     `);
-    // Phase 20 — bounded-volume security primitives. Old rate-limit
+    // bounded-volume security primitives. Old rate-limit
     // buckets only matter while the sliding window references them
     // (max ~2x window size); 1d retention is generous. webhook_event_dedupe
     // protects against SendGrid retries (24h window) — 7d is a cushion.

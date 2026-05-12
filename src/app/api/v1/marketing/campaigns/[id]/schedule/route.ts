@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — POST /api/v1/marketing/campaigns/{id}/schedule
+ * POST /api/v1/marketing/campaigns/{id}/schedule
  *
  * Body: { scheduledFor: ISO8601 }
  *
@@ -21,7 +21,7 @@ export const runtime = "nodejs";
 
 const Body = z.object({
   scheduledFor: z.string().datetime(),
-  // Phase 25 §5.2 — optional OCC token. When provided, the UPDATE
+  // optional OCC token. When provided, the UPDATE
   // refuses to schedule a campaign whose version has been bumped
   // since the caller read it. Existing API consumers without
   // version-awareness keep working; only race-aware clients pay
@@ -79,7 +79,7 @@ export const POST = withApi<{ id: string }>(
       );
     }
 
-    // Phase 25 §5.2 — OCC enforcement matching the server-action path.
+    // OCC enforcement matching the server-action path.
     const whereClauses = [
       eq(marketingCampaigns.id, idParse.data.id),
       eq(marketingCampaigns.status, "draft"),
@@ -103,7 +103,7 @@ export const POST = withApi<{ id: string }>(
       .returning({ id: marketingCampaigns.id });
 
     if (updated.length === 0) {
-      // Phase 25 §5.2 — version mismatch (or status flipped between
+      // version mismatch (or status flipped between
       // the SELECT above and this UPDATE). Surfaces as the canonical
       // CONFLICT api error code; the message hints at the recovery
       // path (refresh-and-retry).

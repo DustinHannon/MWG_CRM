@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Admin-only proxy to GET /v3/user/account on SendGrid.
+ * Admin-only proxy to GET /v3/user/account on SendGrid.
  *
  * Returns the SendGrid account type (free / essentials / pro / premier)
  * + reputation score for the admin marketing surface. Used to surface

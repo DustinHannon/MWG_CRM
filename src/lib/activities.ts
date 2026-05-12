@@ -31,7 +31,7 @@ export const taskSchema = z.object({
 
 export interface ActivityRow {
   id: string;
-  // Phase 3G: leadId is nullable now (activities can attach to
+  // leadId is nullable now (activities can attach to
   // accounts/contacts/opportunities). The activities CHECK constraint
   // ensures exactly-one-parent, so a row will always have at least one
   // of {leadId, accountId, contactId, opportunityId} set.
@@ -73,7 +73,7 @@ export async function listActivitiesForLead(
     })
     .from(activities)
     .leftJoin(users, eq(activities.userId, users.id))
-    // Phase 10 — exclude soft-deleted activities from every UI surface.
+    // exclude soft-deleted activities from every UI surface.
     .where(and(eq(activities.leadId, leadId), eq(activities.isDeleted, false)))
     .orderBy(desc(activities.occurredAt));
 
@@ -133,7 +133,7 @@ export async function createNote(input: {
     .returning({ id: activities.id });
   await bumpLastActivityAt(input.leadId);
 
-  // Phase 3D: parse @-mentions and fan out notifications. Failure of
+  // parse @-mentions and fan out notifications. Failure of
   // mention resolution / notification dispatch must NOT fail the parent
   // create — it's best-effort.
   try {
@@ -214,7 +214,7 @@ export async function createTask(input: {
 }
 
 /**
- * Phase 10 — soft-delete an activity. Author OR admin can call.
+ * soft-delete an activity. Author OR admin can call.
  * Permission re-fetch happens here so the call is safe to make without
  * the caller having pre-loaded the row.
  *
@@ -280,7 +280,7 @@ export async function softDeleteActivity(
 }
 
 /**
- * Phase 10 — restore an archived activity (used by the toast Undo).
+ * restore an archived activity (used by the toast Undo).
  * Recomputes parent's last_activity_at after restore.
  */
 export async function restoreActivity(
@@ -338,10 +338,10 @@ export async function restoreActivity(
 }
 
 /**
- * Phase 13 — public API parent-verification. Confirms the parent FK
+ * public API parent-verification. Confirms the parent FK
  * exists AND is not soft-deleted. Returns:
- *  - { ok: true }  — parent exists, active.
- *  - { ok: false, reason: 'missing' | 'archived' } — caller emits 422.
+ * { ok: true } — parent exists, active.
+ * { ok: false, reason: 'missing' | 'archived' } — caller emits 422.
  */
 export type ParentKind = "lead" | "account" | "contact" | "opportunity";
 
@@ -371,7 +371,7 @@ export async function verifyActivityParent(
 }
 
 /**
- * Phase 13 — direct insert for /api/v1/activities. Caller MUST pre-verify
+ * direct insert for /api/v1/activities. Caller MUST pre-verify
  * the parent FK via verifyActivityParent. Bumps lead.last_activity_at
  * when the parent is a lead.
  */
@@ -416,7 +416,7 @@ export async function createActivityForApi(input: {
 }
 
 /**
- * Phase 13 — paginated activities listing for /api/v1/activities.
+ * paginated activities listing for /api/v1/activities.
  *
  * Excludes soft-deleted rows. Filters: parent FK (lead/account/contact/
  * opportunity), kind. Owner-scoped on the parent's owner.
@@ -493,7 +493,7 @@ export async function getActivityForApi(
 }
 
 /**
- * Phase 13 — partial update for /api/v1/activities/:id.
+ * partial update for /api/v1/activities/:id.
  * activities don't have a version column today, so the OCC `version`
  * field is accepted in the schema for forward-compat but always
  * treated as last-write-wins.

@@ -20,7 +20,7 @@ export const activities = pgTable(
   "activities",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    // Phase 3G: lead_id is nullable now. CHECK constraint
+    // lead_id is nullable now. CHECK constraint
     // `activities_one_parent` enforces exactly-one-of {lead, account,
     // contact, opportunity}. New rows must set exactly one parent.
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
@@ -50,16 +50,16 @@ export const activities = pgTable(
     graphMessageId: text("graph_message_id"),
     graphEventId: text("graph_event_id"),
     graphInternetMessageId: text("graph_internet_message_id"),
-    // Phase 6A — Snapshot of "By: Name" from imported D365 activity
+    // Snapshot of "By: Name" from imported D365 activity
     // bodies when the name doesn't resolve to a CRM user. When set,
     // userId/createdById will be NULL and the UI renders this with an
     // " (imported)" italic hint.
     importedByName: text("imported_by_name"),
-    // Phase 6A — sha256(lead_id||kind||occurred_at_iso||body_first_200).
+    // sha256(lead_id||kind||occurred_at_iso||body_first_200).
     // Set on import only; manually-created activities leave this NULL.
     // The activities_import_dedup_idx index makes re-imports idempotent.
     importDedupKey: text("import_dedup_key"),
-    // Phase 10 — soft-delete columns. listActivitiesFor* must filter
+    // soft-delete columns. listActivitiesFor* must filter
     // is_deleted=false; deleteActivity now archives instead of dropping.
     isDeleted: boolean("is_deleted").notNull().default(false),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -78,7 +78,7 @@ export const activities = pgTable(
     index("activities_lead_occurred_idx").on(t.leadId, t.occurredAt.desc()),
     index("activities_user_idx").on(t.userId),
     index("activities_kind_idx").on(t.kind),
-    // Phase 10 — partial active indexes per parent type. The hot path
+    // partial active indexes per parent type. The hot path
     // is "list activities for {parent}" which always filters is_deleted=false.
     index("activities_active_lead_idx")
       .on(t.leadId, t.occurredAt.desc())
@@ -95,7 +95,7 @@ export const activities = pgTable(
     index("activities_deleted_by_id_idx")
       .on(t.deletedById)
       .where(sql`deleted_by_id IS NOT NULL`),
-    // Phase 6A — partial index on (lead_id, import_dedup_key) for the
+    // partial index on (lead_id, import_dedup_key) for the
     // re-import dedup lookup. Only indexes rows where dedup_key is set,
     // i.e., imported activities.
     index("activities_import_dedup_idx")

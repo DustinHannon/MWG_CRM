@@ -7,7 +7,7 @@ import { rateLimit, ipFromRequest } from "@/lib/security/rate-limit";
 import { writeSystemAudit } from "@/lib/audit";
 
 /**
- * Phase 25 §6.2 P1 follow-up — hash the IP before passing it as the
+ * hash the IP before passing it as the
  * rate-limit principal so `rate_limit_buckets.principal` doesn't
  * persist raw IPs for the 1-day retention window. The audit-event
  * row still stores the raw `ipAddress` (for forensics — same as the
@@ -21,30 +21,30 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 25 §6.2 — CSP violation report endpoint.
+ * CSP violation report endpoint.
  *
  * Two shapes are accepted because the browser ecosystem hasn't fully
  * migrated:
  *
- *   1. Legacy `report-uri` format (current default in `src/proxy.ts`):
- *      Content-Type: application/csp-report
- *      Body: { "csp-report": { "document-uri": "...", ... } }
+ * 1. Legacy `report-uri` format (current default in `src/proxy.ts`):
+ * Content-Type: application/csp-report
+ * Body: { "csp-report": { "document-uri": "...", ... } }
  *
- *   2. Reporting API `report-to` format:
- *      Content-Type: application/reports+json
- *      Body: [{ type: "csp-violation", body: { ... }, ... }]
+ * 2. Reporting API `report-to` format:
+ * Content-Type: application/reports+json
+ * Body: [{ type: "csp-violation", body: { ... }, ... }]
  *
  * Both shapes funnel into the same audit event so the security review
  * doesn't have to know which UA dialect produced it.
  *
  * Defense-in-depth:
- * - Per-IP rate limit (sliding window, 60-second).
- * - Body capped at 32 KB before parsing (CSP reports are tiny; anything
- *   larger is abuse).
- * - Audit event includes only directive + blocked-uri + document-uri +
- *   source-file. The raw `original-policy` is NOT persisted — we know
- *   the policy server-side and the browser-side dump just bloats audit
- *   rows.
+ * Per-IP rate limit (sliding window, 60-second).
+ * Body capped at 32 KB before parsing (CSP reports are tiny; anything
+ * larger is abuse).
+ * Audit event includes only directive + blocked-uri + document-uri +
+ * source-file. The raw `original-policy` is NOT persisted — we know
+ * the policy server-side and the browser-side dump just bloats audit
+ * rows.
  *
  * The endpoint is public (no auth) — browsers POST here when the CSP
  * blocks a resource and they MUST be able to do so without a session
@@ -92,10 +92,10 @@ const reportToReportSchema = z
   })
   .passthrough();
 
-// Phase 25 §6.2 P1 follow-up — cap reports-per-request hard at 5.
+// cap reports-per-request hard at 5.
 // The Reporting API permits batching up to ~50; combined with the
 // 60/min/IP rate limit that's 3000 audit rows per minute per source IP
-// — enough for one misbehaving browser extension to flood audit_log.
+// enough for one misbehaving browser extension to flood audit_log.
 // Five is generous: in practice browsers emit 1-2 reports per page
 // load when a violation occurs.
 const MAX_NORMALIZED_REPORTS_PER_REQUEST = 5;
@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
     });
     return new NextResponse(null, { status: 400 });
   }
-  // Phase 25 §6.2 P2 follow-up — measure in BYTES (not chars) so
+  // measure in BYTES (not chars) so
   // multi-byte UTF-8 reports don't slip past the post-parse check
   // when content-length is missing or unreliable. The earlier
   // content-length gate is bytes already.

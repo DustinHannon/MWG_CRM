@@ -12,10 +12,10 @@ const PHOTO_TTL_HOURS = 24;
  * Cache the user's Microsoft profile photo to Vercel Blob and store the URL
  * on users.photo_blob_url. Refreshes once every PHOTO_TTL_HOURS.
  *
- * - 404 from Graph (no photo set) is treated as a deliberate "no photo"
- *   and we mark the timestamp so we don't retry for a day.
- * - Reauth errors are swallowed — the photo is non-critical and we don't
- *   want the dashboard to fail just because a refresh token expired.
+ * 404 from Graph (no photo set) is treated as a deliberate "no photo"
+ * and we mark the timestamp so we don't retry for a day.
+ * Reauth errors are swallowed — the photo is non-critical and we don't
+ * want the dashboard to fail just because a refresh token expired.
  */
 export async function refreshUserPhotoIfStale(userId: string): Promise<void> {
   const u = await db

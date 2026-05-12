@@ -133,7 +133,7 @@ export const PATCH = withApi<{ id: string }>(
       patch.occurredAt = new Date(m.occurred_at);
     }
     await updateActivityForApi(params.id, patch);
-    // Phase 22 — `updateActivityForApi` lib helper does NOT emit audit.
+    // `updateActivityForApi` lib helper does NOT emit audit.
     // Mirror the (app) action's behaviour so API-key driven updates land
     // in audit_log with the same `activity.update` event taxonomy.
     await writeAudit({

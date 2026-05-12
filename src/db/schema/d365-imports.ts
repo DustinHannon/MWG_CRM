@@ -12,17 +12,17 @@ import {
 import { users } from "./users";
 
 /**
- * Phase 23 — D365 import pipeline state.
+ * D365 import pipeline state.
  *
  * Four tables:
- *  - external_ids — universal source-id linkage for any imported entity.
- *  - import_runs — one user-initiated import session per (entity, scope).
- *  - import_batches — fixed-size review units (D365_IMPORT_BATCH_SIZE = 100).
- *  - import_records — per-row review state with raw + mapped payloads.
+ * external_ids — universal source-id linkage for any imported entity.
+ * import_runs — one user-initiated import session per (entity, scope).
+ * import_batches — fixed-size review units (D365_IMPORT_BATCH_SIZE = 100).
+ * import_records — per-row review state with raw + mapped payloads.
  *
  * Designed for human-in-the-loop review. Run halts on D365 outage,
  * unmapped picklist, high-volume conflict, owner-JIT failure, or
- * validation regression — see §4.5 of the Phase 23 brief.
+ * validation regression — see §4.5 of the brief.
  *
  * Recency preservation rule (§5.2): commit code populates the
  * downstream entity's created_at / updated_at from the D365 source's
@@ -70,15 +70,15 @@ export const externalIds = pgTable(
  * import_runs — one row per user-initiated import session.
  *
  * `status` lifecycle:
- *   created → fetching → mapping → reviewing → committing → completed
- *                   ↘ paused_for_review (halt condition fired)
- *                   ↘ aborted          (admin abort)
+ * created → fetching → mapping → reviewing → committing → completed
+ * ↘ paused_for_review (halt condition fired)
+ * ↘ aborted (admin abort)
  *
  * `scope` JSONB shape:
- *   { filter?: { modifiedSince?: ISO8601, statecode?: number[] },
- *     fields?: string[],
- *     expand?: string[],
- *     includeChildren?: boolean }
+ * { filter?: { modifiedSince?: ISO8601, statecode?: number[] },
+ * fields?: string[],
+ * expand?: string[],
+ * includeChildren?: boolean }
  *
  * `cursor` holds the OData @odata.nextLink (or skiptoken) for the
  * next page within the entity. Persisted so a run can resume across
@@ -132,7 +132,7 @@ export const importRuns = pgTable(
  * `batchNumber` is monotonic per-run, starting at 1.
  *
  * `status` lifecycle:
- *   pending → fetched → reviewing → approved/rejected → committed/failed
+ * pending → fetched → reviewing → approved/rejected → committed/failed
  *
  * Counts sum to recordCountFetched at every state transition.
  */

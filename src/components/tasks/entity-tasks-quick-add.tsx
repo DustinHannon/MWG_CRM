@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { createTaskAction } from "@/app/(app)/tasks/actions";
 
 /**
- * Phase 25 §7.3 — entity-detail Tasks tab quick-add. Auto-sets the
+ * entity-detail Tasks tab quick-add. Auto-sets the
  * parent entity FK matching the page scope (e.g. `leadId` on
  * /leads/[id]). No "Related to" picker here — the entity is implied.
  *

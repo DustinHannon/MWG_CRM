@@ -14,7 +14,7 @@ interface Props {
 }
 
 /**
- * Phase 15 — table + detail drawer for `/admin/email-failures`.
+ * table + detail drawer for `/admin/email-failures`.
  *
  * Click a row → opens the detail dialog with the full row payload
  * (graphMessageId, httpStatus, durationMs, requestId, metadata JSON,

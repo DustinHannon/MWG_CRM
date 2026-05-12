@@ -12,7 +12,7 @@ import {
 } from "@/lib/format-time";
 
 /**
- * Phase 5A — `<UserTime>` server component. Renders a Date / ISO string
+ * `<UserTime>` server component. Renders a Date / ISO string
  * in the current user's timezone + date/time format pulled from
  * user_preferences. The prefs are fetched via React's `cache()` so the
  * cost is one query per request regardless of how many <UserTime>s the

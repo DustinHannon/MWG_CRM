@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 13 — narrow PATCH endpoint dedicated to client-side prefs
+ * narrow PATCH endpoint dedicated to client-side prefs
  * toggles like the sidebar collapse switch. The settings page uses
  * the full server action via form post; the sidebar needs a JSON
  * fetch that doesn't navigate. Both paths funnel through

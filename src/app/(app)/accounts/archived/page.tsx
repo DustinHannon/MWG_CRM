@@ -20,7 +20,7 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 10 — admin-only archived accounts view. Mirrors `/leads/archived`.
+ * admin-only archived accounts view. Mirrors `/leads/archived`.
  * Shows soft-deleted rows with Restore + permanent-Delete actions; cron
  * `purge-archived` (lead-only today) does not yet purge accounts, so
  * Hard delete is the only path until that's extended.
@@ -87,7 +87,7 @@ export default async function ArchivedAccountsPage() {
         </GlassCard>
       ) : (
         <>
-        {/* Phase 12 — dense single-line list at <md, mirrors /leads. */}
+        {/* dense single-line list at <md, mirrors /leads. */}
         <div className="md:hidden">
           <ArchivedListMobile
             rows={rows.map((r) => ({

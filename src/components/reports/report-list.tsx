@@ -13,7 +13,7 @@ import { UserTime } from "@/components/ui/user-time";
 import type { ReportListItem } from "@/lib/reports/repository";
 
 /**
- * Phase 11 — server-friendly card grid for /reports. Each card is a
+ * server-friendly card grid for /reports. Each card is a
  * Link to /reports/[id]; no client interactivity here beyond standard
  * `<a>` navigation. Visualization gets a small icon, entity type is
  * surfaced as an uppercase pill.

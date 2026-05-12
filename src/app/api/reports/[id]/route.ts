@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 11 — PATCH /api/reports/[id]
+ * PATCH /api/reports/[id]
  *
  * Owner-or-admin update path. Bumps the `version` column on every
  * change so the builder can detect stale state if we ever add
@@ -93,7 +93,7 @@ export async function PATCH(
         })
         .where(eq(savedReports.id, id));
 
-      // Phase 15 — coverage sweep. before/after capture the keys that
+      // coverage sweep. before/after capture the keys that
       // changed (not full row dumps) to keep audit volume manageable.
       await writeAudit({
         actorId: viewer.id,
@@ -163,7 +163,7 @@ export async function DELETE(
         })
         .where(eq(savedReports.id, id));
 
-      // Phase 15 — coverage sweep. Soft-delete on shared reports needs
+      // coverage sweep. Soft-delete on shared reports needs
       // an actor-attributable trail in audit_log; api_usage_log only
       // captures token-driven traffic and the report builder UI calls
       // this endpoint with a session cookie.

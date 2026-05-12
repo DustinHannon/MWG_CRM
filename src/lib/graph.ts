@@ -12,8 +12,8 @@ export class GraphError extends Error {
 }
 
 /**
- * Minimal Microsoft Graph fetch wrapper. Phase 3 only uses it for `/me`
- * during user provisioning. Phase 7 wraps this further with token refresh
+ * Minimal Microsoft Graph fetch wrapper. only uses it for `/me`
+ * during user provisioning. wraps this further with token refresh
  * + delegated-token resolution.
  */
 export async function graphFetchWithToken<T>(
@@ -47,7 +47,7 @@ export interface GraphMeProfile {
 }
 
 /**
- * Phase 3B — extended /me fields used to populate the read-only Profile
+ * extended /me fields used to populate the read-only Profile
  * section of /settings. NEVER consumed by lead-tracking surfaces.
  */
 export interface GraphMeProfileExtended extends GraphMeProfile {

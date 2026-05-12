@@ -108,7 +108,7 @@ export async function addTaskAction(
 }
 
 /**
- * Phase 10 — soft-delete an activity. Author OR admin only. Permission
+ * soft-delete an activity. Author OR admin only. Permission
  * is enforced both client-gated (UI hides the trigger) and server-gated
  * (this action re-fetches the activity and verifies userId match or
  * admin). Returns an undo token for the toast.
@@ -197,7 +197,7 @@ export async function undoArchiveActivityAction(input: {
 }
 
 /**
- * Phase 10 — backwards-compat for the legacy form-action call site
+ * backwards-compat for the legacy form-action call site
  * still rendered in the activity-feed pre-Phase-10. Redirects to the
  * canonical soft-delete path.
  */

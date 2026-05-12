@@ -9,14 +9,14 @@ type ThemeChoice = "system" | "light" | "dark";
 
 interface ThemeControlProps {
   initial: ThemeChoice;
-  // Phase 6B — when provided, the parent (PreferencesSection) handles
+  // when provided, the parent (PreferencesSection) handles
   // persistence so we share the version round-trip with other prefs.
   // The standalone path falls back to writing directly.
   onSave?: (theme: ThemeChoice) => Promise<{ ok: boolean; error?: string }>;
 }
 
 /**
- * Phase 5A — coordinates the theme toggle on /settings between the DB
+ * coordinates the theme toggle on /settings between the DB
  * and next-themes. Applying the visual change immediately gives a snappy
  * UX; persisting through a transition guards against the user spamming
  * the toggle. On save failure we revert both the visual state AND the

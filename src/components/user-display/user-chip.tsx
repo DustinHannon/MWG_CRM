@@ -26,19 +26,19 @@ interface UserChipProps {
 }
 
 /**
- * Phase 9B canonical user chip. Avatar + display name, links to
+ * canonical user chip. Avatar + display name, links to
  * /users/[id] on click. When `hoverCard` is supplied, hovering the chip
  * (or focusing it via keyboard) opens a popover with the rich preview.
  *
  * Implementation notes:
- *   - Built on the existing Radix Popover primitive (matches the
- *     project's hover patterns; keyboard + screen reader friendly).
- *     Native <details>/<summary> would lose keyboard parity with the
- *     rest of the app's chrome.
- *   - We use Popover not HoverCard because shadcn/Radix HoverCard isn't
- *     yet vendored in this repo. Same UX: opens on pointer enter, closes
- *     on pointer leave + outside click.
- *   - openDelay 200ms so accidental cursor flyovers don't fire.
+ * Built on the existing Radix Popover primitive (matches the
+ * project's hover patterns; keyboard + screen reader friendly).
+ * Native <details>/<summary> would lose keyboard parity with the
+ * rest of the app's chrome.
+ * We use Popover not HoverCard because shadcn/Radix HoverCard isn't
+ * yet vendored in this repo. Same UX: opens on pointer enter, closes
+ * on pointer leave + outside click.
+ * openDelay 200ms so accidental cursor flyovers don't fire.
  */
 export function UserChip({
   user,

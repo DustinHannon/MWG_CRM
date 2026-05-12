@@ -24,8 +24,8 @@ import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
  * Pre-flight info shown in the delete-user modal.
  *
  * `leadCount` drives the disposition options:
- *  - 0 leads → simple "type DELETE" confirmation, no radio
- *  - ≥1 leads → reassign or cascade-delete radio
+ * 0 leads → simple "type DELETE" confirmation, no radio
+ * ≥1 leads → reassign or cascade-delete radio
  */
 export interface DeleteUserPreflightData {
   user: {
@@ -125,13 +125,13 @@ const deleteSchema = z
 
 /**
  * Single transaction:
- * - reassign disposition: UPDATE leads SET owner_id = newOwner; DELETE user.
- *   Activities (user_id) get SET NULL via FK; permissions / saved_views /
- *   user_preferences / accounts / sessions go via CASCADE.
- * - delete_leads disposition: gather attachment blob pathnames first,
- *   then DELETE FROM leads (cascade hits activities + attachments),
- *   then DELETE user. Blob cleanup runs OUTSIDE the transaction so a
- *   network failure doesn't roll back the DB delete.
+ * reassign disposition: UPDATE leads SET owner_id = newOwner; DELETE user.
+ * Activities (user_id) get SET NULL via FK; permissions / saved_views /
+ * user_preferences / accounts / sessions go via CASCADE.
+ * delete_leads disposition: gather attachment blob pathnames first,
+ * then DELETE FROM leads (cascade hits activities + attachments),
+ * then DELETE user. Blob cleanup runs OUTSIDE the transaction so a
+ * network failure doesn't roll back the DB delete.
  */
 export async function deleteUserAction(
   formData: FormData,

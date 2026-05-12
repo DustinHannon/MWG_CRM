@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 13 — CSV export of `/admin/audit` filtered set.
+ * CSV export of `/admin/audit` filtered set.
  *
  * Mirrors the same WHERE clauses as the page (free-text + action +
  * entity type + date range) so what the admin sees is what they
@@ -144,7 +144,7 @@ function buildWhereClauses(f: AuditFilterInput) {
   }
   if (f.action) wheres.push(eq(auditLog.action, f.action));
   if (f.targetType) wheres.push(eq(auditLog.targetType, f.targetType));
-  // Phase 25 §4.3 P2 follow-up — exact-match on requestId (no
+  // exact-match on requestId (no
   // wildcard scan).
   if (f.requestId && f.requestId.trim())
     wheres.push(eq(auditLog.requestId, f.requestId.trim()));

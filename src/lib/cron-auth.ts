@@ -9,9 +9,9 @@ import { env } from "@/lib/env";
  * 401 the caller should return as-is on failure.
  *
  * Usage:
- *   const unauth = requireCronAuth(req);
- *   if (unauth) return unauth;
- *   // ... handler body
+ * const unauth = requireCronAuth(req);
+ * if (unauth) return unauth;
+ * // ... handler body
  *
  * Encoding note: both inputs are converted to UTF-8 bytes for the
  * compare. The pre-check uses Buffer.byteLength so a multi-byte

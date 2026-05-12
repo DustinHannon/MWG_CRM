@@ -25,15 +25,15 @@ import {
 import { getPermissions } from "@/lib/auth-helpers";
 
 /**
- * Phase 25 §7.3 — Tasks page server actions.
+ * Tasks page server actions.
  *
  * Two surfaces wired here:
- *   1. Saved view CRUD (create / update / delete) — entity_type='task'
- *      scoped via `src/lib/task-views.ts`.
- *   2. Bulk actions (complete / reassign / delete) on selected rows —
- *      thin wrappers around the `bulk*Tasks` helpers in
- *      `src/lib/tasks.ts`. Each gates on the appropriate permission
- *      from the `permissions` table.
+ * 1. Saved view CRUD (create / update / delete) — entity_type='task'
+ * scoped via `src/lib/task-views.ts`.
+ * 2. Bulk actions (complete / reassign / delete) on selected rows —
+ * thin wrappers around the `bulk*Tasks` helpers in
+ * `src/lib/tasks.ts`. Each gates on the appropriate permission
+ * from the `permissions` table.
  *
  * Audit events stay canonical: `task.completed`, `task.reassigned`,
  * `task.deleted` (no fork by source surface).
@@ -44,7 +44,7 @@ import { getPermissions } from "@/lib/auth-helpers";
 // =============================================================================
 
 /**
- * Phase 25 §7.3 — store the currently-selected /tasks view id on
+ * store the currently-selected /tasks view id on
  * user_preferences so a returning user lands on the same surface.
  * Built-in view ids look like "builtin:my-open"; saved view ids
  * look like "saved:<uuid>". Both stored as text (no FK constraint).

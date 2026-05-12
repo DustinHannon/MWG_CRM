@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { recomputeAllScoresAction } from "../actions";
 
 /**
- * Phase 5B — runs the full re-score loop synchronously. The action caps
+ * runs the full re-score loop synchronously. The action caps
  * at 10,000 leads and refuses on overflow with a friendly message.
  */
 export function RecomputeButton() {

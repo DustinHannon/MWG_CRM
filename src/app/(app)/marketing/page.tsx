@@ -13,7 +13,7 @@ import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 19 — Marketing overview. Counts surface scale at a glance and
+ * Marketing overview. Counts surface scale at a glance and
  * link tiles route to the four sub-pages.
  */
 export default async function MarketingOverviewPage() {

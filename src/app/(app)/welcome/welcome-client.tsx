@@ -15,7 +15,7 @@ interface WelcomeClientProps {
 }
 
 /**
- * Phase 15 — first-login orientation card. No mutations, no client state;
+ * first-login orientation card. No mutations, no client state;
  * the only reason this is a client component is so the lucide icon set
  * tree-shakes per the project's existing pattern (icons live in client
  * boundaries).

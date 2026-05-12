@@ -27,12 +27,12 @@ type SubRow = {
 } & Record<string, unknown>;
 
 /**
- * Phase 3H runner. Daily cron:
- *   - select active subs whose frequency matches today (daily always;
- *     weekly only if last_run_at null or >= 7 days ago)
- *   - for each, run filter against leads created since last_seen_max_created_at
- *   - if matches: always create in-app notification, optionally send
- *     email if user's email_digest_frequency matches
+ * runner. Daily cron:
+ * select active subs whose frequency matches today (daily always;
+ * weekly only if last_run_at null or >= 7 days ago)
+ * for each, run filter against leads created since last_seen_max_created_at
+ * if matches: always create in-app notification, optionally send
+ * email if user's email_digest_frequency matches
  */
 export interface DigestSummary {
   processed: number;
@@ -91,7 +91,7 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
       const cutoff =
         sub.lastSeenMaxCreatedAt ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-      // Phase 11 — exclude archived leads from saved-search digest. The
+      // exclude archived leads from saved-search digest. The
       // pre-fix runner emailed users about leads that had since been
       // archived, surfacing rows the user may have explicitly hidden.
       const wheres = [gt(leads.createdAt, cutoff), eq(leads.isDeleted, false)];
@@ -149,7 +149,7 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
 
       if (matches.length === 0) continue;
 
-      // Phase 5A — respect the user's notify_saved_search preference. The
+      // respect the user's notify_saved_search preference. The
       // email digest runs through its own pref below regardless.
       if (sub.notifyInApp) {
         await createNotification({
@@ -161,7 +161,7 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
         summary.notified += 1;
       }
 
-      // Phase 25 §7.2 — email-digest gate. The per-sub `frequency`
+      // email-digest gate. The per-sub `frequency`
       // is authoritative for cadence (the WHERE clause above already
       // picks up only the subs running today). The user's
       // `email_digest_frequency` is now just a global emit-or-not
@@ -187,7 +187,7 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
           });
           summary.emailed += 1;
         } catch (err) {
-          // Phase 15 — sendEmailAs no longer throws ReauthRequiredError
+          // sendEmailAs no longer throws ReauthRequiredError
           // (app permissions bypass per-user refresh tokens). Real
           // delivery failures are logged in email_send_log and
           // surfaced on /admin/email-failures. This catch only fires

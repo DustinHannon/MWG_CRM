@@ -163,7 +163,7 @@ export const PATCH = withApi<{ id: string }>(
       }
       throw err;
     }
-    // Phase 22 — `updateContactForApi` lib helper does NOT emit audit
+    // `updateContactForApi` lib helper does NOT emit audit
     // (the (app)/contacts server action does). Mirror that here so
     // API-key driven updates land in audit_log too.
     await writeAudit({

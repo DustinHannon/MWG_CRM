@@ -19,18 +19,18 @@ import {
 } from "@/app/(app)/marketing/lists/actions";
 
 /**
- * Phase 29 §5 — Mass-edit table for static-imported list members.
+ * Mass-edit table for static-imported list members.
  *
  * Behaviors:
- *   • Selection toolbar (sticky bottom) when ≥1 row selected.
- *   • Header checkbox: select all visible rows on the page.
- *   • "Select all across pages" affordance when total > visible; opens
- *     a count-confirmation alert above 50.
- *   • Inline edit (click → input → blur saves; 600ms debounce).
- *   • Bulk edit modal: one field across selected rows.
- *   • Bulk remove via StandardConfirmDialog-like AlertDialog.
- *   • Search bar (debounced; routes via querystring).
- *   • Sort by name / email / added.
+ * • Selection toolbar (sticky bottom) when ≥1 row selected.
+ * • Header checkbox: select all visible rows on the page.
+ * • "Select all across pages" affordance when total > visible; opens
+ * a count-confirmation alert above 50.
+ * • Inline edit (click → input → blur saves; 600ms debounce).
+ * • Bulk edit modal: one field across selected rows.
+ * • Bulk remove via StandardConfirmDialog-like AlertDialog.
+ * • Search bar (debounced; routes via querystring).
+ * • Sort by name / email / added.
  */
 interface StaticMemberRow {
   id: string;
@@ -725,7 +725,7 @@ function PageLink({
  * input. Saves on blur after a 600ms debounce, or immediately on Enter.
  * Esc cancels.
  *
- * Phase 29 §5 — the parent passes `key={value}` so a server-side change
+ * the parent passes `key={value}` so a server-side change
  * to the row's value remounts this cell rather than relying on a
  * setState-in-effect to mirror the prop.
  */

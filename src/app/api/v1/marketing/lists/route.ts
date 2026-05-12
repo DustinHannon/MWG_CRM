@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Internal marketing-lists CRUD endpoint.
+ * Internal marketing-lists CRUD endpoint.
  *
  * Session-based (not API-key like /api/v1/leads). Used by the marketing
  * UI's list picker, live preview, and detail/edit pages.
@@ -77,7 +77,7 @@ export async function GET(req: Request) {
           id: marketingLists.id,
           name: marketingLists.name,
           description: marketingLists.description,
-          // Phase 29 §5 — surface list_type + source_entity so the
+          // surface list_type + source_entity so the
           // internal list-picker and integrations can branch UI.
           listType: marketingLists.listType,
           sourceEntity: marketingLists.sourceEntity,
@@ -144,7 +144,7 @@ export async function POST(req: Request) {
         .returning({ id: marketingLists.id });
       if (!row) throw new ValidationError("Failed to create list.");
 
-      // Phase 25 §4.1 — surface non-validation refresh failures via
+      // surface non-validation refresh failures via
       // logger.warn. The list row already exists; membership stays
       // empty until next refresh.
       try {

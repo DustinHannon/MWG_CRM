@@ -3,7 +3,7 @@ import { eq, and, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 
 /**
- * Phase 11 — soft-delete query helpers.
+ * soft-delete query helpers.
  *
  * The codebase uses Drizzle's column references rather than the
  * query-builder chain Supabase JS exposes, so the brief's
@@ -11,8 +11,8 @@ import type { PgColumn } from "drizzle-orm/pg-core";
  * helpers return SQL fragments that callers compose into their `where`
  * clauses.
  *
- *   const conds = [withActive(leads.isDeleted), eq(leads.ownerId, user.id)];
- *   const rows = await db.select().from(leads).where(and(...conds));
+ * const conds = [withActive(leads.isDeleted), eq(leads.ownerId, user.id)];
+ * const rows = await db.select().from(leads).where(and(...conds));
  */
 
 /** Fragment that filters out soft-deleted rows. */

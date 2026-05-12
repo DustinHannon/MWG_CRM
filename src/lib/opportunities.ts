@@ -12,7 +12,7 @@ import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 export { OPPORTUNITY_STAGES };
 
 /**
- * Phase 9C (workflow) — direct Opportunity creation, separate from
+ * direct Opportunity creation, separate from
  * the lead-conversion path (`src/lib/conversion.ts`). Conversion stays
  * the canonical entry point; this is the "I already have an account"
  * shortcut and powers the New Opportunity buttons on `/opportunities`
@@ -86,7 +86,7 @@ export async function createOpportunity(
 }
 
 /**
- * Phase 9C (workflow) — contact picker support for the New Opportunity
+ * contact picker support for the New Opportunity
  * form. Returns up to 200 contacts on a given account, sorted by name.
  * Empty list when no account selected.
  */
@@ -109,7 +109,7 @@ export async function listContactsForAccountPicker(
   return rows;
 }
 
-/** Phase 10 — soft-delete opportunities. */
+/** soft-delete opportunities. */
 export async function archiveOpportunitiesById(
   ids: string[],
   actorId: string,
@@ -123,14 +123,14 @@ export async function archiveOpportunitiesById(
       deletedAt: sql`now()`,
       deletedById: actorId,
       deleteReason: reason ?? null,
-      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(opportunities.id, ids));
 }
 
-/** Phase 10 — restore archived opportunities. */
+/** restore archived opportunities. */
 export async function restoreOpportunitiesById(
   ids: string[],
   actorId: string,
@@ -143,21 +143,21 @@ export async function restoreOpportunitiesById(
       deletedAt: null,
       deletedById: null,
       deleteReason: null,
-      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(opportunities.id, ids));
 }
 
-/** Phase 10 — admin hard-delete. */
+/** admin hard-delete. */
 export async function deleteOpportunitiesById(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.delete(opportunities).where(inArray(opportunities.id, ids));
 }
 
 /**
- * Phase 13 — paginated opportunity listing for /api/v1/opportunities.
+ * paginated opportunity listing for /api/v1/opportunities.
  */
 export async function listOpportunitiesForApi(args: {
   q?: string;

@@ -16,16 +16,16 @@ export * from "./lead-scoring";
 export * from "./saved-reports";
 export * from "./api-keys";
 export * from "./email-send-log";
-// Phase 19 — Marketing email subsystem (SendGrid + Unlayer)
+// Marketing email subsystem (SendGrid + Unlayer)
 export * from "./marketing-templates";
 export * from "./marketing-lists";
 export * from "./marketing-campaigns";
 export * from "./marketing-events";
-// Phase 20 — Security primitives (rate limiting + webhook idempotency)
+// Security primitives (rate limiting + webhook idempotency)
 export * from "./security";
-// Phase 23 — D365 CRM import pipeline (external IDs + run/batch/record state)
+// D365 CRM import pipeline (external IDs + run/batch/record state)
 export * from "./d365-imports";
-// Phase 29 — ClickDimensions template-migration worklist
+// ClickDimensions template-migration worklist
 export * from "./clickdimensions-migrations";
-// Phase 29 §6 — Static-list Excel import runs (Sub-agent C)
+// Static-list Excel import runs (Sub-agent C)
 export * from "./list-import-runs";

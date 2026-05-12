@@ -13,13 +13,13 @@ import { templateVisibilityWhere } from "@/lib/marketing/templates";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 19 — Templates list. Read-only view of marketing_templates with
+ * Templates list. Read-only view of marketing_templates with
  * status pill, last-edited stamp, and creator. The drag-drop editor
  * (Unlayer) is mounted from /marketing/templates/[id] and
  * /marketing/templates/new — those routes are stubbed in subsequent
  * passes.
  *
- * Phase 29 §4 — Filters by visibility: global templates are visible to
+ * Filters by visibility: global templates are visible to
  * everyone with template-view permissions; personal templates are
  * visible only to their creator. Admins bypass via the same query
  * shape — the visibility WHERE is composed in so admins still see
@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
 export default async function TemplatesPage() {
   const user = await requireSession();
 
-  // Phase 29 §4 — visibility filter. Admins bypass by skipping the
+  // visibility filter. Admins bypass by skipping the
   // visibility predicate (they see all rows including others'
   // personal templates).
   const visibilityClause = user.isAdmin
@@ -146,7 +146,7 @@ function StatusBadge({ status }: { status: "draft" | "ready" | "archived" }) {
 }
 
 function ScopeBadge({ scope }: { scope: "global" | "personal" }) {
-  // Phase 29 §4 — visibility marker. Neutral palette; the visibility
+  // visibility marker. Neutral palette; the visibility
   // attribute is informational, not a status (status pill already
   // carries draft/ready/archived).
   const label = scope === "global" ? "Global" : "Personal";

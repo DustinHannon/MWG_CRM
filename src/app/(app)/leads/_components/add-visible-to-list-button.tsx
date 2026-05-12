@@ -7,7 +7,7 @@ import { ListPicker } from "@/components/marketing/list-picker";
 import { bulkAddLeadsToListAction } from "@/app/(app)/marketing/lists/actions";
 
 /**
- * Phase 21 — Marketing bulk-action surface on the leads index.
+ * Marketing bulk-action surface on the leads index.
  *
  * Surgical addition: no checkbox column today, so this acts on the set
  * of leads currently visible in the table (passed in as a prop). When

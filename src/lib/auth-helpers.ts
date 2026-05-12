@@ -55,7 +55,7 @@ export async function requireAdmin(): Promise<SessionUser> {
 }
 
 /**
- * Phase 27 §4.6 — Fine-grained marketing permissions (24 keys).
+ * Fine-grained marketing permissions (24 keys).
  *
  * Backfilled from `canManageMarketing` at migration time so behavior is
  * preserved. Future phase migrates call sites from `canManageMarketing`
@@ -86,9 +86,9 @@ export type MarketingPermissionKey =
   | "canMarketingSuppressionsRemove"
   | "canMarketingReportsView"
   | "canMarketingAuditView"
-  // Phase 29 §5 — gates the static-list Excel import path.
+  // gates the static-list Excel import path.
   | "canMarketingListsImport"
-  // Phase 29 §7 — gates the ClickDimensions migrations admin UI.
+  // gates the ClickDimensions migrations admin UI.
   | "canMarketingMigrationsRun";
 
 export type PermissionKey =
@@ -101,14 +101,14 @@ export type PermissionKey =
   | "canSendEmail"
   | "canViewReports"
   | "canManageMarketing"
-  // Phase 25 §7.3 — task-scoped RBAC. "Own" perms are implicit
+  // task-scoped RBAC. "Own" perms are implicit
   // (any user can manage their own tasks); these gate cross-user
   // actions. Admins bypass via the existing isAdmin shortcut.
   | "canViewOthersTasks"
   | "canEditOthersTasks"
   | "canDeleteOthersTasks"
   | "canReassignTasks"
-  // Phase 27 §4.6 — fine-grained marketing perms.
+  // fine-grained marketing perms.
   | MarketingPermissionKey;
 
 /**
@@ -229,7 +229,7 @@ export async function getPermissions(
       canEditOthersTasks: false,
       canDeleteOthersTasks: false,
       canReassignTasks: false,
-      // Phase 27 §4.6 — fine-grained marketing perms default to false.
+      // fine-grained marketing perms default to false.
       canMarketingTemplatesView: false,
       canMarketingTemplatesCreate: false,
       canMarketingTemplatesEdit: false,
@@ -254,7 +254,7 @@ export async function getPermissions(
       canMarketingSuppressionsRemove: false,
       canMarketingReportsView: false,
       canMarketingAuditView: false,
-      // Phase 29 §5 + §7 — static-list import + CD migrations admin.
+      // + §7 — static-list import + CD migrations admin.
       canMarketingListsImport: false,
       canMarketingMigrationsRun: false,
     };

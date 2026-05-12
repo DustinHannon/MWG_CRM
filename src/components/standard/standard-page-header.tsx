@@ -1,16 +1,16 @@
 import type { ReactNode } from "react";
 
 /**
- * Phase 24 §3.4 / §5.4 — canonical page-header primitive.
- * Phase 26 D3.1 — upgraded defaults to match the codebase baseline:
- *   - h1: text-2xl font-semibold (was text-xl)
- *   - subtitle: text-sm (was text-xs)
- *   - kicker?: optional `text-[10px] uppercase tracking-[0.3em]` label
- *   - fontFamily?: "default" | "display" — applies font-display serif
- * Phase 26 D4.1 — optional `controls?: ReactNode` slot rendered in the
- *   trailing flex row to the LEFT of `actions`. Used by /leads and
- *   /opportunities for the Table↔Pipeline view toggle that shares the
- *   header row with the action cluster.
+ * / §5.4 — canonical page-header primitive.
+ * upgraded defaults to match the codebase baseline:
+ * h1: text-2xl font-semibold (was text-xl)
+ * subtitle: text-sm (was text-xs)
+ * kicker?: optional `text-[10px] uppercase tracking-[0.3em]` label
+ * fontFamily?: "default" | "display" — applies font-display serif
+ * optional `controls?: ReactNode` slot rendered in the
+ * trailing flex row to the LEFT of `actions`. Used by /leads and
+ * /opportunities for the Table↔Pipeline view toggle that shares the
+ * header row with the action cluster.
  *
  * Replaces the inline H1 + description + actions row pattern at the top
  * of nearly every list and detail page. Headers stay consistent in

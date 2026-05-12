@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { formatPersonName } from "@/lib/format/person-name";
-// Phase 9C — direct import (not the barrel) keeps the server-only
+// direct import (not the barrel) keeps the server-only
 // UserHoverCard out of the client bundle.
 import { UserAvatar } from "@/components/user-display/user-avatar";
 import { updateLeadStatusAction } from "../actions";
@@ -22,13 +22,13 @@ import { updateLeadStatusAction } from "../actions";
 interface Card {
   id: string;
   status: string;
-  // Phase 8D Wave 4 (FIX-003) — OCC version stamp threaded through DnD.
+  // OCC version stamp threaded through DnD.
   version: number;
   firstName: string;
   lastName: string | null;
   companyName: string | null;
   rating: string;
-  // Phase 9C — owner id powers the canonical xs avatar on the card.
+  // owner id powers the canonical xs avatar on the card.
   ownerId: string | null;
   ownerName: string | null;
   estimatedValue: string | null;
@@ -53,7 +53,7 @@ export function PipelineBoard({
   const [columns, setColumns] = useState(initialColumns);
   const [, startTransition] = useTransition();
 
-  // Phase 12 Sub-E — Touch sensor with a small delay so a tap on a
+  // Touch sensor with a small delay so a tap on a
   // card link still navigates; only a press-and-hold initiates a
   // drag on mobile. Pointer sensor stays as-is for desktop mouse.
   const sensors = useSensors(
@@ -122,7 +122,7 @@ export function PipelineBoard({
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      {/* Phase 12 Sub-E — horizontal scroll with snap so columns
+      {/* horizontal scroll with snap so columns
           land aligned to viewport edges on a touch swipe. The
           snap-mandatory + snap-start on each column ensures a swipe
           doesn't leave the user mid-column. `[scrollbar-gutter:stable]`
@@ -155,7 +155,7 @@ function Column({
     <div
       ref={setNodeRef}
       className={
-        // Phase 12 Sub-E — `snap-start` aligns each column to the
+        // `snap-start` aligns each column to the
         // scroll container's left edge on swipe. Width unchanged so
         // existing desktop layouts continue to fit 4-5 columns
         // across a 1280px viewport.
@@ -233,7 +233,7 @@ function Card({ card }: { card: Card }) {
           }
         />
         {card.ownerId ? (
-          // Phase 9C — avatar-only chip (xs/20px) for the dense card.
+          // avatar-only chip (xs/20px) for the dense card.
           // Wrapping <Link> intercepts the click so the parent draggable
           // doesn't treat it as a drag start; the card body link still
           // reaches /leads/[id] when clicked anywhere else.

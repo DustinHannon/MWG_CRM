@@ -21,7 +21,7 @@ interface Props {
 }
 
 /**
- * Phase 21 — Edit a draft campaign. Reuses the wizard component but
+ * Edit a draft campaign. Reuses the wizard component but
  * jumps the user straight to the schedule step (since template + list
  * are already chosen). Only `draft` campaigns are editable; any other
  * status renders a read-only notice with a link back to detail.
@@ -76,7 +76,7 @@ export default async function EditCampaignPage({ params }: Props) {
   // Load the candidate templates + lists so the wizard can re-render
   // selection grids if the user wants to swap.
   //
-  // Phase 29 §4 — visibility filter. Admin bypasses. We deliberately
+  // visibility filter. Admin bypasses. We deliberately
   // include the campaign's currently-selected template_id in the
   // result even if the visibility filter would otherwise hide it:
   // the wizard needs to render that selection so the user can see

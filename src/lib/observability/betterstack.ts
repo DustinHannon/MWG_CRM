@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 import { writeSystemAudit } from "@/lib/audit";
 
 /**
- * Phase 26 §3.2 — Better Stack SQL Query API client. Shared by
+ * Better Stack SQL Query API client. Shared by
  * /admin/insights (Sub-agent A) and /admin/server-logs (Sub-agent B).
  *
  * Auth: HTTP Basic with env.BETTERSTACK_QUERY_USERNAME +
@@ -27,8 +27,8 @@ import { writeSystemAudit } from "@/lib/audit";
 
 export interface BetterStackQueryOptions {
   /** ClickHouse-flavored SQL. The collection name is interpolated
-   *  via the helpers below (`betterStackLogsCollection`,
-   *  `betterStackS3Collection`) — never hardcode `t<id>_..._logs`. */
+   * via the helpers below (`betterStackLogsCollection`,
+   * `betterStackS3Collection`) — never hardcode `t<id>_..._logs`. */
   query: string;
   /** Cache key fragment — usually the panel name. */
   cacheKey: string;
@@ -41,7 +41,7 @@ export interface BetterStackQueryOptions {
 export class BetterStackNotConfiguredError extends Error {
   constructor() {
     super(
-      "Better Stack SQL Query API is not configured. See docs/operations/phase26-prereqs.md.",
+      "Better Stack SQL Query API is not configured. See operations docs.",
     );
     this.name = "BetterStackNotConfiguredError";
   }

@@ -29,7 +29,7 @@ export default async function AuditLogPage({
 }) {
   const sp = await searchParams;
 
-  // Phase 9C — cursor pagination on (created_at DESC, id DESC). The
+  // cursor pagination on (created_at DESC, id DESC). The
   // composite index `audit_log_created_at_id_idx` supports millisecond-
   // bursting writes (e.g. bulk admin actions) without losing ordering.
   const cursor = parseCursor(sp.cursor);
@@ -48,7 +48,7 @@ export default async function AuditLogPage({
   }
   if (sp.action) wheres.push(eq(auditLog.action, sp.action));
   if (sp.target_type) wheres.push(eq(auditLog.targetType, sp.target_type));
-  // Phase 25 §4.3 P2 follow-up — dedicated exact-match field for
+  // dedicated exact-match field for
   // requestId. Previously folded into the `q` ilike-OR; that scaled
   // poorly as audit_log grows since request_id has no index and the
   // wildcard pattern forced a full scan. The Request column's
@@ -82,7 +82,7 @@ export default async function AuditLogPage({
   }
   const where = wheres.length > 0 ? and(...wheres) : undefined;
 
-  // Phase 9C — guard slow searches: ILIKE %q% scans across multiple
+  // guard slow searches: ILIKE %q% scans across multiple
   // text columns can be expensive on a 1M-row audit log. 5s cap is
   // generous enough for normal browsing and forces a quick fail when
   // the table grows past the trigram-less threshold.
@@ -148,7 +148,7 @@ export default async function AuditLogPage({
       />
       <h1 className="text-2xl font-semibold">Audit log</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {/* Phase 9C — cursor pagination skips the COUNT query. The
+        {/* cursor pagination skips the COUNT query. The
             "Append-only" claim still applies. */}
         Showing {rows.length}{nextCursor ? "+" : ""} {rows.length === 1 ? "event" : "events"}. Append-only.
       </p>
@@ -261,7 +261,7 @@ export default async function AuditLogPage({
                   <UserTime value={r.createdAt} />
                 </td>
                 <td className="px-5 py-3">
-                  {/* Phase 9C — UserChip; email subline dropped per the
+                  {/* UserChip; email subline dropped per the
                       "names only on actor surfaces" directive. Hover card
                       omitted — page renders up to 100 rows. */}
                   {r.actorId ? (
@@ -294,7 +294,7 @@ export default async function AuditLogPage({
                   )}
                 </td>
                 <td className="px-5 py-3 text-xs text-muted-foreground">
-                  {/* Phase 25 §4.3 — requestId surface for cross-line
+                  {/* requestId surface for cross-line
                       log correlation. Render as a clickable filter that
                       narrows the audit log to the same correlation id;
                       title attribute shows the full id on hover so the

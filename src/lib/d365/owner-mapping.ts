@@ -12,7 +12,7 @@ import { D365_AUDIT_EVENTS } from "./audit-events";
 import { getD365Env } from "./env";
 
 /**
- * Phase 25 §5.3 — in-process per-process cache of email → resolution
+ * in-process per-process cache of email → resolution
  * outcome. Speeds up an import run where many records share an owner
  * (typical D365 export pattern: one owner per ~100 leads). Keyed on
  * lowercased email; value is either the resolved user id (positive
@@ -29,7 +29,7 @@ const ownerLookupCache = new Map<
 >();
 
 /**
- * Phase 25 §5.3 — Graph `/users/{upn}` response shape. We only
+ * Graph `/users/{upn}` response shape. We only
  * consume the fields used to create a users row.
  */
 interface GraphUserResponse {
@@ -42,25 +42,25 @@ interface GraphUserResponse {
 }
 
 /**
- * Phase 23 — D365 owner → mwg-crm user resolution.
+ * D365 owner → mwg-crm user resolution.
  *
  * Q-05 decision: three-path resolution with default-owner fallback.
  *
- *  1. EXISTING — D365 systemuser has a `domainname` (Entra UPN). Look
- *     up `users.email` exact-match (case-insensitive). Use the row
- *     verbatim if found.
+ * 1. EXISTING — D365 systemuser has a `domainname` (Entra UPN). Look
+ * up `users.email` exact-match (case-insensitive). Use the row
+ * verbatim if found.
  *
- *  2. JIT — UPN resolves to an Entra account in the MWG tenant but
- *     no `users` row exists yet. Create one mirroring the Phase 15
- *     `user.create.jit` pattern. Emit
- *     `d365.import.owner.jit_provisioned`.
+ * 2. JIT — UPN resolves to an Entra account in the MWG tenant but
+ * no `users` row exists yet. Create one mirroring the
+ * `user.create.jit` pattern. Emit
+ * `d365.import.owner.jit_provisioned`.
  *
- *  3. DEFAULT OWNER — UPN cannot be resolved (former employee, system
- *     account, no email on D365 owner record). Assign to the
- *     configured default-owner email (D365_DEFAULT_OWNER_EMAIL,
- *     default `dustin.hannon@morganwhite.com`). The user explicitly
- *     chose this over a placeholder/unassigned account so unattributed
- *     imports land somewhere a human will see them.
+ * 3. DEFAULT OWNER — UPN cannot be resolved (former employee, system
+ * account, no email on D365 owner record). Assign to the
+ * configured default-owner email (D365_DEFAULT_OWNER_EMAIL,
+ * default `dustin.hannon@morganwhite.com`). The user explicitly
+ * chose this over a placeholder/unassigned account so unattributed
+ * imports land somewhere a human will see them.
  *
  * NOTE: This module is a SKELETON. The JIT path requires a Microsoft
  * Graph lookup against the configured tenant which Sub-agent A wires
@@ -82,14 +82,14 @@ export interface ResolvedOwner {
 /**
  * Resolve a D365 systemuser's UPN/email to a mwg-crm `users.id`.
  *
- * Phase 25 §5.3 — now wires the Microsoft Graph `/users/{upn}`
- * lookup that Phase 23 left as a TODO. Resolution order:
+ * now wires the Microsoft Graph `/users/{upn}`
+ * lookup that left as a TODO. Resolution order:
  *
- *   1. Cache hit (positive or negative) from this lambda instance.
- *   2. Local users.email exact match (case-insensitive).
- *   3. Graph `/users/{upn}` lookup. If 200, JIT-provision a users
- *      row with entra_oid populated and `jit_provisioned=true`.
- *   4. Graph 404 / error → default owner.
+ * 1. Cache hit (positive or negative) from this lambda instance.
+ * 2. Local users.email exact match (case-insensitive).
+ * 3. Graph `/users/{upn}` lookup. If 200, JIT-provision a users
+ * row with entra_oid populated and `jit_provisioned=true`.
+ * 4. Graph 404 / error → default owner.
  *
  * Every resolution result is cached in-process so a batch of 100
  * leads that share an owner only triggers one Graph call. The cache
@@ -98,7 +98,7 @@ export interface ResolvedOwner {
  *
  * @param email Lowercased Entra UPN (D365 `domainname`).
  * @param actorId The admin running the import — required for the
- *                `user.create.jit` audit trail when JIT fires.
+ * `user.create.jit` audit trail when JIT fires.
  */
 export async function resolveD365Owner(
   email: string | null | undefined,
@@ -210,7 +210,7 @@ export async function resolveD365Owner(
 }
 
 /**
- * Phase 25 §5.3 — Idempotent JIT user provisioning. Caller has
+ * Idempotent JIT user provisioning. Caller has
  * already confirmed via Graph that the UPN exists; this helper
  * INSERTs the users row (or returns the existing one if a
  * concurrent caller beat us).
@@ -243,10 +243,10 @@ export async function jitProvisionD365Owner(
     graphUser.surname ??
     displayName.split(" ").slice(1).join(" ") ??
     "";
-  const username = normalized; // username column matches email per Phase 15
+  const username = normalized; // username column matches email
 
   // INSERT with explicit JIT flags so admin can audit which users
-  // came through this path. `is_active=false` mirrors Phase 15's
+  // came through this path. `is_active=false` mirrors the JIT user
   // shape — the user can sign in via Entra and the JWT callback
   // flips `is_active=true` on first successful auth.
   const inserted = await db

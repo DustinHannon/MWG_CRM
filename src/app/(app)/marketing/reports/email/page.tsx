@@ -21,9 +21,9 @@ interface Props {
 }
 
 /**
- * Phase 21 — Marketing Email Performance report.
+ * Marketing Email Performance report.
  *
- * Standalone page (not wired into the Phase 14 reports registry) — the
+ * Standalone page (not wired into the reports registry) — the
  * registry's entityType enum is locked to a finite list of CRM entities
  * and `marketing_campaign` would require a schema-level extension. The
  * audit subtab links here.

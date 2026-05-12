@@ -4,20 +4,20 @@ import { db } from "@/db";
 import { rateLimitBuckets } from "@/db/schema/security";
 
 /**
- * Phase 20 — Postgres-backed sliding-window rate limiter.
+ * Postgres-backed sliding-window rate limiter.
  *
  * No new dependencies (no Redis). Buckets live in `rate_limit_buckets`
  * keyed by `(kind, principal, window_start)`. Each call:
  *
- *   1. Computes the window slot for `now()` aligned to `windowSeconds`.
- *   2. INSERT…ON CONFLICT DO UPDATE bumps `count` for the current slot.
- *   3. Reads the count for the previous slot.
- *   4. Computes a sliding total:
- *        sliding = current + previous * (1 - elapsedInWindow / windowSize)
- *      so a caller right at a slot boundary doesn't get a free reset.
- *   5. If `sliding > limit`: returns `{ allowed: false, retryAfter }`
- *      and ROLLS THE INCREMENT BACK so a client repeatedly hitting a
- *      blocked endpoint doesn't bury its own future budget.
+ * 1. Computes the window slot for `now()` aligned to `windowSeconds`.
+ * 2. INSERT…ON CONFLICT DO UPDATE bumps `count` for the current slot.
+ * 3. Reads the count for the previous slot.
+ * 4. Computes a sliding total:
+ * sliding = current + previous * (1 - elapsedInWindow / windowSize)
+ * so a caller right at a slot boundary doesn't get a free reset.
+ * 5. If `sliding > limit`: returns `{ allowed: false, retryAfter }`
+ * and ROLLS THE INCREMENT BACK so a client repeatedly hitting a
+ * blocked endpoint doesn't bury its own future budget.
  *
  * Failure mode: if the DB call itself fails (very rare; would also fail
  * the actual handler), the limiter `fails open` with a logged warning.
@@ -35,12 +35,12 @@ export type RateLimitKey =
   | { kind: "test_send"; principal: string }
   | { kind: "filter_preview"; principal: string }
   | { kind: "campaign_send"; principal: string }
-  // Phase 25 §6.2 — CSP violation report endpoint. Principal is the
+  // CSP violation report endpoint. Principal is the
   // sha256-hashed client IP (lower-case hex, 64 chars) so raw IPs
   // aren't persisted alongside the limiter bucket. Callers pass the
   // hash via `hashIpForRateLimit(ip)` from the csp-report route.
   | { kind: "csp_report"; principal: string }
-  // Phase 26 §6 — geo-block audit emission throttle. Principal is the
+  // geo-block audit emission throttle. Principal is the
   // sha256-hashed client IP for the same reason as csp_report — keeps
   // raw IPs out of the limiter bucket. Used by `src/proxy.ts` to bound
   // audit_log volume when a non-allowlisted source retries in a tight

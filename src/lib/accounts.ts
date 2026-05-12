@@ -8,7 +8,7 @@ import { expectAffected } from "@/lib/db/concurrent-update";
 import { urlField } from "@/lib/validation/primitives";
 
 /**
- * Phase 9C (workflow) — direct Account creation from `/accounts/new`,
+ * direct Account creation from `/accounts/new`,
  * separate from the lead-conversion path. The conversion path lives in
  * `src/lib/conversion.ts` and stays single-transaction; this is the
  * stand-alone "I already know who this customer is" entry point.
@@ -74,7 +74,7 @@ export async function createAccount(
 }
 
 /**
- * Phase 9C (workflow) — pickable account list for the New Contact /
+ * pickable account list for the New Contact /
  * New Opportunity forms. Returns up to 500 accounts visible to the
  * caller, sorted alphabetically. The brief calls out autocomplete as
  * a future polish; today we render a plain `<select>` and 500 is
@@ -96,7 +96,7 @@ export async function listAccountsForPicker(
 }
 
 /**
- * Phase 10 — soft delete (archive). Sets `is_deleted=true` and the
+ * soft delete (archive). Sets `is_deleted=true` and the
  * deletion-attribution columns on a batch of accounts.
  *
  * @actor account owner or admin (caller enforces)
@@ -114,7 +114,7 @@ export async function archiveAccountsById(
       deletedAt: sql`now()`,
       deletedById: actorId,
       deleteReason: reason ?? null,
-      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
@@ -122,7 +122,7 @@ export async function archiveAccountsById(
 }
 
 /**
- * Phase 10 — restore archived accounts.
+ * restore archived accounts.
  *
  * @actor admin only (caller enforces)
  */
@@ -138,7 +138,7 @@ export async function restoreAccountsById(
       deletedAt: null,
       deletedById: null,
       deleteReason: null,
-      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
@@ -146,7 +146,7 @@ export async function restoreAccountsById(
 }
 
 /**
- * Phase 10 — admin hard-delete. Cascades through opportunities and
+ * admin hard-delete. Cascades through opportunities and
  * contacts via FK ON DELETE SET NULL / CASCADE depending on the link.
  * Use only from admin flows.
  *
@@ -158,7 +158,7 @@ export async function deleteAccountsById(ids: string[]): Promise<void> {
 }
 
 /**
- * Phase 13 — paginated account listing for /api/v1/accounts.
+ * paginated account listing for /api/v1/accounts.
  *
  * Mirrors the inline query on `/(app)/accounts/page.tsx` but returns
  * the offset-pagination envelope the v1 API contract requires
@@ -223,7 +223,7 @@ export async function getAccountForApi(
 }
 
 /**
- * Phase 13 — partial update with optional optimistic concurrency.
+ * partial update with optional optimistic concurrency.
  *
  * When `expectedVersion` is provided, the UPDATE filters on it and
  * throws `ConflictError` (via expectAffected) when it doesn't match.

@@ -26,20 +26,20 @@ interface SidebarProps {
   brand: { subtitle?: string };
   nav: NavItem[];
   user: SessionUser;
-  /** Phase 13 — initial collapsed value from `user_preferences`. */
+  /** initial collapsed value from `user_preferences`. */
   initialCollapsed: boolean;
 }
 
 /**
- * Phase 7B — single sidebar shared by every authenticated layout. The
+ * single sidebar shared by every authenticated layout. The
  * caller passes its own nav array so the main app and the admin
  * section can have different links without forking chrome.
  *
- * Phase 13 — collapsible (240px ↔ 64px) with persistent state, icon
+ * collapsible (240px ↔ 64px) with persistent state, icon
  * mapping per nav item, and active-route accent. When collapsed,
  * labels become tooltips on hover/focus and the user profile panel
  * shows avatar-only. The mobile drawer (`<MobileSidebar>`) is unaffected
- * — it always renders at full width and ignores `initialCollapsed`.
+ * it always renders at full width and ignores `initialCollapsed`.
  */
 export function Sidebar({
   brand,

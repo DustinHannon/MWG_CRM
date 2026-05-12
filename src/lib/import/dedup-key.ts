@@ -1,4 +1,4 @@
-// Phase 6E — sha256 dedup key for imported activities. Lets re-imports
+// sha256 dedup key for imported activities. Lets re-imports
 // be idempotent: the same lead_id + kind + occurred_at + body-prefix
 // hashes to the same key, so a second pass over the same file skips
 // the activity instead of duplicating it.

@@ -12,7 +12,7 @@ import { ConflictError } from "@/lib/errors";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
- * Phase 3B server actions for /settings. Editable fields auto-save on
+ * server actions for /settings. Editable fields auto-save on
  * change — each action validates a small slice of the prefs schema and
  * upserts. Read-only Entra-synced fields are NEVER writable here.
  *
@@ -49,7 +49,7 @@ const updatePreferencesSchema = z.object({
   dateFormat: z.enum(["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"]).optional(),
   timeFormat: z.enum(["12h", "24h"]).optional(),
   tableDensity: z.enum(["comfortable", "compact"]).optional(),
-  // Phase 13 — sidebar collapsed/expanded state. Persisted so the
+  // sidebar collapsed/expanded state. Persisted so the
   // chrome stays consistent across sessions and devices.
   sidebarCollapsed: z.boolean().optional(),
   notifyTasksDue: z.boolean().optional(),
@@ -74,7 +74,7 @@ export async function updatePreferencesAction(
     async (): Promise<PreferencesUpdateData> => {
       const session = await requireSession();
 
-      // Phase 6B — extract version from the patch before Zod validates the
+      // extract version from the patch before Zod validates the
       // pref slice. Optional: a brand-new prefs row has no version yet, so
       // first-save can omit it.
       const expectedVersion = patch.version;

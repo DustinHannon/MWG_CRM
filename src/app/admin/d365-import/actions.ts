@@ -34,7 +34,7 @@ import {
 } from "./_schemas";
 
 /**
- * Phase 23 — admin server actions for the D365 import surface.
+ * admin server actions for the D365 import surface.
  *
  * Every action is admin-gated and wrapped in `withErrorBoundary` so
  * failures surface as a clean public message + request id without
@@ -49,7 +49,7 @@ import {
  */
 
 /* -------------------------------------------------------------------------- *
- *                              Helpers                                       *
+ * Helpers *
  * -------------------------------------------------------------------------- */
 
 function parse<T>(
@@ -213,7 +213,7 @@ function mapResumeFormToResolution(
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Run actions                                   *
+ * Run actions *
  * -------------------------------------------------------------------------- */
 
 export async function createRunAction(
@@ -598,7 +598,7 @@ export async function resumeRunAction(
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Record actions                                *
+ * Record actions *
  * -------------------------------------------------------------------------- */
 
 async function loadRecord(recordId: string): Promise<{
@@ -777,7 +777,7 @@ export async function setConflictResolutionAction(
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Batch commit                                  *
+ * Batch commit *
  * -------------------------------------------------------------------------- */
 
 export async function commitBatchAction(

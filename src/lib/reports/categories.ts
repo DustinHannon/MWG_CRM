@@ -6,7 +6,7 @@ import type { ReportEntityType } from "@/db/schema/saved-reports";
 import type { ReportListItem } from "@/lib/reports/repository";
 
 /**
- * Phase 24 — /reports built-in catalog categorization.
+ * /reports built-in catalog categorization.
  *
  * Reports in the saved_reports table are tagged by `entity_type`
  * (e.g. "lead", "opportunity", "marketing_campaign"). The reports
@@ -33,12 +33,12 @@ export interface ReportCategory {
  * The category catalog. Order = display order on the page.
  *
  * Buckets:
- *   - Leads
- *   - Accounts & Contacts (both client-facing entities live together)
- *   - Opportunities
- *   - Tasks
- *   - Activities
- *   - Marketing & Email (three marketing entities + transactional log)
+ * Leads
+ * Accounts & Contacts (both client-facing entities live together)
+ * Opportunities
+ * Tasks
+ * Activities
+ * Marketing & Email (three marketing entities + transactional log)
  */
 export const REPORT_CATEGORIES: readonly ReportCategory[] = [
   { key: "leads", label: "Leads", entityTypes: ["lead"] },

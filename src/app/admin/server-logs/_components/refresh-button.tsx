@@ -5,7 +5,7 @@ import { useTransition } from "react";
 import { refreshServerLogsAction } from "../actions";
 
 /**
- * Phase 26 §5 — Refresh button for /admin/server-logs.
+ * Refresh button for /admin/server-logs.
  *
  * Invokes `refreshServerLogsAction` (server action) which calls
  * `revalidatePath('/admin/server-logs')`. That invalidates both the

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 29 §7 — Records that an extraction run has started.
+ * Records that an extraction run has started.
  *
  * The Playwright extraction script POSTs this once at startup so the
  * worklist UI can show "Last run started at X". Audit-event-only;

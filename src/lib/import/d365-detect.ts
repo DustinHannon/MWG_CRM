@@ -1,4 +1,4 @@
-// Phase 6D — Legacy D365 "Description" field smart-detect.
+// Legacy D365 "Description" field smart-detect.
 //
 // Real production data ships with everything crammed into a single
 // `Description` column: Topic, Phone Calls, Notes, Meetings, Linked

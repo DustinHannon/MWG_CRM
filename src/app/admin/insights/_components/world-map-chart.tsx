@@ -5,7 +5,7 @@ import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 const TOPOJSON_URL = "/topojson/world-110m.json";
 
 /**
- * Phase 26 §4 — world chloropleth client component.
+ * world chloropleth client component.
  *
  * Renders a chloropleth based on `visitorsByCountry` keyed by ISO
  * 3166-1 alpha-2 code (`{ US: 12, JM: 1, ... }`). The world-atlas
@@ -20,7 +20,7 @@ const TOPOJSON_URL = "/topojson/world-110m.json";
  * traffic — the chart simply leaves unknown alpha-2 codes blank.
  */
 const ISO2_TO_M49: Record<string, string> = {
-  // Geo-block allowlist (Phase 26 §6).
+  // Geo-block allowlist.
   US: "840",
   JM: "388",
   PR: "630",

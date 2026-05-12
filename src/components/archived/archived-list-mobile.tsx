@@ -2,19 +2,19 @@ import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
 
 /**
- * Phase 12 — uniform dense mobile list for the five archived views
+ * uniform dense mobile list for the five archived views
  * (leads, accounts, contacts, opportunities, tasks). Renders only at
  * <md (caller wraps it in `md:hidden`); the desktop archived table
  * stays as the >=md layout.
  *
  * Each archived entity has the same shape on this view:
- *   • the entity's display name / title (with a deterministic-color
- *     initials avatar so users can scan visually)
- *   • a sub-line: optional secondary identifier (company / industry /
- *     stage / account) · "Archived M/D" · "by <name>" · reason
- *   • trailing actions injected by the caller — typically Restore +
- *     Permanent-delete forms. The caller controls the action JSX so
- *     each entity can keep its own inline server actions intact.
+ * • the entity's display name / title (with a deterministic-color
+ * initials avatar so users can scan visually)
+ * • a sub-line: optional secondary identifier (company / industry /
+ * stage / account) · "Archived M/D" · "by <name>" · reason
+ * • trailing actions injected by the caller — typically Restore +
+ * Permanent-delete forms. The caller controls the action JSX so
+ * each entity can keep its own inline server actions intact.
  */
 
 export interface ArchivedListMobileRow {

@@ -17,7 +17,7 @@ import { CloneTemplateButton } from "./_components/clone-template-button";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 21 — Template detail (read-only). Renders metadata, status,
+ * Template detail (read-only). Renders metadata, status,
  * SendGrid sync state, and a sandboxed preview of the rendered HTML.
  *
  * The Edit button shows when the user has marketing permission and no
@@ -61,7 +61,7 @@ export default async function TemplateDetailPage({
     .limit(1);
   if (!row) notFound();
 
-  // Phase 29 §4.4 — visibility 404. A personal template owned by
+  // visibility 404. A personal template owned by
   // someone else simply doesn't exist for this viewer.
   if (
     !canViewTemplate({
@@ -75,7 +75,7 @@ export default async function TemplateDetailPage({
 
   const lock = await getLock(row.id);
   const lockedByOther = lock !== null && lock.userId !== user.id;
-  // Phase 29 §4.5 — Edit gate combines marketing perm + visibility-
+  // Edit gate combines marketing perm + visibility-
   // aware edit rule. Casts to a real check via the helper so the
   // detail page's "Edit" button matches what /edit allows.
   const editGate = canEditTemplate({
@@ -86,7 +86,7 @@ export default async function TemplateDetailPage({
   });
   const canEdit =
     (user.isAdmin || perms.canManageMarketing) && editGate && !lockedByOther;
-  // Phase 29 §4.6 — Clone is gated on canMarketingTemplatesCreate
+  // Clone is gated on canMarketingTemplatesCreate
   // (or canManageMarketing for backward compat). Visible regardless
   // of whether the user can edit the source — that's the whole
   // point: a non-editor can take a private copy and iterate.

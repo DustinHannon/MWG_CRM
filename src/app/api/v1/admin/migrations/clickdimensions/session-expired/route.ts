@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 29 §7 — Records that the extraction script's D365 session
+ * Records that the extraction script's D365 session
  * expired mid-run and the script halted gracefully. Operator must
  * re-auth (delete storage.json + re-run auth.ts) and resume.
  */

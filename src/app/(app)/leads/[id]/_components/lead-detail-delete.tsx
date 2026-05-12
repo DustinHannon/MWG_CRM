@@ -8,7 +8,7 @@ import {
 } from "../../actions";
 
 /**
- * Phase 10 — detail-page Archive trigger. After archive succeeds, the
+ * detail-page Archive trigger. After archive succeeds, the
  * server action revalidates `/leads`; we route the user there since the
  * just-archived lead would 404 if they reload.
  */

@@ -4,7 +4,7 @@ import { StandardEmptyState } from "@/components/standard";
 import { TrafficTimelineChart } from "./traffic-timeline-chart";
 
 /**
- * Phase 26 §4 — server wrapper for the traffic timeline chart.
+ * server wrapper for the traffic timeline chart.
  *
  * Fetches 7 days of daily request counts and hands them to the client
  * component for recharts rendering. Falls back to a "drain not

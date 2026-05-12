@@ -11,7 +11,7 @@ import {
 import { ViewHtmlDialog } from "./view-html-dialog";
 
 /**
- * Phase 29 §7 — ClickDimensions migration worklist (client island).
+ * ClickDimensions migration worklist (client island).
  *
  * Server passes pre-serialized rows. The client manages selection
  * state for bulk actions, dispatches server actions, and renders

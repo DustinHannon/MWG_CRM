@@ -12,10 +12,10 @@ import { hashPassword } from "@/lib/password";
  * Behaviour:
  * 1. Generate a fresh 32-char random password.
  * 2. Insert the breakglass user with `INSERT … WHERE NOT EXISTS … RETURNING id`.
- *    The unique partial index `users_one_breakglass` (is_breakglass=true)
- *    guarantees at most one row even under concurrent cold starts.
+ * The unique partial index `users_one_breakglass` (is_breakglass=true)
+ * guarantees at most one row even under concurrent cold starts.
  * 3. If RETURNING produced a row → we just inserted, so log the password
- *    (this is the ONE place the user ever sees it). Otherwise no-op.
+ * (this is the ONE place the user ever sees it). Otherwise no-op.
  *
  * Memoised per-process: after a successful "already exists" check, we don't
  * hit the DB again for the lifetime of this Lambda instance.
@@ -87,7 +87,7 @@ export async function ensureBreakglass(): Promise<void> {
       canViewReports: true,
     });
 
-    // Phase 2D: every user (incl. breakglass) gets a preferences row.
+    // every user (incl. breakglass) gets a preferences row.
     await tx
       .insert(userPreferences)
       .values({ userId: id })

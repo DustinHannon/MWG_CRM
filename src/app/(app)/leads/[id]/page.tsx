@@ -47,11 +47,11 @@ export default async function LeadDetailPage({
   if (!lead) notFound();
   const prefs = await getCurrentUserTimePrefs();
 
-  // Phase 3I — track this view for the Cmd+K palette's recent list.
+  // track this view for the Cmd+K palette's recent list.
   void (await import("@/lib/recent-views")).trackView(user.id, "lead", lead.id);
 
   const canEdit = user.isAdmin || perms.canEditLeads;
-  // Phase 10 — strict ownership-or-admin per the matrix. The legacy
+  // strict ownership-or-admin per the matrix. The legacy
   // canDeleteLeads permission flag is no longer the gate.
   const canDelete = canDeleteLead(user, { ownerId: lead.ownerId });
 
@@ -89,7 +89,7 @@ export default async function LeadDetailPage({
           { label: formatPersonName(lead) },
         ]}
       />
-      {/* Phase 12 — Supabase Realtime: focal record + filtered child tables. */}
+      {/* Supabase Realtime: focal record + filtered child tables. */}
       <RowRealtime entity="leads" id={lead.id} />
       <PageRealtime
         entities={["activities"]}
@@ -113,7 +113,7 @@ export default async function LeadDetailPage({
           <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/80">
             <span className="inline-flex flex-wrap items-center gap-1.5">
               Created by
-              {/* Phase 9C — canonical UserChip with hover card on this
+              {/* canonical UserChip with hover card on this
                   single-record detail surface. */}
               {creator ? (
                 <UserChip
@@ -260,7 +260,7 @@ export default async function LeadDetailPage({
           <ActivityFeed leadId={lead.id} user={user} />
         </div>
 
-        {/* Phase 25 §7.3 — Tasks tab. Lists tasks where lead_id =
+        {/* Tasks tab. Lists tasks where lead_id =
             currentLead.id with the canonical EntityTasksSection +
             quick-add (auto-FK to this lead). Same `tasks` table backs
             this and /tasks; CHECK `tasks_at_most_one_parent` is the
@@ -277,7 +277,7 @@ export default async function LeadDetailPage({
           />
         </div>
 
-        {/* Phase 21 — Marketing email rollup. Server-fetched and passed
+        {/* Marketing email rollup. Server-fetched and passed
             to the timeline so the client component doesn't waterfall. */}
         <div className="lg:col-span-3">
           <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">

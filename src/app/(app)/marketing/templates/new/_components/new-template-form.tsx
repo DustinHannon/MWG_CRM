@@ -6,10 +6,10 @@ import { Loader2 } from "lucide-react";
 import { createTemplateAction } from "../../actions";
 
 /**
- * Phase 21 — Initial-create form. Posts to the server action; on
+ * Initial-create form. Posts to the server action; on
  * success redirects to the editor for the new id.
  *
- * Phase 29 §4.2 — Adds the Visibility radio. Defaults to Global so
+ * Adds the Visibility radio. Defaults to Global so
  * the existing pre-Phase-29 behavior is preserved unless the creator
  * explicitly chooses Personal.
  */
@@ -136,7 +136,7 @@ interface VisibilityRadioProps {
 }
 
 /**
- * Phase 29 §4.2 — Visibility chooser used on the create form and the
+ * Visibility chooser used on the create form and the
  * editor toolbar. Renders two radio inputs styled as cards so the
  * description text is part of the click target.
  */

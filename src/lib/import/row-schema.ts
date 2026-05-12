@@ -1,4 +1,4 @@
-// Phase 6E — Zod schema for a parsed import row, post-normalisation.
+// Zod schema for a parsed import row, post-normalisation.
 // The raw cell-by-cell shape (strings everywhere) is validated by
 // importRowSchema; the typed payload is then handed to parse-row for
 // activity / opportunity expansion.

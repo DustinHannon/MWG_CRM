@@ -3,7 +3,7 @@ import "server-only";
 import type { importRecords } from "@/db/schema/d365-imports";
 
 /**
- * Phase 23 — pure-function halt detectors for the import pipeline.
+ * pure-function halt detectors for the import pipeline.
  *
  * Each detector inspects an in-memory batch of `import_records` (or a
  * single record) and decides whether the run should pause for review.
@@ -12,13 +12,13 @@ import type { importRecords } from "@/db/schema/d365-imports";
  *
  * Halt taxonomy (see §4.5 of brief / `D365_HALT_REASONS`):
  *
- *   H-1 D365_UNREACHABLE       — detected at fetch-time inside
- *                                 `pullBatch` from retry exhaustion;
- *                                 NOT a pure function (lives there).
- *   H-2 UNMAPPED_PICKLIST      — `detectUnmappedPicklist`
- *   H-3 HIGH_VOLUME_CONFLICT   — `detectHighVolumeConflict` (>30%)
- *   H-4 OWNER_JIT_FAILURE      — `detectOwnerJitFailure`   (>=5 fail)
- *   H-5 VALIDATION_REGRESSION  — `detectValidationRegression` (>=10 warn)
+ * H-1 D365_UNREACHABLE — detected at fetch-time inside
+ * `pullBatch` from retry exhaustion;
+ * NOT a pure function (lives there).
+ * H-2 UNMAPPED_PICKLIST — `detectUnmappedPicklist`
+ * H-3 HIGH_VOLUME_CONFLICT — `detectHighVolumeConflict` (>30%)
+ * H-4 OWNER_JIT_FAILURE — `detectOwnerJitFailure` (>=5 fail)
+ * H-5 VALIDATION_REGRESSION — `detectValidationRegression` (>=10 warn)
  *
  * All thresholds are defined here as named constants so future
  * tuning needs to land in exactly one place (and so the test suite
@@ -26,7 +26,7 @@ import type { importRecords } from "@/db/schema/d365-imports";
  */
 
 /* -------------------------------------------------------------------------- *
- *                              Threshold constants                           *
+ * Threshold constants *
  * -------------------------------------------------------------------------- */
 
 export const HIGH_VOLUME_CONFLICT_THRESHOLD_PERCENT = 30;
@@ -34,7 +34,7 @@ export const OWNER_JIT_FAILURE_THRESHOLD = 5;
 export const VALIDATION_REGRESSION_THRESHOLD = 10;
 
 /* -------------------------------------------------------------------------- *
- *                              Working types                                 *
+ * Working types *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -58,8 +58,8 @@ export interface ValidationWarning {
   code: string;
   message?: string;
   /** Optional raw value that triggered the warning. Used by the
-   *  unmapped-picklist detector to surface the offending option-set
-   *  value to the reviewer. */
+   * unmapped-picklist detector to surface the offending option-set
+   * value to the reviewer. */
   value?: string | number | null;
 }
 
@@ -91,7 +91,7 @@ export interface UnmappedPicklistResult {
 }
 
 /* -------------------------------------------------------------------------- *
- *                          Internal helpers                                  *
+ * Internal helpers *
  * -------------------------------------------------------------------------- */
 
 function asWarnings(raw: unknown): ValidationWarning[] {
@@ -109,7 +109,7 @@ function hasWarningCode(record: ImportRecordForDetect, code: string): boolean {
 }
 
 /* -------------------------------------------------------------------------- *
- *                          H-3 — High-volume conflict                        *
+ * H-3 — High-volume conflict *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -138,12 +138,12 @@ export function detectHighVolumeConflict(
 }
 
 /* -------------------------------------------------------------------------- *
- *                          H-4 — Owner JIT failure                           *
+ * H-4 — Owner JIT failure *
  * -------------------------------------------------------------------------- */
 
 /**
  * Counts records the mapper flagged with `code: 'owner_unresolvable'`
- * — the marker `owner-mapping.ts` emits when neither an existing user,
+ * the marker `owner-mapping.ts` emits when neither an existing user,
  * a JIT-provisionable Entra account, nor the configured default owner
  * could resolve.
  *
@@ -173,7 +173,7 @@ export function detectOwnerJitFailure(
 }
 
 /* -------------------------------------------------------------------------- *
- *                       H-5 — Validation regression                          *
+ * H-5 — Validation regression *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -196,7 +196,7 @@ export function detectValidationRegression(
 }
 
 /* -------------------------------------------------------------------------- *
- *                       H-2 — Unmapped picklist                              *
+ * H-2 — Unmapped picklist *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -204,7 +204,7 @@ export function detectValidationRegression(
  * a D365 option-set value that has no mapping in the registry?
  *
  * The mapper is expected to emit:
- *   { field: 'leadsourcecode', code: 'unmapped_picklist', value: 12 }
+ * { field: 'leadsourcecode', code: 'unmapped_picklist', value: 12 }
  *
  * Halt fires on the FIRST occurrence — picklist gaps need explicit
  * registry updates before commit, not threshold tolerance.
@@ -242,11 +242,11 @@ export function detectUnmappedPicklistInBatch(
 }
 
 /* -------------------------------------------------------------------------- *
- *                           Aggregate runner                                 *
+ * Aggregate runner *
  * -------------------------------------------------------------------------- */
 
 /** Re-export the canonical halt-reason strings via the audit-events module
- *  so callers don't accidentally hardcode strings here. */
+ * so callers don't accidentally hardcode strings here. */
 export { D365_HALT_REASONS } from "./audit-events";
 export type { D365HaltReason } from "./audit-events";
 

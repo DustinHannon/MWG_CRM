@@ -15,15 +15,15 @@ import { TemplateEditor } from "./_components/template-editor";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 21 — Full template editor page. Server-component shell that
+ * Full template editor page. Server-component shell that
  * gates on permission and the soft-lock, then hands off to the
  * client `<TemplateEditor>` which mounts Unlayer and the lock hook.
  *
- * Phase 29 §4.3/4.4/4.5 — Visibility-aware:
- *   - A personal template that the user can't see returns 404.
- *   - The edit gate (creator-only for personal; creator OR
- *     canMarketingTemplatesEdit for global) is applied here; users
- *     without edit rights bounce back to the read-only detail page.
+ * Visibility-aware:
+ * A personal template that the user can't see returns 404.
+ * The edit gate (creator-only for personal; creator OR
+ * canMarketingTemplatesEdit for global) is applied here; users
+ * without edit rights bounce back to the read-only detail page.
  */
 export default async function EditTemplatePage({
   params,
@@ -49,7 +49,7 @@ export default async function EditTemplatePage({
     .limit(1);
   if (!row) notFound();
 
-  // Phase 29 §4.4 — visibility 404. Don't leak existence of personal
+  // visibility 404. Don't leak existence of personal
   // templates the caller can't see.
   if (
     !canViewTemplate({
@@ -61,7 +61,7 @@ export default async function EditTemplatePage({
     notFound();
   }
 
-  // Phase 29 §4.5 — edit gate. If the user can SEE but not EDIT, drop
+  // edit gate. If the user can SEE but not EDIT, drop
   // them back at the read-only detail page rather than rendering an
   // editor that would 403 on save.
   if (

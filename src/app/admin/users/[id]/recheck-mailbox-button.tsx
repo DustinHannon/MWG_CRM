@@ -15,7 +15,7 @@ interface RecheckMailboxButtonProps {
 }
 
 /**
- * Phase 15 — admin-only mailbox re-check. POSTs to the admin endpoint
+ * admin-only mailbox re-check. POSTs to the admin endpoint
  * (which forces past the 24h cache) and optimistically renders the new
  * resolution. The endpoint returns both the freshly-resolved `kind` and
  * the persisted `mailboxCheckedAt` so we don't need to revalidate the

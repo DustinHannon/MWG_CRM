@@ -30,7 +30,7 @@ export default async function ContactsPage({
   const perms = await getPermissions(session.id);
   const canViewAll = session.isAdmin || perms.canViewAllRecords;
 
-  // Phase 9C — cursor pagination on (updated_at DESC, id DESC).
+  // cursor pagination on (updated_at DESC, id DESC).
   // Backed by composite partial index `contacts_updated_at_id_idx`.
   const cursor = parseCursor(sp.cursor);
   const wheres = [eq(contacts.isDeleted, false)];
@@ -53,7 +53,7 @@ export default async function ContactsPage({
       jobTitle: contacts.jobTitle,
       accountId: contacts.accountId,
       accountName: crmAccounts.name,
-      // Phase 9C — owner id surfaced for the canonical UserChip.
+      // owner id surfaced for the canonical UserChip.
       ownerId: contacts.ownerId,
       ownerName: users.displayName,
       createdAt: contacts.createdAt,

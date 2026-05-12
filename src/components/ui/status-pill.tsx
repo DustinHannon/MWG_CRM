@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 11 — colored status pill. Supports lead status, opportunity
+ * colored status pill. Supports lead status, opportunity
  * stage, and task status. Background + foreground are paired tokens
  * defined in globals.css under `:root` and `.dark` so contrast holds
  * in both themes.

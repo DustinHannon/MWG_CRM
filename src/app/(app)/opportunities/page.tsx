@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 50;
 
 /**
- * Phase 9C — opportunities cursor uses `<yyyy-mm-dd|null>:<uuid>`. We
+ * opportunities cursor uses `<yyyy-mm-dd|null>:<uuid>`. We
  * intentionally don't reuse the leads cursor codec because
  * `expected_close_date` is a `date` (not `timestamptz`) and NULLS LAST
  * needs special handling on both encode and where-clause sides.
@@ -53,7 +53,7 @@ export default async function OpportunitiesPage({
   const perms = await getPermissions(session.id);
   const canViewAll = session.isAdmin || perms.canViewAllRecords;
 
-  // Phase 9C — cursor pagination on (expected_close_date DESC NULLS LAST, id DESC).
+  // cursor pagination on (expected_close_date DESC NULLS LAST, id DESC).
   // Backed by composite partial index `opportunities_close_date_id_idx`.
   const cursor = parseOppCursor(sp.cursor);
   const wheres = [eq(opportunities.isDeleted, false)];
@@ -85,7 +85,7 @@ export default async function OpportunitiesPage({
       expectedCloseDate: opportunities.expectedCloseDate,
       accountId: opportunities.accountId,
       accountName: crmAccounts.name,
-      // Phase 9C — owner id surfaced for the canonical UserChip.
+      // owner id surfaced for the canonical UserChip.
       ownerId: opportunities.ownerId,
       ownerName: users.displayName,
       contactName: sql<string | null>`CASE WHEN ${contacts.id} IS NULL THEN NULL ELSE concat_ws(' ', ${contacts.firstName}, ${contacts.lastName}) END`,
@@ -108,7 +108,7 @@ export default async function OpportunitiesPage({
       <BreadcrumbsSetter crumbs={[{ label: "Opportunities" }]} />
       <PageRealtime entities={["opportunities"]} />
       <PagePoll entities={["opportunities"]} />
-      {/* Phase 12 / Phase 26 §7.2 — header migrated to
+      {/* header migrated to
           StandardPageHeader. Table↔Pipeline toggle in `controls` (left
           of `actions`) preserves the existing row layout. Power-user
           controls hide at <md; only `+ New opportunity` stays as the

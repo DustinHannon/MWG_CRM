@@ -11,7 +11,7 @@ import {
 import { users } from "./users";
 
 /**
- * Phase 13 — Bearer-token API keys for external integrations.
+ * Bearer-token API keys for external integrations.
  *
  * Plaintext format: `mwg_live_<32 base32 chars>`. We hash with SHA-256
  * (single round; tokens are full-entropy random, bcrypt's slowdown buys
@@ -63,7 +63,7 @@ export const apiKeys = pgTable(
 );
 
 /**
- * Phase 13 — every API request appends one row, success or failure.
+ * every API request appends one row, success or failure.
  * Snapshots `api_key_name_snapshot` and `api_key_prefix_snapshot` so
  * revoked or deleted keys retain attributable history. 730-day
  * retention is enforced by `/api/cron/retention-prune`.

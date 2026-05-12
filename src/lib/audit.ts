@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 import { getRequestId } from "@/lib/observability/request-context";
 
 /**
- * Phase 20 — Append a system-initiated audit event (no user actor).
+ * Append a system-initiated audit event (no user actor).
  *
  * Used for events fired by anonymous public endpoints — webhook signature
  * failures, replay rejects, rate-limit breaches — where there is no Entra
@@ -28,7 +28,7 @@ export async function writeSystemAudit(args: {
   ipAddress?: string;
 }): Promise<void> {
   try {
-    // Phase 25 §4.3 — auto-pick requestId from AsyncLocalStorage when
+    // auto-pick requestId from AsyncLocalStorage when
     // the caller didn't supply one explicitly, so every audit row
     // emitted during a single request shares the same correlation id.
     const requestId = args.requestId ?? getRequestId() ?? null;
@@ -55,9 +55,9 @@ export async function writeSystemAudit(args: {
  * Append an audit event. Best-effort — we never want a write failure to
  * block the actual mutation it's recording, so we catch and log.
  *
- * @param args.actorId            User performing the action.
+ * @param args.actorId User performing the action.
  * @param args.actorEmailSnapshot Optional pre-resolved email; when omitted we
- *   look it up so audit rows preserve the email even after the user is deleted.
+ * look it up so audit rows preserve the email even after the user is deleted.
  */
 export async function writeAudit(args: {
   actorId: string;
@@ -81,7 +81,7 @@ export async function writeAudit(args: {
       snapshot = u?.email ?? null;
     }
 
-    // Phase 25 §4.3 — auto-pick requestId from AsyncLocalStorage.
+    // auto-pick requestId from AsyncLocalStorage.
     const requestId = args.requestId ?? getRequestId() ?? null;
     await db.insert(auditLog).values({
       actorId: args.actorId,

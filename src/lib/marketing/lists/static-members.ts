@@ -10,17 +10,17 @@ import { likeContains } from "@/lib/security/like-escape";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 
 /**
- * Phase 29 §5 — Lib helpers for the `marketing_static_list_members`
+ * Lib helpers for the `marketing_static_list_members`
  * table (CSV/XLSX-imported recipients living outside the CRM lead graph).
  *
  * Canonical naming per CLAUDE.md §"Naming":
- *   • list (single)             : `getStaticListMemberById`
- *   • list (many)               : `listStaticListMembersForList`
- *   • create                    : `createStaticListMember`
- *   • bulk create               : `createStaticListMembers`
- *   • update                    : `updateStaticListMember`
- *   • bulk update               : `bulkUpdateStaticListMembers`
- *   • hard-delete (caller writes audit per-row): `deleteStaticListMembersById`
+ * • list (single) : `getStaticListMemberById`
+ * • list (many) : `listStaticListMembersForList`
+ * • create : `createStaticListMember`
+ * • bulk create : `createStaticListMembers`
+ * • update : `updateStaticListMember`
+ * • bulk update : `bulkUpdateStaticListMembers`
+ * • hard-delete (caller writes audit per-row): `deleteStaticListMembersById`
  *
  * Server actions live in `src/app/(app)/marketing/lists/actions.ts`. This
  * module assumes the caller has already gated on session + permission.

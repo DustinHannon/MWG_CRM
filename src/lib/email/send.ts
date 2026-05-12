@@ -30,7 +30,7 @@ type FromUser = {
 };
 
 /**
- * sendEmailAs — Phase 15 generic email entry point. Sends `as` the supplied
+ * sendEmailAs — generic email entry point. Sends `as` the supplied
  * `fromUserId` via Microsoft Graph application permissions
  * (POST /users/{oid}/sendMail).
  *
@@ -42,7 +42,7 @@ type FromUser = {
  * and Graph is never called.
  *
  * The `[E2E-…]` sentinel in subject or any recipient address routes through
- * the test gate: rows logged as `blocked_e2e`, no Graph call. Phase 12
+ * the test gate: rows logged as `blocked_e2e`, no Graph call.
  * convention.
  */
 export async function sendEmailAs(opts: SendOptions): Promise<SendResult> {
@@ -257,7 +257,7 @@ function toGraphRecipient(r: EmailRecipient) {
 }
 
 function appendFooter(html: string, displayName: string): string {
-  // Phase 25 §4.5 S-003 — full HTML escape on the display name, not
+  // 003 — full HTML escape on the display name, not
   // just an angle-bracket strip. Display names come from Entra and
   // are admin-controlled in practice, but a forwarded reply-thread
   // containing one could still inject markup via the footer.

@@ -18,20 +18,20 @@ interface TopBarProps {
   unreadCount: number;
   recent: NotificationItem[];
   prefs: TimePrefs;
-  /** Phase 12 Sub-E — mobile drawer trigger rendered before breadcrumbs at <1024px. */
+  /** mobile drawer trigger rendered before breadcrumbs at <1024px. */
   mobileNavTrigger?: ReactNode;
 }
 
 /**
  * Top bar — sticky horizontal chrome that reserves its own vertical
- * space. Phase 11: hosts the data-aware breadcrumb trail (left), and
+ * space. hosts the data-aware breadcrumb trail (left), and
  * the existing Search affordance + notification bell (right).
  *
  * Layout: `shrink-0 h-14` so it reserves space in the parent flex
  * column. Page content lives in a sibling scroll region beneath it,
  * so content can never flow under the bar.
  *
- * Phase 12 Sub-E — gap and horizontal padding tighten on mobile so the
+ * gap and horizontal padding tighten on mobile so the
  * mobile drawer trigger + breadcrumbs + search + bell fit a 380px
  * viewport without horizontal overflow. The breadcrumb wrapper gains
  * `min-w-0 flex-1 overflow-hidden` so it can truncate instead of

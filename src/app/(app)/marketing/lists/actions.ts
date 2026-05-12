@@ -43,7 +43,7 @@ import {
 } from "@/lib/server-action";
 
 /**
- * Phase 21 — Marketing list server actions.
+ * Marketing list server actions.
  *
  * Every action runs through `withErrorBoundary`, gates on session +
  * canManageMarketing (or admin), validates input via Zod, mutates via
@@ -62,7 +62,7 @@ const listInputBaseSchema = z.object({
 });
 
 const listCreateSchema = listInputBaseSchema.extend({
-  // Phase 29 §5 — caller may specify the source entity for dynamic
+  // caller may specify the source entity for dynamic
   // lists. Defaults to 'leads' (the only wired source today).
   sourceEntity: z
     .enum(["leads", "contacts", "accounts", "opportunities", "mixed"])
@@ -71,7 +71,7 @@ const listCreateSchema = listInputBaseSchema.extend({
 });
 const listUpdateSchema = listInputBaseSchema.extend({
   id: z.string().uuid(),
-  // Phase 27 §4.8 — OCC on list edits. List-edit UI passes the version
+  // OCC on list edits. List-edit UI passes the version
   // it loaded; the UPDATE refuses to write if another writer bumped it.
   // Optional only for programmatic API callers; the UI always passes.
   expectedVersion: z.number().int().nonnegative().optional(),
@@ -80,7 +80,7 @@ const listUpdateSchema = listInputBaseSchema.extend({
     .optional(),
 });
 
-// Phase 29 §5 — static-imported list creation. No filter DSL needed;
+// static-imported list creation. No filter DSL needed;
 // members are populated by a separate import flow (Sub-agent C).
 const staticListCreateSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -132,8 +132,8 @@ export async function createListAction(input: {
   name: string;
   description?: string;
   filterDsl: FilterDsl;
-  // Phase 29 §5 — explicit source entity for dynamic lists. Defaults
-  // to 'leads' if omitted, matching Phase 19 behavior.
+  // explicit source entity for dynamic lists. Defaults
+  // to 'leads' if omitted, behavior.
   sourceEntity?: MarketingListSourceEntity;
 }): Promise<ActionResult<{ id: string }>> {
   return withErrorBoundary({ action: "marketing.list.create" }, async () => {
@@ -154,7 +154,7 @@ export async function createListAction(input: {
         name: parsed.data.name,
         description: parsed.data.description,
         filterDsl: parsed.data.filterDsl,
-        // Phase 29 §5 — explicit type tagging. Existing rows
+        // explicit type tagging. Existing rows
         // back-filled to 'dynamic' by the migration.
         listType: "dynamic",
         sourceEntity: parsed.data.sourceEntity,
@@ -173,7 +173,7 @@ export async function createListAction(input: {
       // The list row exists; refresh can be retried from detail page.
       // Re-throw validation errors so the user can correct the DSL.
       if (err instanceof ValidationError) throw err;
-      // Phase 25 §4.1 — non-validation failures (DB blip, connectivity)
+      // non-validation failures (DB blip, connectivity)
       // get logged structured so production diagnostics catch them.
       // The list still exists; membership is empty until next refresh.
       logger.warn("marketing.list.refresh_after_create_failed", {
@@ -233,7 +233,7 @@ export async function updateListAction(input: {
       throw new NotFoundError("marketing list");
     }
 
-    // Phase 27 §4.8 — OCC: when caller passes `expectedVersion`, the
+    // OCC: when caller passes `expectedVersion`, the
     // UPDATE atomically requires `version = expectedVersion` AND bumps
     // it. 0 rows affected ⇒ another writer beat us → ConflictError.
     const whereClauses = [eq(marketingLists.id, parsed.data.id)];
@@ -263,7 +263,7 @@ export async function updateListAction(input: {
       );
     }
 
-    // Re-evaluate membership against the new DSL. Phase 25 §4.1 —
+    // Re-evaluate membership against the new DSL.
     // ValidationError rethrows to the user (bad DSL); any other failure
     // (DB connectivity, etc.) gets logged structured so it's visible
     // in production diagnostics but does NOT block the user since the
@@ -323,7 +323,7 @@ export async function deleteListAction(
       throw new NotFoundError("marketing list");
     }
 
-    // Phase 24 §6.5.2 — refuse to archive a list referenced by any
+    // refuse to archive a list referenced by any
     // active (scheduled or sending) campaign. Mirrors the template
     // delete-block; surfaces the blocking campaigns to the UI.
     const blockingCampaigns = await db
@@ -500,7 +500,7 @@ export async function bulkAddLeadsToListAction(input: {
 }
 
 // =============================================================================
-// Phase 29 §5 — Static-imported list actions
+// Static-imported list actions
 //
 // Static lists are seeded by the Excel import flow (Sub-agent C) and
 // mass-edited from the static-list detail page. Each mutation gates on
@@ -548,7 +548,7 @@ async function requireStaticListEditAccess(
 }
 
 /**
- * Phase 29 §5 — Create a static-imported list row (no members yet).
+ * Create a static-imported list row (no members yet).
  * Sub-agent C's import flow inserts members afterwards via the
  * `createStaticListMembers` lib helper.
  *
@@ -618,7 +618,7 @@ export async function createStaticListAction(input: {
 }
 
 /**
- * Phase 29 §5 — Inline edit of a single static-list member's name or
+ * Inline edit of a single static-list member's name or
  * email. Triggered from the detail page after a 600ms debounce on
  * blur.
  */
@@ -680,7 +680,7 @@ export async function updateStaticListMemberAction(input: {
 }
 
 /**
- * Phase 29 §5 — Bulk edit a single field across many static-list
+ * Bulk edit a single field across many static-list
  * members. Only `name` is exposed for bulk write (bulk email rewrites
  * risk uniqueness conflicts and are restricted to the per-row inline
  * path).
@@ -735,8 +735,8 @@ export async function bulkUpdateStaticListMembersAction(input: {
 }
 
 /**
- * Phase 29 §5 — Remove one or many static-list members. Single-row
- * delete + bulk delete share this action. Writes one audit row per
+ * Remove one or many static-list members. Single-row
+ * delete + bulk delete share this action. Writes one audit row
  * removed member so the forensic trail captures every email that
  * left the list.
  */

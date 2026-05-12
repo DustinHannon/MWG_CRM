@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — POST /api/v1/marketing/campaigns/{id}/test-send
+ * POST /api/v1/marketing/campaigns/{id}/test-send
  *
  * Body: { recipientEmail }
  *
@@ -80,7 +80,7 @@ export const POST = withApi<{ id: string }>(
     if (!campaign) {
       return errorResponse(404, "NOT_FOUND", "Campaign not found");
     }
-    // Phase 29 §4.8 — campaign.templateId is now nullable: a draft
+    // campaign.templateId is now nullable: a draft
     // unlinked by a personal-template delete cascade can't render a
     // test send. Refuse with VALIDATION_ERROR so the caller knows
     // the campaign needs a new template before the test will work.

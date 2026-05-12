@@ -69,7 +69,7 @@ export async function listNotificationsForUser(
   userId: string,
   limit = 20,
 ) {
-  // Phase 9C — verified cursor-friendly: queries the composite partial
+  // verified cursor-friendly: queries the composite partial
   // index `notifications_user_unread_idx (user_id, is_read, created_at DESC)`
   // and is bounded by `limit`, so even a high-volume user (100k+
   // notifications) seeks the leading rows by user_id and stops early.
@@ -85,7 +85,7 @@ export async function listNotificationsForUser(
 }
 
 /**
- * Phase 9C — cursor-paginated variant for the /notifications page so
+ * cursor-paginated variant for the /notifications page so
  * power users with 100k+ notifications can scroll past the top batch.
  * The /notifications page calls this; the bell popover keeps the
  * unbounded `listNotificationsForUser(userId, 10)` form because it's
@@ -171,7 +171,7 @@ export async function markRead(id: string, userId: string): Promise<void> {
 }
 
 /**
- * Phase 15 — fan out a "new user joined" bell notification to every active
+ * fan out a "new user joined" bell notification to every active
  * admin. Called from the JIT provisioning path AFTER the user-create
  * transaction commits. Defensive: a query failure logs and returns
  * silently so a notification miss never bubbles up to fail the sign-in.

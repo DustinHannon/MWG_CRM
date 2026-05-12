@@ -16,18 +16,18 @@ import { TimeRangeSelector } from "./_components/time-range-selector";
 import { RefreshButton } from "./_components/refresh-button";
 
 /**
- * Phase 26 §5 — /admin/server-logs.
+ * /admin/server-logs.
  *
  * Aggregated telemetry from production Vercel runtime logs. NOT a raw
  * log tail — every panel renders a grouped/derived view (top error
  * patterns, top endpoints, status distribution, deploy timeline).
  *
  * Caching:
- *  - Page-level `revalidate = 60` (segment ISR window).
- *  - Each Better Stack query is wrapped in `unstable_cache` with the
- *    same TTL inside `queryBetterStack`.
- *  - The Refresh button calls a server action that invokes
- *    `revalidatePath` to bust both layers on demand.
+ * Page-level `revalidate = 60` (segment ISR window).
+ * Each Better Stack query is wrapped in `unstable_cache` with the
+ * same TTL inside `queryBetterStack`.
+ * The Refresh button calls a server action that invokes
+ * `revalidatePath` to bust both layers on demand.
  *
  * Admin-only — gate via `requireAdmin` which redirects non-admins to
  * the dashboard.

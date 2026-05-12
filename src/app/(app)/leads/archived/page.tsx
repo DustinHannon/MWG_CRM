@@ -20,7 +20,7 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 4G — admin-only archived leads view. Shows soft-deleted rows with
+ * admin-only archived leads view. Shows soft-deleted rows with
  * Restore + permanent-Delete actions. Cron `purge-archived` removes them
  * automatically after 30 days.
  */
@@ -48,7 +48,7 @@ export default async function ArchivedLeadsPage() {
       companyName: leads.companyName,
       deletedAt: leads.deletedAt,
       reason: leads.deleteReason,
-      // Phase 9C — surface the deleted-by id so the cell can render a
+      // surface the deleted-by id so the cell can render a
       // canonical UserChip; email retained only as a fallback when the
       // user record predates display-name backfill (rare).
       deletedById: leads.deletedById,
@@ -90,7 +90,7 @@ export default async function ArchivedLeadsPage() {
         </GlassCard>
       ) : (
         <>
-        {/* Phase 12 — dense single-line list at <md, mirrors /leads. */}
+        {/* dense single-line list at <md, mirrors /leads. */}
         <div className="md:hidden">
           <ArchivedListMobile
             rows={rows.map((r) => ({
@@ -162,7 +162,7 @@ export default async function ArchivedLeadsPage() {
                     <UserTime value={r.deletedAt} mode="date" />
                   </td>
                   <td data-label="By" className="px-4 py-3">
-                    {/* Phase 9C — UserChip for the actor; falls back to
+                    {/* UserChip for the actor; falls back to
                         email then dash when neither id+name are known.
                         Hover card omitted (page caps at 200 rows). */}
                     {r.deletedById ? (

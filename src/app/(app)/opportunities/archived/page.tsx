@@ -84,7 +84,7 @@ export default async function ArchivedOpportunitiesPage() {
         </GlassCard>
       ) : (
         <>
-        {/* Phase 12 — dense single-line list at <md, mirrors /leads. */}
+        {/* dense single-line list at <md, mirrors /leads. */}
         <div className="md:hidden">
           <ArchivedListMobile
             rows={rows.map((r) => ({

@@ -14,7 +14,7 @@ import {
 } from "@/lib/security/filter-dsl";
 
 /**
- * Phase 21 — Single-rule editor for the filter DSL builder.
+ * Single-rule editor for the filter DSL builder.
  *
  * The field and op dropdowns source from `ALLOWED_LEAD_FILTER_FIELDS`
  * and `OPS_FOR_TYPE` — there is no free-text input. The value input

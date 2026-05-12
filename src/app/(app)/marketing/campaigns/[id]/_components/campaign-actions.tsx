@@ -22,7 +22,7 @@ interface CampaignActionsProps {
 }
 
 /**
- * Phase 21 — State-dependent action buttons for the campaign detail
+ * State-dependent action buttons for the campaign detail
  * page. The server component decides which buttons are visible; this
  * client component handles the optimistic UI + confirm dialogs.
  */

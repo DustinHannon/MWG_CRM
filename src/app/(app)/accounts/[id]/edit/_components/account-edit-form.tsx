@@ -7,7 +7,7 @@ import { updateAccountAction } from "../../../actions";
 import type { ActionResult } from "@/lib/server-action";
 
 /**
- * Phase 25 §7.4 — Account edit form. Pre-populated from the loaded
+ * Account edit form. Pre-populated from the loaded
  * row; the row's `version` is sent in a hidden field so the server
  * action enforces OCC. On CONCURRENCY_CONFLICT, the error surfaces
  * as a toast; full diff-dialog integration is documented in

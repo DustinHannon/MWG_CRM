@@ -5,7 +5,7 @@ import { getD365Env, type D365Env } from "./env";
 import { D365HttpError, withD365Retry } from "./with-retry";
 
 /**
- * Phase 23 — Dynamics 365 OData client.
+ * Dynamics 365 OData client.
  *
  * MSAL client-credentials auth with token caching (60s buffer before
  * expiry). All HTTP calls flow through `withD365Retry` for 429/5xx
@@ -15,7 +15,7 @@ import { D365HttpError, withD365Retry } from "./with-retry";
  * actions, cron). Never instantiated client-side. Credentials never
  * leave the server.
  *
- * Pattern mirrors `src/lib/email/graph-app-token.ts` (Phase 15B
+ * Pattern mirrors `src/lib/email/graph-app-token.ts` (
  * Microsoft Graph) but targets the Dynamics CRM resource and uses a
  * separate Entra app (Q-01 — `MWG-D365-Reader-MWGCRM`) with a
  * read-only D365 Security Role.

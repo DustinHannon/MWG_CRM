@@ -1,5 +1,5 @@
 /**
- * Phase 13 — API key scope catalogue. Every scope listed here is the
+ * API key scope catalogue. Every scope listed here is the
  * complete set; the admin UI grid renders from this; the auth middleware
  * checks against this; the OpenAPI security scheme documents this.
  *
@@ -33,7 +33,7 @@ export const ALL_SCOPES = [
   ...DELETE_SCOPES,
   "read:users",
   "admin",
-  // Phase 29 §7 — ClickDimensions migration receiving endpoints. The
+  // ClickDimensions migration receiving endpoints. The
   // local Playwright extraction script authenticates with an API key
   // carrying this scope. `admin` also satisfies it via `hasScope`.
   "marketing.migrations.api",

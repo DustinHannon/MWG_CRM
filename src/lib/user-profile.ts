@@ -7,7 +7,7 @@ import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 
 /**
- * Phase 9B — server library backing the user-display components and
+ * server library backing the user-display components and
  * the /users/[id] profile page.
  *
  * Auth model (per the brief): any signed-in user can fetch any other

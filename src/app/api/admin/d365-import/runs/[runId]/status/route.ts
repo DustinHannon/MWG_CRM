@@ -7,7 +7,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
 import { logger } from "@/lib/logger";
 
 /**
- * Phase 23 — Polling fallback endpoint for the admin run live-progress
+ * Polling fallback endpoint for the admin run live-progress
  * panel. The `useRunRealtime` hook (in
  * `src/components/admin/d365-import/use-run-realtime.ts`) prefers the
  * Supabase Realtime broadcast channel `d365-import-run:<runId>`; this
@@ -17,7 +17,7 @@ import { logger } from "@/lib/logger";
  *
  * Response shape MUST match `RunSnapshot` in use-run-realtime.ts.
  *
- * Auth: admin only (per Phase 23 brief — only admins see imports).
+ * Auth: admin only (by design brief — only admins see imports).
  */
 
 export const dynamic = "force-dynamic";

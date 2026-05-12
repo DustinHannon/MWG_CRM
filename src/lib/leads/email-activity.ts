@@ -8,7 +8,7 @@ import {
 import { marketingEmailEvents } from "@/db/schema/marketing-events";
 
 /**
- * Phase 21 — Lead-side rollup of marketing email activity.
+ * Lead-side rollup of marketing email activity.
  *
  * Groups every campaign that targeted this lead (via campaign_recipients)
  * with derived per-recipient metrics: delivered flag, open count, click
@@ -55,7 +55,7 @@ export async function getEmailActivityForLead(
   leadId: string,
 ): Promise<EmailActivityCampaignRollup[]> {
   // 1. Pull recipient rows + the parent campaign in one round-trip.
-  //    Sorted by sentAt DESC so the timeline reads newest-first.
+  // Sorted by sentAt DESC so the timeline reads newest-first.
   const recipients = await db
     .select({
       recipientId: campaignRecipients.id,
@@ -85,8 +85,8 @@ export async function getEmailActivityForLead(
   if (recipients.length === 0) return [];
 
   // 2. Pull every click event in one query, then bucket by campaignId.
-  //    Filtering by leadId + eventType=click keeps the index sargable
-  //    on `mkt_evt_lead_idx`.
+  // Filtering by leadId + eventType=click keeps the index sargable
+  // on `mkt_evt_lead_idx`.
   const clickRows = await db
     .select({
       campaignId: marketingEmailEvents.campaignId,

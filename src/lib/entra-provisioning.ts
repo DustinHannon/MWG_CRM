@@ -19,11 +19,11 @@ import {
  * Entra OIDC user provisioning per the brief §7.3.
  *
  * Resolution order:
- *   1. Lookup by entra_oid (the OIDC `oid` claim — stable across name changes).
- *   2. Fallback: lookup by email.
- *   3. Create a new row, parsing UPN naively, then OVERRIDING with Graph
- *      /me's givenName / surname / displayName. We deliberately do NOT
- *      import phone, department, company, jobTitle from Graph.
+ * 1. Lookup by entra_oid (the OIDC `oid` claim — stable across name changes).
+ * 2. Fallback: lookup by email.
+ * 3. Create a new row, parsing UPN naively, then OVERRIDING with Graph
+ * /me's givenName / surname / displayName. We deliberately do NOT
+ * import phone, department, company, jobTitle from Graph.
  *
  * On returning sign-ins we refresh display_name/first_name/last_name/email
  * from Graph, but never touch is_admin, is_active, or permissions.
@@ -43,7 +43,7 @@ export interface ProvisionedUser {
   isAdmin: boolean;
   sessionVersion: number;
   /**
-   * Phase 15 — set on the first-ever sign-in for the user. The /welcome
+   * set on the first-ever sign-in for the user. The /welcome
    * server component reads this column directly (not from the JWT) and
    * redirects to /leads if it's older than 5 minutes, so we don't need
    * to plumb a "first login" flag onto the token.
@@ -60,7 +60,7 @@ export async function provisionEntraUser(
     throw new EntraDomainNotAllowedError(domain ?? "(missing)");
   }
 
-  // Phase 3B: extended /me fetch. We pull job_title, department, office,
+  // extended /me fetch. We pull job_title, department, office,
   // business_phones, mobile_phone, country alongside the original
   // name/email fields for the /settings page. If the call fails (e.g.
   // consent missing), we fall back to the parsed UPN — better degraded
@@ -77,7 +77,7 @@ export async function provisionEntraUser(
     });
   }
 
-  // Phase 3B: /me/manager. 404 means "no manager set" — null those fields.
+  // /me/manager. 404 means "no manager set" — null those fields.
   // Other errors leave existing values alone (don't overwrite on transient
   // failures).
   type ManagerState =
@@ -122,7 +122,7 @@ export async function provisionEntraUser(
 
   if (byOid[0]) {
     const existing = byOid[0];
-    // Phase 15 — one-time backfill of first_login_at for users that
+    // one-time backfill of first_login_at for users that
     // pre-date the JIT telemetry columns. Only set when null; never
     // overwritten on subsequent sign-ins.
     const needsFirstLoginBackfill = existing.firstLoginAt === null;
@@ -205,7 +205,7 @@ export async function provisionEntraUser(
         isAdmin: false,
         isActive: true,
         ...buildEntraProfilePatch(me, managerState),
-        // Phase 15 — JIT telemetry. `jit_provisioned` flags rows created
+        // JIT telemetry. `jit_provisioned` flags rows created
         // by SSO (vs manually-seeded breakglass / fixtures); the
         // timestamps power the admin "Recently joined" filter and the
         // /welcome page's 5-minute first-login window.
@@ -240,7 +240,7 @@ export async function provisionEntraUser(
       canViewReports: true,
     });
 
-    // Phase 2D: every user gets a preferences row on provisioning. Idempotent
+    // every user gets a preferences row on provisioning. Idempotent
     // ON CONFLICT so a backfilled row from migration time stays put.
     await tx
       .insert(userPreferences)
@@ -250,7 +250,7 @@ export async function provisionEntraUser(
     return row;
   });
 
-  // Phase 15 — JIT telemetry (post-commit). Audit + admin bell notification
+  // JIT telemetry (post-commit). Audit + admin bell notification
   // run AFTER the transaction so a notification fan-out failure can never
   // leave a half-provisioned user. Both helpers swallow their own errors.
   await writeAudit({
@@ -364,11 +364,11 @@ function trimOrFallback(
 }
 
 /**
- * Phase 3B: build the patch for Entra-sourced profile fields. Always sets
+ * build the patch for Entra-sourced profile fields. Always sets
  * entra_synced_at when we have any profile data. Manager fields:
- *   - "fresh"      → set to manager's data (or null all if manager is null)
- *   - "no_manager" → null all manager fields (Graph 404 = no manager set)
- *   - "error"      → don't touch manager fields (transient failure)
+ * "fresh" → set to manager's data (or null all if manager is null)
+ * "no_manager" → null all manager fields (Graph 404 = no manager set)
+ * "error" → don't touch manager fields (transient failure)
  */
 function buildEntraProfilePatch(
   me: GraphMeProfileExtended | null,

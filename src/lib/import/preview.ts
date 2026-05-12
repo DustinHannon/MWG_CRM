@@ -1,4 +1,4 @@
-// Phase 6E + 6F — aggregator that turns a ParseResult[] into a
+// aggregator that turns a ParseResult[] into a
 // preview shape suitable for display + the commit step. The preview
 // is the bridge between workbook parsing and the actual writes:
 // owner email resolution, by-name resolution, and external-id

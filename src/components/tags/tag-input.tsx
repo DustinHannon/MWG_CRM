@@ -15,7 +15,7 @@ interface TagInputProps {
   value: SelectedTag[];
   onChange: (next: SelectedTag[]) => void;
   /** name + value pair are written to a hidden input so server actions
-   *  can read selected tag IDs from form data. */
+   * can read selected tag IDs from form data. */
   hiddenInputName?: string;
 }
 

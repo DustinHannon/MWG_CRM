@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
 /**
- * Phase 26 §5 — Time range selector for /admin/server-logs.
+ * Time range selector for /admin/server-logs.
  *
  * URL-state component. Renders a segmented button group of 1h/6h/24h/7d.
  * Selection writes `?range=...` and triggers a navigation; the server

@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Phase 3H — daily cron at 14:00 UTC. Runs through every active
+ * daily cron at 14:00 UTC. Runs through every active
  * saved-search subscription, creates in-app notifications + optional
  * email digests.
  */

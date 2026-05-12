@@ -1,5 +1,5 @@
 /**
- * Phase 15 — shared types for the generic email module.
+ * shared types for the generic email module.
  *
  * Naming: `email_send_log` is the system-level audit; `audit_log` rows are
  * action-level. Two tables, one source of truth (`sendEmailAs` writes both).

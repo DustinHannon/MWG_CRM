@@ -22,7 +22,7 @@ export interface RefreshResult {
 }
 
 /**
- * Phase 21 — Recompute membership for a marketing list. Runs the list's
+ * Recompute membership for a marketing list. Runs the list's
  * compiled filter against `leads` (with do_not_email and is_deleted gates),
  * diffs against the existing snapshot in `marketing_list_members`, and
  * applies INSERT/DELETE so unchanged rows aren't churned.

@@ -28,7 +28,7 @@ interface CardRow {
   lastName: string | null;
   companyName: string | null;
   rating: string;
-  // Phase 9C — owner id surfaced for the UserAvatar chip on Kanban
+  // owner id surfaced for the UserAvatar chip on Kanban
   // cards (avatars only, no hover card; high-cardinality surface).
   ownerId: string | null;
   ownerName: string | null;
@@ -51,7 +51,7 @@ export default async function PipelinePage() {
     .select({
       id: leads.id,
       status: sql<string>`${leads.status}::text`,
-      // Phase 8D Wave 4 (FIX-003) — carry version into the board so DnD
+      // carry version into the board so DnD
       // can post it back; OCC enforces compare-and-set on commit.
       version: leads.version,
       firstName: leads.firstName,

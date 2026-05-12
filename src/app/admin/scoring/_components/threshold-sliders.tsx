@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { setScoringThresholdsAction } from "../actions";
 
 /**
- * Phase 5B — three coupled inputs for hot / warm / cool with the
+ * three coupled inputs for hot / warm / cool with the
  * server-side ordering invariant (hot > warm > cool) enforced both
  * here and via the DB CHECK constraint. Local state lets admins drag
  * past invalid intermediate values; "Save" is disabled until valid.

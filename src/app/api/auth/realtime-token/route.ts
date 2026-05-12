@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 12 — mints a Supabase Realtime JWT from the current session.
+ * mints a Supabase Realtime JWT from the current session.
  *
  * The realtime client (browser) calls this endpoint on mount and again
  * before token expiry. The JWT is HS256-signed with the project's
@@ -19,11 +19,11 @@ export const dynamic = "force-dynamic";
  * the RLS policies that read claims from `request.jwt.claims`.
  *
  * Claims:
- *   sub                  user.id
- *   role                 'authenticated' (so RLS policies for that role apply)
- *   is_admin             user.isAdmin
- *   can_view_all_records permission flag (admin always true)
- *   email                for client-side display only
+ * sub user.id
+ * role 'authenticated' (so RLS policies for that role apply)
+ * is_admin user.isAdmin
+ * can_view_all_records permission flag (admin always true)
+ * email for client-side display only
  *
  * We re-fetch the user row from DB so a permission revocation takes
  * effect on the next refresh (≤ 1 hour after revoke).

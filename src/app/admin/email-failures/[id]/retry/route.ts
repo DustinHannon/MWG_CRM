@@ -12,26 +12,26 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 15 — admin "retry this failed email" endpoint.
+ * admin "retry this failed email" endpoint.
  *
  * Constraints:
- *   - Admin-only.
- *   - Only `status='failed'` rows are retryable. `blocked_preflight` is a
- *     mailbox config issue (sender's mailbox is not Exchange Online),
- *     so retrying without fixing the config will fail the same way; we
- *     return 422 to make that explicit.
- *   - The original HTML body is intentionally NOT stored in
- *     `email_send_log` (bodies can be large). The retry therefore sends
- *     a placeholder body that is honest about what's happening — admins
- *     use Retry as a "did the failure mode go away?" probe, not as
- *     message recovery.
- *   - The new send is logged with feature `<original>.retry` so future
- *     queries can distinguish probe sends from organic ones.
- *   - After `sendEmailAs` returns, we patch the new log row's
- *     `retryOfId` to the original — `sendEmailAs` doesn't take that
- *     field directly.
- *   - `audit_log.email.retry` is appended either way (success or
- *     failure) so retry attempts are themselves traceable.
+ * Admin-only.
+ * Only `status='failed'` rows are retryable. `blocked_preflight` is a
+ * mailbox config issue (sender's mailbox is not Exchange Online),
+ * so retrying without fixing the config will fail the same way; we
+ * return 422 to make that explicit.
+ * The original HTML body is intentionally NOT stored in
+ * `email_send_log` (bodies can be large). The retry therefore sends
+ * a placeholder body that is honest about what's happening — admins
+ * use Retry as a "did the failure mode go away?" probe, not as
+ * message recovery.
+ * The new send is logged with feature `<original>.retry` so future
+ * queries can distinguish probe sends from organic ones.
+ * After `sendEmailAs` returns, we patch the new log row's
+ * `retryOfId` to the original — `sendEmailAs` doesn't take that
+ * field directly.
+ * `audit_log.email.retry` is appended either way (success or
+ * failure) so retry attempts are themselves traceable.
  */
 export async function POST(
   _req: NextRequest,

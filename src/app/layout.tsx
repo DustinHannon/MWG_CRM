@@ -36,7 +36,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Phase 8 (FIX-005) — pass the per-request CSP nonce minted by
+  // pass the per-request CSP nonce minted by
   // src/proxy.ts to next-themes so its inline FOUC-prevention <script>
   // is allowed by the strict script-src directive.
   const nonce = (await headers()).get("x-nonce") ?? undefined;
@@ -48,7 +48,7 @@ export default async function RootLayout({
     >
       <body className="antialiased font-sans">
         <ThemeProvider nonce={nonce}>{children}</ThemeProvider>
-        {/* Phase 26 follow-up — Vercel first-party telemetry SDKs.
+        {/* Vercel first-party telemetry SDKs.
             `<SpeedInsights />` collects p75 LCP/INP/CLS/FCP/TTFB and
             posts to https://vitals.vercel-analytics.com.
             `<Analytics />` collects page-view + visitor-country and

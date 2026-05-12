@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 
 /**
- * Phase 26 §6 — geo-block destination page.
+ * geo-block destination page.
  *
  * Rendered by `src/proxy.ts` via `NextResponse.rewrite(..., { status: 403 })`
  * whenever a request originates from a country outside
  * `env.GEO_ALLOWED_COUNTRIES`. The page is intentionally minimal:
  *
- *   - No links into the CRM (sign-in, dashboard, etc.).
- *   - No API calls — the request is already blocked at the edge.
- *   - No Card primitive, no app shell, no nav.
- *   - Only Tailwind semantic tokens (`bg-background`, `text-foreground`,
- *     `text-muted-foreground`) so theming stays consistent if a future
- *     screenshot ends up in support tickets.
+ * No links into the CRM (sign-in, dashboard, etc.).
+ * No API calls — the request is already blocked at the edge.
+ * No Card primitive, no app shell, no nav.
+ * Only Tailwind semantic tokens (`bg-background`, `text-foreground`,
+ * `text-muted-foreground`) so theming stays consistent if a future
+ * screenshot ends up in support tickets.
  *
  * Metadata opts the page out of indexing so search engines don't
  * surface a public "Service unavailable" landing page above the real

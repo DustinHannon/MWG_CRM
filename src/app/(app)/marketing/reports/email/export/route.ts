@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Marketing email report export. Streams an .xlsx file with
+ * Marketing email report export. Streams an .xlsx file with
  * aggregate KPIs + per-campaign rows for the requested window.
  *
  * Authenticated via the standard cookie-based session — same gate as

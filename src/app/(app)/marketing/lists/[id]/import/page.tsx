@@ -14,7 +14,7 @@ import { StaticListImportClient } from "./_components/static-list-import-client"
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 29 §6 — Static-list Excel import wizard.
+ * Static-list Excel import wizard.
  *
  * Access: admin OR `canMarketingListsImport` OR `canMarketingListsEdit`
  * OR the list's creator (for "edit own" semantics).

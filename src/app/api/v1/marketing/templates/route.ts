@@ -12,14 +12,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Marketing template REST. Surface gated by the existing
+ * Marketing template REST. Surface gated by the existing
  * `admin` super-scope (the scope catalogue has no per-entity
  * `read:marketing` slot). Listing and reading are safe enough for
  * any admin-key holder; mutation goes through the in-app server
  * actions.
  *
  * The shape mirrors `/api/v1/leads` — paginated `data` + `meta` block
- * — so existing API clients can reuse their list helpers.
+ * so existing API clients can reuse their list helpers.
  */
 
 const listQuerySchema = z.object({
@@ -33,7 +33,7 @@ const createSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   subject: z.string().trim().min(1).max(998),
   preheader: z.string().trim().max(255).optional(),
-  // Phase 29 §4 — Visibility scope. API clients default to 'global'
+  // Visibility scope. API clients default to 'global'
   // (same as the in-app create form) so backward-compatible callers
   // continue to produce visible-to-everyone templates.
   scope: z.enum(["global", "personal"]).optional(),
@@ -92,7 +92,7 @@ export const GET = withApi(
     }
     const { status, page, pageSize } = parsed.data;
 
-    // Phase 29 §4 — Visibility filter. API keys are scoped to the
+    // Visibility filter. API keys are scoped to the
     // user who created them (`key.createdById`); applying the same
     // visibility rule that the in-app list page uses means a
     // marketing user's API key can't enumerate another user's
@@ -164,7 +164,7 @@ export const POST = withApi(
         unlayerDesignJson: {},
         renderedHtml: "",
         status: "draft",
-        // Phase 29 §4 — Honor the API caller's chosen scope (default
+        // Honor the API caller's chosen scope (default
         // 'global' for parity with the in-app form). The `source`
         // column tracks API-driven provenance so the migration
         // worklist can distinguish manual / api / clickdimensions
@@ -180,7 +180,7 @@ export const POST = withApi(
     if (!row) {
       return errorResponse(500, "INTERNAL_ERROR", "Failed to create template");
     }
-    // Phase 22 — audit parity with the (app)/marketing/templates server
+    // audit parity with the (app)/marketing/templates server
     // action. API-key driven mutations were previously bypassing the
     // marketing audit taxonomy; see phase22-findings-A §F-A1.
     await writeAudit({

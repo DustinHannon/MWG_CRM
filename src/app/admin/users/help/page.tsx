@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 9C — `/admin/users/help`. Admin-only static reference page that
+ * `/admin/users/help`. Admin-only static reference page that
  * documents every permission flag's effect. Linked from the admin Users
  * list header so admins can answer "what does this toggle do?" without
  * spelunking through code.

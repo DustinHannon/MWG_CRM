@@ -54,16 +54,16 @@ function isNextControlFlowError(err: unknown): boolean {
  * Translate raw Postgres / driver errors into `KnownError` subclasses so the
  * UI surfaces a clean public message instead of a 500 stack trace.
  *
- * - SQLSTATE 23514 (CHECK violation) → `ValidationError`
- * - SQLSTATE 23505 (unique violation) → `ConflictError`
- * - SQLSTATE 23503 (foreign-key violation) → `ConflictError` (Phase 25 §4.6 A-004)
+ * SQLSTATE 23514 (CHECK violation) → `ValidationError`
+ * SQLSTATE 23505 (unique violation) → `ConflictError`
+ * SQLSTATE 23503 (foreign-key violation) → `ConflictError` (A-004)
  *
  * Any other error is returned unchanged for the generic INTERNAL path.
  */
 function translatePgError(err: unknown): unknown {
   if (!err || typeof err !== "object") return err;
   const code = (err as { code?: unknown }).code;
-  // Phase 25 P2 follow-up — postgres-js always returns Error subclasses
+  // postgres-js always returns Error subclasses
   // today, but a non-Error object that happens to carry `.code` would
   // surface as `"[object Object]"` via `(err as Error).message`. Coerce
   // safely so the audit `cause` field stays readable.
@@ -82,7 +82,7 @@ function translatePgError(err: unknown): unknown {
     });
   }
   if (code === "23503") {
-    // Phase 25 §4.6 A-004 — surface FK violations as conflicts with a
+    // 004 — surface FK violations as conflicts with a
     // human-readable message instead of an opaque 500. Typical trigger:
     // a referenced record was archived/deleted between the user loading
     // a form and submitting it. Caller-side OCC catches most of these,
@@ -118,7 +118,7 @@ export async function withErrorBoundary<T>(
   const requestId = ctx.requestId ?? newRequestId();
   const start = performance.now();
 
-  // Phase 25 §4.3 — run the action body inside an AsyncLocalStorage
+  // run the action body inside an AsyncLocalStorage
   // scope so any nested `writeAudit`, `writeSystemAudit`, or
   // `logger.*` call auto-correlates with this request id without
   // every helper threading the id through its signature.

@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 29 §7 — Receives one extracted ClickDimensions template from the
+ * Receives one extracted ClickDimensions template from the
  * local Playwright extraction script. Idempotent on `cd_template_id`.
  *
  * On `extracted` success the row is also promoted into
@@ -196,9 +196,9 @@ export const POST = withApi(
     }
 
     // 3. If we got HTML, promote into marketing_templates. Idempotent:
-    //    if the migration row already has imported_template_id, update
-    //    the existing marketing_templates row in place. Otherwise
-    //    insert a new row and capture its id back.
+    // if the migration row already has imported_template_id, update
+    // the existing marketing_templates row in place. Otherwise
+    // insert a new row and capture its id back.
     let importedTemplateId: string | null = existing?.importedTemplateId ?? null;
     if (p.status === "extracted" && p.rawHtml && p.rawHtml.length > 0) {
       const displayName = buildImportedTemplateName(p.cdTemplateName);
@@ -236,7 +236,7 @@ export const POST = withApi(
             sendgridTemplateId: null,
             sendgridVersionId: null,
             status: "draft",
-            // Phase 29 — Sub-agent A added scope + source. We tag
+            // Sub-agent A added scope + source. We tag
             // source so the worklist UI can pivot back to this
             // migration row; scope='global' makes the imported row
             // visible to all marketing users.

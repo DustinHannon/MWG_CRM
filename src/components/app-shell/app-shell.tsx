@@ -28,7 +28,7 @@ interface AppShellProps {
 }
 
 /**
- * Phase 7B canonical authenticated shell. Replaces the inline shell
+ * canonical authenticated shell. Replaces the inline shell
  * that used to live in `(app)/layout.tsx` and the divergent shell that
  * used to live in `admin/layout.tsx`. Every authenticated layout
  * resolves its own gating (`requireSession` or `requireAdmin`) and

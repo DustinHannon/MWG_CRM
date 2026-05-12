@@ -59,7 +59,7 @@ interface SearchParams {
   cols?: string;
   sort?: string;
   dir?: string;
-  // Phase 9C — cursor pagination on the default sort. When present,
+  // cursor pagination on the default sort. When present,
   // `page=` is ignored and the next cursor is read from `result.nextCursor`.
   cursor?: string;
 }
@@ -76,11 +76,11 @@ export default async function LeadsPage({
   const canViewAll = user.isAdmin || perms.canViewAllRecords;
 
   // ---- Resolve active view -----------------------------------------------
-  // Phase 5A precedence:
-  //   1. ?view= explicit
-  //   2. user_preferences.default_leads_view_id (the "stick this view" pref)
-  //   3. user_preferences.last_used_view_id (drives "remember where I was")
-  //   4. fallback to builtin:my-open
+  // precedence:
+  // 1. ?view= explicit
+  // 2. user_preferences.default_leads_view_id (the "stick this view" pref)
+  // 3. user_preferences.last_used_view_id (drives "remember where I was")
+  // 4. fallback to builtin:my-open
   const prefs = await getPreferences(user.id);
   let activeViewParam = sp.view;
   if (!activeViewParam && prefs.defaultLeadsViewId) {
@@ -93,7 +93,7 @@ export default async function LeadsPage({
 
   const savedViews = await listSavedViewsForUser(user.id);
 
-  // Phase 25 §7.2 — active subscription state per saved view. The
+  // active subscription state per saved view. The
   // toolbar uses this to render Subscribe vs Unsubscribe on the
   // current saved view. Cheap query — bounded by the user's own
   // saved-view count.
@@ -166,7 +166,7 @@ export default async function LeadsPage({
     : undefined;
 
   // ---- Run the query -----------------------------------------------------
-  // Phase 9C — cursor wins when present and the active sort is the
+  // cursor wins when present and the active sort is the
   // default (lastActivityAt DESC). Custom sorts continue using offset
   // paging because we don't have composite (col, id) indexes for every
   // sortable column.
@@ -183,7 +183,7 @@ export default async function LeadsPage({
   });
 
   // ---- Toolbar payload ---------------------------------------------------
-  // Phase 25 §7.5 — preload tags for the BulkTagButton picker.
+  // preload tags for the BulkTagButton picker.
   // Cheap query (tags table is small) and cached at the page level
   // so we don't fetch per-render of the dropdown.
   const allTags = await listTags();
@@ -208,7 +208,7 @@ export default async function LeadsPage({
     activeColumns.length !== baseColumns.length ||
     activeColumns.some((c, i) => baseColumns[i] !== c);
 
-  // Phase 28 §5 — broader modification detection covers URL-driven filter,
+  // broader modification detection covers URL-driven filter,
   // sort, and search changes in addition to column drift. Used by the
   // MODIFIED reset button so a click reverts the entire view state to the
   // saved definition.
@@ -222,7 +222,7 @@ export default async function LeadsPage({
     Boolean(sp.sort) ||
     Boolean(sp.dir);
 
-  // Phase 28 §5 — which fields are modified, for the audit-event payload.
+  // which fields are modified, for the audit-event payload.
   const modifiedFields: string[] = [];
   if (columnsModified) modifiedFields.push("columns");
   if (sp.q) modifiedFields.push("search");
@@ -234,15 +234,15 @@ export default async function LeadsPage({
   const savedDirtyId = activeView.source === "saved" ? activeView.id : null;
 
   return (
-    // Phase 12 Sub-E — responsive padding. 16px gutter on mobile up
+    // responsive padding. 16px gutter on mobile up
     // through tablet, 40px on desktop ≥1280px.
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Leads" }]} />
-      {/* Phase 12 — Supabase Realtime is the primary push channel; the
-          Phase 11 polling layer remains as the documented fallback. */}
+      {/* Supabase Realtime is the primary push channel; the
+           polling layer remains as the documented fallback. */}
       <PageRealtime entities={["leads"]} />
       <PagePoll entities={["leads"]} />
-      {/* Phase 12 Sub-E / Phase 26 §7.2 — header migrated to
+      {/* header migrated to
           StandardPageHeader. The Table↔Pipeline toggle rides in the
           `controls` slot (left of `actions`) so it shares the row with
           the action cluster. Power-user controls remain hidden at <md
@@ -252,7 +252,7 @@ export default async function LeadsPage({
         title="Leads"
         description={
           <>
-            {/* Phase 9C — cursor pagination skips the COUNT query for
+            {/* cursor pagination skips the COUNT query for
                 speed at scale. We show the row count only when the
                 offset path runs (custom sort or filtered view). */}
             {result.total > 0
@@ -292,7 +292,7 @@ export default async function LeadsPage({
                 Export
               </a>
             ) : null}
-            {/* Phase 21 — bulk add visible leads to a marketing list. Gated
+            {/* bulk add visible leads to a marketing list. Gated
                 upstream so the button only renders for admins / users with
                 canManageMarketing. Desktop-only to match Import/Export. */}
             <div className="hidden md:inline-flex">
@@ -301,7 +301,7 @@ export default async function LeadsPage({
                 canManage={user.isAdmin || perms.canManageMarketing}
               />
             </div>
-            {/* Phase 25 §7.5 — bulk-tag toolbar. Acts on the currently
+            {/* bulk-tag toolbar. Acts on the currently
                 visible leadIds (same pattern as AddVisibleToList);
                 backed by the existing bulkTagLeadsAction. */}
             <div className="hidden md:inline-flex">
@@ -340,7 +340,7 @@ export default async function LeadsPage({
         />
       </div>
 
-      {/* Phase 12 — sticky at <md so search stays in view while
+      {/* sticky at <md so search stays in view while
           scrolling. Two rows on mobile: a tall search bar with a
           leading magnifier, then a horizontal-scroll chip row of
           filters that auto-submit on change. md+ collapses to one
@@ -456,7 +456,7 @@ export default async function LeadsPage({
         </div>
       </form>
 
-      {/* Phase 12 — dense single-line list at <768px (replaces the
+      {/* dense single-line list at <768px (replaces the
           earlier `data-table-cards` reflow which produced ~200 px
           per row of stacked field labels — unusable at scale).
           Hidden at md+ where the desktop table takes over. */}
@@ -466,7 +466,7 @@ export default async function LeadsPage({
 
       <div className="mt-6 hidden overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl md:block">
         <table className="data-table min-w-full divide-y divide-border/60 text-sm">
-          {/* Phase 25 §7.5 — DnD column reorder via @dnd-kit/sortable.
+          {/* DnD column reorder via @dnd-kit/sortable.
               Drag a header horizontally to reorder; setAdhocColumnsAction
               persists, then revalidatePath re-renders the table body
               with the new column order applied to every row cell. */}
@@ -486,7 +486,7 @@ export default async function LeadsPage({
               </tr>
             ) : null}
             {result.rows.map((l) => (
-              // Phase 10 — `group` enables hover-revealed trash icon
+              // `group` enables hover-revealed trash icon
               // on desktop. The trailing cell stays in the layout
               // regardless so column widths don't shift on hover.
               <tr key={l.id} className="group transition hover:bg-muted/40">
@@ -520,7 +520,7 @@ export default async function LeadsPage({
       </div>
 
       {result.nextCursor || sp.cursor ? (
-        // Phase 9C — cursor pagination path (default sort). "Load more"
+        // cursor pagination path (default sort). "Load more"
         // appears whenever a nextCursor exists; "Back to start"
         // appears once the user has advanced past the first batch.
         <CursorNav nextCursor={result.nextCursor} sp={sp} />
@@ -632,7 +632,7 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
     case "source":
       return <Pill kind="source" value={lead.source} />;
     case "owner":
-      // Phase 9C — UserChip in lieu of plain text. Skip hoverCard:
+      // UserChip in lieu of plain text. Skip hoverCard:
       // table can render up to 50 rows, and server-rendering 50
       // hover cards is too expensive even with the in-process cache.
       // Photo URL is projected via the leftJoin on users so the
@@ -714,7 +714,7 @@ function Pill({
   kind: "status" | "rating" | "source" | "provenance";
   value: string;
 }) {
-  // Phase 12 (Sub-D) — palette uses semantic --status-*/--priority-* tokens
+  // palette uses semantic --status-*/--priority-* tokens
   // from globals.css so light/dark theme drift can't reintroduce raw
   // Tailwind palette literals. Borders share the foreground token at low
   // alpha so the pill outline reads against either surface.

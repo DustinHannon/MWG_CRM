@@ -12,7 +12,7 @@ import {
 } from "./parsers";
 
 /**
- * Phase 23 — D365 `annotation` → mwg-crm `activities` (kind='note').
+ * D365 `annotation` → mwg-crm `activities` (kind='note').
  *
  * Annotations always attach to a parent (objecttypecode +
  * _objectid_value). The orchestrator stitches the parent FK in

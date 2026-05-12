@@ -2,14 +2,14 @@ import "server-only";
 import { KnownError } from "@/lib/errors";
 
 /**
- * Phase 23 — Shared mapping primitives.
+ * Shared mapping primitives.
  *
  * Mappers are run once per record during the `mapping` phase of an
  * import run. They:
- *   1. project D365 OData fields → mwg-crm column shapes,
- *   2. preserve recency (`createdon` / `modifiedon` ride through),
- *   3. emit non-fatal `ValidationWarning`s instead of throwing for
- *      enum mismatches and Zod failures.
+ * 1. project D365 OData fields → mwg-crm column shapes,
+ * 2. preserve recency (`createdon` / `modifiedon` ride through),
+ * 3. emit non-fatal `ValidationWarning`s instead of throwing for
+ * enum mismatches and Zod failures.
  *
  * Hard mapping failures (missing required source data, like a NULL
  * `createdon`) raise `MappingError` so the orchestrator can flip the
@@ -17,7 +17,7 @@ import { KnownError } from "@/lib/errors";
  */
 
 /* -------------------------------------------------------------------------- *
- *                              Errors                                        *
+ * Errors *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -35,7 +35,7 @@ export class MappingError extends KnownError {
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Warnings                                      *
+ * Warnings *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -54,14 +54,14 @@ export interface ValidationWarning {
     | "custom_field_dropped"
     | "unparseable_value"
     /**
-     * Phase 23 — record auto-skipped by the bad-lead quality
+     * record auto-skipped by the bad-lead quality
      * heuristic in `quality.ts`. Reasons are in the warning message.
      * map-batch reads `_qualityVerdict === 'garbage'` from the
      * mapped payload and transitions to status='skipped'.
      */
     | "bad_lead_quality"
     /**
-     * Phase 23 — record has 1-2 quality issues but enough real data
+     * record has 1-2 quality issues but enough real data
      * to commit. Surfaces in the review UI for manual confirmation.
      */
     | "suspicious_lead_quality";
@@ -100,7 +100,7 @@ export interface AttachedActivity {
 }
 
 /* -------------------------------------------------------------------------- *
- *                             Date parsing                                   *
+ * Date parsing *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -133,7 +133,7 @@ export function parseOptionalDate(s: string | null | undefined): Date | null {
 }
 
 /* -------------------------------------------------------------------------- *
- *                             Value coercion                                 *
+ * Value coercion *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -168,7 +168,7 @@ export function parseNumber(v: unknown): number | null {
 }
 
 /* -------------------------------------------------------------------------- *
- *                          Picklist mapper factory                           *
+ * Picklist mapper factory *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -180,9 +180,9 @@ export function parseNumber(v: unknown): number | null {
  *
  * @param map Numeric D365 option-set value → mwg-crm enum string.
  * @param fieldName Name surfaced in the warning (matches the local
- *                  column name, not the D365 logical name).
+ * column name, not the D365 logical name).
  * @param defaultValue The mwg-crm enum string to use for both NULL
- *                     sources and unmapped values.
+ * sources and unmapped values.
  */
 export function picklistMapper<T extends string>(
   map: Record<number, T>,
@@ -208,14 +208,14 @@ export function picklistMapper<T extends string>(
 }
 
 /* -------------------------------------------------------------------------- *
- *                       Custom-field passthrough                             *
+ * Custom-field passthrough *
  * -------------------------------------------------------------------------- */
 
 /**
  * Detects D365 custom-field naming conventions:
- *   - `new_*` (default custom-prefix on every D365 environment)
- *   - `cr<digits>_*` (system-assigned solution prefixes)
- *   - `mwg_*` (MWG-tenant custom solution prefix)
+ * `new_*` (default custom-prefix on every D365 environment)
+ * `cr<digits>_*` (system-assigned solution prefixes)
+ * `mwg_*` (MWG-tenant custom solution prefix)
  *
  * Used by every mapper to peel custom fields off the raw payload
  * into the `metadata` JSONB column. Native fields and OData
@@ -248,7 +248,7 @@ export function extractCustomFields(
 }
 
 /* -------------------------------------------------------------------------- *
- *                       Soft validation helper                               *
+ * Soft validation helper *
  * -------------------------------------------------------------------------- */
 
 /**

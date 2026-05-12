@@ -24,12 +24,12 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 29 §5 — REST endpoint for static-imported list member CRUD.
+ * REST endpoint for static-imported list member CRUD.
  *
- * GET  /api/v1/marketing/lists/<id>/members/static
- *      Paginated member listing, searchable / sortable.
+ * GET /api/v1/marketing/lists/<id>/members/static
+ * Paginated member listing, searchable / sortable.
  * POST /api/v1/marketing/lists/<id>/members/static
- *      Bulk-create members. Body: { members: [{ email, name? }, ...] }.
+ * Bulk-create members. Body: { members: [{ email, name? }, ...] }.
  *
  * Single-row update / remove flow through the server actions on the
  * detail page; this REST surface exists for the import wizard and

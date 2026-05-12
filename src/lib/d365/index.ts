@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Phase 23 — D365 import pipeline barrel.
+ * D365 import pipeline barrel.
  *
  * Exports the public surface for callers in admin pages, server
  * actions, and (later) cron handlers. Sub-agents A/B/C/D extend this

@@ -44,7 +44,7 @@ export interface CommitSuccessData {
 }
 
 /**
- * Phase 6E + 6F — preview step. Parse the upload, build the aggregate
+ * preview step. Parse the upload, build the aggregate
  * counts/warnings/errors, cache the parsed rows under a job id. The
  * user then reviews and clicks Commit.
  */
@@ -64,7 +64,7 @@ export async function previewImportAction(
       if (!(file instanceof File)) {
         throw new ValidationError("No file uploaded.");
       }
-      // Phase 8D Wave 5 (FIX-009) — use the shared MAX_IMPORT_BYTES
+      // use the shared MAX_IMPORT_BYTES
       // constant so admin-tunable limits live in one place.
       if (file.size > MAX_IMPORT_BYTES) {
         throw new ValidationError(
@@ -77,7 +77,7 @@ export async function previewImportAction(
 
       const smartDetect = formData.get("smartDetect") === "on";
 
-      // Phase 8D Wave 5 (FIX-009) — magic-byte gate runs before the
+      // magic-byte gate runs before the
       // workbook parser opens the buffer. Catches `evil.exe` renamed
       // to `.xlsx` and other content-type spoofs that the extension
       // check above cannot.
@@ -129,7 +129,7 @@ export async function previewImportAction(
 
         return { jobId, fileName: file.name, smartDetect, preview };
       } catch (err) {
-        // Phase 8D Wave 5 (FIX-020 / F-023) — full error detail goes
+        // full error detail goes
         // to the structured logger ONLY. The DB row gets a generic
         // public message + the job id so support can find the matching
         // log entry without any sensitive content (connection strings,
@@ -161,7 +161,7 @@ export async function previewImportAction(
 }
 
 /**
- * Phase 6E + 6F — commit step. Reads the cached job, runs the chunked
+ * commit step. Reads the cached job, runs the chunked
  * write pipeline, audit-logs the snapshot.
  */
 export async function commitImportAction(
@@ -229,7 +229,7 @@ export async function commitImportAction(
         revalidatePath("/leads");
         return { result, jobId };
       } catch (err) {
-        // Phase 8D Wave 5 (FIX-020 / F-023) — sanitize: full err only
+        // sanitize: full err only
         // to logger; DB row carries a generic public message tagged
         // with the job id for support correlation.
         logger.error("import_commit_failure", {
@@ -266,7 +266,7 @@ export async function cancelImportAction(
       const user = await requireSession();
       const cached = getJob(jobId, user.id);
       if (cached) deleteJob(jobId);
-      // Phase 8D Wave 5 (FIX-008) — DB-row ownership is now enforced.
+      // DB-row ownership is now enforced.
       // Non-admins can only cancel jobs they themselves started; admins
       // can cancel anyone's. Without this WHERE filter, any signed-in
       // user who learned a job id (URL, log line) could cancel another

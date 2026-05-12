@@ -7,14 +7,14 @@ import { getRequestId } from "@/lib/observability/request-context";
  * tokens and bypass Vercel's structured ingestion.
  *
  * Usage:
- *   logger.info("lead.created", { userId, entityId: lead.id });
- *   logger.error("graph.send_failed", { errorCode: "401", errorMessage });
+ * logger.info("lead.created", { userId, entityId: lead.id });
+ * logger.error("graph.send_failed", { errorCode: "401", errorMessage });
  *
  * Standard meta keys (use these names whenever applicable):
- *   requestId, userId, action, entityType, entityId,
- *   durationMs, errorCode, errorMessage, errorStack
+ * requestId, userId, action, entityType, entityId,
+ * durationMs, errorCode, errorMessage, errorStack
  *
- * Phase 25 §4.3 — when a logger call happens inside a
+ * when a logger call happens inside a
  * `runWithRequestContext` scope and the caller didn't pass an
  * explicit `requestId` in the meta object, the context's id is
  * pulled in automatically so every line for one request shares the
@@ -69,7 +69,7 @@ function redact(obj: unknown, depth = 0): unknown {
 }
 
 function emit(level: Level, msg: string, meta: Record<string, unknown>) {
-  // Phase 25 §4.3 — auto-include requestId from AsyncLocalStorage
+  // auto-include requestId from AsyncLocalStorage
   // when the caller didn't supply one explicitly. Caller-supplied
   // requestId always wins so explicit values (e.g. retry attempts
   // logging the original request id) stay authoritative.

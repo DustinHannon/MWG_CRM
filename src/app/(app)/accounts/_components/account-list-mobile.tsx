@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 
 /**
- * Phase 12 — dense single-line mobile list for /accounts (and the
+ * dense single-line mobile list for /accounts (and the
  * archived view). Renders only at <768 px; the desktop table layout
  * takes over at md+. Mirrors `<LeadListMobile>` so list pages feel
  * uniform on mobile.

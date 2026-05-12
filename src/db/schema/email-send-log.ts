@@ -12,23 +12,23 @@ import {
 import { users } from "./users";
 
 /**
- * Phase 15 — every system-originated email attempt is recorded here, one row
+ * every system-originated email attempt is recorded here, one row
  * per recipient per attempt. Separate from `audit_log` because audit is
  * per-action and one email send fans out to many recipients with their own
  * outcomes.
  *
  * Status lifecycle:
- *   queued     — row inserted, send not yet attempted (rare; we go straight
- *                to 'sending' in current code path).
- *   sending    — Graph call in flight.
- *   sent       — Graph accepted the message for delivery (HTTP 202). NOT
- *                a per-recipient deliverability guarantee — Graph doesn't
- *                surface bounces synchronously.
- *   failed     — Graph rejected the call (4xx/5xx) or threw network error.
- *   blocked_preflight — sender's mailbox is not exchange_online; we never
- *                hit Graph.
- *   blocked_e2e — subject or recipient contained the [E2E-…] sentinel; we
- *                never hit Graph (Phase 12 test convention).
+ * queued — row inserted, send not yet attempted (rare; we go straight
+ * to 'sending' in current code path).
+ * sending — Graph call in flight.
+ * sent — Graph accepted the message for delivery (HTTP 202). NOT
+ * a per-recipient deliverability guarantee — Graph doesn't
+ * surface bounces synchronously.
+ * failed — Graph rejected the call (4xx/5xx) or threw network error.
+ * blocked_preflight — sender's mailbox is not exchange_online; we never
+ * hit Graph.
+ * blocked_e2e — subject or recipient contained the [E2E-…] sentinel; we
+ * never hit Graph (test convention).
  */
 export const emailSendLog = pgTable(
   "email_send_log",

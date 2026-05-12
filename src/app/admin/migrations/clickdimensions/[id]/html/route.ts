@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 29 §7 — Serves the captured raw HTML for a single migration
+ * Serves the captured raw HTML for a single migration
  * row. Permission gate matches the worklist UI: admin OR
  * canMarketingMigrationsRun. Returns 404 if the row doesn't exist OR
  * no HTML was captured.

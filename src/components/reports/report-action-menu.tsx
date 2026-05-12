@@ -7,13 +7,13 @@ import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/delete";
 
 /**
- * Phase 11 — owner-only action row for the report runner page.
+ * owner-only action row for the report runner page.
  *
  * Surface buttons:
- *   - Edit (link to /reports/[id]/edit)
- *   - Duplicate (POST /api/reports with same definition, then route)
- *   - Share toggle (PATCH isShared)
- *   - Delete (soft delete via DELETE)
+ * Edit (link to /reports/[id]/edit)
+ * Duplicate (POST /api/reports with same definition, then route)
+ * Share toggle (PATCH isShared)
+ * Delete (soft delete via DELETE)
  *
  * The Export PDF / CSV buttons live inside <ReportRunner>; this row
  * is only the owner controls.

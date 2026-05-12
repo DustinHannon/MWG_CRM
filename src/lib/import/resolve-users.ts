@@ -1,4 +1,4 @@
-// Phase 6E — batch lookups for owner emails and "By: Name" references
+// batch lookups for owner emails and "By: Name" references
 // inside parsed activities. Avoids N+1 round-trips during a 10k-row
 // import by making at most two queries: one for emails, one for names.
 

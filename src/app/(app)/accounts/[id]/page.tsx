@@ -59,7 +59,7 @@ export default async function AccountDetailPage({
     account.id,
   );
 
-  // Phase 9C (workflow) — "Customer since" derives from the earliest
+  // "Customer since" derives from the earliest
   // closed_won opportunity on this account. Cheap aggregate query
   // (one row, single index seek on opportunities_account_idx + filter
   // on stage); we deliberately keep this on the detail page only —
@@ -102,7 +102,7 @@ export default async function AccountDetailPage({
           { label: account.name },
         ]}
       />
-      {/* Phase 12 — Supabase Realtime: focal record + filtered children. */}
+      {/* Supabase Realtime: focal record + filtered children. */}
       <RowRealtime entity="accounts" id={account.id} />
       <PageRealtime entities={["contacts", "opportunities"]} />
       <PageRealtime
@@ -125,7 +125,7 @@ export default async function AccountDetailPage({
             <span>{account.industry ?? "—"}</span>
             <span>·</span>
             <span>Owner</span>
-            {/* Phase 9C — single low-cardinality chip on a detail page;
+            {/* single low-cardinality chip on a detail page;
                 include the server-rendered hover card. */}
             {account.ownerId ? (
               <UserChip
@@ -161,7 +161,7 @@ export default async function AccountDetailPage({
           >
             + New opportunity
           </Link>
-          {/* Phase 25 §7.4 — dedicated edit affordance. */}
+          {/* dedicated edit affordance. */}
           {session.isAdmin || account.ownerId === session.id ? (
             <Link
               href={`/accounts/${account.id}/edit`}
@@ -250,7 +250,7 @@ export default async function AccountDetailPage({
             </ul>
           </GlassCard>
 
-          {/* Phase 25 §7.3 — account-scoped Tasks section. Same
+          {/* account-scoped Tasks section. Same
               EntityTasksSection used by /leads /contacts
               /opportunities; auto-FK to this account on quick-add. */}
           <GlassCard className="p-5">

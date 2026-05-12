@@ -4,14 +4,14 @@ import { env } from "@/lib/env";
 import { ValidationError } from "@/lib/errors";
 
 /**
- * Phase 10 — undo token. HMAC-SHA256 over the canonical
+ * undo token. HMAC-SHA256 over the canonical
  * "<entity>:<id>:<deletedAtIso>" payload, with a 5-second expiry built
  * into the issuance window. Used by the toast Undo button to restore a
  * just-archived record. The token is tiny and round-trippable through
  * a button onClick → server action.
  *
  * Format: <base64url-payload>.<base64url-signature>
- *   payload = JSON.stringify({ entity, id, deletedAt, exp })
+ * payload = JSON.stringify({ entity, id, deletedAt, exp })
  *
  * Why HMAC and not a DB row? The undo window is 5 seconds and the only
  * payload is "what to restore." A signed token avoids a DB roundtrip

@@ -14,13 +14,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Template soft-lock endpoints. Session-authenticated; the
+ * Template soft-lock endpoints. Session-authenticated; the
  * client lives inside the marketing UI and sends `{ sessionId }` in
  * the body for every method.
  *
- *   POST   acquire (or refresh own lock)        200 / 409
- *   PUT    heartbeat                            200 / 410
- *   DELETE release                              204
+ * POST acquire (or refresh own lock) 200 / 409
+ * PUT heartbeat 200 / 410
+ * DELETE release 204
  *
  * 409 returns `{ holder: { userId, userName, acquiredAt } }` so the
  * banner can render who's editing.

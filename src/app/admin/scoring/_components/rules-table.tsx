@@ -19,7 +19,7 @@ interface RuleRow {
 }
 
 /**
- * Phase 5B — rules-list table for /admin/scoring.
+ * rules-list table for /admin/scoring.
  *
  * "Edit" opens an inline JSON editor for the predicate so admins can
  * change rules without a database round-trip. The full filter-builder UI

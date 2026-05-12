@@ -8,9 +8,9 @@ import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 21 / Phase 29 §5 — Dynamic-list builder.
+ * Dynamic-list builder.
  *
- * Phase 29 §5 — `?type` is accepted for future expansion; the only value
+ * `?type` is accepted for future expansion; the only value
  * routed here is 'dynamic'. Static-list creation lives at
  * `/marketing/lists/new/import` (Sub-agent C).
  */

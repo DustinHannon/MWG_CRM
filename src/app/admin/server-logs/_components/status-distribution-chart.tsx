@@ -10,13 +10,13 @@ import {
 } from "recharts";
 
 /**
- * Phase 26 §5 — Client-side donut for the status distribution panel.
+ * Client-side donut for the status distribution panel.
  *
  * Color mapping follows the standard chart palette in globals.css:
- *   2xx → var(--chart-1)   (primary "good" channel)
- *   3xx → var(--chart-3)   (neutral redirect)
- *   4xx → var(--chart-4)   (client-side warning)
- *   5xx → var(--chart-2)   (high-attention error channel)
+ * 2xx → var(--chart-1) (primary "good" channel)
+ * 3xx → var(--chart-3) (neutral redirect)
+ * 4xx → var(--chart-4) (client-side warning)
+ * 5xx → var(--chart-2) (high-attention error channel)
  *
  * Tooltips render against the popover token so the chart reads in
  * dark mode without additional overrides.

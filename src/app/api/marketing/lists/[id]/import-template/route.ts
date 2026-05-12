@@ -6,7 +6,7 @@ import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { buildStaticListImportTemplate } from "@/lib/marketing/lists/static-import-parse";
 
 /**
- * Phase 29 §6 — Returns a minimal .xlsx template (header row only:
+ * Returns a minimal .xlsx template (header row only:
  * `email`, `name`) for the static-list import wizard.
  *
  * Access mirrors the import page: admin OR `canMarketingListsImport`

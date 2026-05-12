@@ -153,7 +153,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
   callbacks: {
     /**
-     * Phase 11 — explicit open-redirect guard. Auth.js v5's default
+     * explicit open-redirect guard. Auth.js v5's default
      * redirect callback already validates same-origin, but having this
      * be implicit means a future custom `redirect` could silently widen
      * the policy. Centralising the rule here (and in
@@ -193,12 +193,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      * Single source of truth for token state.
      *
      * Three cases:
-     *   1. Initial Entra sign-in (account.provider === microsoft-entra-id):
-     *      provision the local user, upsert the accounts row, mint token.
-     *   2. Initial breakglass sign-in (user.id present, no account):
-     *      copy user.id onto token, hydrate from DB.
-     *   3. Subsequent requests (no user, no account): revalidate is_active /
-     *      session_version against DB; refresh display_name/email.
+     * 1. Initial Entra sign-in (account.provider === microsoft-entra-id):
+     * provision the local user, upsert the accounts row, mint token.
+     * 2. Initial breakglass sign-in (user.id present, no account):
+     * copy user.id onto token, hydrate from DB.
+     * 3. Subsequent requests (no user, no account): revalidate is_active /
+     * session_version against DB; refresh display_name/email.
      */
     async jwt({ token, user, account, profile, trigger }) {
       // Case 1: Entra initial mint
@@ -234,7 +234,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             logger.warn("auth.entra_inactive_user", {
               userId: provisioned.id,
             });
-            // Phase 15 — audit a disabled-user sign-in attempt so admins
+            // audit a disabled-user sign-in attempt so admins
             // can correlate "I've been off-boarded but the system says
             // login failed" reports against actual platform-level denials.
             await writeAudit({
@@ -258,7 +258,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             idToken: account.id_token,
           });
 
-          // Phase 5A — refresh the cached Microsoft profile photo if it's
+          // refresh the cached Microsoft profile photo if it's
           // older than 24h (or never set). The function swallows its own
           // errors so a transient Graph hiccup never blocks sign-in; we
           // wrap in another try/catch as a belt-and-braces guard against
@@ -281,7 +281,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // We intentionally do NOT store the Microsoft access/refresh
           // tokens on the JWT — they're large and would push the session
           // cookie into chunked-cookie territory. The accounts table is
-          // authoritative for token state; Phase 7 reads from there.
+          // authoritative for token state; reads from there.
           logger.info("auth.entra_signin_ok", {
             userId: provisioned.id,
             email,
@@ -329,7 +329,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // A transient DB blip here would otherwise sign the user out (the
       // jwt callback returning null clears the session). We retry once
       // on error, and if the retry also fails we KEEP the existing token
-      // — better to let the user keep working with slightly-stale session
+      // better to let the user keep working with slightly-stale session
       // facts than to log them out on a hiccup. Inactive / version-mismatch
       // checks remain hard-failing because those represent a deliberate
       // admin decision.

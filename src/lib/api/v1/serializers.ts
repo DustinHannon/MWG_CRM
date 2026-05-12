@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Phase 13 — DB row -> JSON serializers for /api/v1.
+ * DB row -> JSON serializers for /api/v1.
  *
  * The DB layer uses camelCase Drizzle keys; the public API contract is
  * snake_case (consistent with most external integrators). These helpers

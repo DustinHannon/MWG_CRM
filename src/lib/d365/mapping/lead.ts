@@ -17,7 +17,7 @@ import {
 } from "./parsers";
 
 /**
- * Phase 23 — D365 `lead` → mwg-crm `leads` insert payload.
+ * D365 `lead` → mwg-crm `leads` insert payload.
  *
  * Recency preservation (NON-NEGOTIABLE per brief §0): `createdAt` /
  * `updatedAt` come from D365 `createdon` / `modifiedon`. NEVER use
@@ -42,7 +42,7 @@ export interface LeadMapContext {
 }
 
 /* -------------------------------------------------------------------------- *
- *                           Picklist tables                                  *
+ * Picklist tables *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -50,7 +50,7 @@ export interface LeadMapContext {
  *
  * Default D365 option-set values from the SDK metadata documentation
  * (Microsoft.Crm.Sdk.Messages — Lead.LeadQualityCode):
- *   1 = Hot, 2 = Warm, 3 = Cold.
+ * 1 = Hot, 2 = Warm, 3 = Cold.
  */
 const RATING_MAP = picklistMapper<"hot" | "warm" | "cold">(
   { 1: "hot", 2: "warm", 3: "cold" },
@@ -62,23 +62,23 @@ const RATING_MAP = picklistMapper<"hot" | "warm" | "cold">(
  * D365 `leadsourcecode` (source) → mwg-crm `lead_source` enum.
  *
  * Per brief §"Picklist maps" — legacy D365 default option-set values:
- *   1=Advertisement, 2=Employee Referral, 3=External Referral,
- *   4=Partner, 5=Public Relations, 6=Seminar, 7=Trade Show,
- *   8=Word of Mouth, 9=Other.
+ * 1=Advertisement, 2=Employee Referral, 3=External Referral,
+ * 4=Partner, 5=Public Relations, 6=Seminar, 7=Trade Show,
+ * 8=Word of Mouth, 9=Other.
  *
  * mwg-crm `lead_source` enum values (see lead-constants.ts):
- *   web | referral | event | cold_call | partner | marketing | import | other.
+ * web | referral | event | cold_call | partner | marketing | import | other.
  *
  * Mapping decisions (defaulted with warning where source is ambiguous):
- *   - 1 Advertisement → marketing
- *   - 2 Employee Referral → referral
- *   - 3 External Referral → referral
- *   - 4 Partner → partner
- *   - 5 Public Relations → marketing
- *   - 6 Seminar → event
- *   - 7 Trade Show → event
- *   - 8 Word of Mouth → referral
- *   - 9 Other → other
+ * 1 Advertisement → marketing
+ * 2 Employee Referral → referral
+ * 3 External Referral → referral
+ * 4 Partner → partner
+ * 5 Public Relations → marketing
+ * 6 Seminar → event
+ * 7 Trade Show → event
+ * 8 Word of Mouth → referral
+ * 9 Other → other
  */
 const SOURCE_MAP = picklistMapper<
   | "web"
@@ -109,8 +109,8 @@ const SOURCE_MAP = picklistMapper<
  * D365 `statuscode` (lead lifecycle) → mwg-crm `lead_status` enum.
  *
  * Per brief — legacy D365 default option-set values:
- *   1=New, 2=Contacted, 3=Qualified, 4=Lost, 5=Cant_Contact,
- *   6=No_Longer_Interested, 7=Cancelled.
+ * 1=New, 2=Contacted, 3=Qualified, 4=Lost, 5=Cant_Contact,
+ * 6=No_Longer_Interested, 7=Cancelled.
  *
  * mwg-crm `lead_status` enum values: new | contacted | qualified |
  * unqualified | converted | lost.
@@ -178,7 +178,7 @@ const INDUSTRY_LABELS: Record<number, string> = {
 };
 
 /* -------------------------------------------------------------------------- *
- *                          Native field allowlist                            *
+ * Native field allowlist *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -234,7 +234,7 @@ const NATIVE_LEAD_FIELDS: ReadonlySet<string> = new Set([
 ]);
 
 /* -------------------------------------------------------------------------- *
- *                                Mapper                                      *
+ * Mapper *
  * -------------------------------------------------------------------------- */
 
 export function mapD365Lead(
@@ -408,7 +408,7 @@ export function mapD365Lead(
   const zodResult = softValidate(leadCreateSchema, softInputForZod);
   warnings.push(...zodResult.warnings);
 
-  // Phase 23 — bad-lead quality assessment. Verdict drives
+  // bad-lead quality assessment. Verdict drives
   // map-batch's auto-skip for `garbage` and surfaces warnings for
   // `suspicious`. Verdict travels on the mapped payload under
   // `_qualityVerdict` (a `_`-prefixed virtual stripped by

@@ -5,7 +5,7 @@ import {
 } from "@/lib/observability/insights-queries";
 
 /**
- * Phase 26 §4 — Core Web Vitals mini-cards.
+ * Core Web Vitals mini-cards.
  *
  * Five metrics: LCP, FCP, CLS, INP, TTFB. Powered by the Speed
  * Insights drain (`vercel.speed_insights.v1` rows in Better Stack).
@@ -13,11 +13,11 @@ import {
  * (good / needs-improvement / poor) per the web.dev Core Web
  * Vitals thresholds:
  *
- *   LCP   good ≤ 2500ms · needs ≤ 4000ms · poor > 4000ms
- *   FCP   good ≤ 1800ms · needs ≤ 3000ms · poor > 3000ms
- *   CLS   good ≤ 0.10   · needs ≤ 0.25   · poor > 0.25
- *   INP   good ≤ 200ms  · needs ≤ 500ms  · poor > 500ms
- *   TTFB  good ≤ 800ms  · needs ≤ 1800ms · poor > 1800ms
+ * LCP good ≤ 2500ms · needs ≤ 4000ms · poor > 4000ms
+ * FCP good ≤ 1800ms · needs ≤ 3000ms · poor > 3000ms
+ * CLS good ≤ 0.10 · needs ≤ 0.25 · poor > 0.25
+ * INP good ≤ 200ms · needs ≤ 500ms · poor > 500ms
+ * TTFB good ≤ 800ms · needs ≤ 1800ms · poor > 1800ms
  */
 const METRICS: readonly WebVitalMetric[] = [
   "LCP",

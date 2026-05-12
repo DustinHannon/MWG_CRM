@@ -12,7 +12,7 @@ import {
 } from "recharts";
 
 /**
- * Phase 26 §5 — Client-side line chart for the deploy timeline.
+ * Client-side line chart for the deploy timeline.
  *
  * X-axis is the 5-minute bucket timestamp; Y-axis is the percentage
  * error rate. Vertical `ReferenceLine` markers indicate Vercel

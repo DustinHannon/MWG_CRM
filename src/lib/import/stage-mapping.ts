@@ -1,4 +1,4 @@
-// Phase 6D — D365 → MWG opportunity stage / lead status mapping.
+// D365 → MWG opportunity stage / lead status mapping.
 // Hard-coded; if the D365 export shape changes, edit this file.
 
 import { LEAD_STATUSES } from "@/lib/lead-constants";

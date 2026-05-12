@@ -17,7 +17,7 @@ import {
 } from "@/lib/errors";
 
 /**
- * Phase 29 §7 — Worklist actions for the ClickDimensions migrations
+ * Worklist actions for the ClickDimensions migrations
  * admin surface.
  *
  * Permission gate: requires admin OR `canMarketingMigrationsRun`.

@@ -9,7 +9,7 @@ import { checkMailboxKind } from "@/lib/email";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 15 — pre-flight endpoint for any UI surface that's about to ask the
+ * pre-flight endpoint for any UI surface that's about to ask the
  * user to schedule outbound email. Returns the cached `mailboxKind` when
  * available; otherwise hits Graph and persists the result.
  *

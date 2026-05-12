@@ -30,7 +30,7 @@ import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { sendCampaign, sendTestEmail } from "@/lib/marketing/sendgrid/send";
 
 /**
- * Phase 21 — Campaign composer + lifecycle actions.
+ * Campaign composer + lifecycle actions.
  *
  * Lifecycle gates are enforced both here and at the API layer; either
  * surface (server action call from the wizard, or REST PUT/POST) hits
@@ -38,19 +38,19 @@ import { sendCampaign, sendTestEmail } from "@/lib/marketing/sendgrid/send";
  * `MARKETING_AUDIT_EVENTS`.
  *
  * State machine:
- *   draft     → scheduled (scheduleCampaignAction)
- *   draft     → sending   (sendCampaignNowAction)
- *   draft     → cancelled (cancelCampaignAction)  // optional convenience
- *   draft     → deleted   (deleteCampaignAction)
- *   scheduled → sending   (sendCampaignNowAction; kicks off early)
- *   scheduled → cancelled (cancelCampaignAction)
- *   sending   → sent      (handled by sendCampaign; not via action)
- *   sending   → failed    (handled by sendCampaign; not via action)
- *   cancelled → deleted   (deleteCampaignAction)
+ * draft → scheduled (scheduleCampaignAction)
+ * draft → sending (sendCampaignNowAction)
+ * draft → cancelled (cancelCampaignAction) // optional convenience
+ * draft → deleted (deleteCampaignAction)
+ * scheduled → sending (sendCampaignNowAction; kicks off early)
+ * scheduled → cancelled (cancelCampaignAction)
+ * sending → sent (handled by sendCampaign; not via action)
+ * sending → failed (handled by sendCampaign; not via action)
+ * cancelled → deleted (deleteCampaignAction)
  */
 
 /* ------------------------------------------------------------------ */
-/* Validation schemas                                                  */
+/* Validation schemas */
 /* ------------------------------------------------------------------ */
 
 const uuidSchema = z.string().uuid();
@@ -74,7 +74,7 @@ const campaignDraftUpdateSchema = z.object({
     .max(254)
     .optional()
     .or(z.literal("")),
-  // Phase 27 §4.8 — OCC on draft edits. The campaign-edit UI passes the
+  // OCC on draft edits. The campaign-edit UI passes the
   // version it loaded; the UPDATE refuses to write if another writer
   // bumped it. Optional only for programmatic API callers where the
   // status='draft' TOCTOU close remains sufficient.
@@ -86,7 +86,7 @@ const campaignScheduleSchema = z.object({
   scheduledFor: z
     .union([z.string(), z.date()])
     .transform((v) => (v instanceof Date ? v : new Date(v))),
-  // Phase 25 §5.2 — optional `expectedVersion` enables OCC. Callers
+  // optional `expectedVersion` enables OCC. Callers
   // that loaded the campaign before submitting can pass the version
   // they saw; the UPDATE refuses to write if another writer bumped
   // it in the meantime. Optional so existing callers don't break;
@@ -101,7 +101,7 @@ const campaignTestSchema = z.object({
 });
 
 /* ------------------------------------------------------------------ */
-/* Permission helper                                                   */
+/* Permission helper */
 /* ------------------------------------------------------------------ */
 
 async function requireMarketingPermission() {
@@ -126,7 +126,7 @@ async function loadCampaign(id: string) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Create draft                                                        */
+/* Create draft */
 /* ------------------------------------------------------------------ */
 
 export async function createCampaignDraftAction(input: {
@@ -225,7 +225,7 @@ export async function createCampaignDraftAction(input: {
 }
 
 /* ------------------------------------------------------------------ */
-/* Update draft                                                        */
+/* Update draft */
 /* ------------------------------------------------------------------ */
 
 export async function updateCampaignDraftAction(input: {
@@ -236,7 +236,7 @@ export async function updateCampaignDraftAction(input: {
   fromEmail?: string;
   fromName?: string;
   replyToEmail?: string;
-  /** Phase 27 §4.8 — OCC: optional version loaded by the caller. */
+  /** OCC: optional version loaded by the caller. */
   expectedVersion?: number;
 }): Promise<ActionResult<never>> {
   return withErrorBoundary(
@@ -302,7 +302,7 @@ export async function updateCampaignDraftAction(input: {
 
       // Mass-assignment guard — only the fields above were copied to
       // `patch`. The rest of the row is untouched.
-      // Phase 27 §4.8 — OCC: when caller passes `expectedVersion`, the
+      // OCC: when caller passes `expectedVersion`, the
       // UPDATE atomically requires `version = expectedVersion` AND bumps
       // it. 0 rows affected ⇒ another writer beat us → ConflictError.
       const whereClauses = [
@@ -351,7 +351,7 @@ export async function updateCampaignDraftAction(input: {
 }
 
 /* ------------------------------------------------------------------ */
-/* Schedule                                                            */
+/* Schedule */
 /* ------------------------------------------------------------------ */
 
 export async function scheduleCampaignAction(input: {
@@ -387,10 +387,10 @@ export async function scheduleCampaignAction(input: {
         );
       }
 
-      // Phase 25 §5.2 — OCC enforcement. When the caller supplied
+      // OCC enforcement. When the caller supplied
       // `expectedVersion`, the UPDATE atomically:
-      //   - matches the current version against the caller's snapshot,
-      //   - bumps version by 1 on success.
+      // matches the current version against the caller's snapshot,
+      // bumps version by 1 on success.
       // If no row updated, the campaign was modified by another writer
       // in the meantime; surface as ConflictError so the UI can show
       // the standard "someone else changed this" recovery flow.
@@ -454,7 +454,7 @@ export async function scheduleCampaignAction(input: {
 }
 
 /* ------------------------------------------------------------------ */
-/* Cancel                                                              */
+/* Cancel */
 /* ------------------------------------------------------------------ */
 
 export async function cancelCampaignAction(
@@ -508,7 +508,7 @@ export async function cancelCampaignAction(
 }
 
 /* ------------------------------------------------------------------ */
-/* Send now                                                            */
+/* Send now */
 /* ------------------------------------------------------------------ */
 
 export async function sendCampaignNowAction(
@@ -552,13 +552,13 @@ export async function sendCampaignNowAction(
 
       // Atomic claim — the WHERE clause guards BOTH:
       // (a) double-click from the same user (the in-flight first
-      //     UPDATE has already flipped status to 'sending'),
+      // UPDATE has already flipped status to 'sending'),
       // (b) race with /api/cron/marketing-process-scheduled-campaigns,
-      //     which uses the same conditional-UPDATE pattern on
-      //     status='scheduled'. If the cron grabs the row first, our
-      //     status moves from 'scheduled' to 'sending' and this
-      //     WHERE clause won't match — we throw ConflictError instead
-      //     of double-sending.
+      // which uses the same conditional-UPDATE pattern on
+      // status='scheduled'. If the cron grabs the row first, our
+      // status moves from 'scheduled' to 'sending' and this
+      // WHERE clause won't match — we throw ConflictError instead
+      // of double-sending.
       const result = await db
         .update(marketingCampaigns)
         .set({
@@ -619,7 +619,7 @@ export async function sendCampaignNowAction(
 }
 
 /* ------------------------------------------------------------------ */
-/* Soft-delete                                                         */
+/* Soft-delete */
 /* ------------------------------------------------------------------ */
 
 export async function deleteCampaignAction(
@@ -668,7 +668,7 @@ export async function deleteCampaignAction(
 }
 
 /* ------------------------------------------------------------------ */
-/* Test send                                                           */
+/* Test send */
 /* ------------------------------------------------------------------ */
 
 export async function sendCampaignTestAction(input: {
@@ -710,7 +710,7 @@ export async function sendCampaignTestAction(input: {
       const campaign = await loadCampaign(parsed.data.id);
       if (campaign.isDeleted) throw new NotFoundError("campaign");
 
-      // Phase 29 §4.8 — campaign.templateId is now nullable (a draft
+      // campaign.templateId is now nullable (a draft
       // can be left dangling after a personal-template delete). A
       // test send against a dangling campaign has nothing to render;
       // surface a Validation error so the wizard prompts the user to
@@ -762,7 +762,7 @@ export async function sendCampaignTestAction(input: {
 }
 
 /* ------------------------------------------------------------------ */
-/* Helpers re-exported for the wizard's resume flow                    */
+/* Helpers re-exported for the wizard's resume flow */
 /* ------------------------------------------------------------------ */
 
 export async function getCampaignRecipientPageAction(input: {

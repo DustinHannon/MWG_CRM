@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import type { FilterDsl } from "@/lib/security/filter-dsl";
 
 /**
- * Phase 21 — Right-rail live preview for the new/edit list pages.
+ * Right-rail live preview for the new/edit list pages.
  *
  * Debounces 500ms after dsl changes, POSTs to
  * `/api/v1/marketing/lists/preview` with the DSL, and renders the

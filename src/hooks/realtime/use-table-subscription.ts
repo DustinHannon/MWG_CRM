@@ -40,7 +40,7 @@ type SupabasePostgresChange = {
 };
 
 /**
- * Phase 12 — Supabase Realtime subscription hook.
+ * Supabase Realtime subscription hook.
  *
  * Wires a Postgres-changes channel on `public.<table>` (optionally
  * filtered) into a stable callback. Cleans up on unmount. Respects

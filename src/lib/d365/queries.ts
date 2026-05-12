@@ -16,18 +16,18 @@ import type {
 import { D365_ENTITY_PK, D365_ENTITY_SET } from "./types";
 
 /**
- * Phase 23 — per-entity OData query builders.
+ * per-entity OData query builders.
  *
  * Each builder enforces:
  *
- *  - explicit `$select` allowlist (NEVER `*` — we keep payload size
- *    bounded and avoid surprise picklists landing in raw_payload)
- *  - `$filter` for incremental pulls (`modifiedon ge X` AND active
- *    `statecode` where applicable)
- *  - `$orderby modifiedon asc` for stable cursoring
- *  - page size 100 (matches `D365_IMPORT_BATCH_SIZE`)
- *  - $expand only on Lead/Contact/Account/Opportunity (activity
- *    entities don't expand further per D365 metadata)
+ * explicit `$select` allowlist (NEVER `*` — we keep payload size
+ * bounded and avoid surprise picklists landing in raw_payload)
+ * `$filter` for incremental pulls (`modifiedon ge X` AND active
+ * `statecode` where applicable)
+ * `$orderby modifiedon asc` for stable cursoring
+ * page size 100 (matches `D365_IMPORT_BATCH_SIZE`)
+ * $expand only on Lead/Contact/Account/Opportunity (activity
+ * entities don't expand further per D365 metadata)
  *
  * When `nextLink` is supplied, we delegate to `client.followNextLink`.
  * The OData server bakes all $select/$filter/$top/$orderby into the
@@ -38,7 +38,7 @@ import { D365_ENTITY_PK, D365_ENTITY_SET } from "./types";
  */
 
 /* -------------------------------------------------------------------------- *
- *                              Common types                                  *
+ * Common types *
  * -------------------------------------------------------------------------- */
 
 export interface FetchPageResult<T> {
@@ -57,7 +57,7 @@ export interface BaseFetchOpts {
   /** Forced re-fetch by primary-key IDs (max ~100 per page). */
   ids?: string[];
   /** When true, $expand the entity's parent / child links. Only valid
-   *  for the four primary entities; ignored for activities. */
+   * for the four primary entities; ignored for activities. */
   expand?: boolean;
   /** Optional caller-provided abort signal. */
   signal?: AbortSignal;
@@ -66,7 +66,7 @@ export interface BaseFetchOpts {
 const DEFAULT_PAGE_SIZE = 100;
 
 /* -------------------------------------------------------------------------- *
- *                             Field allowlists                               *
+ * Field allowlists *
  * -------------------------------------------------------------------------- */
 
 const LEAD_SELECT = [
@@ -254,7 +254,7 @@ const EMAIL_SELECT = [
 ];
 
 /* -------------------------------------------------------------------------- *
- *                              Filter builders                               *
+ * Filter builders *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -304,7 +304,7 @@ function buildFilter(args: BuildFilterArgs): string | undefined {
 }
 
 /* -------------------------------------------------------------------------- *
- *                             Generic page fetch                             *
+ * Generic page fetch *
  * -------------------------------------------------------------------------- */
 
 interface FetchSpec {
@@ -359,7 +359,7 @@ async function fetchByQuery<T>(
 }
 
 /* -------------------------------------------------------------------------- *
- *                          Per-entity public API                             *
+ * Per-entity public API *
  * -------------------------------------------------------------------------- */
 
 export type LeadFetchOpts = BaseFetchOpts;
@@ -547,7 +547,7 @@ export function fetchEmails(
 }
 
 /* -------------------------------------------------------------------------- *
- *                       Entity-type dispatch helper                          *
+ * Entity-type dispatch helper *
  * -------------------------------------------------------------------------- */
 
 /**

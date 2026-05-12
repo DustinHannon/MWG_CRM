@@ -35,12 +35,12 @@ export function NotificationsSection({
   subscriptions: SubscriptionRow[];
 }) {
   const [pending, startTransition] = useTransition();
-  // Phase 6B — version travels with every save and is updated from
+  // version travels with every save and is updated from
   // the server's reply so subsequent toggles use the latest value.
   const [version, setVersion] = useState<number | undefined>(
     prefs?.version ?? undefined,
   );
-  // Phase 25 §7.2 — local optimistic copy of the subscriptions list
+  // local optimistic copy of the subscriptions list
   // so unsubscribe / frequency-update feel responsive. Server actions
   // revalidate /settings on success which refills from the DB.
   const [subs, setSubs] = useState<SubscriptionRow[]>(subscriptions);
@@ -169,7 +169,7 @@ export function NotificationsSection({
           </select>
         </div>
 
-        {/* Phase 25 §7.2 — per-subscription list. */}
+        {/* per-subscription list. */}
         <div className="mt-6 border-t border-glass-border pt-5">
           <div className="flex items-center justify-between">
             <div>

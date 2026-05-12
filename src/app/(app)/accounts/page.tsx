@@ -30,7 +30,7 @@ export default async function AccountsPage({
   const perms = await getPermissions(session.id);
   const canViewAll = session.isAdmin || perms.canViewAllRecords;
 
-  // Phase 9C — cursor pagination on (updated_at DESC, id DESC).
+  // cursor pagination on (updated_at DESC, id DESC).
   // Composite partial index `crm_accounts_updated_at_id_idx` supports
   // these seeks at scale (100k+ accounts).
   const cursor = parseCursor(sp.cursor);
@@ -45,7 +45,7 @@ export default async function AccountsPage({
     );
   }
 
-  // Phase 9C (workflow) — Won deals column. Correlated subquery on
+  // Won deals column. Correlated subquery on
   // opportunities filtered by stage='closed_won'. The composite index
   // `opportunities_account_idx` plus the partial `is_deleted=false`
   // predicate lets Postgres index-only-scan this for typical account
@@ -64,7 +64,7 @@ export default async function AccountsPage({
       id: crmAccounts.id,
       name: crmAccounts.name,
       industry: crmAccounts.industry,
-      // Phase 9C — owner id surfaced for the canonical UserChip.
+      // owner id surfaced for the canonical UserChip.
       ownerId: crmAccounts.ownerId,
       ownerName: users.displayName,
       createdAt: crmAccounts.createdAt,
@@ -112,7 +112,7 @@ export default async function AccountsPage({
         }
       />
 
-      {/* Phase 12 — dense single-line list at <md, mirrors /leads. */}
+      {/* dense single-line list at <md, mirrors /leads. */}
       <div className="mt-6 md:hidden">
         <AccountListMobile
           rows={rows.map((r) => ({
@@ -152,7 +152,7 @@ export default async function AccountsPage({
                 <th className="px-4 py-3">Owner</th>
                 <th className="px-4 py-3 text-right">Won deals</th>
                 <th className="px-4 py-3">Created</th>
-                {/* Phase 10 — fixed-width trailing actions cell. */}
+                {/* fixed-width trailing actions cell. */}
                 <th className="w-10 px-2 py-3" aria-label="actions" />
               </tr>
             </thead>
@@ -171,7 +171,7 @@ export default async function AccountsPage({
                     {r.industry ?? "—"}
                   </td>
                   <td data-label="Owner" className="px-4 py-2.5">
-                    {/* Phase 9C — UserChip; hoverCard omitted on this
+                    {/* UserChip; hoverCard omitted on this
                         50-row table per the perf rule. */}
                     {r.ownerId ? (
                       <UserChip

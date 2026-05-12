@@ -10,12 +10,12 @@ const envSchema = z.object({
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 chars"),
   AUTH_TRUST_HOST: z.coerce.boolean().default(true),
 
-  // Entra OIDC — optional in Phase 1/2 (filled in Phase 3 once App Registration exists).
+  // Entra OIDC — optional /2 (filled once App Registration exists).
   AUTH_MICROSOFT_ENTRA_ID_ID: z.string().optional(),
   AUTH_MICROSOFT_ENTRA_ID_SECRET: z.string().optional(),
   AUTH_MICROSOFT_ENTRA_ID_ISSUER: z.string().url().optional(),
 
-  // Phase 15 — Microsoft Graph application permissions for system-originated
+  // Microsoft Graph application permissions for system-originated
   // email (sendEmailAs / preflight). New aliases default to the existing
   // delegated-flow values so the same Entra app works for both flows once
   // Mail.Send + User.Read.All application permissions are admin-consented.
@@ -34,7 +34,7 @@ const envSchema = z.object({
   // App
   APP_NAME: z.string().default("MWG CRM"),
 
-  // Phase 12 — Supabase Realtime. URL + publishable/anon key are
+  // Supabase Realtime. URL + publishable/anon key are
   // browser-exposed (NEXT_PUBLIC_*). JWT secret is server-only and mints
   // user JWTs that the realtime client uses to authenticate with the
   // Realtime broker. All three are optional during dev (a missing
@@ -44,7 +44,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20).optional(),
   SUPABASE_JWT_SECRET: z.string().min(20).optional(),
 
-  // Cron / scheduled jobs (Phase 3D, 3H)
+  // Cron / scheduled jobs (, 3H)
   CRON_SECRET: z.string().min(20).optional(),
   ALLOWED_EMAIL_DOMAINS: z
     .string()
@@ -62,7 +62,7 @@ const envSchema = z.object({
   VERCEL_ENV: z.enum(["production", "preview", "development"]).optional(),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
-  // Phase 19 — SendGrid marketing email. Optional in dev so a missing key
+  // SendGrid marketing email. Optional in dev so a missing key
   // just disables marketing send paths (the UI shows a banner). Production
   // boot has all four set.
   SENDGRID_API_KEY: z.string().optional(),
@@ -74,18 +74,18 @@ const envSchema = z.object({
   // Created via /v3/asm/groups; id is per-account.
   SENDGRID_UNSUBSCRIBE_GROUP_ID: z.coerce.number().int().optional(),
 
-  // Phase 19 — Unlayer (react-email-editor). Project id is a tenant
+  // Unlayer (react-email-editor). Project id is a tenant
   // identifier and is exposed to the client; the API key is server-only
   // and only used for backend export-to-html fallback.
   UNLAYER_PROJECT_ID: z.coerce.number().int().optional(),
   NEXT_PUBLIC_UNLAYER_PROJECT_ID: z.coerce.number().int().optional(),
   UNLAYER_API_KEY: z.string().optional(),
 
-  // Phase 19 — Template soft-lock for collaborative editing.
+  // Template soft-lock for collaborative editing.
   MARKETING_LOCK_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(60),
   MARKETING_LOCK_HEARTBEAT_SECONDS: z.coerce.number().int().positive().default(30),
 
-  // Phase 20 — Security hardening: rate-limit budgets and webhook
+  // Security hardening: rate-limit budgets and webhook
   // signature freshness window. All have safe defaults so a missing
   // value in development doesn't disable the limiter.
   WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS: z.coerce
@@ -113,7 +113,7 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(5),
-  // Phase 25 §6.2 — CSP violation report endpoint. Public endpoint;
+  // CSP violation report endpoint. Public endpoint;
   // browsers POST to /api/v1/security/csp-report whenever the CSP
   // blocks a resource. Bound the volume per source IP so a misbehaving
   // page or a hostile origin can't flood audit_log.
@@ -123,7 +123,7 @@ const envSchema = z.object({
     .positive()
     .default(60),
 
-  // Phase 26 §6 — Geo-blocking. Allowlist is a comma-separated list of
+  // Geo-blocking. Allowlist is a comma-separated list of
   // ISO 3166-1 alpha-2 country codes. Requests from any other country
   // are rewritten to /blocked with a 403 status by `src/proxy.ts`.
   // Default `US,JM,PR` matches the WAF rule documented in
@@ -143,7 +143,7 @@ const envSchema = z.object({
     .positive()
     .default(5),
 
-  // Phase 26 §4.2 / §5.2 — Better Stack SQL Query API. All optional so the
+  // / §5.2 — Better Stack SQL Query API. All optional so the
   // app still boots if a phase-26 prerequisite isn't provisioned yet;
   // the /admin/insights and /admin/server-logs pages render an empty
   // state via StandardEmptyState when any of these is missing.
@@ -153,13 +153,13 @@ const envSchema = z.object({
   BETTERSTACK_QUERY_USERNAME: z.string().optional(),
   BETTERSTACK_QUERY_PASSWORD: z.string().optional(),
 
-  // Phase 26 §4.3 — Vercel REST API token for the recent-deployments
+  // Vercel REST API token for the recent-deployments
   // panel on /admin/insights. Optional for the same reason.
   VERCEL_API_TOKEN: z.string().optional(),
   VERCEL_TEAM_ID: z.string().optional(),
   VERCEL_PROJECT_ID: z.string().optional(),
 
-  // Phase 26 §4.4 + §5.5 — server-side cache TTLs (seconds) for the two
+  // + §5.5 — server-side cache TTLs (seconds) for the two
   // admin observability pages.
   INSIGHTS_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
   SERVER_LOGS_CACHE_TTL_SECONDS: z.coerce
@@ -188,7 +188,7 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 
-/** True when both Entra client ID and secret are present (Phase 3 complete). */
+/** True when both Entra client ID and secret are present (complete). */
 export const entraConfigured =
   Boolean(env.AUTH_MICROSOFT_ENTRA_ID_ID) &&
   Boolean(env.AUTH_MICROSOFT_ENTRA_ID_SECRET) &&

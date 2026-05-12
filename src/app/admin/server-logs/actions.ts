@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth-helpers";
 
 /**
- * Phase 26 §5 — Manual refresh for /admin/server-logs.
+ * Manual refresh for /admin/server-logs.
  *
  * The page is `revalidate = 60`, and every Better Stack query is
  * wrapped in `unstable_cache` with the same TTL. Clicking "Refresh"

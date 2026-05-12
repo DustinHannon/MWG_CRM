@@ -14,7 +14,7 @@ const bodySchema = z.object({
 });
 
 /**
- * Phase 15 — admin-only diagnostic that exercises sendEmailAs end-to-end.
+ * admin-only diagnostic that exercises sendEmailAs end-to-end.
  * Useful for smoke testing the Graph token + preflight + send pipeline
  * without coupling to a real product surface (reports, notifications, etc.).
  *

@@ -7,7 +7,7 @@ import {
 import { z } from "zod";
 
 /**
- * Phase 13 — single OpenAPI registry. Every /api/v1 route file imports
+ * single OpenAPI registry. Every /api/v1 route file imports
  * this module's `registry` and calls `registerPath(...)` to add itself
  * to the spec. `buildOpenApiSpec()` collects everything and emits an
  * OpenAPI 3.1 document.

@@ -1,4 +1,4 @@
-// Phase 6E — canonical header→field mapping for the new 39-column
+// canonical header→field mapping for the new 39-column
 // import template. Header strings are matched case-insensitively after
 // trim. Trailing asterisk on a header (e.g., "First Name*") is also
 // matched. Unknown headers are silently ignored — the importer logs a
@@ -9,7 +9,7 @@ export interface HeaderMapEntry {
   required?: boolean;
 }
 
-// Order matters for the downloadable template (Phase 6G).
+// Order matters for the downloadable template.
 export const TEMPLATE_HEADERS: Array<{
   header: string;
   field: string;

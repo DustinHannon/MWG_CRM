@@ -45,7 +45,7 @@ export async function createViewAction(
 
       try {
         const { id } = await createSavedView(user.id, result);
-        // Phase 4B — auto-revert: when the user saves the current state as
+        // auto-revert: when the user saves the current state as
         // a new view, the originating built-in view's modifications (adhoc
         // columns) should reset so switching back shows clean defaults.
         await setAdhocColumns(user.id, null);
@@ -80,7 +80,7 @@ export async function updateViewAction(
     async (): Promise<ViewIdData> => {
       const user = await requireSession();
       const id = z.string().uuid().parse(formData.get("id"));
-      // Phase 6B — version stamps every saved-view edit.
+      // version stamps every saved-view edit.
       const version = z.coerce
         .number()
         .int()
@@ -162,7 +162,7 @@ export async function setAdhocColumnsAction(
 }
 
 /**
- * Phase 28 §5 — reset the current view to its saved definition.
+ * reset the current view to its saved definition.
  *
  * The client owns the URL navigation (`router.push('/leads?view=...')`);
  * this action handles the server-side side-effects: clear adhoc columns

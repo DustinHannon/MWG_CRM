@@ -15,12 +15,12 @@ interface SearchParams {
 }
 
 /**
- * Phase 19 / Phase 29 §5 — Lists index.
+ * Lists index.
  *
- * Phase 29 §5 adds:
- *   • Type column showing Dynamic / Static.
- *   • Type filter (all | dynamic | static) via querystring.
- *   • Two header action buttons (New dynamic list, New static list).
+ * adds:
+ * • Type column showing Dynamic / Static.
+ * • Type filter (all | dynamic | static) via querystring.
+ * • Two header action buttons (New dynamic list, New static list).
  */
 export default async function ListsPage({
   searchParams,

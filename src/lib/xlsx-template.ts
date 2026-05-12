@@ -4,15 +4,15 @@ import { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES } from "@/lib/lead-constants"
 import { TEMPLATE_HEADERS } from "@/lib/import/headers";
 
 /**
- * Phase 6G — three-sheet template generated for the new 39-column
- * import structure (§4 of the Phase 6 brief). Sheets:
+ * three-sheet template generated for the new 39-column
+ * import structure (§4 of the brief). Sheets:
  *
- *  - Leads        : headers + 3 example rows (minimal / typical / rich)
- *  - Instructions : column docs + multi-line activity format + mappings
- *  - Allowed values: status / rating / opportunity stage enums
+ * Leads : headers + 3 example rows (minimal / typical / rich)
+ * Instructions : column docs + multi-line activity format + mappings
+ * Allowed values: status / rating / opportunity stage enums
  *
  * The "rich" example demonstrates the multi-line activity column shape
- * — exceljs preserves embedded \n inside a cell and the import parser
+ * exceljs preserves embedded \n inside a cell and the import parser
  * recognises that as activity boundaries. Users open the template,
  * paste their data, and submit it on /leads/import.
  */
@@ -38,7 +38,7 @@ const RICH_MEETINGS = `[2026-02-20 03:00 PM CT] Plan walkthrough
 // 3 sample rows — minimal / typical / rich-with-multiline-activities.
 const EXAMPLE_ROWS: Array<Record<string, string>> = [
   // 1. Minimal — just the required field, plus an email so the lead is
-  //    identifiable.
+  // identifiable.
   {
     firstName: "Amy",
     lastName: "",

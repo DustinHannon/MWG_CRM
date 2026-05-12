@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Single campaign GET / PUT / DELETE.
+ * Single campaign GET / PUT / DELETE.
  *
  * PUT mass-assignment guard: only the explicit allowlist below may be
  * patched. Anything else in the body is silently ignored.

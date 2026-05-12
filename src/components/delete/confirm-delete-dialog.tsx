@@ -21,7 +21,7 @@ const ENTITY_LABEL: Record<EntityKind, string> = {
 };
 
 /**
- * Phase 10 — canonical archive confirmation dialog. Wraps Radix
+ * canonical archive confirmation dialog. Wraps Radix
  * AlertDialog so the focus trap, ESC handling, and portal placement
  * come for free. Body copy is derived from `entityKind`; pass
  * `extraBody` for entity-specific cascade hints (e.g., "Its 14
@@ -65,10 +65,10 @@ export function ConfirmDeleteDialog({
       <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
-        {/* Phase 12 Sub-E — `mwg-mobile-sheet` collapses the centered
+        {/* `mwg-mobile-sheet` collapses the centered
             modal to a full-bleed bottom sheet at <640px; desktop
             ≥640px keeps the centered placement.
-            Phase 12 — fade only (no zoom/slide) so the centering
+            fade only (no zoom/slide) so the centering
             translates aren't fought by tw-animate-css's enter/exit
             transforms. */}
         <AlertDialog.Content className="mwg-mobile-sheet fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-background p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0">

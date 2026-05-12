@@ -1,5 +1,5 @@
 /**
- * Phase 29 §6 — Shared types for the generic Excel import wizard.
+ * Shared types for the generic Excel import wizard.
  *
  * The wizard at `@/components/import/import-wizard.tsx` is a 3-stage
  * shell (upload → preview → result) that delegates the entity-specific

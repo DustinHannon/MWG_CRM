@@ -26,7 +26,7 @@ export const leads = pgTable(
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
     // ON DELETE RESTRICT: deleting a user with owned leads must go
     // through the admin "delete user" flow which forces a reassign or a
-    // cascade-delete decision. Phase 1 used SET NULL which silently
+    // cascade-delete decision. used SET NULL which silently
     // orphaned leads — corrected in the phase2_integrity_owner_restrict
     // migration.
     ownerId: uuid("owner_id").references(() => users.id, {
@@ -37,7 +37,7 @@ export const leads = pgTable(
     source: leadSourceEnum("source").notNull().default("other"),
     salutation: text("salutation"),
     firstName: text("first_name").notNull(),
-    // Phase 6A — last_name nullable. Real CRM data routinely has incomplete
+    // last_name nullable. Real CRM data routinely has incomplete
     // name records (e.g., "Amy", "Mr.", "Unknown"). The leads_last_name_len
     // CHECK still validates length when non-NULL.
     lastName: text("last_name"),
@@ -58,7 +58,7 @@ export const leads = pgTable(
     estimatedValue: numeric("estimated_value", { precision: 14, scale: 2 }),
     estimatedCloseDate: date("estimated_close_date"),
     description: text("description"),
-    // Phase 6A — Subject line ("Topic" in legacy D365 dumps). Stored
+    // Subject line ("Topic" in legacy D365 dumps). Stored
     // separately from description so it can be searched and indexed
     // independently. CHECK constraint caps at 1000 chars (intentional —
     // some D365 Topic values are essentially the customer's full inbound
@@ -67,9 +67,9 @@ export const leads = pgTable(
     doNotContact: boolean("do_not_contact").notNull().default(false),
     doNotEmail: boolean("do_not_email").notNull().default(false),
     doNotCall: boolean("do_not_call").notNull().default(false),
-    // Phase 8D — legacy `tags text[]` column dropped in
+    // legacy `tags text[]` column dropped in
     // phase8d_drop_legacy_leads_tags. The relational `lead_tags` junction
-    // table (Phase 3C) is the source of truth for lead tagging.
+    // table is the source of truth for lead tagging.
     externalId: text("external_id"),
     convertedAt: timestamp("converted_at", { withTimezone: true }),
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
@@ -94,7 +94,7 @@ export const leads = pgTable(
     // Optimistic concurrency stamp. Bumped by every UPDATE through
     // concurrentUpdate(); a stale `version` causes ConflictError.
     version: integer("version").notNull().default(1),
-    // Phase 4G — soft delete. activeLeads() filters by `is_deleted = false`.
+    // soft delete. activeLeads() filters by `is_deleted = false`.
     // Cron `/api/cron/purge-archived` hard-deletes after 30 days.
     isDeleted: boolean("is_deleted").notNull().default(false),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -102,11 +102,11 @@ export const leads = pgTable(
       onDelete: "set null",
     }),
     deleteReason: text("delete_reason"),
-    // Phase 4C — lead scoring (rules-based).
+    // lead scoring (rules-based).
     score: integer("score").notNull().default(0),
     scoreBand: text("score_band").notNull().default("cold"),
     scoredAt: timestamp("scored_at", { withTimezone: true }),
-    // Phase 23 — D365 custom-field passthrough. Mappers route any
+    // D365 custom-field passthrough. Mappers route any
     // non-native field (D365 `new_*`, `cr*_*`, `mwg_*`) into this
     // JSONB so the review UI surfaces it without re-fetching the raw
     // OData payload. NULL on manually-created leads.
@@ -119,18 +119,18 @@ export const leads = pgTable(
     index("leads_company_idx").on(t.companyName),
     index("leads_external_id_idx").on(t.externalId),
     index("leads_last_activity_idx").on(t.lastActivityAt.desc()),
-    // Phase 9C — composite cursor key for /leads default sort
+    // composite cursor key for /leads default sort
     // (last_activity_at DESC NULLS LAST, id DESC), partial on is_deleted=false
     // so cursor seeks stay index-only at 100k+ leads.
     index("leads_last_activity_id_idx")
       .on(sql`last_activity_at DESC NULLS LAST`, t.id.desc())
       .where(sql`is_deleted = false`),
-    // Phase 9C — composite cursor key for sort-by-updated_at views
+    // composite cursor key for sort-by-updated_at views
     // (recently-modified, account/contact-style fallbacks).
     index("leads_updated_at_id_idx")
       .on(t.updatedAt.desc(), t.id.desc())
       .where(sql`is_deleted = false`),
-    // Phase 8D — `leads_tags_gin_idx` on the legacy `tags text[]` column was
+    // `leads_tags_gin_idx` on the legacy `tags text[]` column was
     // dropped along with that column. Tag filters now use the lead_tags join.
     // Partial index — only useful when querying by import.
     index("leads_import_job_idx")

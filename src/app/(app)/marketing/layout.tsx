@@ -4,7 +4,7 @@ import { getPermissions, requireSession } from "@/lib/auth-helpers";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 19 — Marketing tab gate. Authenticated users without admin OR
+ * Marketing tab gate. Authenticated users without admin OR
  * canManageMarketing get bounced. Mirrors the Reports gate pattern.
  */
 export default async function MarketingLayout({

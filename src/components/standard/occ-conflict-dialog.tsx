@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /**
- * Phase 25 §7.1 — Side-by-side OCC conflict resolution dialog.
+ * Side-by-side OCC conflict resolution dialog.
  *
  * Surfaced when a server action returns CONCURRENCY_CONFLICT (or
  * any ConflictError with `code === 'CONCURRENCY_CONFLICT'`). Renders
@@ -11,13 +11,13 @@ import { useState } from "react";
  * differing fields highlighted. The modal is READ-ONLY. The only
  * resolution paths are:
  *
- *   - Refresh:   discard the local draft + re-render with server state.
- *                Caller wires this to a router.refresh() or full reload.
- *   - Overwrite: force-apply the local draft with the server's bumped
- *                version. Caller wires this to re-call the same
- *                server action with the server's version.
+ * Refresh: discard the local draft + re-render with server state.
+ * Caller wires this to a router.refresh() or full reload.
+ * Overwrite: force-apply the local draft with the server's bumped
+ * version. Caller wires this to re-call the same
+ * server action with the server's version.
  *
- * Auto-merge is intentionally NOT offered (per Phase 25 §0 #10).
+ * Auto-merge is intentionally NOT offered (by design).
  * "View their changes" is read-only context, never auto-applied.
  *
  * The component is presentation-only — fetching the server state +
@@ -37,15 +37,15 @@ export interface OccConflictDialogProps {
   /** When true, the dialog is rendered. */
   open: boolean;
   /** Close-without-resolve handler (e.g. user dismisses). Equivalent
-   *  to Cancel — leaves the form in its dirty state so the user can
-   *  copy values if they want. */
+   * to Cancel — leaves the form in its dirty state so the user can
+   * copy values if they want. */
   onDismiss: () => void;
   /** Discard local edits + reload from server. */
   onRefresh: () => void;
   /** Force-apply local edits with the server's bumped version. */
   onOverwrite: () => void;
   /** Pre-computed field-by-field diff. Show only fields that differ
-   *  (the caller filters before passing). */
+   * (the caller filters before passing). */
   fields: OccConflictField[];
   /** Optional entity-friendly label e.g. "lead" or "campaign". */
   entityLabel?: string;

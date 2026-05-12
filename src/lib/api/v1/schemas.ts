@@ -2,7 +2,7 @@ import "server-only";
 import { openapiZ as z, registry } from "@/lib/openapi/registry";
 
 /**
- * Phase 13 — shared OpenAPI schemas. Every entity defines its own
+ * shared OpenAPI schemas. Every entity defines its own
  * Lead/Account/Contact/etc. schema next to its route, but the common
  * envelope shapes (pagination meta, error body) live here so they're
  * registered once and referenced everywhere.

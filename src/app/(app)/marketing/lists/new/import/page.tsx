@@ -8,11 +8,11 @@ import { StaticListCreateForm } from "../../_components/static-list-create-form"
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 29 §5 — Static-list creation entry point.
+ * Static-list creation entry point.
  *
  * Step 1: capture name + description and create the empty list row.
  * Step 2: redirect into the import wizard hosted at
- *         `/marketing/lists/<id>/import` (Sub-agent C).
+ * `/marketing/lists/<id>/import` (Sub-agent C).
  *
  * This page is intentionally minimal — the actual Excel/CSV ingest is
  * the wizard's job. A static list can also be filled via inline edit

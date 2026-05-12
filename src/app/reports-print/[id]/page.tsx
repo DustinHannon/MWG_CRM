@@ -18,13 +18,13 @@ export const metadata = {
 };
 
 /**
- * Phase 11 — print-friendly report page. Lives outside `(app)` so the
+ * print-friendly report page. Lives outside `(app)` so the
  * sidebar/topbar/glass chrome is absent. Browser-print first: the user
  * picks "Save as PDF" from the system dialog.
  *
  * v1 ships table-only output (with optional summary header for the
  * visualization). Static SVG chart rendering via Recharts SSR was cut
- * — see PHASE11-SUBC-REPORT.md for the rationale.
+ * see PHASE11-SUBC-REPORT.md for the rationale.
  */
 export default async function ReportPrintPage({
   params,

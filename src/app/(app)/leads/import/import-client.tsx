@@ -13,10 +13,10 @@ import {
 import type { ActionResult } from "@/lib/server-action";
 
 /**
- * Phase 29 §6 — Thin shell that wires the generic `<ImportWizard>` to
+ * Thin shell that wires the generic `<ImportWizard>` to
  * the leads-specific preview / commit / cancel actions and renders the
  * leads-specific preview + result panes. The visible behavior is
- * unchanged from the original Phase 6E wizard; only the surrounding
+ * unchanged from the original wizard; only the surrounding
  * state machine has moved to `@/components/import/import-wizard.tsx`.
  */
 export function ImportClient() {

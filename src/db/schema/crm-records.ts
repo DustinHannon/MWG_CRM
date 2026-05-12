@@ -16,7 +16,7 @@ import { leads } from "./leads";
 import { users } from "./users";
 
 /**
- * Phase 3G — CRM record entities (post-conversion). Lead conversion
+ * CRM record entities (post-conversion). Lead conversion
  * creates Account → Contact → Opportunity in a single transaction.
  *
  * NOTE: the SQL table is `crm_accounts` to avoid a collision with the
@@ -43,7 +43,7 @@ export const crmAccounts = pgTable(
     createdById: uuid("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    // Phase 12 — actor stamp for realtime skip-self. Set on every UPDATE
+    // actor stamp for realtime skip-self. Set on every UPDATE
     // by callers via concurrentUpdate or explicit .set({ updatedById }).
     updatedById: uuid("updated_by_id").references(() => users.id, {
       onDelete: "set null",
@@ -64,13 +64,13 @@ export const crmAccounts = pgTable(
       onDelete: "set null",
     }),
     deleteReason: text("delete_reason"),
-    // Phase 23 — D365 custom-field passthrough.
+    // D365 custom-field passthrough.
     metadata: jsonb("metadata"),
   },
   (t) => [
     index("crm_accounts_owner_idx").on(t.ownerId),
     index("crm_accounts_name_idx").on(sql`lower(${t.name})`),
-    // Phase 9C — composite cursor pagination key for /accounts list.
+    // composite cursor pagination key for /accounts list.
     index("crm_accounts_updated_at_id_idx")
       .on(t.updatedAt.desc(), t.id.desc())
       .where(sql`is_deleted = false`),
@@ -85,7 +85,7 @@ export const contacts = pgTable(
       onDelete: "set null",
     }),
     firstName: text("first_name").notNull(),
-    // Phase 6A — last_name nullable on contacts to mirror leads. The
+    // last_name nullable on contacts to mirror leads. The
     // contacts_last_len CHECK still validates length when non-NULL.
     lastName: text("last_name"),
     jobTitle: text("job_title"),
@@ -102,7 +102,7 @@ export const contacts = pgTable(
     createdById: uuid("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    // Phase 12 — actor stamp for realtime skip-self. Set on every UPDATE
+    // actor stamp for realtime skip-self. Set on every UPDATE
     // by callers via concurrentUpdate or explicit .set({ updatedById }).
     updatedById: uuid("updated_by_id").references(() => users.id, {
       onDelete: "set null",
@@ -123,14 +123,14 @@ export const contacts = pgTable(
       onDelete: "set null",
     }),
     deleteReason: text("delete_reason"),
-    // Phase 23 — D365 custom-field passthrough.
+    // D365 custom-field passthrough.
     metadata: jsonb("metadata"),
   },
   (t) => [
     index("contacts_account_idx").on(t.accountId),
     index("contacts_owner_idx").on(t.ownerId),
     index("contacts_email_idx").on(sql`lower(${t.email})`),
-    // Phase 9C — composite cursor pagination key for /contacts list.
+    // composite cursor pagination key for /contacts list.
     index("contacts_updated_at_id_idx")
       .on(t.updatedAt.desc(), t.id.desc())
       .where(sql`is_deleted = false`),
@@ -150,7 +150,7 @@ export const opportunities = pgTable(
   "opportunities",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    // Phase 6E — accountId is nullable so imports can create lead-only
+    // accountId is nullable so imports can create lead-only
     // opportunities. When a lead is later converted, accountId gets set.
     accountId: uuid("account_id").references(() => crmAccounts.id, {
       onDelete: "cascade",
@@ -170,7 +170,7 @@ export const opportunities = pgTable(
     createdById: uuid("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    // Phase 12 — actor stamp for realtime skip-self. Set on every UPDATE
+    // actor stamp for realtime skip-self. Set on every UPDATE
     // by callers via concurrentUpdate or explicit .set({ updatedById }).
     updatedById: uuid("updated_by_id").references(() => users.id, {
       onDelete: "set null",
@@ -192,14 +192,14 @@ export const opportunities = pgTable(
       onDelete: "set null",
     }),
     deleteReason: text("delete_reason"),
-    // Phase 23 — D365 custom-field passthrough.
+    // D365 custom-field passthrough.
     metadata: jsonb("metadata"),
   },
   (t) => [
     index("opportunities_account_idx").on(t.accountId),
     index("opportunities_owner_idx").on(t.ownerId),
     index("opportunities_stage_idx").on(t.stage),
-    // Phase 9C — composite cursor pagination keys. The list page sorts
+    // composite cursor pagination keys. The list page sorts
     // by expected_close_date NULLS LAST (default) but server-side
     // updated_at sort fallbacks also exist. Partial on is_deleted=false.
     index("opportunities_close_date_id_idx")

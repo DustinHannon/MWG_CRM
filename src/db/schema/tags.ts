@@ -11,7 +11,7 @@ import { leads } from "./leads";
 import { users } from "./users";
 
 /**
- * Phase 3C — first-class tags. Each tag has a color from a fixed
+ * first-class tags. Each tag has a color from a fixed
  * brand-aligned palette; leads link via the `lead_tags` junction table.
  *
  * Color palette: slate (default), navy, blue, teal, green, amber, gold,

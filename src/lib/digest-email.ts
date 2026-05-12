@@ -22,10 +22,10 @@ interface DigestArgs {
 }
 
 /**
- * Phase 3H — render minimal HTML digest of new saved-search matches and
+ * render minimal HTML digest of new saved-search matches and
  * send to the subscriber's own inbox.
  *
- * Phase 15 — migrated from delegated /me/sendMail (which silently dropped
+ * migrated from delegated /me/sendMail (which silently dropped
  * digests when refresh tokens rotated and required ReauthRequiredError
  * recovery) to sendEmailAs (application permissions). Each delivery now
  * gets a row in email_send_log + audit_log, gets gated on mailbox preflight,

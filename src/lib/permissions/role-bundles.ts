@@ -1,5 +1,5 @@
 /**
- * Phase 27 §4.6 — Marketing role bundles.
+ * Marketing role bundles.
  *
  * Each bundle is a preset for the 24 fine-grained marketing permissions
  * shipped on the `permissions` table. The admin UI ("Apply role bundle")
@@ -40,7 +40,7 @@ const CREATOR_PERMS: MarketingPermissionKey[] = [
   "canMarketingListsDelete",
   "canMarketingListsRefresh",
   "canMarketingListsBulkAdd",
-  // Phase 29 §5 — Creators can import static lists from Excel.
+  // Creators can import static lists from Excel.
   "canMarketingListsImport",
   "canMarketingCampaignsCreate",
   "canMarketingCampaignsEdit",
@@ -59,7 +59,7 @@ const ADMIN_PERMS: MarketingPermissionKey[] = [
   ...CAMPAIGNER_PERMS,
   "canMarketingSuppressionsAdd",
   "canMarketingSuppressionsRemove",
-  // Phase 29 §7 — Admins can run the ClickDimensions template migration.
+  // Admins can run the ClickDimensions template migration.
   "canMarketingMigrationsRun",
 ];
 
@@ -110,7 +110,7 @@ export const ALL_MARKETING_KEYS: MarketingPermissionKey[] = [
   "canMarketingSuppressionsRemove",
   "canMarketingReportsView",
   "canMarketingAuditView",
-  // Phase 29 §5 + §7 — static-list import + CD migrations admin.
+  // + §7 — static-list import + CD migrations admin.
   "canMarketingListsImport",
   "canMarketingMigrationsRun",
 ];

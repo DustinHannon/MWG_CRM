@@ -1,16 +1,16 @@
 import "server-only";
 
 /**
- * Phase 10 — pure ownership/admin checks for delete affordances. These are
+ * pure ownership/admin checks for delete affordances. These are
  * synchronous client-and-server helpers used to gate UI rendering AND
  * server actions. The server action MUST re-fetch the record before calling
  * these (never trust the client to claim ownership).
  *
- * Rules per the Phase 10 matrix:
- *   - Lead/Account/Contact/Opportunity: owner OR admin can soft-delete
- *   - Task:                              creator OR assignee OR admin
- *   - Activity:                          author (user_id) OR admin
- *   - Hard delete (any entity):          admin only, from archive view
+ * Rules per the matrix:
+ * Lead/Account/Contact/Opportunity: owner OR admin can soft-delete
+ * Task: creator OR assignee OR admin
+ * Activity: author (user_id) OR admin
+ * Hard delete (any entity): admin only, from archive view
  *
  * `canViewAllRecords` deliberately does NOT grant delete. View ≠ delete.
  */

@@ -20,7 +20,7 @@ interface LockedTemplateBannerProps {
 }
 
 /**
- * Phase 21 — Banner shown on the template editor page when another
+ * Banner shown on the template editor page when another
  * user holds the soft-lock. Offers a read-only fallback link and an
  * admin "force unlock" affordance gated behind a Radix AlertDialog
  * (the same primitive `ConfirmDeleteDialog` uses, so the focus trap

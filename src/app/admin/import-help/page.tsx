@@ -1,4 +1,4 @@
-// Phase 6I — admin-only static reference for the import pipeline.
+// admin-only static reference for the import pipeline.
 // Linked from /admin and recommended in the import preview screen
 // when smart-detect is enabled.
 

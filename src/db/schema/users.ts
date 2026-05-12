@@ -12,9 +12,9 @@ import {
 
 /**
  * Application users. Three populations live here:
- *  - Entra (SSO) users: provisioned on first successful sign-in.
- *  - Breakglass user (singleton, is_breakglass=true): seeded once on first
- *    server boot. Always available even if Entra/SSO is broken.
+ * Entra (SSO) users: provisioned on first successful sign-in.
+ * Breakglass user (singleton, is_breakglass=true): seeded once on first
+ * server boot. Always available even if Entra/SSO is broken.
  *
  * `is_admin` is independent of `permissions` — admins bypass every per-feature
  * permission flag. Bumping `session_version` invalidates outstanding JWTs.
@@ -43,7 +43,7 @@ export const users = pgTable(
     lastCalendarSyncAt: timestamp("last_calendar_sync_at", {
       withTimezone: true,
     }),
-    // Phase 3B: Entra-sourced profile fields. Read-only on /settings.
+    // Entra-sourced profile fields. Read-only on /settings.
     // Refreshed on every Entra sign-in. Never used in lead workflow.
     jobTitle: text("job_title"),
     department: text("department"),
@@ -58,7 +58,7 @@ export const users = pgTable(
     managerDisplayName: text("manager_display_name"),
     managerEmail: text("manager_email"),
     entraSyncedAt: timestamp("entra_synced_at", { withTimezone: true }),
-    // Phase 15 — Mailbox capability (cached). 'exchange_online' | 'on_premises'
+    // Mailbox capability (cached). 'exchange_online' | 'on_premises'
     // | 'unknown' | 'not_licensed'. Re-checked at most every 24h, on every
     // sign-in, or on-demand via admin "Re-check mailbox".
     mailboxKind: text("mailbox_kind"),
@@ -90,7 +90,7 @@ export const users = pgTable(
 /**
  * Per-user feature flags. Admin bypasses these (see auth helpers).
  *
- * Phase 3G renamed `can_view_all_leads` → `can_view_all_records` since
+ * renamed `can_view_all_leads` → `can_view_all_records` since
  * the flag now governs leads + crm_accounts + contacts + opportunities.
  */
 export const permissions = pgTable("permissions", {
@@ -105,24 +105,24 @@ export const permissions = pgTable("permissions", {
   canExport: boolean("can_export").notNull().default(false),
   canSendEmail: boolean("can_send_email").notNull().default(true),
   canViewReports: boolean("can_view_reports").notNull().default(true),
-  // Phase 5E — grants visibility into records owned by the user's
+  // grants visibility into records owned by the user's
   // direct reports (per Microsoft Entra `manager` field). Independent
   // of canViewAllRecords; manager users can flip this without unlocking
   // org-wide visibility. Access-gate wiring + entity-level UI surfaces
   // are tracked in ROADMAP — schema landed first so the column is
   // available for future work.
   canViewTeamRecords: boolean("can_view_team_records").notNull().default(false),
-  // Phase 19 — gates the Marketing tab (templates, lists, campaigns,
+  // gates the Marketing tab (templates, lists, campaigns,
   // suppressions). Admin bypasses. Defaults to false; flip per user via
   // /admin/users/<id>/permissions.
   //
-  // Phase 27 §4.6 — `canManageMarketing` remains the OPERATIVE gate
+  // `canManageMarketing` remains the OPERATIVE gate
   // for backwards compatibility. The 24 fine-grained `canMarketing*`
   // permissions below are populated by the role-bundle apply UI and
   // backfilled from `canManageMarketing` at migration time. Future
   // phase migrates call sites to use the specific perms.
   canManageMarketing: boolean("can_manage_marketing").notNull().default(false),
-  // Phase 25 §7.3 — task-scoped RBAC. Every user can always
+  // task-scoped RBAC. Every user can always
   // view/edit/delete/complete THEIR OWN tasks (the "own" half of the
   // brief's permission constants is implicit). These four gate
   // cross-user actions. Admins bypass all.
@@ -130,7 +130,7 @@ export const permissions = pgTable("permissions", {
   canEditOthersTasks: boolean("can_edit_others_tasks").notNull().default(false),
   canDeleteOthersTasks: boolean("can_delete_others_tasks").notNull().default(false),
   canReassignTasks: boolean("can_reassign_tasks").notNull().default(false),
-  // Phase 27 §4.6 — 24 fine-grained marketing permissions.
+  // 24 fine-grained marketing permissions.
   // Backfilled from `canManageMarketing` so behavior is preserved.
   canMarketingTemplatesView: boolean("can_marketing_templates_view").notNull().default(false),
   canMarketingTemplatesCreate: boolean("can_marketing_templates_create").notNull().default(false),
@@ -156,13 +156,13 @@ export const permissions = pgTable("permissions", {
   canMarketingSuppressionsRemove: boolean("can_marketing_suppressions_remove").notNull().default(false),
   canMarketingReportsView: boolean("can_marketing_reports_view").notNull().default(false),
   canMarketingAuditView: boolean("can_marketing_audit_view").notNull().default(false),
-  // Phase 29 §5 — gates the static-list Excel import path on
+  // gates the static-list Excel import path on
   // /marketing/lists/new/import. Granted by Creator / Campaigner /
   // Admin role bundles.
   canMarketingListsImport: boolean("can_marketing_lists_import")
     .notNull()
     .default(false),
-  // Phase 29 §7 — gates the ClickDimensions migrations admin UI at
+  // gates the ClickDimensions migrations admin UI at
   // /admin/migrations. Added in Sub-agent B's migration for atomicity;
   // wired by Sub-agent D's role-bundle update.
   canMarketingMigrationsRun: boolean("can_marketing_migrations_run")

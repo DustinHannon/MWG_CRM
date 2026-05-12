@@ -6,18 +6,18 @@ import { savedViews } from "@/db/schema/views";
 import { expectAffected } from "@/lib/db/concurrent-update";
 
 /**
- * Phase 25 §7.3 — Tasks saved-view layer. Parallel to `src/lib/views.ts`
+ * Tasks saved-view layer. Parallel to `src/lib/views.ts`
  * (leads) but scoped to `saved_views.entity_type = 'task'`. The same
  * `saved_views` table backs both; the entity_type column is the
  * partition.
  *
  * Filter dimensions for tasks:
- *   - assignee:        'me' | <userId> | 'any'
- *   - status:          ('open'|'in_progress'|'completed'|'cancelled')[]
- *   - priority:        ('low'|'normal'|'high'|'urgent')[]
- *   - relation:        'all' | 'standalone' | 'linked'
- *   - relatedEntity:   'lead' | 'account' | 'contact' | 'opportunity' (when relation='linked')
- *   - dueRange:        'overdue' | 'today' | 'this_week' | 'later' | 'none' | 'all'
+ * assignee: 'me' | <userId> | 'any'
+ * status: ('open'|'in_progress'|'completed'|'cancelled')[]
+ * priority: ('low'|'normal'|'high'|'urgent')[]
+ * relation: 'all' | 'standalone' | 'linked'
+ * relatedEntity: 'lead' | 'account' | 'contact' | 'opportunity' (when relation='linked')
+ * dueRange: 'overdue' | 'today' | 'this_week' | 'later' | 'none' | 'all'
  *
  * Sort dimension: { field: 'dueAt' | 'priority' | 'title' | 'assignee' | 'status' | 'createdAt', direction: 'asc' | 'desc' }
  */

@@ -4,7 +4,7 @@ import { getVisitorsByCountry } from "@/lib/observability/insights-queries";
 import { WorldMapChart } from "./world-map-chart";
 
 /**
- * Phase 26 §4 — server wrapper for the world chloropleth.
+ * server wrapper for the world chloropleth.
  *
  * Driven by `getVisitorsByCountry` which aggregates Web Analytics
  * pageviews from the `vercel.analytics.v1` drain in Better Stack.

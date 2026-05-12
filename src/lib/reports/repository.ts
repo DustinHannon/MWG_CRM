@@ -6,7 +6,7 @@ import { users } from "@/db/schema/users";
 import { NotFoundError } from "@/lib/errors";
 
 /**
- * Phase 11 — repository helpers for the reports feature.
+ * repository helpers for the reports feature.
  *
  * Pure data fetchers; permission gating happens in
  * `lib/reports/access.ts` and at the API layer.

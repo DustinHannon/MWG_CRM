@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Admin-only proxy to GET /v3/stats on SendGrid.
+ * Admin-only proxy to GET /v3/stats on SendGrid.
  *
  * Returns daily aggregate stats (delivered / opens / clicks / bounces /
  * unsubscribes / spam_reports) for the most recent N days (default 30,

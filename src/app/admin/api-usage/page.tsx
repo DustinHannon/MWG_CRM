@@ -23,8 +23,8 @@ interface ApiUsageSearchParams {
   method?: string;
   path?: string;
   /** Either repeated (`?status=2xx&status=4xx`) when checkbox group is
-   *  serialized by the browser, or a single comma-separated string
-   *  when copy-pasted from the export URL. */
+   * serialized by the browser, or a single comma-separated string
+   * when copy-pasted from the export URL. */
   status?: string | string[];
   api_key_id?: string | string[];
   created_at_gte?: string;

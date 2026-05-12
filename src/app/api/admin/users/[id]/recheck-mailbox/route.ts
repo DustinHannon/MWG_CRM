@@ -11,7 +11,7 @@ import { logger } from "@/lib/logger";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 15 — admin-only "Re-check mailbox" endpoint. Forces a fresh
+ * admin-only "Re-check mailbox" endpoint. Forces a fresh
  * Microsoft Graph probe for an arbitrary user (bypasses the 24h cache)
  * and persists the resolution. Mirrors `/api/me/can-send-email?refresh=1`
  * but for someone other than the caller.

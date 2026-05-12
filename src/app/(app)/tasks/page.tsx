@@ -26,7 +26,7 @@ import { TaskViewSelector } from "./_components/task-view-selector";
 export const dynamic = "force-dynamic";
 
 /**
- * /tasks — Phase 25 §7.3 redesign.
+ * /tasks — redesign.
  *
  * Title is "Tasks" (no subtitle — copy convention update).
  *
@@ -63,7 +63,7 @@ export default async function TasksPage({
   const sp = await searchParams;
   const prefs = await getCurrentUserTimePrefs();
 
-  // Phase 25 §7.3 — read the user's last-used task view as the
+  // read the user's last-used task view as the
   // default when the URL doesn't pin one. Persist on every render
   // so picking a view via the selector + a hard reload land on
   // the same surface.
@@ -164,7 +164,7 @@ export default async function TasksPage({
     ? BUILTIN_TASK_VIEWS
     : BUILTIN_TASK_VIEWS.filter((v) => v.id !== "builtin:team-open");
 
-  // Phase 25 §7.3 — active users for the bulk-reassign picker.
+  // active users for the bulk-reassign picker.
   // Restricted to is_active=true; sorted by display name. Only loaded
   // when the viewer has reassign perm so non-managers don't pay for
   // the query.
@@ -180,7 +180,7 @@ export default async function TasksPage({
         .orderBy(asc(users.displayName))
     : [];
 
-  // Phase 25 §7.3 — persist the active view id (built-in or saved).
+  // persist the active view id (built-in or saved).
   // Fire-and-forget UPSERT; failure here doesn't block the page.
   // Caught + swallowed because a write blip can't break read paths.
   try {
@@ -200,7 +200,7 @@ export default async function TasksPage({
       <BreadcrumbsSetter crumbs={[{ label: "Tasks" }]} />
       <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["tasks"]} />
-      {/* Phase 25 §7.3 — title is "Tasks"; subtitle removed. */}
+      {/* title is "Tasks"; subtitle removed. */}
       <StandardPageHeader
         title="Tasks"
         fontFamily="display"
@@ -216,7 +216,7 @@ export default async function TasksPage({
         }
       />
 
-      {/* Phase 25 §7.3 — view selector + filter bar. URL-state driven,
+      {/* view selector + filter bar. URL-state driven,
           like the /leads filter bar. */}
       <div className="mt-5 space-y-3">
         <TaskViewSelector
@@ -312,7 +312,7 @@ const PRIORITY_OPTIONS = [
 ] as const;
 
 /**
- * Phase 25 §7.3 follow-up — server-rendered filter bar with multi-
+ * server-rendered filter bar with multi-
  * select chip toggles for status + priority (replacing the prior
  * single-select dropdowns that bundled options like "High +").
  * URL state is comma-separated; clicking a chip toggles its
@@ -464,7 +464,7 @@ function FilterBar({
 }
 
 /**
- * Phase 25 §7.3 — multi-select chip. Toggles `value` in/out of the
+ * multi-select chip. Toggles `value` in/out of the
  * comma-separated `paramName` query string and navigates. Server-
  * rendered link so it works without JS.
  *
@@ -495,7 +495,7 @@ function ChipToggle({
   // ?paramName=joined and let the page re-resolve other state from
   // its own URL on re-render. Other params survive because Next's
   // navigation merges on URL.searchParams.set() not full-replace
-  // — but here we're constructing a fresh querystring from this
+  // but here we're constructing a fresh querystring from this
   // chip alone. To keep other params we'd need to thread them in.
   //
   // Workable shortcut: emit JS-free chips inside a form so the

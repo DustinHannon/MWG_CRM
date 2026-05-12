@@ -7,7 +7,7 @@ import {
 } from "./standard-page-header";
 
 /**
- * Phase 24 §3.4 / §5.4 — canonical detail-page header.
+ * / §5.4 — canonical detail-page header.
  *
  * Composes <StandardPageHeader> with an optional Back link rendered
  * above the title. Used on entity detail pages (lead, contact,

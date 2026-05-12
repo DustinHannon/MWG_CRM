@@ -25,14 +25,14 @@ export interface ViewSummary {
   source: "builtin" | "saved";
   scope: "mine" | "all";
   isPinned?: boolean;
-  // Phase 6B — present on saved views; required when posting Save changes.
+  // present on saved views; required when posting Save changes.
   version?: number;
 }
 
 export interface ViewToolbarProps {
   views: ViewSummary[];
   activeViewId: string;
-  /** Phase 28 §5 — name of the currently-active view, for the reset dialog. */
+  /** name of the currently-active view, for the reset dialog. */
   activeViewName: string;
   activeColumns: ColumnKey[];
   baseColumns: ColumnKey[];
@@ -41,25 +41,25 @@ export interface ViewToolbarProps {
   /** True when activeColumns differs from baseColumns. */
   columnsModified: boolean;
   /**
-   * Phase 28 §5 — broader modification flag covering URL-driven filter,
+   * broader modification flag covering URL-driven filter,
    * sort, and search changes in addition to column drift. Drives the
    * MODIFIED reset button's visibility.
    */
   viewModified: boolean;
   /**
-   * Phase 28 §5 — which fields are modified (columns / search / filters /
+   * which fields are modified (columns / search / filters /
    * sort), for the audit-event payload emitted by `resetViewAction`.
    */
   modifiedFields: string[];
-  /** Phase 25 §7.2 — saved-view ids the current user is subscribed to. */
+  /** saved-view ids the current user is subscribed to. */
   subscribedViewIds?: string[];
 }
 
 /**
  * Top-of-page toolbar:
- * - View selector (built-in + saved)
- * - "Modified" badge with Save changes / Save as new
- * - Column chooser
+ * View selector (built-in + saved)
+ * "Modified" badge with Save changes / Save as new
+ * Column chooser
  *
  * Filter inputs live in the existing form below the toolbar — those are
  * server-rendered and submit via GET so the URL stays the source of truth
@@ -143,7 +143,7 @@ export function ViewToolbar({
 
       {/* Modified badge + actions */}
       {/*
-       * Phase 28 §5 — the MODIFIED badge is now a clickable button that
+       * the MODIFIED badge is now a clickable button that
        * opens a confirmation dialog to reset the view to its saved
        * definition. Visual styling matches the prior <span> 1:1; the
        * only additions are hover/focus/cursor affordances. `viewModified`
@@ -192,7 +192,7 @@ export function ViewToolbar({
             const view = views.find((v) => v.id === savedDirtyId);
             const fd = new FormData();
             fd.set("id", id);
-            // Phase 6B — version round-trips through the form so OCC
+            // version round-trips through the form so OCC
             // can refuse stale writes.
             fd.set("version", String(view?.version ?? 1));
             fd.set("payload", JSON.stringify({ columns: activeColumns }));
@@ -262,7 +262,7 @@ export function ViewToolbar({
         />
       ) : null}
 
-      {/* Phase 25 §7.2 — Subscribe / Unsubscribe affordance for the
+      {/* Subscribe / Unsubscribe affordance for the
           active saved view. The same `saved_search_subscriptions`
           table backs this button and the per-row list on
           /settings → Notifications. Digests are sent from the
@@ -569,7 +569,7 @@ function SaveViewDialog({
 
 
 /**
- * Phase 25 §7.2 — Subscribe / Unsubscribe affordance for the active
+ * Subscribe / Unsubscribe affordance for the active
  * saved view. Toggles `saved_search_subscriptions.is_active` via the
  * settings/subscriptions-actions endpoints. Optimistic UI: flips the
  * local label immediately, server confirms via revalidate.

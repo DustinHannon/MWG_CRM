@@ -239,7 +239,7 @@ export default async function EmailFailuresPage({
       />
       <h1 className="text-2xl font-semibold">Email failures</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {/* Phase 15 — only system-originated email attempts that failed
+        {/* only system-originated email attempts that failed
             (Graph rejected) or were blocked by the mailbox-kind preflight.
             Successful sends and `blocked_e2e` test rows are intentionally
             excluded — see the Email send log for the full feed. */}

@@ -113,7 +113,7 @@ const importRowSchema = z.object({
 });
 
 /**
- * Phase 5G — migrated from `xlsx` (deprecated, two HIGH advisories) to
+ * migrated from `xlsx` (deprecated, two HIGH advisories) to
  * `exceljs`. Same parsing semantics: first sheet named "Leads"
  * (case-insensitive) or fall back to the first worksheet; row 1 is the
  * header; subsequent rows mapped via HEADER_MAP.
@@ -262,7 +262,7 @@ export async function importLeadsFromBuffer(
     }
 
     const d = parsed.data;
-    // Phase 8D — legacy `leads.tags text[]` was dropped. Tag strings
+    // legacy `leads.tags text[]` was dropped. Tag strings
     // from the import row are no longer written to the leads table; the
     // primary import path (lib/import/commit.ts) handles tag fan-out via
     // the relational lead_tags table. This legacy buffer importer no
@@ -377,10 +377,10 @@ export async function importLeadsFromBuffer(
         doNotCall: d.doNotCall,
         createdById: importerUserId,
         updatedById: importerUserId,
-        // Phase 5B — `last_activity_at` left NULL on import. Imports do
+        // `last_activity_at` left NULL on import. Imports do
         // NOT count as engagement signal; the column populates only when
         // a real counting activity is logged.
-        // Provenance — Phase 2D.
+        // Provenance —.
         createdVia: "imported",
         importJobId: importJobIdForRows,
       })

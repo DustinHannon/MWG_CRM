@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Phase 23 — D365 environment configuration loader.
+ * D365 environment configuration loader.
  *
  * Throws at first use if any required variable is missing. Optional
  * sizing variables fall back to brief-locked defaults.

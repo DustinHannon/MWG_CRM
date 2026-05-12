@@ -1,5 +1,5 @@
 /**
- * Phase 21 — Merge tag registry for marketing templates.
+ * Merge tag registry for marketing templates.
  *
  * The Unlayer editor renders an inline "personalize" button that
  * inserts a token like `{{firstName}}`. SendGrid Dynamic Templates

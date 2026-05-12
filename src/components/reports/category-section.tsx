@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 /**
- * Phase 24 — collapsible category section on the /reports page.
+ * collapsible category section on the /reports page.
  *
  * Owns ONLY the toggle state + visibility wrapper. The card grid
  * itself (which uses `UserTime` and other server-only utilities)

@@ -4,7 +4,7 @@ import { D365_ENTITY_TYPES } from "@/lib/d365/types";
 import { D365_HALT_REASONS } from "@/lib/d365/audit-events";
 
 /**
- * Phase 23 — Zod schemas for every server-action FormData input on
+ * Zod schemas for every server-action FormData input on
  * the D365 import surface. Each schema parses the raw `Record<string,
  * string>` produced by `formToObject` (entries that come in as `""`
  * are normalised to `undefined`).
@@ -39,7 +39,7 @@ const entityTypeSchema = z.enum(D365_ENTITY_TYPES);
 /**
  * Scope shape used to seed `import_runs.scope`.
  *
- *   { filter: { modifiedSince: ISO }, includeChildren: bool }
+ * { filter: { modifiedSince: ISO }, includeChildren: bool }
  *
  * The advanced-modal form serialises one record per field. We
  * accept `modifiedSince` as a date-only string (yyyy-mm-dd) and
@@ -132,7 +132,7 @@ export const resumeRunSchema = z.object({
   reason: haltReasonSchema,
   /**
    * For `high_volume_conflict` the reviewer picks one of:
-   *   skip / overwrite / merge.
+   * skip / overwrite / merge.
    * Other halt reasons have no per-reason payload — the user clicks
    * "Resume after fix" / "Use default owner and resume".
    */

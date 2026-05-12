@@ -23,7 +23,7 @@ interface ResumableRun {
 }
 
 /**
- * Phase 29 §6 — Thin shell that wires the generic `<ImportWizard>` to
+ * Thin shell that wires the generic `<ImportWizard>` to
  * the static-list import actions.
  *
  * If a `resumable` run is passed, the user sees a banner offering to

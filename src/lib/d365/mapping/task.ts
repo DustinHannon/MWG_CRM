@@ -47,7 +47,7 @@ const NATIVE_TASK_FIELDS: ReadonlySet<string> = new Set([
 
 /**
  * D365 task `statecode` → mwg-crm `task_status`.
- *   0=Open, 1=Completed, 2=Canceled (default option-set).
+ * 0=Open, 1=Completed, 2=Canceled (default option-set).
  */
 const TASK_STATUS_MAP = picklistMapper<
   "open" | "in_progress" | "completed" | "cancelled"
@@ -63,8 +63,8 @@ const TASK_STATUS_MAP = picklistMapper<
 
 /**
  * D365 `prioritycode` → mwg-crm `task_priority`.
- *   0=Low, 1=Normal, 2=High (default option-set).
- *   "urgent" has no D365 default; never auto-assigned.
+ * 0=Low, 1=Normal, 2=High (default option-set).
+ * "urgent" has no D365 default; never auto-assigned.
  */
 const TASK_PRIORITY_MAP = picklistMapper<
   "low" | "normal" | "high" | "urgent"

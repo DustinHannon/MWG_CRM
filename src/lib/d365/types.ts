@@ -5,7 +5,7 @@
 // server-only surface lives in client.ts / queries.ts / pull-batch.ts.
 
 /**
- * Phase 23 — TypeScript shapes for the D365 9.2 OData entities we
+ * TypeScript shapes for the D365 9.2 OData entities we
  * pull during import.
  *
  * These describe the WIRE-LEVEL JSON returned by the Dynamics OData
@@ -17,26 +17,26 @@
  *
  * Each type intentionally extends an open `Record<string, unknown>`
  * via `[key: string]: unknown` so:
- *  - custom prefixed columns (`new_*`, `cr*_*`, `mwg_*`) flow through
- *    without extending the surface
- *  - `@odata.etag` and other annotation keys (`*@OData.Community.Display.V1.FormattedValue`)
- *    pass through without lying about the type
- *  - mapper code (Sub-agent B) is not blocked by missing field types
- *    while we're still discovering the schema in production
+ * custom prefixed columns (`new_*`, `cr*_*`, `mwg_*`) flow through
+ * without extending the surface
+ * `@odata.etag` and other annotation keys (`*@OData.Community.Display.V1.FormattedValue`)
+ * pass through without lying about the type
+ * mapper code (Sub-agent B) is not blocked by missing field types
+ * while we're still discovering the schema in production
  *
  * Conventions:
- *  - all GUID fields are typed as `string` (D365 returns lowercase
- *    UUIDs like `"e1c8f2b4-..."`)
- *  - all dates are `string` (ISO 8601 with offset, e.g.
- *    `"2026-05-09T12:34:56Z"`)
- *  - `_xxx_value` columns are FK-by-id navigation projections; they
- *    appear when you don't $expand the linked entity
- *  - `statecode` / `statuscode` are integer enums (numeric codes
- *    map per-entity in the Dynamics options registry)
+ * all GUID fields are typed as `string` (D365 returns lowercase
+ * UUIDs like `"e1c8f2b4-..."`)
+ * all dates are `string` (ISO 8601 with offset, e.g.
+ * `"2026-05-09T12:34:56Z"`)
+ * `_xxx_value` columns are FK-by-id navigation projections; they
+ * appear when you don't $expand the linked entity
+ * `statecode` / `statuscode` are integer enums (numeric codes
+ * map per-entity in the Dynamics options registry)
  */
 
 /* -------------------------------------------------------------------------- *
- *                              Common shapes                                 *
+ * Common shapes *
  * -------------------------------------------------------------------------- */
 
 /** A GUID returned by D365 OData (lowercase, dash-formatted). */
@@ -59,7 +59,7 @@ export interface D365EntityBase {
 }
 
 /* -------------------------------------------------------------------------- *
- *                                  Lead                                      *
+ * Lead *
  * -------------------------------------------------------------------------- */
 
 export interface D365Lead extends D365EntityBase {
@@ -101,7 +101,7 @@ export interface D365Lead extends D365EntityBase {
 }
 
 /* -------------------------------------------------------------------------- *
- *                                Contact                                     *
+ * Contact *
  * -------------------------------------------------------------------------- */
 
 export interface D365Contact extends D365EntityBase {
@@ -133,7 +133,7 @@ export interface D365Contact extends D365EntityBase {
 }
 
 /* -------------------------------------------------------------------------- *
- *                                Account                                     *
+ * Account *
  * -------------------------------------------------------------------------- */
 
 export interface D365Account extends D365EntityBase {
@@ -159,7 +159,7 @@ export interface D365Account extends D365EntityBase {
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Opportunity                                   *
+ * Opportunity *
  * -------------------------------------------------------------------------- */
 
 export interface D365Opportunity extends D365EntityBase {
@@ -181,7 +181,7 @@ export interface D365Opportunity extends D365EntityBase {
 }
 
 /* -------------------------------------------------------------------------- *
- *                            Annotation (note)                               *
+ * Annotation (note) *
  * -------------------------------------------------------------------------- */
 
 export interface D365Annotation extends D365EntityBase {
@@ -199,7 +199,7 @@ export interface D365Annotation extends D365EntityBase {
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Activities                                    *
+ * Activities *
  * -------------------------------------------------------------------------- */
 
 interface D365ActivityBase extends D365EntityBase {
@@ -254,7 +254,7 @@ export interface D365Email extends D365ActivityBase {
 }
 
 /* -------------------------------------------------------------------------- *
- *                              SystemUser                                    *
+ * SystemUser *
  * -------------------------------------------------------------------------- */
 
 /**
@@ -278,7 +278,7 @@ export interface D365SystemUser {
 }
 
 /* -------------------------------------------------------------------------- *
- *                       Discriminated entity unions                          *
+ * Discriminated entity unions *
  * -------------------------------------------------------------------------- */
 
 /**

@@ -53,7 +53,7 @@ const NATIVE_OPPORTUNITY_FIELDS: ReadonlySet<string> = new Set([
  * Default D365 sales-process stages aren't a fixed numeric option-set
  * the way leads are; many tenants override. The legacy default stage
  * picklist (Microsoft.Crm.Sdk.Messages — Opportunity.SalesStage):
- *   0=Qualify, 1=Develop, 2=Propose, 3=Close.
+ * 0=Qualify, 1=Develop, 2=Propose, 3=Close.
  *
  * mwg-crm `opportunity_stage`: prospecting | qualification | proposal
  * | negotiation | closed_won | closed_lost.

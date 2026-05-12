@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
-// Phase 9C — direct import (not the barrel) keeps the server-only
+// direct import (not the barrel) keeps the server-only
 // UserHoverCard out of the client bundle.
 import { UserAvatar } from "@/components/user-display/user-avatar";
 import { updateOpportunityStageAction } from "../actions";
@@ -29,12 +29,12 @@ import { ConfirmDeleteDialog, showUndoToast } from "@/components/delete";
 interface Card {
   id: string;
   stage: string;
-  // Phase 8D Wave 4 (FIX-004) — OCC version threaded through DnD.
+  // OCC version threaded through DnD.
   version: number;
   name: string;
   accountName: string | null;
   amount: string | null;
-  // Phase 9C — owner id powers the canonical xs avatar on the card.
+  // owner id powers the canonical xs avatar on the card.
   ownerId: string | null;
   ownerName: string | null;
 }
@@ -65,7 +65,7 @@ export function OppPipelineBoard({
   const canDelete = (c: Card) =>
     isAdmin || c.ownerId === currentUserId;
 
-  // Phase 12 Sub-E — Touch sensor with 200ms delay so a tap on a
+  // Touch sensor with 200ms delay so a tap on a
   // card link still navigates; press-and-hold initiates drag on
   // mobile. Pointer sensor unchanged for desktop mouse / trackpad.
   const sensors = useSensors(
@@ -112,7 +112,7 @@ export function OppPipelineBoard({
           [fromStage!]: [card!, ...(prev[fromStage!] ?? [])],
         }));
       } else {
-        // Phase 8D — bump local version so a follow-up drag posts the
+        // bump local version so a follow-up drag posts the
         // right stamp instead of the now-stale one.
         const newVersion = res.data?.version;
         if (typeof newVersion === "number") {
@@ -142,7 +142,7 @@ export function OppPipelineBoard({
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      {/* Phase 12 Sub-E — snap-x mandatory + per-column snap-start
+      {/* snap-x mandatory + per-column snap-start
           so swipes land aligned to viewport edges on touch. */}
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-gutter:stable]">
         {STAGES.map((s) => (
@@ -203,7 +203,7 @@ function Column({
     <div
       ref={setNodeRef}
       className={
-        // Phase 12 Sub-E — `snap-start` so each column aligns to
+        // `snap-start` so each column aligns to
         // the scroll container's left edge on touch swipe.
         "flex w-[260px] shrink-0 snap-start flex-col rounded-lg border p-2 transition " +
         (isOver
@@ -260,7 +260,7 @@ function Card({
       className="group/card relative cursor-grab rounded-md border border-glass-border bg-card p-3 text-sm shadow-sm active:cursor-grabbing"
     >
       {canDelete ? (
-        // Phase 10 — hover-revealed trash icon, top-right of card.
+        // hover-revealed trash icon, top-right of card.
         // Wrapped in a div that stops drag propagation so clicking
         // the icon doesn't initiate a drag.
         <div
@@ -300,7 +300,7 @@ function Card({
       ) : null}
       <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
         {card.ownerId ? (
-          // Phase 9C — avatar-only chip (xs/20px) for the dense card.
+          // avatar-only chip (xs/20px) for the dense card.
           <Link
             href={`/users/${card.ownerId}`}
             onClick={(e) => e.stopPropagation()}

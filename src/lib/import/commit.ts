@@ -1,4 +1,4 @@
-// Phase 6E — chunked commit pipeline. Takes the validated ParsedRow[]
+// chunked commit pipeline. Takes the validated ParsedRow[]
 // and writes leads / activities / opportunities / lead_tags in 100-row
 // chunks, using concurrentUpdate for re-import paths so two users
 // can't trample each other's edits between preview and commit.
@@ -72,7 +72,7 @@ export async function commitImport({
   const byNameMap = await resolveByNames(byNames);
 
   // Tag autocreate — collect distinct names and ensure tags rows exist.
-  // Phase 8D Wave 7 (FIX-018) — every candidate is validated through
+  // every candidate is validated through
   // the `tagName` primitive (length + charset). Failures are logged
   // (row + reason) and the offending tag is dropped; the rest of the
   // row's tags still go through. Keeps junk like raw HTML, 200-char
@@ -210,7 +210,7 @@ async function processChunk(args: {
       isUpdate = true;
       leadId = existing.id;
       try {
-        // Phase 8D Wave 4 (FIX-007) — re-import UPDATE now goes through
+        // re-import UPDATE now goes through
         // expectAffected so a stale `version` raises a real
         // ConflictError instead of silently no-op'ing while the row id
         // got pushed to updatedLeadIds. lastActivityAt is folded into
@@ -362,8 +362,8 @@ async function processChunk(args: {
       const importedByName = createdById ? null : act.metadata.byName ?? null;
 
       // Translate parser direction to DB enum:
-      //   outgoing → outbound, incoming → inbound. (Internal-direction
-      //   isn't used by the parser; manual UI is the only producer.)
+      // outgoing → outbound, incoming → inbound. (Internal-direction
+      // isn't used by the parser; manual UI is the only producer.)
       const dbDirection: "inbound" | "outbound" | null =
         act.metadata.direction === "outgoing"
           ? "outbound"
@@ -446,7 +446,7 @@ async function processChunk(args: {
       for (const candidate of row.leadPatch.tags.split(",")) {
         const trimmed = candidate.trim();
         if (trimmed.length === 0) continue;
-        // Phase 8D Wave 7 (FIX-018) — re-run primitive here too. If the
+        // re-run primitive here too. If the
         // string was rejected at the upstream Set-build step, the
         // tagMap won't have an entry and we silently skip; this mirrors
         // that without re-warning per row.
@@ -467,7 +467,7 @@ async function processChunk(args: {
     }
 
     // ---- last_activity_at ---------------------------------------------
-    // Phase 8D Wave 4 (F-027) — for re-imports we already folded
+    // for re-imports we already folded
     // lastActivityAt into the OCC-checked UPDATE above. For freshly
     // INSERTed leads the value is set here; the row was just created,
     // so there is no concurrent writer to race with and a non-versioned

@@ -34,8 +34,8 @@ type LeadFormValues = {
   postalCode?: string | null;
   country?: string | null;
   description?: string | null;
-  // Phase 8D Wave 6 (FIX-015) — `subject` is the legacy "Topic:" line.
-  // The column shipped in Phase 6A; Wave 6 finally exposes it on the form.
+  // `subject` is the legacy "Topic:" line.
+  // The column shipped; Wave 6 finally exposes it on the form.
   subject?: string | null;
   status: (typeof LEAD_STATUSES)[number];
   rating: (typeof LEAD_RATINGS)[number];
@@ -45,7 +45,7 @@ type LeadFormValues = {
   doNotContact: boolean;
   doNotEmail: boolean;
   doNotCall: boolean;
-  // Phase 8D Wave 6 (FIX-016) — tags are now hydrated id+name+color so
+  // tags are now hydrated id+name+color so
   // the TagInput combobox can render chips and round-trip selections.
   tags?: SelectedTag[];
 };
@@ -76,7 +76,7 @@ export function LeadForm({
   >(async (_prev, fd) => action(fd), initial);
 
   const v = lead ?? empty;
-  // Phase 8D Wave 6 (FIX-016) — TagInput is controlled; selectedTags
+  // TagInput is controlled; selectedTags
   // round-trips into a hidden `tagIds` input the server action reads.
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>(
     v.tags ?? [],
@@ -87,7 +87,7 @@ export function LeadForm({
       {mode === "edit" && lead?.id ? (
         <>
           <input type="hidden" name="id" value={lead.id} />
-          {/* Phase 6B — version round-trips through the form so the
+          {/* version round-trips through the form so the
               server action can refuse stale concurrent writes. */}
           <input type="hidden" name="version" value={lead.version ?? 1} />
         </>
@@ -378,7 +378,7 @@ function ContactPreferences({
 }
 
 /**
- * Phase 3F — wraps email + phone + mobile inputs with controlled state
+ * wraps email + phone + mobile inputs with controlled state
  * so the DuplicateWarning component sees real-time changes. Only fires
  * the duplicate check on lead create (not on edit, where the active
  * lead would always self-match).

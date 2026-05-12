@@ -5,7 +5,7 @@ import { env, sendgridConfigured } from "@/lib/env";
 import { MarketingNotConfiguredError } from "@/lib/marketing/errors";
 
 /**
- * Phase 19 — Lazy-initialized SendGrid clients. Both `@sendgrid/mail` and
+ * Lazy-initialized SendGrid clients. Both `@sendgrid/mail` and
  * `@sendgrid/client` are stateful module singletons — calling `setApiKey`
  * once is enough for the lifetime of the lambda.
  *

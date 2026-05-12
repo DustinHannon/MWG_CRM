@@ -1,4 +1,4 @@
-// Phase 6E — orchestrator. Takes a raw cell map for a single row and
+// orchestrator. Takes a raw cell map for a single row and
 // produces a fully parsed `ParsedRow` ready for the commit pipeline:
 // validated lead patch, expanded activity[]/opportunity[] arrays, plus
 // per-row warnings/errors.

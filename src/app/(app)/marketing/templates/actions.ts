@@ -30,7 +30,7 @@ import {
   withErrorBoundary,
   type ActionResult,
 } from "@/lib/server-action";
-// Phase 21 — Sub-agent A modules. Imports kept loose (no top-level
+// Sub-agent A modules. Imports kept loose (no top-level
 // type imports) so a missing implementation typechecks via the runtime
 // boundary; the lead resolves any coordination gap before merge.
 import { pushTemplateToSendGrid } from "@/lib/marketing/sendgrid/templates";
@@ -55,7 +55,7 @@ const createTemplateSchema = z.object({
     .max(255)
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
-  // Phase 29 §4 — Visibility scope chosen by the creator. Defaults to
+  // Visibility scope chosen by the creator. Defaults to
   // 'global' to match pre-Phase-29 behavior; form submissions that
   // omit the field also fall through to 'global'.
   scope: z.enum(["global", "personal"]).optional().default("global"),
@@ -122,7 +122,7 @@ async function requireMarketingPermission(userId: string): Promise<void> {
 }
 
 /**
- * Phase 21 — Create a new template metadata row. The Unlayer design
+ * Create a new template metadata row. The Unlayer design
  * starts empty; the editor populates it on first save.
  */
 export async function createTemplateAction(
@@ -182,7 +182,7 @@ export async function createTemplateAction(
 }
 
 /**
- * Phase 21 — Save the design + HTML, push to SendGrid, optionally
+ * Save the design + HTML, push to SendGrid, optionally
  * promote to ready. The OCC fence is a re-check of the soft-lock —
  * if a different sessionId now holds the lock the editor lost the
  * race (force-unlock by an admin) and we refuse the write.
@@ -225,7 +225,7 @@ export async function updateTemplateAction(input: {
       .limit(1);
     if (!existing) throw new NotFoundError("template");
 
-    // Phase 29 §4.4 — Visibility gate: a 'personal' template that you
+    // Visibility gate: a 'personal' template that you
     // don't own appears not to exist (404 rather than 403 to avoid
     // leaking existence).
     if (
@@ -238,9 +238,9 @@ export async function updateTemplateAction(input: {
       throw new NotFoundError("template");
     }
 
-    // Phase 29 §4.5 — Edit gate:
-    //   personal → creator-only.
-    //   global   → creator OR canMarketingTemplatesEdit.
+    // Edit gate:
+    // personal → creator-only.
+    // global → creator OR canMarketingTemplatesEdit.
     // (Admins bypass; the existing super-admin model is unchanged.)
     const perms = user.isAdmin ? null : await getPermissions(user.id);
     if (
@@ -358,7 +358,7 @@ export async function updateTemplateAction(input: {
 }
 
 /**
- * Phase 21 — Soft-archive a template. The send pipeline refuses to
+ * Soft-archive a template. The send pipeline refuses to
  * dispatch archived templates; campaigns that already reference one
  * stay attached so the campaign history reads cleanly.
  */
@@ -389,7 +389,7 @@ export async function archiveTemplateAction(
       return;
     }
 
-    // Phase 29 §4.4/4.5 — Visibility + edit gate. Personal templates
+    // Visibility + edit gate. Personal templates
     // are creator-only for any mutation including delete; global
     // templates require canMarketingTemplatesEdit OR creator.
     if (
@@ -417,7 +417,7 @@ export async function archiveTemplateAction(
       );
     }
 
-    // Phase 24 §6.5.2 — refuse to archive a template referenced by any
+    // refuse to archive a template referenced by any
     // active (scheduled or sending) campaign. Snapshot the blocking
     // campaigns so the UI can link the user to them. The block is
     // audited as a separate event so the forensic trail captures the
@@ -451,7 +451,7 @@ export async function archiveTemplateAction(
       );
     }
 
-    // Phase 29 §4.8 — Deletion cascade. Draft campaigns referencing
+    // Deletion cascade. Draft campaigns referencing
     // this template are unlinked (template_id → NULL) so the delete
     // can proceed. Scheduled/sending campaigns are caught by the
     // §6.5.2 block above; sent campaigns retain their FK because the
@@ -535,7 +535,7 @@ export async function archiveTemplateAction(
 }
 
 /**
- * Phase 21 — Send a single test email through SendGrid. Rate-limited
+ * Send a single test email through SendGrid. Rate-limited
  * per-user (defaults to 20/hour) so an over-eager preview loop can't
  * burn the daily SendGrid quota.
  */
@@ -582,7 +582,7 @@ export async function sendTestTemplateAction(input: {
         .limit(1);
       if (!existing) throw new NotFoundError("template");
 
-      // Phase 29 §4 — Visibility gate: sending a test on a personal
+      // Visibility gate: sending a test on a personal
       // template you can't see returns 404, same as the read path.
       if (
         !canViewTemplate({
@@ -620,7 +620,7 @@ export async function sendTestTemplateAction(input: {
 }
 
 /**
- * Phase 29 §4.6 — Clone an existing template into a new personal
+ * Clone an existing template into a new personal
  * row owned by the current user. The source must be visible to the
  * caller (global, or personal-owned-by-caller); the destination is
  * always `scope='personal'` so a casual marketer can iterate on a
@@ -722,19 +722,19 @@ export async function cloneTemplateAction(
 }
 
 /**
- * Phase 29 §4.7 — Promote or demote a template's visibility scope.
+ * Promote or demote a template's visibility scope.
  *
- *   personal → global  : creator-only. (Anyone can publish their
- *                         own personal work; the canMarketingTemplatesEdit
- *                         gate is intentionally NOT required here
- *                         because the user is already allowed to edit
- *                         their own creator-owned content.)
- *   global   → personal : creator-only AND canMarketingTemplatesEdit.
- *                         Demoting hides a template from everyone
- *                         else, so we require both the ownership
- *                         signal AND the edit-others permission to
- *                         avoid a non-editor accidentally hiding a
- *                         shared template they happen to own.
+ * personal → global : creator-only. (Anyone can publish their
+ * own personal work; the canMarketingTemplatesEdit
+ * gate is intentionally NOT required here
+ * because the user is already allowed to edit
+ * their own creator-owned content.)
+ * global → personal : creator-only AND canMarketingTemplatesEdit.
+ * Demoting hides a template from everyone
+ * else, so we require both the ownership
+ * signal AND the edit-others permission to
+ * avoid a non-editor accidentally hiding a
+ * shared template they happen to own.
  *
  * OCC version check fences against a concurrent edit. The lock is
  * NOT consulted — scope changes are a metadata-only operation and
@@ -847,7 +847,7 @@ export async function changeTemplateScopeAction(
 }
 
 /**
- * Phase 21 — Admin-only: drop the soft-lock. The previous holder
+ * Admin-only: drop the soft-lock. The previous holder
  * loses unsaved work; this is logged via
  * `MARKETING_AUDIT_EVENTS.TEMPLATE_FORCE_UNLOCK`.
  */

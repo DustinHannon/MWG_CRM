@@ -11,7 +11,7 @@ import {
 import { marketingTemplates } from "./marketing-templates";
 
 /**
- * Phase 29 §7 — ClickDimensions template-migration worklist.
+ * ClickDimensions template-migration worklist.
  *
  * One row per template extracted from the legacy ClickDimensions
  * surface in D365. The extraction script (tools/clickdimensions-

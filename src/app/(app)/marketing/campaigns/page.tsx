@@ -15,7 +15,7 @@ import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 19 — Campaigns list. Read-only view. Send-flow / scheduler
+ * Campaigns list. Read-only view. Send-flow / scheduler
  * implementation lands in the next pass.
  */
 export default async function CampaignsPage() {

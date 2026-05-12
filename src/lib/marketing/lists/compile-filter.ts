@@ -15,20 +15,20 @@ import { likeContains, likeEndsWith, likeStartsWith } from "@/lib/security/like-
 import { leads } from "@/db/schema/leads";
 
 /**
- * Phase 21 — Compile a Phase 20 filter DSL into a Drizzle WHERE
+ * Compile a filter DSL into a Drizzle WHERE
  * fragment scoped to `leads`. Always combined with `is_deleted = false`
  * by the caller.
  *
  * Security:
- *   • The DSL is re-validated through the Zod schema first. Any field
- *     name not in `ALLOWED_LEAD_FILTER_FIELDS` is rejected before
- *     reaching SQL.
- *   • Per-field op compatibility is enforced again at compile time as a
- *     defense in depth — even if the schema's superRefine is bypassed.
- *   • String values destined for ILIKE are routed through `escapeLike`
- *     (via `likeContains` / `likeStartsWith` / `likeEndsWith`) to neutralise
- *     `%` and `_` wildcards.
- *   • Array operands are bounded by the schema's max array length.
+ * • The DSL is re-validated through the Zod schema first. Any field
+ * name not in `ALLOWED_LEAD_FILTER_FIELDS` is rejected before
+ * reaching SQL.
+ * • Per-field op compatibility is enforced again at compile time as a
+ * defense in depth — even if the schema's superRefine is bypassed.
+ * • String values destined for ILIKE are routed through `escapeLike`
+ * (via `likeContains` / `likeStartsWith` / `likeEndsWith`) to neutralise
+ * `%` and `_` wildcards.
+ * • Array operands are bounded by the schema's max array length.
  */
 export function compileFilterDsl(dslInput: unknown): SQL {
   const parsed = filterDslSchema.safeParse(dslInput);

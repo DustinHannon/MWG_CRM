@@ -69,7 +69,7 @@ export default async function ContactDetailPage({
           { label: formatPersonName(contact) },
         ]}
       />
-      {/* Phase 12 — Supabase Realtime: focal record + filtered activities. */}
+      {/* Supabase Realtime: focal record + filtered activities. */}
       <RowRealtime entity="contacts" id={contact.id} />
       <PageRealtime
         entities={["activities"]}
@@ -99,7 +99,7 @@ export default async function ContactDetailPage({
           </p>
         </div>
         <div className="flex gap-2">
-          {/* Phase 25 §7.4 — dedicated edit affordance. */}
+          {/* dedicated edit affordance. */}
           {session.isAdmin || contact.ownerId === session.id ? (
             <Link
               href={`/contacts/${contact.id}/edit`}
@@ -122,7 +122,7 @@ export default async function ContactDetailPage({
           <Row label="Email" value={contact.email} mailto />
           <Row label="Phone" value={contact.phone} />
           <Row label="Mobile" value={contact.mobilePhone} />
-          {/* Phase 9C — Owner row uses the canonical UserChip with a
+          {/* Owner row uses the canonical UserChip with a
               hover card on this single-record detail page. */}
           <div className="flex">
             <dt className="w-32 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
@@ -156,7 +156,7 @@ export default async function ContactDetailPage({
         </dl>
       </GlassCard>
 
-      {/* Phase 25 §7.3 — contact-scoped Tasks section. Same
+      {/* contact-scoped Tasks section. Same
           EntityTasksSection used by /leads /accounts /opportunities;
           auto-FK to this contact on quick-add. */}
       <GlassCard className="mt-6 p-5">

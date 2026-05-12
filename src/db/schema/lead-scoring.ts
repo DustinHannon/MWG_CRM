@@ -13,7 +13,7 @@ import {
 import { users } from "./users";
 
 /**
- * Phase 4C — admin-curated rules that compute a lead score.
+ * admin-curated rules that compute a lead score.
  * `predicate` is the saved-views filter JSON: same shape, same operators.
  * Engine: src/lib/scoring/engine.ts.
  */
@@ -41,7 +41,7 @@ export const leadScoringRules = pgTable(
 );
 
 /**
- * Phase 5B — single-row settings table holding the score band thresholds.
+ * single-row settings table holding the score band thresholds.
  * Constrained server-side via CHECK to enforce hot > warm > cool ordering.
  * The engine reads this table on every evaluation; admins edit via the
  * /admin/scoring sliders.

@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 
 /**
- * Phase 12 — dense single-line mobile list for /contacts (and the
+ * dense single-line mobile list for /contacts (and the
  * archived view). Mirrors `<LeadListMobile>` and `<AccountListMobile>`.
  */
 export interface ContactListMobileRow {

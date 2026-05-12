@@ -7,7 +7,7 @@ import { UserTimeClient } from "@/components/ui/user-time-client";
 import type { TimePrefs } from "@/lib/format-time";
 
 /**
- * Phase 21 — Marketing email performance report (client component).
+ * Marketing email performance report (client component).
  *
  * Renders KPIs across the campaign rows passed in, plus a campaign ×
  * event-type pivot table. Date-range filter applies in-page (no
@@ -15,7 +15,7 @@ import type { TimePrefs } from "@/lib/format-time";
  * default 30-day window.
  *
  * "Export to Excel" hits the dedicated export route (added to actions
- * once Phase 14's Excel pipeline is reused; here it surfaces the link).
+ * once the Excel pipeline is reused; here it surfaces the link).
  */
 
 export interface MarketingReportRow {

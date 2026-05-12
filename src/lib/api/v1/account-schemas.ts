@@ -3,7 +3,7 @@ import { openapiZ as z, registry } from "@/lib/openapi/registry";
 import { paginatedListSchema } from "./schemas";
 
 /**
- * Phase 13 — Account schemas for /api/v1/accounts.
+ * Account schemas for /api/v1/accounts.
  *
  * Synthetic examples only. Underlying SQL table is `crm_accounts`
  * (the Auth.js `accounts` table is a separate concern); the public

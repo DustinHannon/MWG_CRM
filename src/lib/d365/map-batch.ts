@@ -47,7 +47,7 @@ import type {
 } from "./types";
 
 /**
- * Phase 23 — `mapBatch` orchestrator.
+ * `mapBatch` orchestrator.
  *
  * Loads pending `import_records` for a batch, runs the right mapper,
  * then dedup, then persists the mappedPayload + warnings + conflict
@@ -142,7 +142,7 @@ async function haltRun(args: {
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Dispatcher                                    *
+ * Dispatcher *
  * -------------------------------------------------------------------------- */
 
 async function dispatchMap(
@@ -241,7 +241,7 @@ async function dispatchDedup(
 }
 
 /* -------------------------------------------------------------------------- *
- *                               mapBatch                                     *
+ * mapBatch *
  * -------------------------------------------------------------------------- */
 
 export async function mapBatch(
@@ -290,7 +290,7 @@ export async function mapBatch(
   let warningCount = 0;
   let processed = 0;
   let halted = false;
-  // Phase 23 — garbage-quality records auto-skip via the
+  // garbage-quality records auto-skip via the
   // `_qualityVerdict` virtual on the mapped payload. If > 50% of a
   // batch verdicts as garbage we halt the run for human review.
   let garbageCount = 0;
@@ -359,7 +359,7 @@ export async function mapBatch(
         warningCount += warnings.length;
       }
 
-      // Phase 23 — bad-lead quality auto-skip. The lead mapper writes
+      // bad-lead quality auto-skip. The lead mapper writes
       // `_qualityVerdict` + `_qualityReasons` virtuals onto the mapped
       // object. `garbage` short-circuits to skipped + audit; the
       // commit-batch cleanPayload step strips `_*` virtuals before
@@ -472,7 +472,7 @@ export async function mapBatch(
       });
     }
 
-    // Phase 23 — halt the run if too much of the batch is garbage.
+    // halt the run if too much of the batch is garbage.
     // Only checks after a meaningful sample (10 records) so the very
     // first few being bad doesn't immediately halt the run.
     if (

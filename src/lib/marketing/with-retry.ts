@@ -1,13 +1,13 @@
 import "server-only";
 
 /**
- * Phase 21 — Generic retry wrapper for SendGrid HTTP calls.
+ * Generic retry wrapper for SendGrid HTTP calls.
  *
  * SendGrid's REST + SMTP APIs return:
- *   - 5xx → transient backend trouble; safe to retry.
- *   - 429 → rate-limit; retry honoring `Retry-After` if present.
- *   - ECONNRESET / ETIMEDOUT (Node net errors) → retry.
- *   - 4xx (other than 429) → caller-side problem; do NOT retry.
+ * 5xx → transient backend trouble; safe to retry.
+ * 429 → rate-limit; retry honoring `Retry-After` if present.
+ * ECONNRESET / ETIMEDOUT (Node net errors) → retry.
+ * 4xx (other than 429) → caller-side problem; do NOT retry.
  *
  * The retry budget is intentionally small (default 3) — SendGrid is the
  * canary; if it's down, we surface a `failed` campaign status promptly

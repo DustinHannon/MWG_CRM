@@ -30,7 +30,7 @@ export { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES };
  * The filters arrive from URL query strings (and from saved-view JSON).
  * URL forms always serialise empty <select> values as `key=` — an empty
  * string. zod's z.enum REJECTS empty strings (they're not in the enum),
- * which is the root cause of the "Apply button throws" bug from Phase 2A.
+ * which is the root cause of the "Apply button throws" bug.
  *
  * Fix: pre-process the raw input via `sanitizeFilterInput` below so empty
  * strings collapse to undefined BEFORE the schema parse. This applies to
@@ -53,7 +53,7 @@ export const leadFiltersSchema = z.object({
     z.enum(["lastActivity", "created", "name", "company", "value"]),
   ).default("lastActivity"),
   dir: emptyToUndef(z.enum(["asc", "desc"])).default("desc"),
-  // Phase 9C — cursor pagination. Cursor format is `<iso8601>:<uuid>`
+  // cursor pagination. Cursor format is `<iso8601>:<uuid>`
   // where the timestamp matches the active sort column and the uuid
   // is the row's id. When present, callers SHOULD NOT also pass `page`
   // (cursor wins; offset is ignored).
@@ -61,7 +61,7 @@ export const leadFiltersSchema = z.object({
 });
 
 /**
- * Phase 9C — cursor codec. Pagination cursors are stable strings of the
+ * cursor codec. Pagination cursors are stable strings of the
  * form `<iso8601>:<uuid>`. The leading timestamp is whichever column
  * drives the active sort (last_activity_at, updated_at, etc.); the
  * trailing uuid is the row's id, used as a tiebreaker so cursor seeks
@@ -109,7 +109,7 @@ export type LeadFilters = z.infer<typeof leadFiltersSchema>;
 const leadCreateSchemaBase = z.object({
   salutation: z.string().max(20).optional().nullable(),
   firstName: nameField,
-  // Phase 6A — last_name is now nullable. Manual create form still
+  // last_name is now nullable. Manual create form still
   // marks the field required via HTML/UI, but the schema accepts empty
   // so the import path can carry NULL through.
   lastName: nameField.or(z.literal("")).optional().nullable(),
@@ -128,7 +128,7 @@ const leadCreateSchemaBase = z.object({
   postalCode: z.string().max(20).optional().nullable(),
   country: z.string().max(100).optional().nullable(),
   description: z.string().max(20_000).optional().nullable(),
-  // Phase 6A — leads.subject (the "Topic:" line in legacy D365 dumps).
+  // leads.subject (the "Topic:" line in legacy D365 dumps).
   subject: z.string().max(1000).optional().nullable(),
   status: z.enum(LEAD_STATUSES).default("new"),
   rating: z.enum(LEAD_RATINGS).default("warm"),
@@ -151,7 +151,7 @@ const leadCreateSchemaBase = z.object({
   doNotContact: z.boolean().default(false),
   doNotEmail: z.boolean().default(false),
   doNotCall: z.boolean().default(false),
-  // Phase 8D — `tags` removed from lead create/update schema. Tags are
+  // `tags` removed from lead create/update schema. Tags are
   // managed via the relational lead_tags table; the lead-form's free-text
   // tags input is silently ignored (will be replaced with a tag picker
   // in a follow-up). Schema is permissive — extra keys are stripped.
@@ -223,7 +223,7 @@ export interface LeadListResult {
   page: number;
   pageSize: number;
   /**
-   * Phase 9C — opaque cursor that callers pass back via `?cursor=…` to
+   * opaque cursor that callers pass back via `?cursor=…` to
    * load the next page. Null when there are no more rows. Always set
    * when cursor pagination is active (ignored on offset paths).
    */
@@ -265,7 +265,7 @@ export async function listLeads(
   if (filters.source) wheres.push(eq(leads.source, filters.source));
   if (filters.ownerId) wheres.push(eq(leads.ownerId, filters.ownerId));
   if (filters.tag) {
-    // Phase 8D — legacy `leads.tags` column was dropped. Membership now
+    // legacy `leads.tags` column was dropped. Membership now
     // resolves via the relational lead_tags table joined to tags.name.
     wheres.push(
       sql`EXISTS (
@@ -280,7 +280,7 @@ export async function listLeads(
     wheres.push(eq(leads.ownerId, user.id));
   }
 
-  // Phase 4G — default queries hide archived rows.
+  // default queries hide archived rows.
   wheres.push(eq(leads.isDeleted, false));
 
   const whereExpr = wheres.length > 0 ? and(...wheres) : undefined;
@@ -302,7 +302,7 @@ export async function listLeads(
   const order = filters.dir === "asc" ? asc(sortColumn) : desc(sortColumn);
 
   // ------------------------------------------------------------------
-  // Phase 9C — cursor pagination on the default sort
+  // cursor pagination on the default sort
   // (last_activity_at DESC, id DESC). Fast path: when the sort is the
   // default and a cursor is provided, append a tuple-style WHERE clause
   // and skip the OFFSET. Slow path (custom sort field, or paginated by
@@ -355,7 +355,7 @@ export async function listLeads(
         lastActivityAt: leads.lastActivityAt,
         updatedAt: leads.updatedAt,
         createdAt: leads.createdAt,
-        // Phase 8D — hydrate tag names from the relational lead_tags
+        // hydrate tag names from the relational lead_tags
         // join. Returns NULL when the lead has no tags so existing UI
         // null-checks keep working.
         tags: sql<string[] | null>`(
@@ -371,7 +371,7 @@ export async function listLeads(
       .orderBy(order, desc(leads.id))
       .limit(sliceLimit)
       .offset(offset),
-    // Phase 9C — total count is only required for offset pagination
+    // total count is only required for offset pagination
     // (footer "Page X of Y"). Cursor mode skips it; the +1 row trick
     // tells us whether another page exists, which is what the UI needs.
     useCursor
@@ -414,7 +414,7 @@ export async function getLeadById(
     .where(and(...wheres))
     .limit(1);
   if (!row[0]) return null;
-  // Phase 8D — hydrate tag names from the relational lead_tags table.
+  // hydrate tag names from the relational lead_tags table.
   // The legacy `leads.tags text[]` column was dropped; consumers still
   // expect `lead.tags: string[] | null` so we fetch and attach.
   const tagRows = await db
@@ -465,7 +465,7 @@ export async function createLead(
       estimatedCloseDate: input.estimatedCloseDate ?? null,
       createdById: user.id,
       updatedById: user.id,
-      // Phase 5B — `last_activity_at` left NULL on creation so scoring
+      // `last_activity_at` left NULL on creation so scoring
       // recency rules don't treat just-imported / just-created leads as
       // engaged. It bumps when the first counting activity (note / call /
       // email / meeting / task) is logged.
@@ -475,7 +475,7 @@ export async function createLead(
 }
 
 /**
- * Phase 6B — OCC backend wiring. Update path is now version-checked:
+ * OCC backend wiring. Update path is now version-checked:
  * the caller passes the `expectedVersion` it loaded with the row, the
  * UPDATE only fires when the on-disk version still matches, and we
  * bump version + updated_at in the same statement.
@@ -498,7 +498,7 @@ export async function updateLead(
   for (const key of Object.keys(input) as Array<keyof LeadCreateInput>) {
     update[key] = input[key];
   }
-  // Phase 8D F-046 — `is_deleted = false` clause prevents a stale
+  // 046 — `is_deleted = false` clause prevents a stale
   // edit form from silently overwriting a row that was archived between
   // load and submit. With this filter the UPDATE matches zero rows,
   // expectAffected throws NotFoundError, and the user sees the correct
@@ -531,7 +531,7 @@ export async function deleteLeadsById(ids: string[]): Promise<void> {
 }
 
 /**
- * Phase 4G — soft delete (archive). Sets `is_deleted=true` and the
+ * soft delete (archive). Sets `is_deleted=true` and the
  * deletion-attribution columns. Reversible via `restoreLeadsById()`.
  *
  * @actor lead owner or admin
@@ -549,7 +549,7 @@ export async function archiveLeadsById(
       deletedAt: sql`now()`,
       deletedById: actorId,
       deleteReason: reason ?? null,
-      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
@@ -557,7 +557,7 @@ export async function archiveLeadsById(
 }
 
 /**
- * Phase 4G — restore archived leads. Returns row count for logging.
+ * restore archived leads. Returns row count for logging.
  *
  * @actor admin only
  */

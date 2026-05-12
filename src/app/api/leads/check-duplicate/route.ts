@@ -12,13 +12,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 3F duplicate detection. GET ?email= and/or ?phone= returns up
+ * duplicate detection. GET ?email= and/or ?phone= returns up
  * to 10 likely duplicate leads. Permission-checked: non-admins without
  * canViewAllRecords only see their own owned leads.
  *
  * Match rules:
- *   - email: case-insensitive exact (strongest)
- *   - phone: digits-only normalised exact (strong)
+ * email: case-insensitive exact (strongest)
+ * phone: digits-only normalised exact (strong)
  *
  * (firstName + lastName + companyName softer match isn't surfaced to
  * the API — handled inline in the manual create form when both email
@@ -58,7 +58,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ matches: [] });
   }
 
-  // Phase 11 — exclude archived leads from dedup. Pre-fix the check
+  // exclude archived leads from dedup. Pre-fix the check
   // surfaced soft-deleted rows as "duplicates" against fresh imports,
   // which the import flow then rejected, blocking re-creation of leads
   // whose archive was the actual user intent.
@@ -94,7 +94,7 @@ export async function GET(req: Request) {
       email: r.email,
       phone: r.phone,
       status: r.status,
-      // Phase 9C — surface ownerId so the warning UI can render the
+      // surface ownerId so the warning UI can render the
       // canonical user chip instead of plain text.
       ownerId: r.ownerId,
       ownerName: r.ownerName,

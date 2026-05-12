@@ -24,19 +24,19 @@ import type { D365EntityType } from "./types";
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 
 /**
- * Phase 23 — commit batch helper.
+ * commit batch helper.
  *
  * Loads all approved records for a batch and, per-record, transactionally:
- *   1. Resolves the local row id via existing dedup metadata
- *      (`conflictWith`) or a fresh `external_ids` lookup.
- *   2. Applies the chosen `conflictResolution`:
- *        - `dedup_skip`        → no-op, mark record as skipped.
- *        - `dedup_overwrite`   → UPDATE every non-null mapped column.
- *        - `dedup_merge`       → UPDATE only fields that are NULL/empty
- *                                in the local row.
- *        - `dedup_none` / null → INSERT new row.
- *   3. Upserts an `external_ids` row.
- *   4. Stamps `import_records.localId` + `status='committed'`.
+ * 1. Resolves the local row id via existing dedup metadata
+ * (`conflictWith`) or a fresh `external_ids` lookup.
+ * 2. Applies the chosen `conflictResolution`:
+ * `dedup_skip` → no-op, mark record as skipped.
+ * `dedup_overwrite` → UPDATE every non-null mapped column.
+ * `dedup_merge` → UPDATE only fields that are NULL/empty
+ * in the local row.
+ * `dedup_none` / null → INSERT new row.
+ * 3. Upserts an `external_ids` row.
+ * 4. Stamps `import_records.localId` + `status='committed'`.
  *
  * Per-record failures isolate (status='failed', error stored) — they
  * do NOT roll back the batch. After all records process we update the
@@ -138,7 +138,7 @@ export async function commitBatch(
           error: message.slice(0, 1000),
         })
         .where(eq(importRecords.id, rec.id));
-      // Phase 24 §7.2.3 — pair the row's status='failed' update with
+      // pair the row's status='failed' update with
       // a forensic audit row. writeAudit is best-effort; an audit
       // outage cannot block the commit-batch loop's remaining work.
       await writeAudit({
@@ -296,7 +296,7 @@ async function commitOneRecord(
 }
 
 /* -------------------------------------------------------------------------- *
- *                            Parent entity commit                             *
+ * Parent entity commit *
  * -------------------------------------------------------------------------- */
 
 async function commitParentEntity(
@@ -430,7 +430,7 @@ function buildMergeUpdate(
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Activities path                                *
+ * Activities path *
  * -------------------------------------------------------------------------- */
 
 async function commitActivity(
@@ -524,7 +524,7 @@ async function commitActivity(
 }
 
 /* -------------------------------------------------------------------------- *
- *                              external_ids upsert                           *
+ * external_ids upsert *
  * -------------------------------------------------------------------------- */
 
 async function upsertExternalId(

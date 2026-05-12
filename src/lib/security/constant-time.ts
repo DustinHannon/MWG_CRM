@@ -13,7 +13,7 @@ import { timingSafeEqual } from "node:crypto";
  * Use for: webhook signature compares, API key compares, any secret
  * that flows in from an untrusted source.
  *
- * Phase 14 introduced the same pattern inline in `requireCronAuth`
+ * introduced the same pattern inline in `requireCronAuth`
  * (`src/lib/cron-auth.ts`); this is the canonical exported helper for
  * the rest of the app.
  */

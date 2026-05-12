@@ -4,7 +4,7 @@ import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { useState, useTransition, type ReactNode } from "react";
 
 /**
- * Phase 24 §3.4 / §5.4 — canonical generic confirmation dialog.
+ * / §5.4 — canonical generic confirmation dialog.
  *
  * Generalises the existing `ConfirmDeleteDialog` (which is
  * entity-archive specific) for non-archive destructive actions:

@@ -14,7 +14,7 @@ import {
   formatUserTime,
   type TimePrefs,
 } from "@/lib/format-time";
-// Phase 9C — direct import (not the barrel) keeps the server-only
+// direct import (not the barrel) keeps the server-only
 // UserHoverCard out of the client bundle.
 import { UserChip } from "@/components/user-display/user-chip";
 import { PriorityPill } from "@/components/ui/priority-pill";
@@ -38,7 +38,7 @@ export function TaskListClient({
   const [pending, startTransition] = useTransition();
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
 
-  // Phase 6B — local version map updated optimistically and rolled
+  // local version map updated optimistically and rolled
   // back on conflict, so subsequent toggles use the latest known
   // version after each successful save.
   const [versions, setVersions] = useState<Record<string, number>>({});
@@ -125,7 +125,7 @@ export function TaskListClient({
                           {t.status !== "open" ? (
                             <StatusPill status={t.status} />
                           ) : null}
-                          {/* Phase 25 §7.3 — Related-to inline link.
+                          {/* Related-to inline link.
                               CHECK tasks_at_most_one_parent enforces
                               ≤1 FK, so the four branches are
                               mutually exclusive. Em-dash falls out
@@ -160,7 +160,7 @@ export function TaskListClient({
                               {t.opportunityName ?? "Opportunity"}
                             </Link>
                           ) : null}
-                          {/* Phase 9C — assignee avatar/name when the
+                          {/* assignee avatar/name when the
                               task isn't assigned to the viewer. */}
                           {t.assignedToId && t.assignedToId !== userId ? (
                             <UserChip

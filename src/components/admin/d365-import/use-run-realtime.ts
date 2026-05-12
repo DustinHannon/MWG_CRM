@@ -4,17 +4,17 @@ import { useEffect, useState } from "react";
 import { getRealtimeClient } from "@/lib/realtime/client";
 
 /**
- * Phase 23 — D365 import run live-progress hook.
+ * D365 import run live-progress hook.
  *
  * Subscribes to the Supabase Realtime broadcast channel
  * `d365-import-run:<runId>` (Sub-agent A's `realtime-broadcast.ts`
  * publishes to this channel from the fetch / map / commit phases).
  *
  * Broadcast event names come from `D365_REALTIME_EVENTS`:
- *   fetching.started / .progress / .completed
- *   mapping.started  / .progress / .completed
- *   committing.started / .progress / .completed
- *   error / halted / resumed
+ * fetching.started / .progress / .completed
+ * mapping.started / .progress / .completed
+ * committing.started / .progress / .completed
+ * error / halted / resumed
  *
  * Polling fallback: if Realtime is not configured (no Supabase env)
  * OR the channel fails to subscribe within 3s, we fall back to GET

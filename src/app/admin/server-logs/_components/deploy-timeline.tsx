@@ -19,7 +19,7 @@ import {
 } from "./deploy-timeline-chart";
 
 /**
- * Phase 26 §5 — Panel 5: deploy timeline.
+ * Panel 5: deploy timeline.
  *
  * Aggregates errors per 5-minute bucket over the last 24 hours and
  * overlays vertical reference lines for each recent Vercel deployment.

@@ -16,16 +16,16 @@ import { RecomputeButton } from "./_components/recompute-button";
 export const dynamic = "force-dynamic";
 
 /**
- * /admin/scoring — Phase 5B. Three sections:
+ * /admin/scoring —. Three sections:
  *
- *   1. Rules list — toggle active, edit, delete (with the predicate
- *      summary inline so admins don't have to open the modal to recall
- *      what each rule does).
- *   2. Threshold sliders — hot / warm / cool. CHECK constraint enforces
- *      hot > warm > cool server-side; the client also validates so the
- *      UX doesn't bounce.
- *   3. Recompute button — runs the same loop as the nightly cron, with
- *      a 10,000-lead safety cap.
+ * 1. Rules list — toggle active, edit, delete (with the predicate
+ * summary inline so admins don't have to open the modal to recall
+ * what each rule does).
+ * 2. Threshold sliders — hot / warm / cool. CHECK constraint enforces
+ * hot > warm > cool server-side; the client also validates so the
+ * UX doesn't bounce.
+ * 3. Recompute button — runs the same loop as the nightly cron, with
+ * a 10,000-lead safety cap.
  *
  * `/admin/scoring/help` documents the field + operator catalog and the
  * import-doesn't-count rule.

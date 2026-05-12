@@ -3,7 +3,7 @@
 // preview if a future feature needs it.
 
 /**
- * Phase 23 — bad-lead quality heuristics.
+ * bad-lead quality heuristics.
  *
  * MWG's D365 instance carries years of accumulated junk from prior
  * bad imports — empty rows, test-pattern emails (`asdf@asdf.com`),
@@ -11,15 +11,15 @@
  * want any of that landing in the new CRM.
  *
  * Three verdicts:
- *   - `clean`       — commit normally.
- *   - `suspicious`  — has 1-2 quality issues but enough real data to
- *                     keep. Commits with a non-fatal warning surfaced
- *                     in the review UI.
- *   - `garbage`     — clearly bad. map-batch auto-skips these
- *                     (status='skipped'), writes an audit row with
- *                     the reasons array, and increments the batch's
- *                     skipped counter. Reviewer can override per
- *                     record in the review UI.
+ * `clean` — commit normally.
+ * `suspicious` — has 1-2 quality issues but enough real data to
+ * keep. Commits with a non-fatal warning surfaced
+ * in the review UI.
+ * `garbage` — clearly bad. map-batch auto-skips these
+ * (status='skipped'), writes an audit row with
+ * the reasons array, and increments the batch's
+ * skipped counter. Reviewer can override
+ * record in the review UI.
  *
  * If > 50% of a batch verdicts as garbage, the run halts with reason
  * `bad_lead_volume` for human review — that's almost certainly a
@@ -50,7 +50,7 @@ export interface LeadQualityInput {
 }
 
 // ---------------------------------------------------------------------------
-//  Email garbage patterns
+// Email garbage patterns
 // ---------------------------------------------------------------------------
 
 /** Local-part patterns that are clearly placeholders / test data. */
@@ -124,7 +124,7 @@ const PLACEHOLDER_NAME_PATTERNS: readonly RegExp[] = [
 ];
 
 // ---------------------------------------------------------------------------
-//  Helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
 function isBlank(s: string | null | undefined): boolean {
@@ -174,25 +174,25 @@ function isMalformedEmail(email: string | null | undefined): boolean {
 }
 
 // ---------------------------------------------------------------------------
-//  Lead-level assessment
+// Lead-level assessment
 // ---------------------------------------------------------------------------
 
 /**
  * Score a mapped lead's data quality. Pure function — no DB calls.
  *
  * Garbage triggers (any one is enough):
- *   - All identity fields blank: no first/last/company AND no email AND
- *     no phone.
- *   - Email matches a garbage pattern AND no real name OR company.
- *   - Both first and last name are placeholders ("test", "asdf", etc.)
- *     AND email is garbage or missing.
+ * All identity fields blank: no first/last/company AND no email AND
+ * no phone.
+ * Email matches a garbage pattern AND no real name OR company.
+ * Both first and last name are placeholders ("test", "asdf", etc.)
+ * AND email is garbage or missing.
  *
  * Suspicious triggers (commit, but flag):
- *   - Email is malformed (parses but no `.` in domain, etc.).
- *   - Name field is a single character or matches a placeholder
- *     pattern.
- *   - Has email but no other identifying field at all.
- *   - Has only a company name and nothing else (no contact info).
+ * Email is malformed (parses but no `.` in domain, etc.).
+ * Name field is a single character or matches a placeholder
+ * pattern.
+ * Has email but no other identifying field at all.
+ * Has only a company name and nothing else (no contact info).
  */
 export function assessLeadQuality(input: LeadQualityInput): QualityAssessment {
   const reasons: string[] = [];
@@ -300,7 +300,7 @@ export function assessLeadQuality(input: LeadQualityInput): QualityAssessment {
 }
 
 // ---------------------------------------------------------------------------
-//  Batch-level halt threshold
+// Batch-level halt threshold
 // ---------------------------------------------------------------------------
 
 /**

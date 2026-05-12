@@ -20,7 +20,7 @@ import {
 } from "../../actions";
 
 /* ------------------------------------------------------------------ */
-/* Types                                                               */
+/* Types */
 /* ------------------------------------------------------------------ */
 
 export interface WizardTemplate {
@@ -44,7 +44,7 @@ export interface ExistingDraft {
   id: string;
   name: string;
   /**
-   * Phase 29 §4.8 — Nullable because a personal-template delete
+   * Nullable because a personal-template delete
    * unlinks any draft campaigns referencing it. The wizard renders
    * the template picker with no selection in that case so the user
    * can choose a replacement.
@@ -56,7 +56,7 @@ export interface ExistingDraft {
   replyToEmail: string | null;
   scheduledFor: string | null;
   status: string;
-  /** Phase 27 §4.8 — OCC version at load time. */
+  /** OCC version at load time. */
   version: number;
 }
 
@@ -74,7 +74,7 @@ type Step = 1 | 2 | 3 | 4;
 type ScheduleMode = "now" | "later";
 
 /* ------------------------------------------------------------------ */
-/* Component                                                           */
+/* Component */
 /* ------------------------------------------------------------------ */
 
 export function CampaignWizard({
@@ -97,7 +97,7 @@ export function CampaignWizard({
   const [campaignId, setCampaignId] = useState<string | null>(
     existing?.id ?? null,
   );
-  // Phase 27 §4.8 — track OCC version locally so each update can pass
+  // track OCC version locally so each update can pass
   // the current expected version and detect concurrent edits from a
   // second browser. Incremented after every successful mutation; reset
   // by the user via reload on a ConflictError.
@@ -137,7 +137,7 @@ export function CampaignWizard({
   );
 
   /* --------------------------------------------------------------- */
-  /* Derived                                                          */
+  /* Derived */
   /* --------------------------------------------------------------- */
 
   const filteredTemplates = useMemo(() => {
@@ -160,7 +160,7 @@ export function CampaignWizard({
   );
 
   /* --------------------------------------------------------------- */
-  /* Actions                                                          */
+  /* Actions */
   /* --------------------------------------------------------------- */
 
   function persistDraftAndAdvance(target: Step) {
@@ -306,7 +306,7 @@ export function CampaignWizard({
   }
 
   /* --------------------------------------------------------------- */
-  /* Render                                                           */
+  /* Render */
   /* --------------------------------------------------------------- */
 
   return (
@@ -416,7 +416,7 @@ export function CampaignWizard({
 }
 
 /* ------------------------------------------------------------------ */
-/* Sub-components                                                      */
+/* Sub-components */
 /* ------------------------------------------------------------------ */
 
 function Stepper({ current }: { current: Step }) {
@@ -803,7 +803,7 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Helpers                                                             */
+/* Helpers */
 /* ------------------------------------------------------------------ */
 
 function computeInitialStep(existing: ExistingDraft | null): Step {

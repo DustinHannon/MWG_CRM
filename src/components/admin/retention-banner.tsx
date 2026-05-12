@@ -6,7 +6,7 @@ interface RetentionBannerProps {
 }
 
 /**
- * Phase 13 — visible retention notice for both `/admin/audit` and
+ * visible retention notice for both `/admin/audit` and
  * `/admin/api-usage`. Sits above the filter bar so it is the first
  * thing on the page; satisfies the brief's requirement that retention
  * be visible, not buried in a tooltip.

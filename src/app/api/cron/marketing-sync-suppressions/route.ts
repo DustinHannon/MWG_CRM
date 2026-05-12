@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Phase 19 — Hourly reconcile against SendGrid's authoritative
+ * Hourly reconcile against SendGrid's authoritative
  * suppression lists. Fills gaps left by webhook drops or manual
  * console-side suppressions.
  *

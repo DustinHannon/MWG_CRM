@@ -17,7 +17,7 @@ import { DangerZoneSection } from "./_components/danger-zone-section";
 export const dynamic = "force-dynamic";
 
 /**
- * /settings — Phase 3B. Six sections, two-column desktop layout (left
+ * /settings —. Six sections, two-column desktop layout (left
  * rail of anchors, scrolling right pane). All cards are glass weight 1.
  *
  * Profile section renders ENTRA-SYNCED FIELDS as disabled inputs with a
@@ -68,7 +68,7 @@ export default async function SettingsPage() {
     .from(savedViews)
     .where(eq(savedViews.userId, session.id));
 
-  // Phase 25 §7.2 — active saved-search subscriptions joined to the
+  // active saved-search subscriptions joined to the
   // owning view's name so the Notifications section can render a
   // per-row list with unsubscribe + per-row frequency override.
   const activeSubscriptions = await db

@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 11 — POST /api/reports
+ * POST /api/reports
  *
  * Creates a saved report owned by the current user. Validates entity,
  * field whitelist, group_by length, and metric functions via the
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         })
         .returning({ id: savedReports.id });
 
-      // Phase 15 — coverage sweep. Saved reports can be shared org-wide
+      // coverage sweep. Saved reports can be shared org-wide
       // and embed customer-data filter expressions, so the create row
       // is recorded in the human-actor audit trail (separate from
       // `api_usage_log`, which only tracks API-key traffic).

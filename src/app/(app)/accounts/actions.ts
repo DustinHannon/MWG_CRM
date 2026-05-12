@@ -19,7 +19,7 @@ import { canDeleteAccount, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
 
 /**
- * Phase 10 — soft-delete an account. Owner OR admin.
+ * soft-delete an account. Owner OR admin.
  */
 export async function softDeleteAccountAction(input: {
   id: string;
@@ -79,7 +79,7 @@ export async function undoArchiveAccountAction(input: {
       .from(crmAccounts)
       .where(eq(crmAccounts.id, payload.id))
       .limit(1);
-    // Phase 12C — BUG-003: row may have been hard-deleted by an admin
+    // BUG-003: row may have been hard-deleted by an admin
     // between the soft-delete and the user clicking Undo. Surface a
     // clear NotFound rather than a misleading Forbidden so the toast
     // can show "This record was permanently deleted" without the user
@@ -103,7 +103,7 @@ export async function undoArchiveAccountAction(input: {
 }
 
 /**
- * Phase 10 — admin restore from archive view.
+ * admin restore from archive view.
  */
 export async function restoreAccountAction(
   formData: FormData,
@@ -125,7 +125,7 @@ export async function restoreAccountAction(
 }
 
 /**
- * Phase 10 — admin hard delete from archive view.
+ * admin hard delete from archive view.
  */
 export async function hardDeleteAccountAction(
   formData: FormData,
@@ -152,7 +152,7 @@ export async function hardDeleteAccountAction(
 }
 
 /**
- * Phase 25 §7.4 — dedicated edit form for accounts. Thin wrapper
+ * dedicated edit form for accounts. Thin wrapper
  * around `updateAccountForApi`; OCC enforced via expectedVersion in
  * the form (hidden field).
  */

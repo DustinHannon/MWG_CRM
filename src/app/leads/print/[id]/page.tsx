@@ -23,7 +23,7 @@ export const metadata = {
 };
 
 /**
- * Phase 4F — print-friendly lead detail. Lives outside the `(app)` route
+ * print-friendly lead detail. Lives outside the `(app)` route
  * group so the sidebar/topbar/glass chrome isn't rendered. Browser-print
  * first: no server-side Chromium dependency. The user picks "Save as PDF"
  * from the system print dialog.

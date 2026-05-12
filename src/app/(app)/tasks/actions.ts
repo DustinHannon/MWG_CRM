@@ -26,7 +26,7 @@ import { canDeleteTask, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
 
 /**
- * Phase 3D server actions for tasks. Validate, audit, optionally notify
+ * server actions for tasks. Validate, audit, optionally notify
  * the assignee.
  */
 
@@ -66,7 +66,7 @@ export async function createTaskAction(
       }
 
       revalidatePath("/tasks");
-      // Phase 25 §7.3 — revalidate the linked entity's detail page
+      // revalidate the linked entity's detail page
       // so the Tasks section there picks up the new row immediately.
       if (parsed.leadId) revalidatePath(`/leads/${parsed.leadId}`);
       if (parsed.accountId) revalidatePath(`/accounts/${parsed.accountId}`);
@@ -80,7 +80,7 @@ export async function createTaskAction(
 
 const updateActionSchema = taskUpdateSchema.extend({
   id: z.string().uuid(),
-  // Phase 6B — required so concurrentUpdate can reject stale writes.
+  // required so concurrentUpdate can reject stale writes.
   version: z.coerce.number().int().positive(),
 });
 
@@ -107,10 +107,10 @@ export async function updateTaskAction(
 }
 
 /**
- * Phase 10 — REPLACED. The pre-Phase-10 deleteTaskAction did a HARD
+ * REPLACED. The pre-Phase-10 deleteTaskAction did a HARD
  * delete with NO permission check (any signed-in user could drop any
  * task). This now does a soft-delete gated by creator/assignee/admin
- * per the Phase 10 matrix and returns an undo token.
+ * per the matrix and returns an undo token.
  */
 export async function deleteTaskAction(
   id: string,

@@ -28,10 +28,10 @@ export const taskPriorityEnum = pgEnum("task_priority", [
 ]);
 
 /**
- * Phase 3D — tasks. Distinct from `activities` (records of what
+ * tasks. Distinct from `activities` (records of what
  * happened): tasks are things to DO with a due date.
  *
- * Phase 3G extends with account_id/contact_id/opportunity_id and adds
+ * extends with account_id/contact_id/opportunity_id and adds
  * a CHECK constraint enforcing at-most-one parent.
  */
 export const tasks = pgTable(
@@ -60,7 +60,7 @@ export const tasks = pgTable(
     createdById: uuid("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    // Phase 12 — actor stamp for realtime skip-self.
+    // actor stamp for realtime skip-self.
     updatedById: uuid("updated_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -81,7 +81,7 @@ export const tasks = pgTable(
   (t) => [
     index("tasks_assigned_due_idx").on(t.assignedToId, t.dueAt),
     index("tasks_lead_idx").on(t.leadId, t.status, t.dueAt),
-    // Phase 9C — composite cursor pagination key for /tasks
+    // composite cursor pagination key for /tasks
     // (assigned_to_id, due_at NULLS LAST, id DESC). Partial on
     // is_deleted=false because the list page never shows archived rows.
     index("tasks_assigned_due_at_id_idx")

@@ -10,7 +10,7 @@ import {
 import { users } from "./users";
 
 /**
- * Phase 3I — recently-viewed records, used by the Cmd+K palette and any
+ * recently-viewed records, used by the Cmd+K palette and any
  * future "recently viewed" surface. Upserted on every detail page load
  * (server-side fire-and-forget). Trim to 50 entries per user on each
  * write.

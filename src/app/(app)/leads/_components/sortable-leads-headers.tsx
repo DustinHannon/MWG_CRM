@@ -21,7 +21,7 @@ import { setAdhocColumnsAction } from "../view-actions";
 import { AVAILABLE_COLUMNS, type ColumnKey } from "@/lib/view-constants";
 
 /**
- * Phase 25 §7.5 — DnD column reorder on /leads. Wraps the existing
+ * DnD column reorder on /leads. Wraps the existing
  * server-rendered table header row in a @dnd-kit SortableContext so
  * each header can be dragged horizontally. On drop, the new column
  * order is persisted via `setAdhocColumnsAction` (existing backend);
@@ -38,9 +38,9 @@ export function SortableLeadsHeaders({
 }: {
   initialColumns: ColumnKey[];
   /** "saved:<uuid>" or "builtin:<key>" — passed through to the
-   *  persistence action so it can decide between saving on the
-   *  user_preferences.adhoc_columns slot vs the saved-view's own
-   *  columns array. The action already handles this routing. */
+   * persistence action so it can decide between saving on the
+   * user_preferences.adhoc_columns slot vs the saved-view's own
+   * columns array. The action already handles this routing. */
   activeViewId: string;
 }) {
   const [columns, setColumns] = useState<ColumnKey[]>(initialColumns);
@@ -92,7 +92,7 @@ export function SortableLeadsHeaders({
             ))}
           </SortableContext>
         </DndContext>
-        {/* Phase 10 — fixed-width trailing actions cell (not draggable). */}
+        {/* fixed-width trailing actions cell (not draggable). */}
         <th className="w-10 px-2 py-3" aria-label="actions" />
       </tr>
     </thead>

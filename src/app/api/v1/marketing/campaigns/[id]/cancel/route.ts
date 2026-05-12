@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — POST /api/v1/marketing/campaigns/{id}/cancel
+ * POST /api/v1/marketing/campaigns/{id}/cancel
  *
  * State transition: draft|scheduled → cancelled.
  */

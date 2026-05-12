@@ -8,17 +8,17 @@ import { cn } from "@/lib/utils";
 import { useBreadcrumbs } from "./provider";
 
 /**
- * Phase 11 — breadcrumbs trail. Renders inside the TopBar.
+ * breadcrumbs trail. Renders inside the TopBar.
  *
  * Behavior:
- *   • First segment is a Home icon linking to /dashboard.
- *   • All but the last segment are <Link>s.
- *   • Last segment is plain text (the current page).
- *   • A loading segment shows a skeleton chip until label resolves.
- *   • Adjacent <RefreshButton> calls router.refresh() to re-render
- *     Server Components against the latest DB state.
+ * • First segment is a Home icon linking to /dashboard.
+ * • All but the last segment are <Link>s.
+ * • Last segment is plain text (the current page).
+ * • A loading segment shows a skeleton chip until label resolves.
+ * • Adjacent <RefreshButton> calls router.refresh() to re-render
+ * Server Components against the latest DB state.
  *
- * Phase 12 Sub-E — at <640px the trail collapses to a single
+ * at <640px the trail collapses to a single
  * back-arrow (linking to the immediate parent) plus the current
  * segment label. The home icon and intermediate segments hide via
  * `hidden sm:inline-flex`. This matches the mobile contract: trail
@@ -27,8 +27,8 @@ import { useBreadcrumbs } from "./provider";
 export function Breadcrumbs() {
   const crumbs = useBreadcrumbs();
   // Parent for the mobile back arrow:
-  //  • single crumb / leaf only → back to dashboard
-  //  • otherwise → previous segment if it has an href, else dashboard
+  // • single crumb / leaf only → back to dashboard
+  // • otherwise → previous segment if it has an href, else dashboard
   const last = crumbs[crumbs.length - 1];
   const parent = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null;
   const mobileBackHref = parent?.href ?? "/dashboard";

@@ -2,7 +2,7 @@ import { getTopPages } from "@/lib/observability/insights-queries";
 import { StandardEmptyState } from "@/components/standard";
 
 /**
- * Phase 26 §4 — top 10 paths by request count, last 24h.
+ * top 10 paths by request count, last 24h.
  *
  * Excludes `/api/*`, `/_next/*`, `/favicon*`. Driven by the runtime
  * logs drain (vercel.proxy.path), so it has data whenever real

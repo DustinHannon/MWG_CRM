@@ -12,12 +12,12 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Phase 4G — daily cron at 10:00 UTC (~04:00 CT). Hard-deletes leads that
+ * daily cron at 10:00 UTC (~04:00 CT). Hard-deletes leads that
  * have been archived ≥ 30 days. Snapshots row data into audit_log for
  * forensic recovery if needed.
  *
  * Configured in vercel.json as:
- *   { "path": "/api/cron/purge-archived", "schedule": "0 10 * * *" }
+ * { "path": "/api/cron/purge-archived", "schedule": "0 10 * * *" }
  */
 export async function GET(req: Request) {
   const unauth = requireCronAuth(req);
@@ -54,7 +54,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // Phase 8D F-024 — gather attachment blob pathnames BEFORE the DB
+    // 024 — gather attachment blob pathnames BEFORE the DB
     // delete; after CASCADE the join rows are gone and the blobs become
     // unrecoverable orphans. Gather failure is non-fatal — purge proceeds.
     const candidateIds = candidates.map((c) => c.id);
@@ -76,7 +76,7 @@ export async function GET(req: Request) {
       ),
     );
 
-    // Phase 8D F-024 — fire-and-forget Vercel Blob cleanup. The cron
+    // 024 — fire-and-forget Vercel Blob cleanup. The cron
     // window is generous (maxDuration=300) but we still don't await the
     // network round-trip per blob — `del()` accepts a batch.
     if (blobPathnames.length > 0) {

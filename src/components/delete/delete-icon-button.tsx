@@ -7,7 +7,7 @@ import { showUndoToast } from "./undo-toast";
 import { toast } from "sonner";
 
 /**
- * Phase 10 — list-row trash icon. Hidden on desktop until the row's
+ * list-row trash icon. Hidden on desktop until the row's
  * parent `<tr class="group">` is hovered; always visible on mobile.
  *
  * Renders nothing if `canDelete` is false — no disabled-but-shown state.

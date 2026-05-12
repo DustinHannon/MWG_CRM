@@ -6,11 +6,11 @@ import { DownloadCloud } from "lucide-react";
 import { pullNextBatchAction } from "@/app/admin/d365-import/actions";
 
 /**
- * Phase 23 — pull-next-batch button on the run detail page.
+ * pull-next-batch button on the run detail page.
  *
  * Disabled by the parent server component when:
- *   - run.status is aborted / completed / paused_for_review
- *   - latest batch is still pending / fetched / reviewing / approved
+ * run.status is aborted / completed / paused_for_review
+ * latest batch is still pending / fetched / reviewing / approved
  *
  * On success the page revalidates from the action's revalidatePath
  * call; we additionally call `router.refresh()` so the latest batch

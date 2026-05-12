@@ -32,14 +32,14 @@ import {
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
- * Phase 29 §6 — Server actions for the static-list Excel import wizard.
+ * Server actions for the static-list Excel import wizard.
  *
  * Three actions mirroring the leads-import shape:
- *   • previewStaticListImportAction → parse workbook, persist parsed rows
- *     + per-row errors to `list_import_runs`, return preview payload.
- *   • commitStaticListImportAction  → read persisted parsed rows, chunk-
- *     insert into `marketing_static_list_members`, audit, return summary.
- *   • cancelStaticListImportAction  → mark the run row 'cancelled'.
+ * • previewStaticListImportAction → parse workbook, persist parsed rows
+ * + per-row errors to `list_import_runs`, return preview payload.
+ * • commitStaticListImportAction → read persisted parsed rows, chunk-
+ * insert into `marketing_static_list_members`, audit, return summary.
+ * • cancelStaticListImportAction → mark the run row 'cancelled'.
  *
  * Permission gate (preview + commit): admin OR
  * `canMarketingListsImport` OR `canMarketingListsEdit` OR the list's
@@ -47,14 +47,14 @@ import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
  */
 
 /**
- * Phase 29 brief — locked default. The brief's §0 caps Excel import
+ * brief — locked default. The brief's §0 caps Excel import
  * size at 10 MB. Kept in this file (not env) so we don't add an
  * unnecessary deploy-config knob.
  */
 const STATIC_LIST_IMPORT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 /**
- * Phase 29 brief — locked default. Chunked insert size for the commit
+ * brief — locked default. Chunked insert size for the commit
  * step. Matches `MARKETING_LIST_IMPORT_BATCH_SIZE` from the brief.
  */
 const STATIC_LIST_IMPORT_BATCH_SIZE = 500;
@@ -184,7 +184,7 @@ async function requireStaticListImportAccess(
 }
 
 /**
- * Phase 29 §6 — Preview step. Parse workbook, persist rows + errors to
+ * Preview step. Parse workbook, persist rows + errors to
  * `list_import_runs`. If `formData` carries a `resumeRunId`, return
  * the persisted snapshot instead of re-parsing.
  */
@@ -413,7 +413,7 @@ function buildPreviewResponse(
 }
 
 /**
- * Phase 29 §6 — Commit step. Reads the persisted run row, inserts the
+ * Commit step. Reads the persisted run row, inserts the
  * `status === 'ok'` rows in batches of 500, audits the summary.
  */
 export async function commitStaticListImportAction(

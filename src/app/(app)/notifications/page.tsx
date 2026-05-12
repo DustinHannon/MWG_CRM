@@ -16,7 +16,7 @@ export default async function NotificationsPage({
 }) {
   const session = await requireSession();
   const sp = await searchParams;
-  // Phase 9C — cursor pagination on (created_at DESC, id DESC) with
+  // cursor pagination on (created_at DESC, id DESC) with
   // page size 50. Backed by `notifications_user_unread_idx` for the
   // user_id leading column; the (created_at, id) tail keeps cursor
   // seeks deterministic at high volumes.

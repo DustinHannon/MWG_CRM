@@ -10,22 +10,22 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 25 §4.2 — public health-check endpoint.
+ * public health-check endpoint.
  *
  * Probes the three dependencies the app cannot function without:
- *   1. Postgres (Supabase / Supavisor) — DB-backed everything.
- *   2. Microsoft Graph token — email sending, lead-activity, contact photos.
- *   3. Vercel Blob — attachments, generated reports, contact photos.
+ * 1. Postgres (Supabase / Supavisor) — DB-backed everything.
+ * 2. Microsoft Graph token — email sending, lead-activity, contact photos.
+ * 3. Vercel Blob — attachments, generated reports, contact photos.
  *
  * Each probe is bounded with its own catch so a single failure tags
  * exactly the dependency that broke, not the whole probe.
  *
  * Response shape:
- *   { healthy: boolean, checks: { db, graph, blob } }
+ * { healthy: boolean, checks: { db, graph, blob } }
  * Status:
- *   200 when every check passes.
- *   503 when any check fails (load balancers / uptime monitors will
- *   surface the outage even if the page itself still loads).
+ * 200 when every check passes.
+ * 503 when any check fails (load balancers / uptime monitors will
+ * surface the outage even if the page itself still loads).
  *
  * Result is cached in-process for HEALTH_CHECK_CACHE_TTL_SECONDS so a
  * rapid uptime-monitor probe loop doesn't hammer Graph or Blob. The
@@ -40,7 +40,7 @@ export const runtime = "nodejs";
  * in proxy.ts so an external monitor can hit it without a session.
  */
 
-// Phase 25 §4.2 P1 follow-up — NaN guard on the env-parsed TTL.
+// NaN guard on the env-parsed TTL.
 // Bad input (`"abc"`) used to silently produce NaN → cache never hits
 // → external monitor probe storms hammer Graph + Blob every request.
 // Falls back to 30s on any non-finite / negative value.
@@ -96,7 +96,7 @@ async function withTimeout<T>(
 async function checkDb(): Promise<CheckResult> {
   const start = Date.now();
   try {
-    // Phase 25 §4.2 P1 follow-up — Promise.race only races the
+    // Promise.race only races the
     // promise; the underlying query keeps running until completion,
     // which under sustained DB hang leaks a connection from the
     // Supavisor max:1 pool. Setting `statement_timeout` server-side

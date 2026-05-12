@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Admin / canManageMarketing test-send.
+ * Admin / canManageMarketing test-send.
  *
  * Sends a single inline-HTML email through SendGrid for diagnostic
  * purposes. The recipient defaults to the requester's own email so a
@@ -23,11 +23,11 @@ export const runtime = "nodejs";
  * QA aliases).
  *
  * Hardening:
- *   - Per-user sliding-window rate limit
- *     (`RATE_LIMIT_TEST_SEND_PER_USER_PER_HOUR`).
- *   - Body size cap on `html` to keep abusive payloads off the
- *     SendGrid call.
- *   - SENDGRID_SANDBOX=true in dev makes every call a no-op.
+ * Per-user sliding-window rate limit
+ * (`RATE_LIMIT_TEST_SEND_PER_USER_PER_HOUR`).
+ * Body size cap on `html` to keep abusive payloads off the
+ * SendGrid call.
+ * SENDGRID_SANDBOX=true in dev makes every call a no-op.
  */
 
 const REQUEST_BODY_SCHEMA = z.object({

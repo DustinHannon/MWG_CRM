@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 29 §7 — Records that an extraction run has completed.
+ * Records that an extraction run has completed.
  *
  * Audit row carries the success/failure breakdown. The worklist UI
  * surfaces the latest `run_completed` event detail as a header banner.

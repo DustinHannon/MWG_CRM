@@ -18,7 +18,7 @@ interface Ctx {
 const BreadcrumbsCtx = createContext<Ctx | null>(null);
 
 /**
- * Phase 11 — Breadcrumbs context. Lives once per shell. Pages call
+ * Breadcrumbs context. Lives once per shell. Pages call
  * `useSetBreadcrumbs([...])` from their client subtree to register a
  * trail; the trail unregisters on unmount so the next page starts
  * blank.

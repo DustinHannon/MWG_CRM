@@ -18,7 +18,7 @@ import {
 import { broadcastRunEvent } from "./realtime-broadcast";
 
 /**
- * Phase 23 — companion to `halt-detection.ts` and the H-1 halt path
+ * companion to `halt-detection.ts` and the H-1 halt path
  * in `pull-batch.ts`.
  *
  * `resumeRun` validates a reviewer's resolution against the halt
@@ -33,7 +33,7 @@ import { broadcastRunEvent } from "./realtime-broadcast";
  */
 
 /* -------------------------------------------------------------------------- *
- *                          Resolution discriminated union                     *
+ * Resolution discriminated union *
  * -------------------------------------------------------------------------- */
 
 export type ResumeResolution =
@@ -58,7 +58,7 @@ export type ResumeResolution =
   | { kind: "open_for_review" };
 
 /* -------------------------------------------------------------------------- *
- *                              Validation matrix                              *
+ * Validation matrix *
  * -------------------------------------------------------------------------- */
 
 const ALLOWED_RESOLUTIONS: Record<D365HaltReason, ResumeResolution["kind"][]> =
@@ -69,7 +69,7 @@ const ALLOWED_RESOLUTIONS: Record<D365HaltReason, ResumeResolution["kind"][]> =
       "apply_dedup_default",
       "open_for_review",
     ],
-    // Phase 23 — bad-lead-volume halt only resolves via human
+    // bad-lead-volume halt only resolves via human
     // review of the batch (admin walks the auto-skipped records,
     // confirms or un-skips). No bulk resolution makes sense here
     // because each record's "bad" reason can be different.
@@ -84,10 +84,10 @@ const ALLOWED_RESOLUTIONS: Record<D365HaltReason, ResumeResolution["kind"][]> =
 /**
  * Map resolution kind -> the run.status to land in.
  *
- *   retry / use_default_owner       → `fetching`     (worker re-pulls)
- *   fix_picklist                    → `mapping`      (re-map then review)
- *   apply_dedup_default             → `mapping`      (re-evaluate dedup)
- *   open_for_review                 → `reviewing`    (human walks rows)
+ * retry / use_default_owner → `fetching` (worker re-pulls)
+ * fix_picklist → `mapping` (re-map then review)
+ * apply_dedup_default → `mapping` (re-evaluate dedup)
+ * open_for_review → `reviewing` (human walks rows)
  */
 const NEXT_STATUS: Record<
   ResumeResolution["kind"],
@@ -101,7 +101,7 @@ const NEXT_STATUS: Record<
 };
 
 /* -------------------------------------------------------------------------- *
- *                                 resumeRun                                   *
+ * resumeRun *
  * -------------------------------------------------------------------------- */
 
 export async function resumeRun(
@@ -210,7 +210,7 @@ export async function resumeRun(
 }
 
 /* -------------------------------------------------------------------------- *
- *                       Notes parsing — last halt entry                      *
+ * Notes parsing — last halt entry *
  * -------------------------------------------------------------------------- */
 
 const HALT_REASON_VALUES = new Set<string>(Object.values(D365_HALT_REASONS));
@@ -226,10 +226,10 @@ interface HaltNoteEntry {
  * return its `reason` (one of `D365_HALT_REASONS`).
  *
  * Tolerant of:
- *   - trailing/leading whitespace
- *   - non-JSON lines (skipped; logged WARN once at parse time)
- *   - missing/legacy `type` keys (we still trust an entry whose
- *     `reason` value is in the halt-reason whitelist)
+ * trailing/leading whitespace
+ * non-JSON lines (skipped; logged WARN once at parse time)
+ * missing/legacy `type` keys (we still trust an entry whose
+ * `reason` value is in the halt-reason whitelist)
  */
 export function parseLastHaltReason(
   notes: string | null,

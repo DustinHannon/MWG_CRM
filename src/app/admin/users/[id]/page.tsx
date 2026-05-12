@@ -84,7 +84,7 @@ export default async function UserDetailPage({
         })) : []}
       />
 
-      {/* Phase 15 — mailbox capability + admin re-check. Read-only for
+      {/* mailbox capability + admin re-check. Read-only for
           breakglass since they have no Entra mailbox to probe. */}
       {!u.isBreakglass ? (
         <section className="mt-8 rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
@@ -107,7 +107,7 @@ export default async function UserDetailPage({
         </section>
       ) : null}
 
-      {/* Danger zone — phase 2F.4 */}
+      {/* Danger zone — */}
       <section className="mt-10 rounded-2xl border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)]/40 p-6">
         <h2 className="text-xs font-medium uppercase tracking-wide text-[var(--status-lost-fg)]">
           Danger zone

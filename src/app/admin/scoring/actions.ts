@@ -23,7 +23,7 @@ import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 void dbAlias;
 
 /**
- * Phase 5B — admin scoring CRUD + threshold management.
+ * admin scoring CRUD + threshold management.
  *
  * Every action is gated by `requireAdmin` and writes an audit row.
  * Threshold writes invalidate the in-process cache so the next

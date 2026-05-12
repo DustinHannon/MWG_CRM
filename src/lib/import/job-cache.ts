@@ -1,4 +1,4 @@
-// Phase 6E + 6F — in-process cache for the parsed rows between
+// in-process cache for the parsed rows between
 // preview and commit. The user clicks Commit on the same instance
 // that handled the preview within the cache TTL; if it expired or
 // the request hits a different region, we surface a friendly

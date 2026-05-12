@@ -72,7 +72,7 @@ export default async function OpportunityDetailPage({
           { label: opp.name },
         ]}
       />
-      {/* Phase 12 — Supabase Realtime: focal record + filtered children. */}
+      {/* Supabase Realtime: focal record + filtered children. */}
       <RowRealtime entity="opportunities" id={opp.id} />
       <PageRealtime
         entities={["activities"]}
@@ -102,7 +102,7 @@ export default async function OpportunityDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          {/* Phase 25 §7.4 — dedicated edit affordance. */}
+          {/* dedicated edit affordance. */}
           {session.isAdmin || opp.ownerId === session.id ? (
             <Link
               href={`/opportunities/${opp.id}/edit`}
@@ -132,7 +132,7 @@ export default async function OpportunityDetailPage({
             href={opp.contactId ? `/contacts/${opp.contactId}` : null}
             value={opp.contactName ?? null}
           />
-          {/* Phase 9C — Owner uses canonical UserChip + UserHoverCard
+          {/* Owner uses canonical UserChip + UserHoverCard
               on this single-record detail page. */}
           <div className="flex">
             <dt className="w-40 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
@@ -166,7 +166,7 @@ export default async function OpportunityDetailPage({
         </dl>
       </GlassCard>
 
-      {/* Phase 25 §7.3 — opportunity-scoped Tasks section. Same
+      {/* opportunity-scoped Tasks section. Same
           EntityTasksSection used by /leads /accounts /contacts;
           auto-FK to this opportunity on quick-add. */}
       <GlassCard className="mt-6 p-5">

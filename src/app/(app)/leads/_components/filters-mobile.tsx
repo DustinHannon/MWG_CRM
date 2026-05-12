@@ -3,7 +3,7 @@
 import { useRef } from "react";
 
 /**
- * Phase 12 — mobile-friendly filter select. Renders the same native
+ * mobile-friendly filter select. Renders the same native
  * <select> the desktop form uses (so iOS / Android show their native
  * picker), but auto-submits its enclosing <form> on change so the
  * user doesn't have to also tap an Apply button. The visual chrome

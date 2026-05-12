@@ -12,13 +12,13 @@ import { marketingSuppressions } from "@/db/schema/marketing-events";
 import { ValidationError } from "@/lib/errors";
 
 /**
- * Phase 29 §5 — Unified list-resolution at send time.
+ * Unified list-resolution at send time.
  *
  * The marketing send pipeline used to read directly from
  * `marketing_list_members` (the lead-snapshot table). With static lists,
  * recipients can live in either:
- *   • `marketing_list_members`         (dynamic lists, joined to `leads`)
- *   • `marketing_static_list_members`  (imported recipients, free email/name)
+ * • `marketing_list_members` (dynamic lists, joined to `leads`)
+ * • `marketing_static_list_members` (imported recipients, free email/name)
  *
  * `resolveListRecipients(listId)` branches on `marketing_lists.list_type`
  * and returns a unified shape the send path can consume without knowing
@@ -26,7 +26,7 @@ import { ValidationError } from "@/lib/errors";
  * layer in BOTH branches so suppressed emails never reach the campaign
  * recipient table.
  *
- * For dynamic lists today (Phase 19): only `source_entity = 'leads'` is
+ * For dynamic lists today: only `source_entity = 'leads'` is
  * wired. Other source entities are reserved for future phases; the
  * resolver errors clearly if they're requested.
  */

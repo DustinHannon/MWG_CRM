@@ -1,7 +1,7 @@
 import { getKpiSnapshot } from "@/lib/observability/insights-queries";
 
 /**
- * Phase 26 §4 — 6 KPI cards across the top of the Insights dashboard.
+ * 6 KPI cards across the top of the Insights dashboard.
  *
  * Three cards are powered by the runtime-logs drain (requests, page
  * views, error rate); three more are powered by the Speed Insights

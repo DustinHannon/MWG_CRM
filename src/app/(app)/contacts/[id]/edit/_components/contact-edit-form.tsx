@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { updateContactAction } from "../../../actions";
 import type { ActionResult } from "@/lib/server-action";
 
-/** Phase 25 §7.4 — Contact edit form. Same shape as AccountEditForm. */
+/** Contact edit form. Same shape as AccountEditForm. */
 export function ContactEditForm({
   contact,
 }: {

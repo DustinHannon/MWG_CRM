@@ -23,7 +23,7 @@ const PIPELINE_STATUSES = z.enum([
 ]);
 
 /**
- * Phase 8D Wave 4 (FIX-003) — kanban DnD now goes through the
+ * kanban DnD now goes through the
  * version-checked `updateLead` helper. Stale boards refuse to commit
  * with a ConflictError so two users can't trample each other's drag
  * results. The new version is returned so the client can rebind the

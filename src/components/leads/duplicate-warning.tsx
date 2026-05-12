@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
-// Phase 9C — import the client primitive directly (not the barrel) so
+// import the client primitive directly (not the barrel) so
 // the bundler doesn't pull UserHoverCard's server-only deps into the
 // client graph.
 import { UserChip } from "@/components/user-display/user-chip";
@@ -25,7 +25,7 @@ interface DuplicateWarningProps {
 }
 
 /**
- * Phase 3F: debounced duplicate-check on lead create. Watches email +
+ * debounced duplicate-check on lead create. Watches email +
  * phone fields; when either has ≥3 chars, hits /api/leads/check-duplicate
  * and renders an inline warning with matching leads.
  *
@@ -129,7 +129,7 @@ export function DuplicateWarning({ email, phone }: DuplicateWarningProps) {
                     {m.email ? <span>{m.email} ·</span> : null}
                     <span>{m.status}</span>
                     <span>· owner</span>
-                    {/* Phase 9C — canonical UserChip in lieu of plain
+                    {/* canonical UserChip in lieu of plain
                         owner name. Hover card omitted: this surface
                         renders inline during typing. */}
                     {m.ownerId ? (

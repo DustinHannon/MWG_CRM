@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 /**
- * Phase 8 (FIX-006) — auto-open the browser print dialog after the page
+ * auto-open the browser print dialog after the page
  * has finished mounting. Replaces a server-rendered inline <script> that
  * was blocked by the strict CSP set in src/proxy.ts (no nonce passthrough
  * on a `<script dangerouslySetInnerHTML>` element).

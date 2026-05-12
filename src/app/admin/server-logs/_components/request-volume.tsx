@@ -13,7 +13,7 @@ import {
 } from "@/lib/observability/betterstack";
 
 /**
- * Phase 26 §5 — Panel 2: top 20 endpoints by request count.
+ * Panel 2: top 20 endpoints by request count.
  *
  * The query excludes `/_next/*` and `/favicon*` so static-asset noise
  * doesn't dominate. Each row shows total requests, 5xx error count,

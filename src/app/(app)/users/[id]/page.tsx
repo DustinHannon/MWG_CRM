@@ -27,7 +27,7 @@ const TAB_LABEL: Record<NonNullable<SearchParams["tab"]>, string> = {
 };
 
 /**
- * Phase 9B — read-only user profile. Any signed-in user can view any
+ * read-only user profile. Any signed-in user can view any
  * other user's basic profile. Sensitive fields are filtered out by
  * getUserProfilePage.
  *

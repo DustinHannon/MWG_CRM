@@ -2,20 +2,20 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
- * Phase 24 §3.4 / §5.4 — canonical empty-state primitive.
- * Phase 26 D3.1 — added `variant?: "card" | "muted"` to cover the
+ * / §5.4 — canonical empty-state primitive.
+ * added `variant?: "card" | "muted"` to cover the
  * inline `bg-muted/40` single-line empty pattern used by tasks,
  * leads detail tabs, and similar dense surfaces.
  *
  * Replaces the duplicated inline pattern across leads/contacts/accounts/
  * marketing-* list pages:
  *
- *   <div className="flex h-48 flex-col items-center justify-center gap-2
- *                   rounded-lg border border-dashed border-border bg-card
- *                   text-center">
- *     <p className="text-sm font-medium text-foreground">No X yet</p>
- *     <p className="text-xs text-muted-foreground">Helper copy</p>
- *   </div>
+ * <div className="flex h-48 flex-col items-center justify-center gap-2
+ * rounded-lg border border-dashed border-border bg-card
+ * text-center">
+ * <p className="text-sm font-medium text-foreground">No X yet</p>
+ * <p className="text-xs text-muted-foreground">Helper copy</p>
+ * </div>
  *
  * Use `icon` (optional lucide-react component) for a visual anchor; pass
  * `action` (already-styled CTA) when the empty state should suggest a
@@ -34,9 +34,9 @@ export interface StandardEmptyStateProps {
   size?: "compact" | "default";
   /**
    * Visual treatment:
-   *   - `card`   (default): dashed border, `bg-card`, centered title + description.
-   *   - `muted`            : solid rounded `bg-muted/40` row, no dashed border.
-   *                          Matches the inline empty patterns on detail tabs.
+   * `card` (default): dashed border, `bg-card`, centered title + description.
+   * `muted` : solid rounded `bg-muted/40` row, no dashed border.
+   * Matches the inline empty patterns on detail tabs.
    */
   variant?: "card" | "muted";
   /** Optional extra classes for callers that need to widen / narrow. */

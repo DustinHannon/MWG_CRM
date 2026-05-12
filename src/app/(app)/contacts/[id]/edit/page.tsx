@@ -12,7 +12,7 @@ import { ContactEditForm } from "./_components/contact-edit-form";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 25 §7.4 — dedicated edit form for contacts.
+ * dedicated edit form for contacts.
  */
 export default async function EditContactPage({
   params,

@@ -8,10 +8,10 @@ import {
 } from "@/app/admin/d365-import/actions";
 
 /**
- * Phase 23 — bottom-of-page run controls. Two buttons:
- *   - Abort run (admin confirm).
- *   - Mark complete (only when canMarkComplete is true, i.e. no
- *     pending/reviewing/approved batches outstanding).
+ * bottom-of-page run controls. Two buttons:
+ * Abort run (admin confirm).
+ * Mark complete (only when canMarkComplete is true, i.e. no
+ * pending/reviewing/approved batches outstanding).
  *
  * Wraps the corresponding server actions. Hidden entirely when the
  * run is already terminal (completed / aborted).

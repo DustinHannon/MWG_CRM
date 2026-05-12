@@ -21,7 +21,7 @@ import { users } from "./users";
  * here, so any view stored as 'all' is just a UI hint.
  *
  * `filters` shape: { status?: string[]; rating?: string[]; source?: string[];
- *                    tags?: string[]; search?: string; do_not_contact?: boolean }
+ * tags?: string[]; search?: string; do_not_contact?: boolean }
  * `columns` shape: string[] of column keys (see lib/views.ts AVAILABLE_COLUMNS)
  * `sort` shape: { field: string; direction: 'asc' | 'desc' }
  */
@@ -32,7 +32,7 @@ export const savedViews = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Phase 25 §7.3 — `entity_type` scopes views by domain. 'lead'
+    // `entity_type` scopes views by domain. 'lead'
     // (default) preserves prior behaviour; 'task' powers the new
     // /tasks page saved-view selector. CHECK constraint
     // `saved_views_entity_type_valid` restricts to known values.
@@ -80,19 +80,19 @@ export const userPreferences = pgTable("user_preferences", {
   lastUsedViewId: uuid("last_used_view_id").references(() => savedViews.id, {
     onDelete: "set null",
   }),
-  // Phase 25 §7.3 — last-used view on /tasks. text not uuid because
+  // last-used view on /tasks. text not uuid because
   // built-in views use string ids ("builtin:my-open") that don't
   // match the savedViews uuid FK shape.
   lastUsedTaskViewId: text("last_used_task_view_id"),
   // ad-hoc column visibility chosen on a built-in view (saved views
   // store their own columns array on the saved_views row instead).
   adhocColumns: jsonb("adhoc_columns"),
-  // Phase 3B: editable preferences surfaced on /settings.
+  // editable preferences surfaced on /settings.
   timezone: text("timezone").notNull().default("America/Chicago"),
   dateFormat: text("date_format").notNull().default("MM/DD/YYYY"),
   timeFormat: text("time_format").notNull().default("12h"),
   tableDensity: text("table_density").notNull().default("comfortable"),
-  // Phase 13 — sidebar collapsed/expanded state.
+  // sidebar collapsed/expanded state.
   sidebarCollapsed: boolean("sidebar_collapsed").notNull().default(false),
   defaultLeadsViewId: uuid("default_leads_view_id").references(
     () => savedViews.id,
@@ -104,7 +104,7 @@ export const userPreferences = pgTable("user_preferences", {
   notifyMentions: boolean("notify_mentions").notNull().default(true),
   notifySavedSearch: boolean("notify_saved_search").notNull().default(true),
   emailDigestFrequency: text("email_digest_frequency").notNull().default("off"),
-  // Phase 3E: pipeline/table view-mode preference.
+  // pipeline/table view-mode preference.
   leadsDefaultMode: text("leads_default_mode").notNull().default("table"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

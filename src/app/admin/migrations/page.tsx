@@ -13,7 +13,7 @@ import { StandardPageHeader } from "@/components/standard";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 29 §7 — Admin migrations landing page. Today only the
+ * Admin migrations landing page. Today only the
  * ClickDimensions worklist lives under this tree; future external
  * migrations (HubSpot, Marketo) would surface here too.
  */

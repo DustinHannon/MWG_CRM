@@ -12,13 +12,13 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
- * Phase 25 §7.2 — saved-view subscribe / unsubscribe / frequency-override
+ * saved-view subscribe / unsubscribe / frequency-override
  * server actions. Two surfaces share this same `saved_search_subscriptions`
  * table:
  *
- *   - Leads view-toolbar (per-view Subscribe / Unsubscribe button)
- *   - Settings → Notifications (list of all active subs with per-row
- *     unsubscribe + per-row frequency override)
+ * Leads view-toolbar (per-view Subscribe / Unsubscribe button)
+ * Settings → Notifications (list of all active subs with per-row
+ * unsubscribe + per-row frequency override)
  *
  * The `notify_saved_search` user preference stays as the global kill
  * switch (off = no in-app notifications regardless of active subs).
@@ -50,10 +50,10 @@ const unsubscribeSchema = z.object({
 
 /**
  * Resolve the default frequency for a new subscription:
- *   - If the caller passed an explicit frequency → use it.
- *   - Else if user_preferences.email_digest_frequency is 'daily' or
- *     'weekly' → use that.
- *   - Else (user has 'off' or no row) → 'daily'.
+ * If the caller passed an explicit frequency → use it.
+ * Else if user_preferences.email_digest_frequency is 'daily' or
+ * 'weekly' → use that.
+ * Else (user has 'off' or no row) → 'daily'.
  *
  * The fallback to 'daily' on 'off' is deliberate: a subscription
  * needs a cadence to be useful at all. If the user wants no emails,

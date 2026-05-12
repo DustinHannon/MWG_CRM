@@ -23,7 +23,7 @@ export default async function UsersListPage({
   const sp = await searchParams;
   const isRecentFilter = sp.recent === RECENT_JIT_FILTER;
 
-  // Phase 15 — surface JIT telemetry. Default sort is `last_login_at desc
+  // surface JIT telemetry. Default sort is `last_login_at desc
   // nulls last` so admins see "who's actually been around lately" up
   // top; the recent-JIT filter swaps to `jit_provisioned_at desc` and
   // narrows to users who joined in the last 7 days.
@@ -90,7 +90,7 @@ export default async function UsersListPage({
         </div>
       </div>
 
-      {/* Phase 15 — recently-joined filter chips. */}
+      {/* recently-joined filter chips. */}
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <FilterChip href="/admin/users" active={!isRecentFilter}>
           All users
@@ -107,7 +107,7 @@ export default async function UsersListPage({
         <table className="data-table min-w-full divide-y divide-border/60">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-              {/* Phase 9C — avatar column at the front. Email column
+              {/* avatar column at the front. Email column
                   stays per the audit-driven exception (admins need it). */}
               <th className="px-5 py-3 font-medium w-12"></th>
               <th className="px-5 py-3 font-medium">Name</th>

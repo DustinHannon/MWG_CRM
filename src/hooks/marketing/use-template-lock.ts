@@ -18,18 +18,18 @@ interface UseTemplateLockResult {
 }
 
 /**
- * Phase 21 — Client hook for the marketing-template soft-lock.
+ * Client hook for the marketing-template soft-lock.
  *
  * Behavior:
- *   1. On mount, mints a per-tab `sessionId` (kept stable across the
- *      hook's lifetime via `useRef`) and POSTs `/lock`.
- *      • 200 → status='held'
- *      • 409 with `{ holder }` → status='locked'
- *   2. While 'held', PUTs the heartbeat every 30s.
- *   3. On unmount and on `beforeunload`, sends a DELETE so the next
- *      editor can pick up immediately. The unload path uses
- *      `fetch(..., { keepalive: true })` instead of sendBeacon so we
- *      can ship a JSON body with the sessionId.
+ * 1. On mount, mints a per-tab `sessionId` (kept stable across the
+ * hook's lifetime via `useRef`) and POSTs `/lock`.
+ * • 200 → status='held'
+ * • 409 with `{ holder }` → status='locked'
+ * 2. While 'held', PUTs the heartbeat every 30s.
+ * 3. On unmount and on `beforeunload`, sends a DELETE so the next
+ * editor can pick up immediately. The unload path uses
+ * `fetch(..., { keepalive: true })` instead of sendBeacon so we
+ * can ship a JSON body with the sessionId.
  *
  * The realtime broadcast channel that would push lock changes to other
  * tabs is deferred to a follow-up phase — for now another editor sees

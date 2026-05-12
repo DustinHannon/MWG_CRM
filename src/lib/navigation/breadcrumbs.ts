@@ -2,14 +2,14 @@ import type { Breadcrumb } from "@/components/breadcrumbs";
 import { marketingCrumbs } from "./marketing-breadcrumbs";
 
 /**
- * Phase 24 §3.5 — Global breadcrumb registry.
+ * Global breadcrumb registry.
  *
  * Every page under (app) and /admin renders a breadcrumb trail via
  * <BreadcrumbsSetter crumbs={...} />. Historically pages have inlined
  * the trail array. This module centralizes the trails so new pages
  * reference a typed entry and renames stay consistent.
  *
- * The marketing trails (Phase 21 §3.7) live in `marketing-breadcrumbs.ts`
+ * The marketing trails live in `marketing-breadcrumbs.ts`
  * and are merged here so callers have a single import.
  *
  * Existing pages with inlined trails continue to work; new pages should
@@ -169,15 +169,15 @@ export const adminCrumbs = {
   importHelp: (): Breadcrumb[] => [ADMIN, { label: "Import help" }],
   emailFailures: (): Breadcrumb[] => [ADMIN, { label: "Email failures" }],
 
-  // Platform insights (Phase 26 §4) — Better Stack-driven dashboard
+  // Platform insights — Better Stack-driven dashboard
   // for traffic, error rate, and deployment health.
   insights: (): Breadcrumb[] => [ADMIN, { label: "Platform insights" }],
 
-  // Server logs (Phase 26 §5) — aggregated telemetry from the
+  // Server logs — aggregated telemetry from the
   // Better Stack drain. Not a raw log tail.
   serverLogs: (): Breadcrumb[] => [ADMIN, { label: "Server logs" }],
 
-  // D365 import (Phase 23)
+  // D365 import
   d365Import: (): Breadcrumb[] => [ADMIN, { label: "D365 import" }],
   d365ImportRun: (runShortId: string): Breadcrumb[] => [
     ADMIN,
@@ -195,7 +195,7 @@ export const adminCrumbs = {
     { label: `Batch #${batchNumber}` },
   ],
 
-  // Migrations (Phase 29 §7) — ClickDimensions template-migration
+  // Migrations — ClickDimensions template-migration
   // worklist. Index page is a thin landing surface; the meaningful
   // surface is the ClickDimensions sub-page.
   migrationsIndex: (): Breadcrumb[] => [ADMIN, { label: "Migrations" }],

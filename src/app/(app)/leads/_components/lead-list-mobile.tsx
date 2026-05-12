@@ -5,7 +5,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import type { LeadRow } from "@/lib/views";
 
 /**
- * Phase 12 — dense single-line mobile list for /leads (and the
+ * dense single-line mobile list for /leads (and the
  * archived view). Renders only at <768px; the desktop table layout
  * takes over above that.
  *

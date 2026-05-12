@@ -42,7 +42,7 @@ type RowMap = Record<string, unknown>;
 export default async function DashboardPage() {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
-  // Phase 9C — gate /dashboard on canViewReports. Admin bypasses. The
+  // gate /dashboard on canViewReports. Admin bypasses. The
   // generic requirePermission helper redirects to /dashboard on miss,
   // which would loop here, so we redirect to /leads explicitly.
   if (!user.isAdmin && !perms.canViewReports) {
@@ -279,7 +279,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* Phase 25 §7.3 — "My open tasks" widget. Top 5 by due date,
+      {/* "My open tasks" widget. Top 5 by due date,
           overdue flagged, related entity (lead/account/contact/opp)
           shown inline with click-through. Footer link surfaces the
           full list at /tasks?assignee=me&status=open. */}

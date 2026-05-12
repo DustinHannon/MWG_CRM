@@ -8,10 +8,10 @@ import { logger } from "@/lib/logger";
 import type { D365RealtimeEvent } from "./audit-events";
 
 /**
- * Phase 23 — server-side broadcast helper for the
+ * server-side broadcast helper for the
  * `d365-import-run:<runId>` Supabase Realtime channel.
  *
- * Browser subscribers receive these events via the Phase 12 realtime
+ * Browser subscribers receive these events via the realtime
  * client and update the live progress panel without page reload.
  *
  * Failure mode: best-effort, like `writeAudit`. A broadcast failure
@@ -21,13 +21,13 @@ import type { D365RealtimeEvent } from "./audit-events";
  * return.
  *
  * Env wiring:
- *   - `SUPABASE_URL`              — required (server-side, no NEXT_PUBLIC).
- *     Falls back to `NEXT_PUBLIC_SUPABASE_URL` if not set.
- *   - `SUPABASE_SERVICE_ROLE_KEY` — preferred. Bypasses RLS so the
- *     publisher can broadcast even without a per-user JWT.
- *     Falls back to `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the anon key has
- *     publish-only permission on broadcast channels by default —
- *     verify in Supabase if RLS is tightened later).
+ * `SUPABASE_URL` — required (server-side, no NEXT_PUBLIC).
+ * Falls back to `NEXT_PUBLIC_SUPABASE_URL` if not set.
+ * `SUPABASE_SERVICE_ROLE_KEY` — preferred. Bypasses RLS so the
+ * publisher can broadcast even without a per-user JWT.
+ * Falls back to `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the anon key has
+ * publish-only permission on broadcast channels by default —
+ * verify in Supabase if RLS is tightened later).
  *
  * If neither URL+key combo is present, calls become no-ops and we log
  * a one-time `d365.broadcast.disabled` warning.

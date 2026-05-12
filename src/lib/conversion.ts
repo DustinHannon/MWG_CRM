@@ -68,7 +68,7 @@ export async function convertLead(
   actorId: string,
   actorOwnerId: string,
 ): Promise<ConversionResult> {
-  // Pull lead. Phase 11 — reject conversion of archived leads. A
+  // Pull lead. reject conversion of archived leads. A
   // soft-deleted lead should not be promotable to account/contact/
   // opportunity; the user's archive intent takes precedence.
   const leadRow = await db
@@ -176,9 +176,9 @@ export async function convertLead(
       .where(eq(leads.id, input.leadId));
 
     // 5. Reassign lead's activities → opportunity (if created), else
-    //    leave them on the lead. The CHECK constraint requires
-    //    exactly-one-parent, so we set lead_id NULL when setting
-    //    opportunity_id.
+    // leave them on the lead. The CHECK constraint requires
+    // exactly-one-parent, so we set lead_id NULL when setting
+    // opportunity_id.
     if (opportunityId) {
       await tx
         .update(activities)

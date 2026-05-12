@@ -24,7 +24,7 @@ export default async function EditLeadPage({
   const lead = await getLeadById(user, id, perms.canViewAllRecords);
   if (!lead) notFound();
 
-  // Phase 8D Wave 6 (FIX-016) — fetch tag rows (id+name+color) to seed
+  // fetch tag rows (id+name+color) to seed
   // the TagInput combobox. getLeadById hydrates `lead.tags` as a string
   // array of names only, which the combobox can't render as chips.
   const tagRows = await getTagsForLead(lead.id);

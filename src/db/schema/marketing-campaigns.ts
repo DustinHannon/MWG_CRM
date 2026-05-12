@@ -16,12 +16,12 @@ import { marketingTemplates } from "./marketing-templates";
 import { users } from "./users";
 
 /**
- * Phase 19 — Marketing campaign (one send of a template to a list).
+ * Marketing campaign (one send of a template to a list).
  *
  * Status lifecycle:
- *   draft → scheduled → sending → sent
- *                    ↘ cancelled
- *                    ↘ failed
+ * draft → scheduled → sending → sent
+ * ↘ cancelled
+ * ↘ failed
  *
  * The counters (total_sent / delivered / opened / clicked / bounced /
  * unsubscribed) are updated atomically by the SendGrid Event Webhook
@@ -38,7 +38,7 @@ export const marketingCampaigns = pgTable(
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
     name: text("name").notNull(),
     /**
-     * Phase 29 §4 — Made nullable to support the personal-template
+     * Made nullable to support the personal-template
      * deletion cascade: when a creator deletes a personal template
      * that's still referenced by a draft campaign, the campaign's
      * `template_id` is cleared (the user must pick a new template
@@ -117,7 +117,7 @@ export const marketingCampaigns = pgTable(
  *
  * status mirrors SendGrid's terminal event state but with one important
  * difference: 'opened' / 'clicked' DO NOT advance away from 'delivered'
- * — they're tracked as flags via firstOpenedAt / firstClickedAt so a
+ * they're tracked as flags via firstOpenedAt / firstClickedAt so a
  * recipient that opened, then later bounced (rare), doesn't lose the
  * open record.
  */
@@ -165,7 +165,7 @@ export const campaignRecipients = pgTable(
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     /**
-     * Phase 24 §6.5.1 — snapshot of per-recipient merge fields captured
+     * snapshot of per-recipient merge fields captured
      * at queue-time. The send loop reads this in preference to a fresh
      * lead lookup so mid-send lead edits do not change later batches.
      * Stored shape mirrors the SendGrid Dynamic Template substitution
@@ -174,13 +174,13 @@ export const campaignRecipients = pgTable(
      */
     snapshotMergeData: jsonb("snapshot_merge_data"),
     /**
-     * Phase 24 §6.5.1 — reserved for future per-recipient subject
+     * reserved for future per-recipient subject
      * override. NULL means the SendGrid Dynamic Template's own subject
      * is used.
      */
     snapshotSubject: text("snapshot_subject"),
     /**
-     * Phase 24 §6.5.1 — reserved for future per-recipient preheader
+     * reserved for future per-recipient preheader
      * override. NULL means the template's preheader is used.
      */
     snapshotPreheader: text("snapshot_preheader"),

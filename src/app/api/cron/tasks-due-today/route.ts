@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Phase 3D — daily cron at 14:00 UTC (~8 AM Central winter / 9 AM summer).
+ * daily cron at 14:00 UTC (~8 AM Central winter / 9 AM summer).
  * Bearer-auth via CRON_SECRET. For each task due today (status open or
  * in_progress, assignee with notify_tasks_due=true) creates a 'task_due'
  * notification.

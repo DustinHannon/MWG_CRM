@@ -8,7 +8,7 @@ import { TagChip } from "@/components/tags/tag-chip";
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 25 §7.5 — bulk-tag toolbar surface. Mirrors the
+ * bulk-tag toolbar surface. Mirrors the
  * AddVisibleToListButton pattern: acts on the leadIds currently
  * visible in the table (passed in as a prop) rather than a per-row
  * selection model. When per-row selection lands, swap the leadIds

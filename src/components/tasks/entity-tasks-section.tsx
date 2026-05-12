@@ -4,7 +4,7 @@ import { type TaskRow } from "@/lib/tasks";
 import { EntityTasksQuickAdd } from "./entity-tasks-quick-add";
 
 /**
- * Phase 25 §7.3 — Tasks section for entity-detail pages.
+ * Tasks section for entity-detail pages.
  *
  * Server component. Renders the list of tasks linked to the parent
  * entity (lead / account / contact / opportunity) plus a client-side

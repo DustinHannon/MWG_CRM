@@ -13,13 +13,13 @@ const APP_NAV: NavItem[] = [
   { label: "Contacts", href: "/contacts", iconKey: "Contact" },
   { label: "Opportunities", href: "/opportunities", iconKey: "Target" },
   { label: "Tasks", href: "/tasks", iconKey: "CheckSquare" },
-  // Phase 13 — Reports tab. Page-level gate enforces canViewReports;
+  // Reports tab. Page-level gate enforces canViewReports;
   // this entry is visible to every authenticated user. The page
   // bounces non-permitted users back to /leads itself.
   { label: "Reports", href: "/reports", iconKey: "BarChart3" },
 ];
 
-// Phase 19 — Marketing nav. Inserted after Reports for users with
+// Marketing nav. Inserted after Reports for users with
 // canManageMarketing or admin. The page-level gate in
 // /marketing/layout.tsx is the source of truth — this nav entry just
 // hides the link from non-permitted users so it doesn't bounce.
@@ -37,7 +37,7 @@ export default async function AppLayout({
   const user = await requireSession();
   const perms = await getPermissions(user.id);
 
-  // Phase 9C — hide Dashboard for users without canViewReports. Admin
+  // hide Dashboard for users without canViewReports. Admin
   // always sees it. Keeps nav in sync with the page-level gate so users
   // don't see a link that bounces them back to /leads.
   const baseNav =
@@ -45,14 +45,14 @@ export default async function AppLayout({
       ? APP_NAV
       : APP_NAV.filter((item) => !("href" in item) || item.href !== "/dashboard");
 
-  // Phase 19 — append Marketing for users with canManageMarketing (or admin).
+  // append Marketing for users with canManageMarketing (or admin).
   // The /marketing layout double-checks; this just hides the link.
   const navWithMarketing: NavItem[] =
     user.isAdmin || perms.canManageMarketing
       ? [...baseNav, MARKETING_NAV_ITEM]
       : baseNav;
 
-  // Post-Phase 25 — admins get an expandable Admin group that exposes
+  // admins get an expandable Admin group that exposes
   // every admin sub-page inline. Auto-expands when the active route
   // is under /admin. The (app) shell renders the group; the /admin
   // shell renders the same items flat under its own subtitle so users
@@ -72,7 +72,7 @@ export default async function AppLayout({
   return (
     <RealtimeProvider userId={user.id}>
       {/*
-        Phase 12 — layout-level notifications subscription so the topbar
+        layout-level notifications subscription so the topbar
         bell updates everywhere without each page re-mounting it. Filter
         scopes to the current user; RLS doubly enforces that.
       */}

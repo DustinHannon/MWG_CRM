@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { updateOpportunityAction } from "../../../actions";
 import type { ActionResult } from "@/lib/server-action";
 
-/** Phase 25 §7.4 — Opportunity edit form. */
+/** Opportunity edit form. */
 export function OpportunityEditForm({
   opportunity,
 }: {

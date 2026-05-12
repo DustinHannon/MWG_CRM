@@ -16,15 +16,15 @@ import { leads } from "./leads";
 import { users } from "./users";
 
 /**
- * Phase 29 §5 — list type discriminator.
+ * list type discriminator.
  *
- * `dynamic`         — membership computed by evaluating `filter_dsl` against
- *                     `source_entity`. Snapshot lives in
- *                     `marketing_list_members` (lead-only today).
+ * `dynamic` — membership computed by evaluating `filter_dsl` against
+ * `source_entity`. Snapshot lives in
+ * `marketing_list_members` (lead-only today).
  * `static_imported` — membership is a flat email/name table populated by
- *                     CSV/XLSX import; lives in
- *                     `marketing_static_list_members`. `filter_dsl` is a
- *                     placeholder (empty rules).
+ * CSV/XLSX import; lives in
+ * `marketing_static_list_members`. `filter_dsl` is a
+ * placeholder (empty rules).
  */
 export const marketingListTypeEnum = pgEnum("marketing_list_type", [
   "dynamic",
@@ -32,7 +32,7 @@ export const marketingListTypeEnum = pgEnum("marketing_list_type", [
 ]);
 
 /**
- * Phase 29 §5 — source entity for dynamic lists.
+ * source entity for dynamic lists.
  *
  * Only `leads` is wired today (the filter DSL is leads-scoped). The other
  * values are reserved so the picker can be shown for forward compatibility;
@@ -44,13 +44,13 @@ export const marketingListSourceEntityEnum = pgEnum(
 );
 
 /**
- * Phase 19 — Marketing list (segment of recipients).
+ * Marketing list (segment of recipients).
  *
  * A dynamic list is defined by a JSONB filter (`filter_dsl`) that is
  * evaluated against the source entity (today: `leads`). We snapshot
  * membership into `marketing_list_members` whenever the list is refreshed.
  *
- * Phase 29 §5 — adds `list_type` + `source_entity`. Static-imported lists
+ * adds `list_type` + `source_entity`. Static-imported lists
  * skip the filter DSL entirely; their members live in
  * `marketing_static_list_members`.
  *
@@ -64,8 +64,8 @@ export const marketingLists = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     /**
-     * Phase 14 cross-entity filter DSL serialized as JSON. Shape:
-     *   { combinator: "AND" | "OR", rules: Array<{ field, op, value }> }
+     * cross-entity filter DSL serialized as JSON. Shape:
+     * { combinator: "AND" | "OR", rules: Array<{ field, op, value }> }
      * Evaluated server-side via @/lib/marketing/lists/refresh against the
      * source entity. Static-imported lists store an empty
      * `{ combinator: "AND", rules: [] }` placeholder — the resolver
@@ -75,13 +75,13 @@ export const marketingLists = pgTable(
     memberCount: integer("member_count").notNull().default(0),
     lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }),
     /**
-     * Phase 29 §5 — discriminates dynamic vs. static-imported lists.
+     * discriminates dynamic vs. static-imported lists.
      */
     listType: marketingListTypeEnum("list_type")
       .notNull()
       .default("dynamic"),
     /**
-     * Phase 29 §5 — source entity for dynamic lists. Nullable for
+     * source entity for dynamic lists. Nullable for
      * static-imported lists (which have no source entity).
      */
     sourceEntity: marketingListSourceEntityEnum("source_entity").default(
@@ -105,7 +105,7 @@ export const marketingLists = pgTable(
       onDelete: "set null",
     }),
     /**
-     * Phase 27 §4.8 — OCC (optimistic concurrency) version. Incremented
+     * OCC (optimistic concurrency) version. Incremented
      * atomically on each update. The list-edit UI passes the version it
      * loaded; the UPDATE refuses to write if another writer bumped it.
      */
@@ -156,16 +156,16 @@ export const marketingListMembers = pgTable(
 );
 
 /**
- * Phase 29 §5 — Static-imported list members.
+ * Static-imported list members.
  *
  * Each row is a recipient that was added by Excel/CSV import (or by
  * direct mass-edit on the static-list detail page). Lives separately
  * from `marketing_list_members` (which is the lead-snapshot table for
  * dynamic lists) so:
- *   • Static rows can carry a free-text name + email without binding
- *     to a CRM lead.
- *   • The unique `(list_id, lower(email))` constraint deduplicates
- *     case-insensitive addresses.
+ * • Static rows can carry a free-text name + email without binding
+ * to a CRM lead.
+ * • The unique `(list_id, lower(email))` constraint deduplicates
+ * case-insensitive addresses.
  *
  * Resolution at send time happens in `src/lib/marketing/lists/resolution.ts`
  * which branches on `marketing_lists.list_type` and reads the correct

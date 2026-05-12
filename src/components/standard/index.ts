@@ -1,5 +1,5 @@
 /**
- * Phase 24 §3.4 / §5.4 — standard component primitives.
+ * / §5.4 — standard component primitives.
  *
  * Import from "@/components/standard" rather than the per-file paths
  * so future renames stay tractable.

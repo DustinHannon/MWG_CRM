@@ -24,12 +24,12 @@ const STAGES = [
 interface CardRow {
   id: string;
   stage: string;
-  // Phase 8D Wave 4 (FIX-004) — OCC version stamp threaded through DnD.
+  // OCC version stamp threaded through DnD.
   version: number;
   name: string;
   accountName: string | null;
   amount: string | null;
-  // Phase 9C — owner id powers the canonical xs avatar on the card.
+  // owner id powers the canonical xs avatar on the card.
   ownerId: string | null;
   ownerName: string | null;
 }
@@ -51,7 +51,7 @@ export default async function OppPipelinePage() {
     .select({
       id: opportunities.id,
       stage: sql<string>`${opportunities.stage}::text`,
-      // Phase 8D Wave 4 (FIX-004) — version on every card; the DnD
+      // version on every card; the DnD
       // handler posts it back so the action can refuse stale moves.
       version: opportunities.version,
       name: opportunities.name,

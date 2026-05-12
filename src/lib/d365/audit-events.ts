@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Phase 23 — registered taxonomy of `d365.import.*` audit events.
+ * registered taxonomy of `d365.import.*` audit events.
  *
  * Every meaningful state transition in the import pipeline emits one
  * of these via `writeAudit`. The §11 acceptance includes a production
@@ -30,7 +30,7 @@ export const D365_AUDIT_EVENTS = {
   RECORD_SKIPPED: "d365.import.record.skipped",
   CONFIG_CHANGED: "d365.import.config.changed",
   OWNER_JIT_PROVISIONED: "d365.import.owner.jit_provisioned",
-  // Phase 24 §7.2.3 — explicit *_FAILED events so the forensic trail
+  // explicit *_FAILED events so the forensic trail
   // captures every error class without relying on logger output. Each
   // emit site pairs the event with the row-level `status='failed'`
   // update so the audit log and the records table agree.

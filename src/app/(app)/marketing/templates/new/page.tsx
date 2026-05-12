@@ -8,7 +8,7 @@ import { NewTemplateForm } from "./_components/new-template-form";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 21 — Template create. The metadata (name, subject, preheader,
+ * Template create. The metadata (name, subject, preheader,
  * description) is captured here; the design itself lives on the next
  * step. The Unlayer editor mounts on the edit page once the row
  * exists so the lock infrastructure has a target id to talk to.

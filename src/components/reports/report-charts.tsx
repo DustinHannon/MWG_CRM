@@ -21,7 +21,7 @@ import {
 import type { ReportVisualization } from "@/db/schema/saved-reports";
 
 /**
- * Phase 11 — small chart palette for the report runner. Mirrors the
+ * small chart palette for the report runner. Mirrors the
  * dashboard's Recharts setup (CSS-variable colors, popover tooltip,
  * fixed heights inside ResponsiveContainer).
  */

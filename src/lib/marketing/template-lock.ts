@@ -6,7 +6,7 @@ import { users } from "@/db/schema/users";
 import { env } from "@/lib/env";
 
 /**
- * Phase 19 — Soft-lock infrastructure for collaborative template editing.
+ * Soft-lock infrastructure for collaborative template editing.
  *
  * The lock is one row per template_id. Acquiring requires either no row
  * (or a stale one — older than MARKETING_LOCK_TIMEOUT_SECONDS) or a row

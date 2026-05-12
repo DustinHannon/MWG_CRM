@@ -10,7 +10,7 @@ import { writeAudit } from "@/lib/audit";
 import { expectAffected } from "@/lib/db/concurrent-update";
 
 /**
- * Phase 9C — task cursor format: `<iso8601-due_at-or-"null">:<uuid>`.
+ * task cursor format: `<iso8601-due_at-or-"null">:<uuid>`.
  * The default sort is `(due_at ASC NULLS LAST, id DESC)`, so a NULL
  * due_at puts a row in the tail block — encoded with the literal
  * timestamp "null".
@@ -44,7 +44,7 @@ export const taskCreateSchema = z
     priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
     dueAt: z.coerce.date().optional().nullable(),
     assignedToId: z.string().uuid().optional().nullable(),
-    // Phase 25 §7.3 — exactly one of these four can be set (or all
+    // exactly one of these four can be set (or all
     // null = standalone). Backed by CHECK constraint
     // `tasks_at_most_one_parent`. The Zod refine below catches the
     // ≥2 case at the action layer so the user sees a clean
@@ -80,7 +80,7 @@ export type TaskUpdateInput = z.infer<typeof taskUpdateSchema>;
 
 export interface TaskRow {
   id: string;
-  // Phase 6B — version exposed on every list/detail row so the client
+  // version exposed on every list/detail row so the client
   // has the right value to send back on toggle/edit.
   version: number;
   title: string;
@@ -92,7 +92,7 @@ export interface TaskRow {
   assignedToId: string | null;
   assignedToName: string | null;
   createdById: string | null;
-  // Phase 25 §7.3 — exactly one of these is non-null when the task is
+  // exactly one of these is non-null when the task is
   // linked to a parent entity (CHECK constraint `tasks_at_most_one_parent`
   // enforces ≤1). All four null = standalone task.
   leadId: string | null;
@@ -119,7 +119,7 @@ const baseSelect = {
   assignedToId: tasks.assignedToId,
   assignedToName: users.displayName,
   createdById: tasks.createdById,
-  // Phase 25 §7.3 — pull display names for every related-entity slot
+  // pull display names for every related-entity slot
   // so the /tasks Related-to column + lead-detail tab + dashboard
   // widget all share the same shape.
   leadId: tasks.leadId,
@@ -137,7 +137,7 @@ const baseSelect = {
 };
 
 /**
- * Phase 9C — page-size + cursor support added. Default page size is 50;
+ * page-size + cursor support added. Default page size is 50;
  * pass `pageSize: 0` (or omit the cursor entirely) for the legacy
  * unbounded fetch (only safe for callers that already constrain by
  * leadId / scope / etc.). Cursor format documented on `parseTaskCursor`.
@@ -155,20 +155,20 @@ export async function listTasksForUser(args: {
   isAdmin: boolean;
   status?: ("open" | "in_progress" | "completed" | "cancelled")[];
   scope?: "me" | "all";
-  /** Phase 25 §7.3 — filter by related-entity link state. */
+  /** filter by related-entity link state. */
   relation?: "all" | "standalone" | "linked";
-  /** Phase 25 §7.3 expansion — additional filter dimensions. */
+  /** expansion — additional filter dimensions. */
   priority?: ("low" | "normal" | "high" | "urgent")[];
   relatedEntity?: "lead" | "account" | "contact" | "opportunity";
   dueRange?: "overdue" | "today" | "this_week" | "later" | "none" | "all";
   q?: string;
-  /** Phase 25 §7.3 — explicit assignee filter for the new /tasks
-   *  redesign. `me` (default) preserves existing behavior; a specific
-   *  user id scopes to that user; `any` shows everyone (requires
-   *  canViewOthersTasks). When unset, falls back to scope semantics. */
+  /** explicit assignee filter for the new /tasks
+   * redesign. `me` (default) preserves existing behavior; a specific
+   * user id scopes to that user; `any` shows everyone (requires
+   * canViewOthersTasks). When unset, falls back to scope semantics. */
   assignee?: "me" | "any" | string;
   /** When false, skip the (due_at NULLS LAST, id DESC) cursor index
-   *  and use the requested sort. Cursor pagination is then disabled. */
+   * and use the requested sort. Cursor pagination is then disabled. */
   sort?: {
     field:
       | "dueAt"
@@ -184,10 +184,10 @@ export async function listTasksForUser(args: {
   pageSize?: number;
 }): Promise<ListTasksResult> {
   const wheres: SQL[] = [];
-  // Phase 9C — exclude soft-deleted tasks from every listing.
+  // exclude soft-deleted tasks from every listing.
   wheres.push(eq(tasks.isDeleted, false));
 
-  // Phase 25 §7.3 — assignee filter takes precedence over the legacy
+  // assignee filter takes precedence over the legacy
   // `scope` arg. When neither is set, default to "me" for the original
   // /tasks personal-queue behavior. The "any" sentinel disables the
   // assigned-to filter entirely (caller is responsible for gating via
@@ -215,13 +215,13 @@ export async function listTasksForUser(args: {
       )!,
     );
   }
-  // Phase 25 §7.3 — priority filter.
+  // priority filter.
   if (args.priority && args.priority.length > 0) {
     wheres.push(
       or(...args.priority.map((p) => eq(tasks.priority, p)))!,
     );
   }
-  // Phase 25 §7.3 — relation filter. CHECK `tasks_at_most_one_parent`
+  // relation filter. CHECK `tasks_at_most_one_parent`
   // ensures at most one FK is set, so "linked" means any of the four
   // is non-null and "standalone" means all four are null.
   if (args.relation === "standalone") {
@@ -243,7 +243,7 @@ export async function listTasksForUser(args: {
       )!,
     );
   }
-  // Phase 25 §7.3 — relatedEntity filter (only meaningful when
+  // relatedEntity filter (only meaningful when
   // relation='linked' or unset). Forces the chosen FK column to be
   // non-null.
   if (args.relatedEntity) {
@@ -255,7 +255,7 @@ export async function listTasksForUser(args: {
     else if (args.relatedEntity === "opportunity")
       wheres.push(isNotNull(tasks.opportunityId));
   }
-  // Phase 25 §7.3 — due-date-range filter. Bucketed off the same
+  // due-date-range filter. Bucketed off the same
   // boundaries the page UI used for grouping, so saved views show
   // the same set the user picks via the chip row.
   if (args.dueRange && args.dueRange !== "all") {
@@ -278,7 +278,7 @@ export async function listTasksForUser(args: {
       wheres.push(isNull(tasks.dueAt));
     }
   }
-  // Phase 25 §7.3 — title search. ILIKE is fine here (tasks table is
+  // title search. ILIKE is fine here (tasks table is
   // small; no trigram index needed at current scale).
   if (args.q && args.q.trim()) {
     const pattern = `%${args.q.trim()}%`;
@@ -286,7 +286,7 @@ export async function listTasksForUser(args: {
   }
 
   const pageSize = args.pageSize ?? 50;
-  // Phase 9C — cursor seeks via composite index
+  // cursor seeks via composite index
   // `tasks_assigned_due_at_id_idx (assigned_to_id, due_at NULLS LAST, id DESC)`.
   const cursor = pageSize > 0 ? parseTaskCursor(args.cursor) : null;
   if (cursor) {
@@ -342,7 +342,7 @@ export async function listTasksForLead(leadId: string): Promise<TaskRow[]> {
     .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
 }
 
-// Phase 25 §7.3 — sibling helpers for the other three entity-detail
+// sibling helpers for the other three entity-detail
 // Tasks tabs. Same shape as listTasksForLead; backed by the same
 // table + JOINs (no parallel storage).
 
@@ -389,7 +389,7 @@ export async function listTasksForOpportunity(
     .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
 }
 
-// Phase 25 §7.3 — bulk-action helpers for the new /tasks toolbar.
+// bulk-action helpers for the new /tasks toolbar.
 // Each helper writes a single audit row per affected task using the
 // canonical event names so audit volume scales linearly. Caller
 // must have already access-checked (canEditOthersTasks /
@@ -517,7 +517,7 @@ export async function createTask(
       dueAt: input.dueAt ?? null,
       assignedToId: input.assignedToId ?? actorId,
       createdById: actorId,
-      // Phase 25 §7.3 — at most one parent FK populated; the Zod
+      // at most one parent FK populated; the Zod
       // refine + DB CHECK constraint both enforce this.
       leadId: input.leadId ?? null,
       accountId: input.accountId ?? null,
@@ -546,7 +546,7 @@ export async function updateTask(
 ): Promise<{ id: string; version: number }> {
   const set: Record<string, unknown> = {
     ...patch,
-    // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+    // actor stamping for skip-self in Supabase Realtime.
     updatedById: actorId,
     updatedAt: sql`now()`,
     version: sql`${tasks.version} + 1`,
@@ -573,7 +573,7 @@ export async function updateTask(
 }
 
 /**
- * Phase 10 — soft-delete (archive) tasks. Sets is_deleted=true and the
+ * soft-delete (archive) tasks. Sets is_deleted=true and the
  * deletion-attribution columns. Reversible via restoreTasksById().
  *
  * @actor task creator, assignee, or admin (caller enforces)
@@ -591,14 +591,14 @@ export async function archiveTasksById(
       deletedAt: sql`now()`,
       deletedById: actorId,
       deleteReason: reason ?? null,
-      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(tasks.id, ids));
 }
 
-/** Phase 10 — restore archived tasks. */
+/** restore archived tasks. */
 export async function restoreTasksById(
   ids: string[],
   actorId: string,
@@ -611,14 +611,14 @@ export async function restoreTasksById(
       deletedAt: null,
       deletedById: null,
       deleteReason: null,
-      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(tasks.id, ids));
 }
 
-/** Phase 10 — admin hard-delete. Use only from admin flows. */
+/** admin hard-delete. Use only from admin flows. */
 export async function deleteTasksById(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.delete(tasks).where(inArray(tasks.id, ids));
@@ -665,7 +665,7 @@ export async function listTasksDueTodayForCron(): Promise<
 void isNull;
 
 /**
- * Phase 13 — paginated task listing for /api/v1/tasks. Returns the
+ * paginated task listing for /api/v1/tasks. Returns the
  * offset-pagination envelope the v1 API contract requires.
  */
 export async function listTasksForApi(args: {
@@ -718,7 +718,7 @@ export async function listTasksForApi(args: {
 }
 
 /**
- * Phase 13 — fetch a single task and its row context (assignee, parent).
+ * fetch a single task and its row context (assignee, parent).
  * Returns null when the row doesn't exist or is soft-deleted.
  */
 export async function getTaskForApi(

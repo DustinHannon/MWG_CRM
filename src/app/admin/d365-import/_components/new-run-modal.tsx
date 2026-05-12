@@ -9,13 +9,13 @@ import { createRunAction } from "@/app/admin/d365-import/actions";
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 23 — "+ New import run" advanced modal.
+ * "+ New import run" advanced modal.
  *
  * Fields:
- *   - entity radio (9 options)
- *   - modifiedSince date (default 2 years ago)
- *   - activeOnly toggle
- *   - includeChildren toggle (only for lead/contact/account/opportunity)
+ * entity radio (9 options)
+ * modifiedSince date (default 2 years ago)
+ * activeOnly toggle
+ * includeChildren toggle (only for lead/contact/account/opportunity)
  *
  * Confirm → calls `createRunAction`, redirects to /admin/d365-import/<id>.
  */

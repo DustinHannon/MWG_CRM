@@ -6,10 +6,10 @@ import { useTableSubscription } from "@/hooks/realtime/use-table-subscription";
 import type { RealtimeEntity } from "@/hooks/realtime/use-realtime-poll";
 
 /**
- * Phase 12 — Supabase Realtime wrapper for list/detail pages. Drop-in
- * companion to Phase 11's <PagePoll> with the same entity-name surface.
+ * Supabase Realtime wrapper for list/detail pages. Drop-in
+ * companion to the <PagePoll> with the same entity-name surface.
  *
- *   <PageRealtime entities={["leads"]} />
+ * <PageRealtime entities={["leads"]} />
  *
  * Behavior: on any INSERT / UPDATE / DELETE that the realtime broker
  * delivers to this client (RLS-scoped), we call `router.refresh()` so

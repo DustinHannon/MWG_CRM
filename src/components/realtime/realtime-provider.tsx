@@ -19,18 +19,18 @@ interface RealtimeProviderProps {
 }
 
 /**
- * Phase 12 — mounts at the top of the authenticated layout. Fetches a
+ * mounts at the top of the authenticated layout. Fetches a
  * Supabase JWT minted from the user's session, hands it to the realtime
  * client, and refreshes before expiry.
  *
  * Failure modes:
- *  - JWT mint endpoint 401 → user signed out elsewhere; provider goes
- *    quiet and the next navigation will redirect to /auth/signin.
- *  - JWT mint endpoint 5xx / 503 → log + retry every 30s. Realtime stays
- *    inert until recovery; the existing polling fallback still produces
- *    fresh data via router.refresh().
- *  - NEXT_PUBLIC_SUPABASE_* missing → getRealtimeClient() returns null;
- *    we skip the whole flow.
+ * JWT mint endpoint 401 → user signed out elsewhere; provider goes
+ * quiet and the next navigation will redirect to /auth/signin.
+ * JWT mint endpoint 5xx / 503 → log + retry every 30s. Realtime stays
+ * inert until recovery; the existing polling fallback still produces
+ * fresh data via router.refresh().
+ * NEXT_PUBLIC_SUPABASE_* missing → getRealtimeClient() returns null;
+ * we skip the whole flow.
  */
 export function RealtimeProvider({ userId, children }: RealtimeProviderProps) {
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

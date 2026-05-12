@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Phase 13 — canonical error envelope shape used by every /api/v1
+ * canonical error envelope shape used by every /api/v1
  * route. The shape is documented in /apihelp; integrators code against
  * this contract.
  */

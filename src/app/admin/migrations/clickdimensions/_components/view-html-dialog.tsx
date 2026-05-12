@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { WorklistRow } from "./worklist-client";
 
 /**
- * Phase 29 §7 — Modal viewer for the captured HTML of a single
+ * Modal viewer for the captured HTML of a single
  * ClickDimensions migration row. Fetched on demand from the
  * `/admin/migrations/clickdimensions/[id]/html` route to avoid
  * shipping large blobs to the client up-front.

@@ -13,7 +13,7 @@ import { ListForm } from "../../_components/list-form";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 21 / Phase 29 §5 — Edit a marketing list (dynamic only).
+ * Edit a marketing list (dynamic only).
  *
  * Loads the existing record and pre-populates the same form used by
  * /marketing/lists/new. Static-imported lists do not surface this

@@ -1,12 +1,12 @@
 /**
- * Phase 24 §3.4 / §5.4 — canonical loading-state primitives.
+ * / §5.4 — canonical loading-state primitives.
  *
  * Three variants cover the most common Suspense fallback shapes:
  *
- *  - `table` — multi-row skeleton matching the existing list-table aesthetic
- *    (border + rounded card + alternating row heights).
- *  - `card`  — single content card placeholder for detail pages.
- *  - `inline`— one-line skeleton for inline async results.
+ * `table` — multi-row skeleton matching the existing list-table aesthetic
+ * (border + rounded card + alternating row heights).
+ * `card` — single content card placeholder for detail pages.
+ * `inline`— one-line skeleton for inline async results.
  *
  * All variants render the same dashed border + animate-pulse rhythm so the
  * UI never flashes a completely empty area while waiting on Suspense data.

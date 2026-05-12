@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Phase 13 — eager registration. Each /api/v1 route file calls
+ * eager registration. Each /api/v1 route file calls
  * `registry.registerPath(...)` at module top level. Next.js loads
  * route handlers on demand, which means the OpenAPI registry only
  * sees a route after it's been hit. To make /api/openapi.json show

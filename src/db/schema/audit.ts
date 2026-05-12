@@ -41,7 +41,7 @@ export const auditLog = pgTable(
     index("audit_action_idx").on(t.action),
     index("audit_target_idx").on(t.targetType, t.targetId),
     index("audit_created_idx").on(t.createdAt.desc()),
-    // Phase 9C — composite cursor key (created_at DESC, id DESC) so
+    // composite cursor key (created_at DESC, id DESC) so
     // the /admin/audit list seeks deterministically even when many rows
     // share a created_at to the millisecond (high-volume admin actions).
     index("audit_log_created_at_id_idx").on(t.createdAt.desc(), t.id.desc()),

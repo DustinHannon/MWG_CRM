@@ -34,17 +34,17 @@ interface ChangesResponse {
 }
 
 /**
- * Phase 11 — polling-based realtime. See PHASE11-AUDIT.md §3 for why
+ * polling-based realtime. See PHASE11-AUDIT.md §3 for why
  * we don't ship Supabase channels in v1.
  *
  * Loop:
- *   1. Initial fetch sets `since` to "now".
- *   2. Every tick, GET /api/realtime/changes?entities=..&since=<iso>.
- *   3. If response carries any ids: call onChange(or router.refresh)
- *      and update `since` to lastChangeAt.
- *   4. If two consecutive ticks are empty, slow to backoffMs.
- *   5. visibilitychange → adjust cadence; "hidden" pauses entirely.
- *   6. window:focus + window:mwg:refresh-now → reset cadence + tick.
+ * 1. Initial fetch sets `since` to "now".
+ * 2. Every tick, GET /api/realtime/changes?entities=..&since=<iso>.
+ * 3. If response carries any ids: call onChange(or router.refresh)
+ * and update `since` to lastChangeAt.
+ * 4. If two consecutive ticks are empty, slow to backoffMs.
+ * 5. visibilitychange → adjust cadence; "hidden" pauses entirely.
+ * 6. window:focus + window:mwg:refresh-now → reset cadence + tick.
  *
  * The hook is fire-and-forget — failure modes log to console.warn but
  * never throw to the consumer. The page degrades gracefully to "data

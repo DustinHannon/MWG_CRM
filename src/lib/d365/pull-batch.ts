@@ -31,24 +31,24 @@ import {
 } from "./types";
 
 /**
- * Phase 23 — orchestrator that pulls one batch (≤100 records) of an
+ * orchestrator that pulls one batch (≤100 records) of an
  * import run from D365 and persists it for human review.
  *
  * Flow:
  *
- *   1. Acquire transaction-scoped advisory lock on the run id so a
- *      double-clicked "Pull next batch" can't double-pull.
- *   2. Load the run; assert status ∈ {created, fetching, reviewing}
- *      and entityType is one of the nine supported.
- *   3. Reserve the next `import_batches` row (status='pending') with
- *      monotonic `batch_number` per run.
- *   4. Broadcast `fetching.started` → call entity-specific query
- *      builder → broadcast `fetching.progress` → on success persist
- *      `import_records` rows + update batch + update run cursor.
- *   5. On retry exhaustion (`D365HttpError` thrown after retries):
- *      transition run to `paused_for_review`, append note, emit
- *      `RUN_HALTED`, broadcast `halted`, throw a typed error for the
- *      caller.
+ * 1. Acquire transaction-scoped advisory lock on the run id so a
+ * double-clicked "Pull next batch" can't double-pull.
+ * 2. Load the run; assert status ∈ {created, fetching, reviewing}
+ * and entityType is one of the nine supported.
+ * 3. Reserve the next `import_batches` row (status='pending') with
+ * monotonic `batch_number` per run.
+ * 4. Broadcast `fetching.started` → call entity-specific query
+ * builder → broadcast `fetching.progress` → on success persist
+ * `import_records` rows + update batch + update run cursor.
+ * 5. On retry exhaustion (`D365HttpError` thrown after retries):
+ * transition run to `paused_for_review`, append note, emit
+ * `RUN_HALTED`, broadcast `halted`, throw a typed error for the
+ * caller.
  *
  * Returns `{ batchId, recordCount, nextCursor }`. `nextCursor` is the
  * server-supplied OData @odata.nextLink for the *next* page, or null
@@ -113,7 +113,7 @@ export async function pullNextBatch(
   if (!runId) throw new ValidationError("runId is required.");
   if (!actorId) throw new ValidationError("actorId is required.");
 
-  // Phase 1 — reserve a batch row under advisory lock + return cursor.
+  // reserve a batch row under advisory lock + return cursor.
   const reservation = await reserveNextBatch(runId);
   const { batchId, batchNumber, run } = reservation;
 
@@ -125,7 +125,7 @@ export async function pullNextBatch(
     entityType,
   });
 
-  // Phase 2 — fetch from D365 OUTSIDE the lock.
+  // fetch from D365 OUTSIDE the lock.
   const fetchOpts = scopeToFetchOpts(run.scope, run.cursor);
   let fetched: FetchPageResult<unknown>;
   try {
@@ -148,7 +148,7 @@ export async function pullNextBatch(
     nextLinkPresent: Boolean(nextLink),
   });
 
-  // Phase 3 — persist records + update run cursor + batch row.
+  // persist records + update run cursor + batch row.
   const pkColumn = D365_ENTITY_PK[entityType];
   await db.transaction(async (tx) => {
     if (records.length > 0) {
@@ -241,7 +241,7 @@ export async function pullNextBatch(
 }
 
 /* -------------------------------------------------------------------------- *
- *                         Reservation under lock                             *
+ * Reservation under lock *
  * -------------------------------------------------------------------------- */
 
 async function reserveNextBatch(runId: string): Promise<{
@@ -317,7 +317,7 @@ async function reserveNextBatch(runId: string): Promise<{
 }
 
 /* -------------------------------------------------------------------------- *
- *                          Scope -> fetch opts                               *
+ * Scope -> fetch opts *
  * -------------------------------------------------------------------------- */
 
 function scopeToFetchOpts(
@@ -349,7 +349,7 @@ function scopeToFetchOpts(
 }
 
 /* -------------------------------------------------------------------------- *
- *                       D365_UNREACHABLE halt path                           *
+ * D365_UNREACHABLE halt path *
  * -------------------------------------------------------------------------- */
 
 async function handleFetchFailure(
@@ -379,7 +379,7 @@ async function handleFetchFailure(
       entityType,
       errorMessage: err instanceof Error ? err.message : String(err),
     });
-    // Phase 24 §7.2.3 — explicit audit event so the forensic trail
+    // explicit audit event so the forensic trail
     // captures non-halt fetch failures alongside the logger output.
     await writeAudit({
       actorId,
@@ -459,7 +459,7 @@ async function handleFetchFailure(
 }
 
 /* -------------------------------------------------------------------------- *
- *                                  Errors                                    *
+ * Errors *
  * -------------------------------------------------------------------------- */
 
 /**

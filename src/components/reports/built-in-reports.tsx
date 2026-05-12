@@ -4,7 +4,7 @@ import { groupBuiltinReports } from "@/lib/reports/categories";
 import type { ReportListItem } from "@/lib/reports/repository";
 
 /**
- * Phase 24 — server component that lays out built-in reports in
+ * server component that lays out built-in reports in
  * expandable category sections.
  *
  * The card grid (`<ReportList>`) is rendered HERE on the server,

@@ -1,4 +1,4 @@
-// Phase 6E — workbook -> row[] driver. Loads an .xlsx buffer with
+// workbook -> row[] driver. Loads an .xlsx buffer with
 // exceljs, maps headers via headers.ts, hands each row to parseImportRow.
 // Returns a flat list of ParsedResult; caller aggregates into a preview
 // or hands directly to commit.

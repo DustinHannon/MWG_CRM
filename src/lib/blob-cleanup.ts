@@ -34,7 +34,7 @@ async function deleteBlobs(pathnames: string[]): Promise<void> {
 }
 
 /**
- * Phase 8D — gather every blob pathname attached to any of the given
+ * gather every blob pathname attached to any of the given
  * leads' activities. Used by hard-delete and the purge-archived cron.
  * Call BEFORE the DB delete (after which the join rows are gone).
  */
@@ -51,7 +51,7 @@ export async function gatherBlobsForLeads(
 }
 
 /**
- * Phase 8D — gather + delete blobs for a batch of leads. Failures are
+ * gather + delete blobs for a batch of leads. Failures are
  * logged but don't throw, so callers can fire-and-forget after the DB
  * delete commits without worrying about a network blip rolling anything
  * back.
@@ -65,7 +65,7 @@ export async function cleanupBlobsForLeads(
 
 /**
  * Gather every blob pathname for every lead owned by the given user. Used
- * by the admin "delete user with cascade-delete leads" flow (Phase 2F.4).
+ * by the admin "delete user with cascade-delete leads" flow.
  * Call BEFORE the DELETE FROM leads WHERE owner_id = userId.
  */
 export async function gatherBlobsForUser(userId: string): Promise<string[]> {

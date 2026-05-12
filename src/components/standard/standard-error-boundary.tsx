@@ -4,7 +4,7 @@ import { AlertTriangle, RotateCw } from "lucide-react";
 import { Component, type ReactNode } from "react";
 
 /**
- * Phase 24 §3.4 / §5.4 — canonical client-side error boundary.
+ * / §5.4 — canonical client-side error boundary.
  *
  * For *route-level* errors prefer Next.js `error.tsx` (App Router's
  * built-in mechanism). Use this component for embedded async client
@@ -43,7 +43,7 @@ export class StandardErrorBoundary extends Component<
   }
 
   componentDidCatch(): void {
-    // Phase 16 — diagnostic console.error allowed for client-side
+    // diagnostic console.error allowed for client-side
     // fallback observability when no `onError` callback is wired in.
     // Reason: the boundary catches errors that would otherwise bubble
     // silently into React's default unhandled-error logger.

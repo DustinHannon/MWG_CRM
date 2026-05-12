@@ -6,14 +6,14 @@ import { resumeRunAction, abortRunAction } from "@/app/admin/d365-import/actions
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 23 — Halt-banner for paused_for_review runs.
+ * Halt-banner for paused_for_review runs.
  *
- * Five reason variants per Phase 23 §4.5:
- *   - d365_unreachable        → Retry / Abort
- *   - unmapped_picklist       → Resume after fix / Abort
- *   - high_volume_conflict    → skip|overwrite|merge radio + Apply / Abort
- *   - owner_jit_failure       → Use default owner and resume / Abort
- *   - validation_regression   → Open batch for review (link) / Abort
+ * Five reason variants by design:
+ * d365_unreachable → Retry / Abort
+ * unmapped_picklist → Resume after fix / Abort
+ * high_volume_conflict → skip|overwrite|merge radio + Apply / Abort
+ * owner_jit_failure → Use default owner and resume / Abort
+ * validation_regression → Open batch for review (link) / Abort
  *
  * Reads the halt reason as a JSON-decoded last line of
  * `import_runs.notes` (server-side parsing happens on the run-detail

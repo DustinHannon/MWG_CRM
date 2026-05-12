@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Admin-only "force unlock" endpoint. Delegates to the
+ * Admin-only "force unlock" endpoint. Delegates to the
  * server action so the audit row, permission check, and revalidate
  * paths flow through the same code path as the in-page button.
  */

@@ -6,21 +6,21 @@ import { AlertTriangle, Loader2, Save } from "lucide-react";
 import { buildMergeTagDict } from "@/lib/marketing/merge-tags";
 
 /**
- * Phase 21 — Embedded Unlayer drag-and-drop email editor.
+ * Embedded Unlayer drag-and-drop email editor.
  *
  * `react-email-editor` is a thin wrapper around the global Unlayer
  * embed script and only renders in the browser. We mount it via
  * `next/dynamic({ ssr: false })` so it never reaches the server bundle.
  *
  * Sandbox policy:
- *   • The editor's own iframe needs `allow-scripts` and
- *     `allow-same-origin` to operate (the editor is a complex SPA).
- *     This component DOES NOT render untrusted user HTML — that work
- *     is done by `<SafeHtmlPreview>` which runs with sandbox="" .
- *   • We still apply an explicit sandbox attribute below so the iframe
- *     can't pop dialogs, escape via top-level navigation, or run code
- *     in a privileged context. Unlayer's panels stay functional under
- *     `allow-same-origin allow-scripts allow-forms allow-popups`.
+ * • The editor's own iframe needs `allow-scripts` and
+ * `allow-same-origin` to operate (the editor is a complex SPA).
+ * This component DOES NOT render untrusted user HTML — that work
+ * is done by `<SafeHtmlPreview>` which runs with sandbox="" .
+ * • We still apply an explicit sandbox attribute below so the iframe
+ * can't pop dialogs, escape via top-level navigation, or run code
+ * in a privileged context. Unlayer's panels stay functional under
+ * `allow-same-origin allow-scripts allow-forms allow-popups`.
  *
  * Merge tags come from `@/lib/marketing/merge-tags` so the editor
  * inserts the same `{{firstName}}` Handlebars tokens that the
@@ -132,7 +132,7 @@ export function UnlayerEditor({
           "sandbox",
           "allow-same-origin allow-scripts allow-forms allow-popups",
         );
-        // Phase 22 — strict-origin on the editor iframe trims path/query
+        // strict-origin on the editor iframe trims path/query
         // out of any Referer header it sends to api.unlayer.com / asset
         // CDNs. The editor only needs the origin for asset upload calls;
         // path data is internal to the CRM and shouldn't leak.

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { createStaticListAction } from "@/app/(app)/marketing/lists/actions";
 
 /**
- * Phase 29 §5 — Static-list creation form.
+ * Static-list creation form.
  *
  * Captures name + description, posts to `createStaticListAction`, then
  * redirects to the import wizard (Sub-agent C) at

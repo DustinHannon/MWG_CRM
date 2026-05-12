@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Phase 4C — daily cron at 09:00 UTC (~03:00 CT). Rescores every active
+ * daily cron at 09:00 UTC (~03:00 CT). Rescores every active
  * lead so time-decay rules (e.g. `last_activity_within_days`) take effect.
  */
 export async function GET(req: Request) {

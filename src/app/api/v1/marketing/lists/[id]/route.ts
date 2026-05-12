@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Internal marketing-lists single-record endpoint.
+ * Internal marketing-lists single-record endpoint.
  *
  * GET reads. PUT updates name/description/filterDsl (mass-assignment
  * gate keeps system fields like memberCount/lastRefreshedAt out of
@@ -132,7 +132,7 @@ export async function PUT(
         })
         .where(eq(marketingLists.id, id));
 
-      // Phase 25 §4.1 — surface non-validation refresh failures via
+      // surface non-validation refresh failures via
       // logger.warn so they're visible in production diagnostics.
       // The list update already landed; membership stays stale until
       // the next refresh.

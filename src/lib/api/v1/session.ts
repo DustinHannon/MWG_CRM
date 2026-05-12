@@ -6,7 +6,7 @@ import type { SessionUser } from "@/lib/auth-helpers";
 import type { AuthedKey } from "@/lib/api/auth";
 
 /**
- * Phase 13 — for endpoints that need a SessionUser-shaped subject (the
+ * for endpoints that need a SessionUser-shaped subject (the
  * existing business-logic functions accept `user: SessionUser`), build
  * a synthetic identity from the API key's `created_by_id`.
  *

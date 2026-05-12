@@ -21,7 +21,7 @@ interface EmailActivityTimelineProps {
 }
 
 /**
- * Phase 21 — Lead-detail marketing email timeline.
+ * Lead-detail marketing email timeline.
  *
  * Renders one card per campaign that targeted this lead, sorted newest
  * first. Each card surfaces the per-recipient metrics rolled up by

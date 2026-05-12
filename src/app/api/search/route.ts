@@ -17,10 +17,10 @@ interface SearchHit {
 }
 
 /**
- * Phase 4H — Cmd+K cross-entity search backed by Postgres FTS + pg_trgm.
- * Replaces the Phase 3I ILIKE implementation. Each entity gets a UNION of:
- *   - websearch_to_tsquery against the FTS GIN index (high score).
- *   - pg_trgm `%` similarity for typo tolerance (lower score).
+ * Cmd+K cross-entity search backed by Postgres FTS + pg_trgm.
+ * Replaces the ILIKE implementation. Each entity gets a UNION of:
+ * websearch_to_tsquery against the FTS GIN index (high score).
+ * pg_trgm `%` similarity for typo tolerance (lower score).
  * Results are deduped, ordered by score, capped at 10/entity.
  *
  * Owner-scope respected for non-admins without canViewAllRecords. Archived

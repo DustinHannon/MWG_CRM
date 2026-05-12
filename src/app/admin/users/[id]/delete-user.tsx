@@ -14,8 +14,8 @@ import type { ActionResult } from "@/lib/server-action";
  * Click "Delete user" → hits getDeleteUserPreflight, which fetches the
  * lead/activity counts and the list of valid reassign targets and admin
  * count (for the last-admin guard). The modal renders one of two shapes:
- *  - "User has 0 leads" → simple "type DELETE" confirmation.
- *  - "User has ≥1 leads" → radio: reassign-vs-cascade-delete.
+ * "User has 0 leads" → simple "type DELETE" confirmation.
+ * "User has ≥1 leads" → radio: reassign-vs-cascade-delete.
  *
  * Submission goes through deleteUserAction in a single transaction. On
  * success the action redirects to /admin/users, so we just show the
@@ -143,7 +143,7 @@ function DeleteForm({
     const fd = new FormData();
     fd.set("userId", userId);
     // For the no-leads case we always pass "reassign" with reassignTo unset
-    // — the server still runs the delete user step and the leads-update is
+    // the server still runs the delete user step and the leads-update is
     // a no-op. Simpler than a third disposition value.
     fd.set("disposition", hasLeads ? disposition : "reassign");
     if (hasLeads && disposition === "reassign") {

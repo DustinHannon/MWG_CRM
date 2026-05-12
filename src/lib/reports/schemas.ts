@@ -1,7 +1,7 @@
 import type { ReportEntityType } from "@/db/schema/saved-reports";
 
 /**
- * Phase 11 — report builder field metadata.
+ * report builder field metadata.
  *
  * Each entry maps a report entity type to the columns offered in the
  * builder. Only columns listed here can be selected in `fields`,
@@ -10,12 +10,12 @@ import type { ReportEntityType } from "@/db/schema/saved-reports";
  * client can't inject arbitrary column names.
  *
  * `kind` drives the builder UI:
- *   - "string" / "text" — pickable, groupable, count metric
- *   - "enum" — pickable, groupable, count metric
- *   - "number" — pickable, groupable, sum/avg/min/max metric
- *   - "date" — pickable, groupable (truncated to month/week)
- *   - "uuid" — usually a foreign key; pickable, groupable; surfaced
- *     with a label join when possible
+ * "string" / "text" — pickable, groupable, count metric
+ * "enum" — pickable, groupable, count metric
+ * "number" — pickable, groupable, sum/avg/min/max metric
+ * "date" — pickable, groupable (truncated to month/week)
+ * "uuid" — usually a foreign key; pickable, groupable; surfaced
+ * with a label join when possible
  */
 
 export type FieldKind = "string" | "text" | "enum" | "number" | "date" | "uuid";
@@ -278,7 +278,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
       { column: "updated_at", label: "Updated", kind: "date" },
     ],
   },
-  // ----- Phase 21+ marketing entities -----
+  // ----- + marketing entities -----
   marketing_campaign: {
     table: "marketing_campaigns",
     timestampColumn: "updated_at",

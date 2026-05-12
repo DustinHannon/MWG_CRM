@@ -1,14 +1,14 @@
-// Phase 6C — multi-line activity column parser.
+// multi-line activity column parser.
 //
 // Real CRM exports cram phone calls, meetings, notes, and emails into
 // free-text columns shaped like:
 //
-//   [2026-01-29 02:54 PM UTC] Dental Quote
-//     Outgoing | Duration: 30 min | By: Tanzania Griffith
-//     lead called wanting BEST dental plan w/o copays
+// [2026-01-29 02:54 PM UTC] Dental Quote
+// Outgoing | Duration: 30 min | By: Tanzania Griffith
+// lead called wanting BEST dental plan w/o copays
 //
-//   [2026-02-15 10:30 AM CT] Follow-up
-//     Outgoing | Left Voicemail | By: Tanzania Griffith
+// [2026-02-15 10:30 AM CT] Follow-up
+// Outgoing | Left Voicemail | By: Tanzania Griffith
 //
 // This module turns the column text into ParsedActivity[] for ingestion.
 // Pure function; no DB access. Caller resolves ParsedActivity.metadata.byName
@@ -147,7 +147,7 @@ function parseNoteInline(line: string): {
 }
 
 /**
- * Strip a single leading "  " (two-space) indent if present. Used when
+ * Strip a single leading " " (two-space) indent if present. Used when
  * collecting body lines so that a quoted indent inside the cell is
  * preserved relative to the activity's overall indent level.
  */
@@ -167,10 +167,10 @@ interface CallMetaParse {
 
 function parseCallOrEmailMetaLine(line: string): CallMetaParse {
   // Examples:
-  //   "Outgoing | Duration: 30 min | By: Tanzania Griffith"
-  //   "Outgoing | Left Voicemail | By: Tanzania Griffith"
-  //   "Incoming | No Answer | By: Tanzania Griffith"
-  //   "Outgoing | Connected | By: Tanzania Griffith"
+  // "Outgoing | Duration: 30 min | By: Tanzania Griffith"
+  // "Outgoing | Left Voicemail | By: Tanzania Griffith"
+  // "Incoming | No Answer | By: Tanzania Griffith"
+  // "Outgoing | Connected | By: Tanzania Griffith"
   const segments = line.split("|").map((s) => s.trim());
   const result: CallMetaParse = {};
   for (const seg of segments) {

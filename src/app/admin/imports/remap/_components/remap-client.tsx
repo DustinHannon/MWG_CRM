@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { remapImportedByNameAction } from "../actions";
 
 /**
- * Phase 25 §7.5 — claim-and-remap client. Per row: shows the
+ * claim-and-remap client. Per row: shows the
  * imported_by_name string, the count of affected activities, the
  * most-recent activity timestamp, plus a user picker + Apply button.
  */
@@ -30,7 +30,7 @@ export function RemapClient({
 }) {
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [busy, startTransition] = useTransition();
-  // Phase 25 §7.5 follow-up — `new Date().toLocaleString()` returns
+  // `new Date().toLocaleString()` returns
   // different strings on the server (UTC, env locale) vs the client
   // (user's locale + timezone), which triggers a React #418 hydration
   // mismatch. useSyncExternalStore returns the server snapshot during

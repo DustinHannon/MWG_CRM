@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Phase 21 — Scheduled-campaign processor.
+ * Scheduled-campaign processor.
  *
  * Picks up campaigns whose `scheduled_for` has elapsed and runs them
  * through the SendGrid pipeline (`sendCampaign`). Designed for one

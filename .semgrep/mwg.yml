@@ -166,3 +166,81 @@ rules:
       Replace with a concise functional description.
       See CLAUDE.md → UI copy conventions for the full banned list.
     severity: WARNING
+
+  # ---- Phase references: code comments ------------------------------
+  # Phase 30 — phase numbers leak design-history scaffolding into the
+  # codebase. After the cleanup phase, comments must describe WHAT
+  # invariants the code guarantees (or WHY a non-obvious choice was
+  # made), not when they were wired up. Identifiers, type names, and
+  # variable names with phase numbers are still allowed — those are
+  # stable internal references.
+  #
+  # Excluded paths: src/scripts/phase23/* (dev-only fixture script
+  # whose identifiers carry the phase number by convention).
+  - id: mwg-code-comment-no-phase-reference
+    languages: [generic]
+    paths:
+      include:
+        - "src/**/*.tsx"
+        - "src/**/*.ts"
+      exclude:
+        - "src/scripts/phase23/**"
+        - "tools/**"
+    patterns:
+      - pattern-either:
+          # Line comments
+          - pattern-regex: '//[^\n]*[Pp]hase\s+\d+'
+          # JSDoc / block-comment body lines (` * ` followed by text)
+          - pattern-regex: '^\s*\*[^/\n]*[Pp]hase\s+\d+'
+          # Inline /* ... */ block comments on a single line
+          - pattern-regex: '/\*[^*\n]*[Pp]hase\s+\d+[^*\n]*\*/'
+          # JSX comment opener {/* ... */}
+          - pattern-regex: '\{/\*[^*\n]*[Pp]hase\s+\d+'
+    message: |
+      Source code comment references internal phase numbering. Either
+      delete the comment or drop the phase tag and keep the content.
+      See CLAUDE.md → Phase references.
+    severity: ERROR
+
+  # ---- Phase references: UI strings ---------------------------------
+  # Phase 30 — strengthens the Phase 28 JSX-text rule by also catching
+  # phase references inside string literals (toast messages, prop
+  # values, aria-labels). The original `mwg-ui-copy-phase-reference`
+  # rule continues to enforce JSX-text occurrences.
+  #
+  # Identifiers (variable / type / function names) are exempt because
+  # the patterns only match content INSIDE quoted strings or template
+  # literals.
+  #
+  # Excluded paths: src/scripts/phase23/* (internal fixture script
+  # whose string literals reference the phase identifier by convention)
+  # and lib server-side modules where strings may be log payloads
+  # routed through `logger` — those are also forbidden but already
+  # caught by mwg-code-comment-no-phase-reference adjacent rules.
+  - id: mwg-ui-no-phase-reference
+    languages: [generic]
+    paths:
+      include:
+        - "src/app/**/*.tsx"
+        - "src/app/**/*.ts"
+        - "src/components/**/*.tsx"
+        - "src/components/**/*.ts"
+        - "src/hooks/**/*.tsx"
+        - "src/hooks/**/*.ts"
+        - "src/lib/**/*.ts"
+      exclude:
+        - "src/scripts/phase23/**"
+        - "tools/**"
+    patterns:
+      - pattern-either:
+          # Double-quoted strings containing Phase N
+          - pattern-regex: '"[^"\n]*[Pp]hase\s+\d+[^"\n]*"'
+          # Single-quoted strings containing Phase N
+          - pattern-regex: "'[^'\\n]*[Pp]hase\\s+\\d+[^'\\n]*'"
+          # Template literals containing Phase N
+          - pattern-regex: '`[^`\n]*[Pp]hase\s+\d+[^`\n]*`'
+    message: |
+      User-visible string references internal phase numbering. Replace
+      with a functional description of what the surface does. See
+      CLAUDE.md → Phase references.
+    severity: ERROR

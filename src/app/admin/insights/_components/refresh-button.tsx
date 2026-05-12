@@ -6,7 +6,7 @@ import { useTransition } from "react";
 import { refreshInsightsAction } from "../actions";
 
 /**
- * Phase 26 §4 — Insights page refresh button.
+ * Insights page refresh button.
  *
  * Calls a server action that runs `revalidatePath('/admin/insights')`,
  * which invalidates both the page-level cache and the

@@ -14,7 +14,7 @@ import {
 } from "@/lib/observability/betterstack";
 
 /**
- * Phase 26 §5 — Panel 1: top 10 error patterns.
+ * Panel 1: top 10 error patterns.
  *
  * Renders rows grouped by Better Stack's auto-pattern field for log
  * lines with HTTP status >= 500. Each row shows the pattern (monospace,

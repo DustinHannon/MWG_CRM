@@ -25,7 +25,7 @@ interface Props {
 }
 
 /**
- * Phase 21 — Marketing audit log subtab. Server-component paginated
+ * Marketing audit log subtab. Server-component paginated
  * listing of every `marketing.*` event in `audit_log`. Filters surface
  * via query params (`?user`, `?from`, `?to`, `?type`).
  *

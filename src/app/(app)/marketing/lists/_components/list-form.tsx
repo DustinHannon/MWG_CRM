@@ -13,7 +13,7 @@ import {
 } from "@/app/(app)/marketing/lists/actions";
 
 /**
- * Phase 21 — Client form for creating or editing a marketing list.
+ * Client form for creating or editing a marketing list.
  *
  * Composes the filter-DSL builder + the right-rail live preview.
  * Submits to `createListAction` (new) or `updateListAction` (edit).
@@ -25,7 +25,7 @@ interface Props {
     name: string;
     description: string | null;
     filterDsl: FilterDsl;
-    /** Phase 27 §4.8 — OCC version captured at load time. */
+    /** OCC version captured at load time. */
     version: number;
     sourceEntity?: MarketingListSourceEntity | null;
   };
@@ -40,7 +40,7 @@ export function ListForm({ mode, initial }: Props) {
   const [dsl, setDsl] = useState<FilterDsl | null>(
     initial?.filterDsl ?? null,
   );
-  // Phase 29 §5 — source entity for dynamic lists. Only 'leads' is wired
+  // source entity for dynamic lists. Only 'leads' is wired
   // today; the picker shows the others greyed out for forward
   // compatibility.
   const [sourceEntity, setSourceEntity] = useState<MarketingListSourceEntity>(
@@ -80,7 +80,7 @@ export function ListForm({ mode, initial }: Props) {
           name,
           description: description.trim() || undefined,
           filterDsl: dsl,
-          // Phase 27 §4.8 — pass the version we loaded so the action
+          // pass the version we loaded so the action
           // refuses to write if another user beat us to it.
           expectedVersion: initial.version,
         });

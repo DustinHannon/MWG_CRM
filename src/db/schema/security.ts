@@ -9,7 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * Phase 20 — sliding-window rate-limit buckets.
+ * sliding-window rate-limit buckets.
  *
  * The application-layer rate limiter (`src/lib/security/rate-limit.ts`)
  * partitions counters into discrete time windows keyed by
@@ -48,7 +48,7 @@ export const rateLimitBuckets = pgTable(
 );
 
 /**
- * Phase 20 — webhook idempotency dedupe.
+ * webhook idempotency dedupe.
  *
  * SendGrid retries non-2xx responses for up to 24 hours. To prevent
  * counter inflation, audit-log noise, and double suppressions if a

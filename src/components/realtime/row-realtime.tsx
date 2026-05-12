@@ -6,13 +6,13 @@ import { useRowSubscription } from "@/hooks/realtime/use-table-subscription";
 import type { RealtimeEntity } from "@/hooks/realtime/use-realtime-poll";
 
 /**
- * Phase 12 — single-row Supabase Realtime subscription for detail
+ * single-row Supabase Realtime subscription for detail
  * pages. On any UPDATE/DELETE of the focal record, we call
  * `router.refresh()` (debounced 150ms) so the server-rendered detail
  * surface re-renders with fresh data. Skip-self is enforced inside
  * the hook so the actor's own writes don't echo back.
  *
- *   <RowRealtime entity="leads" id={lead.id} />
+ * <RowRealtime entity="leads" id={lead.id} />
  *
  * Pair with `<PageRealtime entities={["activities", …]} filter=… />`
  * for the timeline + child tables.

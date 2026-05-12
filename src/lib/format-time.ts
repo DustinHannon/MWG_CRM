@@ -2,7 +2,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { formatDistanceToNow } from "date-fns";
 
 /**
- * Phase 5A — pure timestamp formatter. Centralizes the user-prefs date /
+ * pure timestamp formatter. Centralizes the user-prefs date /
  * time / timezone choices so every UI path produces the same output for
  * the same instant.
  */

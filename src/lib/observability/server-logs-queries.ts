@@ -8,26 +8,26 @@ import {
 } from "@/lib/observability/betterstack";
 
 /**
- * Phase 26 §5 — Aggregated telemetry queries for /admin/server-logs.
+ * Aggregated telemetry queries for /admin/server-logs.
  *
  * Each panel has one exported function. Every function:
- *   - Validates configuration via `isBetterStackConfigured` (the
- *     wrapper throws `BetterStackNotConfiguredError` otherwise; we
- *     re-check at the boundary so the page can render a typed empty
- *     state without a try/catch dance).
- *   - Picks the collection mix based on the requested time range:
- *       1h  → hot collection only (sub-30-minute drain)
- *       6h  → UNION ALL hot + s3 (overlap is fine; ClickHouse counts
- *             each event once per row, and the s3 collection has a
- *             `_row_type = 1` filter that excludes meta rows)
- *       24h → UNION ALL hot + s3
- *       7d  → s3 only (hot doesn't cover that window; using s3 alone
- *             avoids paying the UNION cost on a 7-day scan)
- *   - Passes `auditFamily: "observability.server_logs"` so any query
- *     failure audits under the right family.
+ * Validates configuration via `isBetterStackConfigured` (the
+ * wrapper throws `BetterStackNotConfiguredError` otherwise; we
+ * re-check at the boundary so the page can render a typed empty
+ * state without a try/catch dance).
+ * Picks the collection mix based on the requested time range:
+ * 1h → hot collection only (sub-30-minute drain)
+ * 6h → UNION ALL hot + s3 (overlap is fine; ClickHouse counts
+ * each event once per row, and the s3 collection has a
+ * `_row_type = 1` filter that excludes meta rows)
+ * 24h → UNION ALL hot + s3
+ * 7d → s3 only (hot doesn't cover that window; using s3 alone
+ * avoids paying the UNION cost on a 7-day scan)
+ * Passes `auditFamily: "observability.server_logs"` so any query
+ * failure audits under the right family.
  *
  * NOT a raw log tail. The /admin/server-logs page surfaces aggregated
- * views only per the Phase 26 brief §5.
+ * views only per the brief §5.
  */
 
 export type ServerLogsRange = "1h" | "6h" | "24h" | "7d";
@@ -246,10 +246,10 @@ export async function getDeployTimeline(): Promise<DeployTimelineRow[]> {
  * Vercel's drain writes Lambda invocation duration into the message
  * text rather than a structured field — every invocation logs:
  *
- *   START RequestId: <uuid>
- *   [METHOD] /path status=NNN
- *   END RequestId: <uuid>
- *   REPORT RequestId: <uuid> Duration: N ms Billed Duration: N ms ...
+ * START RequestId: <uuid>
+ * [METHOD] /path status=NNN
+ * END RequestId: <uuid>
+ * REPORT RequestId: <uuid> Duration: N ms Billed Duration: N ms ...
  *
  * Importantly, all four lines arrive in ONE log entry's `message`
  * field, so we can extract path (already structured via

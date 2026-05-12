@@ -6,7 +6,7 @@ import {
 } from "@supabase/supabase-js";
 
 /**
- * Phase 12 — Supabase Realtime client (browser-only).
+ * Supabase Realtime client (browser-only).
  *
  * The CRM does NOT use Supabase Auth. We mint our own HS256 JWTs from
  * `/api/auth/realtime-token` and feed them to this client via
@@ -31,7 +31,7 @@ export function getRealtimeClient(): SupabaseClient | null {
   if (!url || !key) {
     // Realtime not configured (e.g., dev without Supabase env vars). The
     // hooks will degrade gracefully — they short-circuit on a null client
-    // and the existing Phase 11 polling layer continues to drive
+    // and the existing polling layer continues to drive
     // freshness via router.refresh().
     return null;
   }

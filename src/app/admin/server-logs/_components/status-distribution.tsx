@@ -14,7 +14,7 @@ import {
 import { StatusDistributionChart } from "./status-distribution-chart";
 
 /**
- * Phase 26 §5 — Panel 3: status code distribution (donut chart).
+ * Panel 3: status code distribution (donut chart).
  *
  * Buckets every proxy status into 2xx/3xx/4xx/5xx. Renders as a
  * recharts PieChart with the standard `var(--chart-1..4)` palette

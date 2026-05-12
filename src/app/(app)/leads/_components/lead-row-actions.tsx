@@ -8,7 +8,7 @@ import { DeleteIconButton } from "@/components/delete";
 import { useRouter } from "next/navigation";
 
 /**
- * Phase 10 — list-row delete trigger. Wraps the canonical
+ * list-row delete trigger. Wraps the canonical
  * `<DeleteIconButton>` with the lead-specific server actions.
  */
 export function LeadRowActions({

@@ -3,7 +3,7 @@ import { openapiZ as z, registry } from "@/lib/openapi/registry";
 import { ALL_SCOPES } from "@/lib/api/scopes";
 
 /**
- * Phase 13 — Meta endpoint schemas (/me, /users).
+ * Meta endpoint schemas (/me, /users).
  */
 
 export const MeSchema = registry.register(

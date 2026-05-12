@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 
 /**
- * Phase 13 — client hook that owns the desktop sidebar collapse
+ * client hook that owns the desktop sidebar collapse
  * state. Initial value comes from the server (read off
  * `user_preferences.sidebar_collapsed` in the AppShell server
  * component). Toggling fires a fire-and-forget PATCH to
@@ -12,7 +12,7 @@ import { useCallback, useState } from "react";
  * rejects the patch we silently revert.
  *
  * The mobile drawer ignores this state — at <1024px the slide-out
- * drawer is the only navigation surface (Phase 12 work).
+ * drawer is the only navigation surface (work).
  */
 export function useSidebarState(initial: boolean) {
   const [collapsed, setCollapsed] = useState<boolean>(initial);

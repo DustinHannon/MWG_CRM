@@ -26,15 +26,15 @@ interface KeyRow {
 }
 
 /**
- * Phase 13 — admin-only management surface for Bearer-token API keys.
+ * admin-only management surface for Bearer-token API keys.
  *
  * Plaintext tokens are visible exactly once at generation time (returned
  * by the server action). The roster table never re-displays plaintext.
  *
  * Audit-logged actions:
- *  - api_key.create  (on Generate)
- *  - api_key.revoke  (on Revoke)
- *  - api_key.delete  (on Delete with name confirmation)
+ * api_key.create (on Generate)
+ * api_key.revoke (on Revoke)
+ * api_key.delete (on Delete with name confirmation)
  */
 export default async function AdminApiKeysPage() {
   const rows = await db

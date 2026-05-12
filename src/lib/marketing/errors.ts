@@ -1,7 +1,7 @@
 import { KnownError } from "@/lib/errors";
 
 /**
- * Phase 19 — Marketing-domain typed errors.
+ * Marketing-domain typed errors.
  *
  * Subclasses of `KnownError` so `withErrorBoundary` translates them to
  * stable user-facing codes/messages. Use these for every expected
@@ -14,7 +14,7 @@ import { KnownError } from "@/lib/errors";
 export class TemplateLockedError extends KnownError {
   /**
    * @param lockedByName Display name of the user currently holding the
-   *   lock — surfaced in the toast so the editor knows who to ask.
+   * lock — surfaced in the toast so the editor knows who to ask.
    */
   constructor(lockedByName: string, lockedByUserId?: string) {
     super(
@@ -47,7 +47,7 @@ export class SuppressedRecipientError extends KnownError {
 /**
  * Webhook receiver throws this when the SendGrid signature header is
  * missing or fails ECDSA verification. Public response is always 401
- * — the route handler catches this and returns it directly without
+ * the route handler catches this and returns it directly without
  * leaking which check failed.
  */
 export class WebhookSignatureError extends Error {
@@ -55,7 +55,7 @@ export class WebhookSignatureError extends Error {
     | "missing_headers"
     | "verify_failed"
     | "no_public_key"
-    | "replay_rejected"; // Phase 20 — timestamp outside freshness window
+    | "replay_rejected"; // timestamp outside freshness window
   constructor(
     reason:
       | "missing_headers"

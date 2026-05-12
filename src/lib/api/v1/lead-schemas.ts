@@ -4,7 +4,7 @@ import { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES } from "@/lib/leads";
 import { paginatedListSchema } from "./schemas";
 
 /**
- * Phase 13 — Lead schemas for /api/v1/leads.
+ * Lead schemas for /api/v1/leads.
  *
  * These DOUBLE as Zod runtime validators (used by the route handler)
  * AND OpenAPI schemas (rendered on /apihelp). The `.openapi()` calls

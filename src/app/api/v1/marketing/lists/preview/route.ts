@@ -23,7 +23,7 @@ const bodySchema = z.object({
 });
 
 /**
- * Phase 21 — Live preview of a draft filter DSL.
+ * Live preview of a draft filter DSL.
  *
  * Rate-limited per user (RATE_LIMIT_FILTER_PREVIEW_PER_USER_PER_MINUTE)
  * because the new-list builder fires this on every keystroke (debounced)

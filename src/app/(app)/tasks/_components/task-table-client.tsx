@@ -19,7 +19,7 @@ import {
 } from "../view-actions";
 
 /**
- * Phase 25 §7.3 — Tasks page table-style client.
+ * Tasks page table-style client.
  *
  * Replaces the prior bucketed-by-due-window TaskListClient with a
  * sortable flat table + per-row selection + bulk-action toolbar.
@@ -35,9 +35,9 @@ export interface TaskTableClientProps {
   userId: string;
   isAdmin: boolean;
   canReassign: boolean;
-  /** Phase 25 §7.3 — active users for the bulk-reassign modal.
-   *  Empty array when the viewer lacks reassign perm; the toolbar
-   *  hides the Reassign button in that case. */
+  /** active users for the bulk-reassign modal.
+   * Empty array when the viewer lacks reassign perm; the toolbar
+   * hides the Reassign button in that case. */
   assignableUsers: { id: string; displayName: string; email: string }[];
   prefs: TimePrefs;
   /** Current sort, surfaced by the server page from URL params. */
@@ -74,7 +74,7 @@ export function TaskTableClient({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  // Phase 25 §7.3 follow-up — bulk-reassign modal state.
+  // bulk-reassign modal state.
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignTo, setReassignTo] = useState<string>("");
 
@@ -303,7 +303,7 @@ export function TaskTableClient({
         </table>
       </div>
 
-      {/* Phase 25 §7.3 follow-up — bulk-reassign modal. Simple
+      {/* bulk-reassign modal. Simple
           inline dialog (no Radix dependency) — picker + Confirm +
           Cancel. Backed by bulkReassignTasksAction; the server
           gate-checks canReassignTasks before the UPDATE fires. */}

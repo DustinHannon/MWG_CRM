@@ -20,7 +20,7 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 10 — admin-only archived tasks view.
+ * admin-only archived tasks view.
  */
 export default async function ArchivedTasksPage() {
   const user = await requireSession();
@@ -83,7 +83,7 @@ export default async function ArchivedTasksPage() {
         </GlassCard>
       ) : (
         <>
-        {/* Phase 12 — dense single-line list at <md, mirrors /leads. */}
+        {/* dense single-line list at <md, mirrors /leads. */}
         <div className="md:hidden">
           <ArchivedListMobile
             rows={rows.map((r) => ({

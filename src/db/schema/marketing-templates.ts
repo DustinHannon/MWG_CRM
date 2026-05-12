@@ -13,18 +13,18 @@ import {
 import { users } from "./users";
 
 /**
- * Phase 29 §4 — Template visibility scope.
+ * Template visibility scope.
  *
- *   global   — visible to anyone with template-view permissions.
- *   personal — visible only to the creator (and admins via the same
- *              creator-id match? no — admins have read access to
- *              everything in this CRM; the personal-vs-global split
- *              is a non-admin privacy convenience, not a security
- *              boundary).
+ * global — visible to anyone with template-view permissions.
+ * personal — visible only to the creator (and admins via the same
+ * creator-id match? no — admins have read access to
+ * everything in this CRM; the personal-vs-global split
+ * is a non-admin privacy convenience, not a security
+ * boundary).
  *
  * Edit gates layer on top of scope:
- *   personal → only the creator may edit.
- *   global   → creator OR `canMarketingTemplatesEdit` may edit.
+ * personal → only the creator may edit.
+ * global → creator OR `canMarketingTemplatesEdit` may edit.
  *
  * Cloning a global template into a personal copy is the cheap way for
  * a marketer to draft a variant without overwriting the shared
@@ -38,7 +38,7 @@ export const marketingTemplateScopeEnum = pgEnum(
 export type MarketingTemplateScope = "global" | "personal";
 
 /**
- * Phase 19 — Marketing email templates.
+ * Marketing email templates.
  *
  * Designed inside the embedded Unlayer editor (react-email-editor 1.8.0)
  * and stored here both as the raw Unlayer JSON design (`unlayer_design_json`)
@@ -46,7 +46,7 @@ export type MarketingTemplateScope = "global" | "personal";
  * HTML to SendGrid as a Dynamic Template version and capture the returned
  * ids on `sendgrid_template_id` / `sendgrid_version_id` so the marketing
  * send path uses SendGrid Dynamic Templates instead of inline HTML payloads
- * — that way the template-design history lives with us, but the per-send
+ * that way the template-design history lives with us, but the per-send
  * personalization (dynamic_template_data) flows through SendGrid as
  * intended.
  *
@@ -84,18 +84,18 @@ export const marketingTemplates = pgTable(
       .notNull()
       .default("draft"),
     /**
-     * Phase 29 §4 — Visibility scope. See `marketingTemplateScopeEnum`
+     * Visibility scope. See `marketingTemplateScopeEnum`
      * above for the rationale. Backfilled to 'global' for existing rows
      * so the pre-Phase-29 behavior (everyone sees everything) is
      * preserved on day one.
      */
     scope: marketingTemplateScopeEnum("scope").notNull().default("global"),
     /**
-     * Phase 29 §4 — Provenance marker.
+     * Provenance marker.
      *
-     *   manual                   — created via the in-app /new flow.
-     *   clickdimensions_migration — created via the Phase 29 ClickDimensions
-     *                               migration importer (Sub-agent D).
+     * manual — created via the in-app /new flow.
+     * clickdimensions_migration — created via the ClickDimensions
+     * migration importer (Sub-agent D).
      *
      * Stored as free-form text rather than an enum so future importers
      * (e.g. mailchimp_migration) can be added without a schema bump.
@@ -129,7 +129,7 @@ export const marketingTemplates = pgTable(
     index("mkt_tpl_sg_template_idx")
       .on(t.sendgridTemplateId)
       .where(sql`sendgrid_template_id IS NOT NULL`),
-    // Phase 29 §4 — visibility filter index. Every list/detail query
+    // visibility filter index. Every list/detail query
     // selects on `(scope = 'global' OR (scope = 'personal' AND
     // created_by_id = $user))`; the composite supports both arms.
     index("mkt_tpl_scope_created_by_idx").on(t.scope, t.createdById),
@@ -137,7 +137,7 @@ export const marketingTemplates = pgTable(
 );
 
 /**
- * Phase 19 — Soft-lock for collaborative template editing.
+ * Soft-lock for collaborative template editing.
  *
  * One row per template currently being edited. The acquiring tab/session
  * heartbeats every MARKETING_LOCK_HEARTBEAT_SECONDS (default 30); a lock

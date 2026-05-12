@@ -3,14 +3,14 @@ import { and, eq, or, type SQL } from "drizzle-orm";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 
 /**
- * Phase 29 §4 — Visibility-aware query helpers for marketing
+ * Visibility-aware query helpers for marketing
  * templates.
  *
  * The rule (locked in the brief): a user can SEE a template iff
  *
- *   scope = 'global'
- *   OR
- *   (scope = 'personal' AND created_by_id = $userId)
+ * scope = 'global'
+ * OR
+ * (scope = 'personal' AND created_by_id = $userId)
  *
  * Admins see everything in this CRM, but admin-bypass is folded into
  * the caller (e.g. server actions that resolve `requireSession()` and
@@ -55,8 +55,8 @@ export function templateVisibilityWhere(userId: string): SQL {
  * True when `userId` is allowed to edit `template`. Mirrors the gate
  * inside `updateTemplateAction`:
  *
- *   personal → only the creator may edit.
- *   global   → creator OR `canMarketingTemplatesEdit` may edit.
+ * personal → only the creator may edit.
+ * global → creator OR `canMarketingTemplatesEdit` may edit.
  *
  * Pass `isAdmin = true` to bypass (admin gates are usually applied
  * upstream, but inline call sites can short-circuit through this

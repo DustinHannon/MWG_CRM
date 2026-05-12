@@ -11,7 +11,7 @@ interface AvatarProps {
 }
 
 /**
- * Avatar — Phase 3B primitive. Renders a Microsoft Graph profile photo
+ * Avatar — primitive. Renders a Microsoft Graph profile photo
  * (cached via Vercel Blob → users.photo_blob_url) when available, else
  * a colored circle with the user's initials. Color is derived from the
  * user's id with a tiny string hash so the same user always gets the

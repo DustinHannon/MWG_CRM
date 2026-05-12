@@ -14,14 +14,14 @@ import {
 import { logger } from "@/lib/logger";
 
 /**
- * Phase 26 §4.4 — issues banner.
+ * issues banner.
  *
  * Aggregates issues from three sources:
- *   1. Better Stack error-rate spike check (last hour vs 7d baseline).
- *   2. Audit log WAF/geo-block surge (events with
- *      action='geo.block.middleware_enforced' > 5x per-hour baseline).
- *   3. Vercel deployments — failed deploy in last hour = critical;
- *      successful deploy in last hour = info.
+ * 1. Better Stack error-rate spike check (last hour vs 7d baseline).
+ * 2. Audit log WAF/geo-block surge (events with
+ * action='geo.block.middleware_enforced' > 5x per-hour baseline).
+ * 3. Vercel deployments — failed deploy in last hour = critical;
+ * successful deploy in last hour = info.
  *
  * If nothing fires the banner renders a "no active issues" empty state.
  */
@@ -38,7 +38,7 @@ export async function IssuesBanner() {
   }
 
   // 2. WAF geo-block surge. Uses audit_log directly because the proxy
-  //    geo-block events flow through writeSystemAudit → audit_log.
+  // geo-block events flow through writeSystemAudit → audit_log.
   try {
     issues.push(...(await detectWafSurge()));
   } catch (err) {

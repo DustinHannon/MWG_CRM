@@ -4,7 +4,7 @@ import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 import { paginatedListSchema } from "./schemas";
 
 /**
- * Phase 13 — Opportunity schemas for /api/v1/opportunities.
+ * Opportunity schemas for /api/v1/opportunities.
  * Synthetic examples only.
  */
 

@@ -6,7 +6,7 @@ import type { ReportVisualization } from "@/db/schema/saved-reports";
 import { ReportChart, type ChartDatum } from "./report-charts";
 
 /**
- * Phase 11 — client-side runner. Receives precomputed rows from a
+ * client-side runner. Receives precomputed rows from a
  * server component (saved-report page) and renders the appropriate
  * visualization plus a flat data table.
  *

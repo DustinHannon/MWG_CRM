@@ -10,7 +10,7 @@ import {
 import { ConfirmDeleteDialog, showUndoToast } from "@/components/delete";
 
 /**
- * Phase 10 — activity timeline-card delete trigger. Hover-revealed
+ * activity timeline-card delete trigger. Hover-revealed
  * top-right of the card. Calls softDeleteActivityAction; recompute of
  * `last_activity_at` happens server-side. Undo restores both the
  * activity and the recomputed parent timestamp.

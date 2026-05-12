@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 23 — Batch review split-pane component.
+ * Batch review split-pane component.
  *
  * Left: scrollable record list with bulk actions header + per-row
  * status icons, summary, warning/conflict/default-owner badges.
@@ -151,7 +151,7 @@ export function BatchReviewPane({
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Left pane                                     *
+ * Left pane *
  * -------------------------------------------------------------------------- */
 
 function RecordList({
@@ -316,7 +316,7 @@ function Badge({
 }
 
 /* -------------------------------------------------------------------------- *
- *                              Right pane                                    *
+ * Right pane *
  * -------------------------------------------------------------------------- */
 
 type DetailTab = "mapped" | "raw" | "activities";
@@ -711,7 +711,7 @@ function ConflictResolutionPicker({
 }
 
 /* -------------------------------------------------------------------------- *
- *                                 Footer                                     *
+ * Footer *
  * -------------------------------------------------------------------------- */
 
 function BatchFooter({

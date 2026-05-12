@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import type { D365EntityType } from "@/lib/d365/types";
 
 /**
- * Phase 23 — Nine entity quick-pull buttons.
+ * Nine entity quick-pull buttons.
  *
  * Each card represents one D365 entity. Clicking "Pull next 100"
  * either creates a new run (default scope: modifiedSince=2 years ago)

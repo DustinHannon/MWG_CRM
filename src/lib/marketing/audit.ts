@@ -2,7 +2,7 @@ import "server-only";
 import { writeAudit } from "@/lib/audit";
 
 /**
- * Phase 19 — Marketing audit event types. Dotted strings consistent with
+ * Marketing audit event types. Dotted strings consistent with
  * the rest of the audit_log (lead.create, email.send.success, …).
  *
  * Always pass the actor user id, the target id (template/list/campaign),
@@ -38,7 +38,7 @@ export type MarketingAuditAction =
   | "marketing.suppression.add"
   | "marketing.suppression.remove"
   | "marketing.suppression.sync"
-  // Phase 20 — Security events. webhook.* are emitted by the Signed
+  // Security events. webhook.* are emitted by the Signed
   // Event Webhook receiver on every reject/duplicate path. The remaining
   // events (idor, force_unlock, api_key, filter_dsl, rate_limit) become
   // active when their owning surfaces ship in subsequent passes.

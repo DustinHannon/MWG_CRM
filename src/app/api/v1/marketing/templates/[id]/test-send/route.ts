@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Phase 21 — Test-send a template to an arbitrary recipient. Wraps
+ * Test-send a template to an arbitrary recipient. Wraps
  * the server action so audit, rate limiting, and permissions all
  * flow through the same code path as the in-page UI button.
  */

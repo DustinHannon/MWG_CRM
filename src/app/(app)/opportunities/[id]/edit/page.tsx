@@ -11,7 +11,7 @@ import { OpportunityEditForm } from "./_components/opportunity-edit-form";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 25 §7.4 — dedicated edit form for opportunities.
+ * dedicated edit form for opportunities.
  */
 export default async function EditOpportunityPage({
   params,

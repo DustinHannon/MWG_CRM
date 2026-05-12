@@ -7,11 +7,11 @@ import { userPreferences } from "@/db/schema/views";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 5A — apply the user's default landing preference. Resolution
+ * apply the user's default landing preference. Resolution
  * order:
- *   1. user_preferences.default_landing_page (one of the named choices)
- *   2. If choice is "/custom", use user_preferences.custom_landing_path
- *   3. Fallback to /dashboard
+ * 1. user_preferences.default_landing_page (one of the named choices)
+ * 2. If choice is "/custom", use user_preferences.custom_landing_path
+ * 3. Fallback to /dashboard
  *
  * The custom-path Zod allowlist on the settings server action already
  * narrows /custom destinations to /(dashboard|leads|opportunities|

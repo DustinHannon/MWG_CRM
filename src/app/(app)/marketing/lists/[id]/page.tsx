@@ -32,13 +32,13 @@ interface SearchParams {
 }
 
 /**
- * Phase 21 / Phase 29 §5 — Marketing list detail.
+ * Marketing list detail.
  *
  * Branches on `list_type`:
- *   • 'dynamic'          → header pill "Dynamic", DSL summary, lead-joined
- *                          member preview (existing Phase 21 behavior).
- *   • 'static_imported'  → header pill "Static", inline-editable member
- *                          table with mass-edit toolbar.
+ * • 'dynamic' → header pill "Dynamic", DSL summary, lead-joined
+ * member preview (existing behavior).
+ * • 'static_imported' → header pill "Static", inline-editable member
+ * table with mass-edit toolbar.
  */
 export default async function ListDetailPage({
   params,

@@ -13,13 +13,13 @@ import {
 } from "@/lib/observability/betterstack";
 
 /**
- * Phase 26 §5 — Panel 4: top 10 endpoints by p95 response time.
+ * Panel 4: top 10 endpoints by p95 response time.
  *
  * Duration is parsed from each Lambda REPORT line's `message` text
  * via ClickHouse regex (see `getSlowEndpoints`). Rows are tinted
  * destructive at p95 ≥ 1s and warning at p95 ≥ 500ms, mirroring the
  * semantic-token pattern in request-volume.tsx (error-rate column)
- * and the Phase 25 email-failures admin page.
+ * and the email-failures admin page.
  */
 
 const WARN_MS = 500;

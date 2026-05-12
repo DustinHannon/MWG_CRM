@@ -6,7 +6,7 @@ import {
 } from "./standard-page-header";
 
 /**
- * Phase 24 §3.4 / §5.4 — canonical list-page shell.
+ * / §5.4 — canonical list-page shell.
  *
  * Slot-based wrapper for the common pattern: header + optional filter
  * row + body (table OR empty state). When `isEmpty` is true the body

@@ -16,7 +16,7 @@ import { TrafficTimeline } from "./_components/traffic-timeline";
 import { WorldMapPanel } from "./_components/world-map-panel";
 
 /**
- * Phase 26 §4 — Admin Insights dashboard.
+ * Admin Insights dashboard.
  *
  * Server component. Each panel is its own async component wrapped in
  * `<Suspense>` so a slow Better Stack query never blocks the whole

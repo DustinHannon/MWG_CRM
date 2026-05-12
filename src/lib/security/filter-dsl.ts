@@ -1,18 +1,18 @@
 import { z } from "zod";
 
 /**
- * Phase 20 / Phase 21 — Filter DSL allowlists and Zod schema for the
+ * Filter DSL allowlists and Zod schema for the
  * marketing list segment builder.
  *
  * Security model:
- *   • Field names are an allowlist mapped to a column descriptor.
- *     Anything not in the list is rejected — there is no "free text"
- *     field name in the DSL or the UI.
- *   • Operators are an allowlist; the compiler maps each to a Drizzle
- *     comparator.
- *   • Per-field op compatibility is enforced by `isOpCompatibleWithField`.
- *   • Value cardinality (max chars per scalar, max array length) is
- *     enforced in the schema.
+ * • Field names are an allowlist mapped to a column descriptor.
+ * Anything not in the list is rejected — there is no "free text"
+ * field name in the DSL or the UI.
+ * • Operators are an allowlist; the compiler maps each to a Drizzle
+ * comparator.
+ * • Per-field op compatibility is enforced by `isOpCompatibleWithField`.
+ * • Value cardinality (max chars per scalar, max array length) is
+ * enforced in the schema.
  *
  * Compile site: src/lib/marketing/lists/compile-filter.ts.
  * UI site: src/components/marketing/filter-dsl-builder.tsx.

@@ -117,16 +117,16 @@ export async function setLeadTags(
 }
 
 /**
- * Phase 4E — bulk tag operations. Apply or remove a list of tags across
+ * bulk tag operations. Apply or remove a list of tags across
  * many leads in a single transaction. `ON CONFLICT DO NOTHING` keeps adds
  * idempotent. Caller is responsible for permission checks (call
  * `requireLeadAccess` per id before invoking).
  *
- * @param leadIds   Up to 1000 lead UUIDs.
- * @param tagIds    Tag UUIDs to add or remove.
+ * @param leadIds Up to 1000 lead UUIDs.
+ * @param tagIds Tag UUIDs to add or remove.
  * @param operation 'add' inserts; 'remove' deletes the (lead, tag) pairs.
- * @param actorId   Author of the change — recorded as `lead_tags.added_by_id`.
- * @returns         { leadsTouched, tagsAdded, tagsRemoved } summary.
+ * @param actorId Author of the change — recorded as `lead_tags.added_by_id`.
+ * @returns { leadsTouched, tagsAdded, tagsRemoved } summary.
  * @throws ValidationError when leadIds.length > 1000.
  */
 export async function bulkTagLeads(

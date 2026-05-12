@@ -90,14 +90,14 @@ async function logMarketingSendFailure(args: {
 }
 
 /**
- * Phase 21 — SendGrid send pipeline.
+ * SendGrid send pipeline.
  *
  * Two paths:
- *   1. `sendCampaign(id)` — fans the campaign template out to every
- *      list_member that isn't suppressed. Caller transitions the row to
- *      `sending` first; this fn enforces it.
- *   2. `sendTestEmail({...})` — single-recipient inline-HTML send used
- *      by the template-editor "test send" button.
+ * 1. `sendCampaign(id)` — fans the campaign template out to every
+ * list_member that isn't suppressed. Caller transitions the row to
+ * `sending` first; this fn enforces it.
+ * 2. `sendTestEmail({...})` — single-recipient inline-HTML send used
+ * by the template-editor "test send" button.
  *
  * The webhook receiver (`webhook.ts`) reconciles `x-message-id` →
  * `recipient_id` via custom_args we set on each personalization, so the
@@ -140,7 +140,7 @@ interface TemplateRow {
 }
 
 /**
- * Phase 29 §5 — leadId is nullable so static-imported list members can
+ * leadId is nullable so static-imported list members can
  * flow through the same send path. The `rowKey` getter below produces
  * a stable lookup key for the recipientByLead map (formerly keyed
  * solely on leadId).
@@ -157,7 +157,7 @@ interface RecipientCandidate {
 }
 
 /**
- * Phase 29 §5 — Stable key for mapping a candidate row to its inserted
+ * Stable key for mapping a candidate row to its inserted
  * `marketing_campaign_recipients` row. Uses leadId when available
  * (dynamic-list path) and falls back to email (static-imported path).
  * Within a single campaign send, both leadId and email are unique
@@ -198,7 +198,7 @@ export async function sendCampaign(
     );
   }
 
-  // Phase 29 §5 — unified resolution. `resolveListRecipients` branches
+  // unified resolution. `resolveListRecipients` branches
   // on `marketing_lists.list_type`: dynamic lists join through
   // `marketing_list_members` + leads; static lists pull directly from
   // `marketing_static_list_members`. Both paths filter suppressions at
@@ -274,7 +274,7 @@ export async function sendCampaign(
   const inserted = await insertRecipientRows(campaign.id, candidateRows);
 
   // Build a rowKey → recipientId map so personalizations can carry
-  // custom_args.recipient_id for webhook reconciliation. Phase 29 §5 —
+  // custom_args.recipient_id for webhook reconciliation.
   // key is leadId for dynamic-list rows, `email:<lowercase>` for
   // static-imported rows (which have no lead row backing them).
   const recipientByLead = new Map<string, string>();
@@ -434,17 +434,17 @@ export async function sendCampaign(
 
 /**
  * Single-recipient diagnostic send. Two callable shapes — both ship in
- * Phase 21 because they cover separate consumers:
+ * because they cover separate consumers:
  *
- *   - "raw" shape: caller already has rendered HTML + a subject + the
- *     fromName they want stamped (template-editor preview, admin
- *     endpoint with arbitrary HTML).
+ * "raw" shape: caller already has rendered HTML + a subject + the
+ * fromName they want stamped (template-editor preview, admin
+ * endpoint with arbitrary HTML).
  *
- *   - "template" shape: caller passes `templateId` + `recipientEmail`
- *     + `actorUserId`; we look up the stored template and use its
- *     subject + rendered HTML, attributing the audit/log line to the
- *     actor. Used by the marketing template-detail "Send Test" button
- *     so the operator doesn't have to re-paste HTML.
+ * "template" shape: caller passes `templateId` + `recipientEmail`
+ * + `actorUserId`; we look up the stored template and use its
+ * subject + rendered HTML, attributing the audit/log line to the
+ * actor. Used by the marketing template-detail "Send Test" button
+ * so the operator doesn't have to re-paste HTML.
  *
  * Neither shape goes through SendGrid Dynamic Templates — the editor's
  * working copy may not have been pushed yet, and we want the test to
@@ -678,7 +678,7 @@ async function loadCampaignContext(
   if (campaignRow.listIsDeleted) {
     throw new ValidationError("Campaign list has been archived.");
   }
-  // Phase 29 §4.8 — campaign.templateId is now nullable: a draft can
+  // campaign.templateId is now nullable: a draft can
   // be left dangling after a personal-template delete. The send path
   // explicitly refuses dangling campaigns (an unlinked draft can't
   // reach 'scheduled' through the wizard either, but the validation
@@ -740,12 +740,12 @@ async function insertRecipientRows(
     // Previously this insert wrote `sent` upfront which left
     // recipients incorrectly stamped if the subsequent send failed.
     //
-    // Phase 24 §6.5.1 — snapshot the merge data at queue-time. Once
+    // snapshot the merge data at queue-time. Once
     // queued, subsequent edits to the source lead (rename, company
     // change) do NOT affect what this recipient receives. The send
     // batch reads from snapshot_merge_data.
     //
-    // Phase 29 §5 — leadId may be null for static-imported list
+    // leadId may be null for static-imported list
     // members (no lead row backs them). The campaignRecipients schema
     // already allows nullable leadId; the rowKey returned below uses
     // email-based fallback when leadId is null so the in-memory
@@ -842,7 +842,7 @@ async function sendBatch(input: SendBatchInput): Promise<number> {
       custom_args: {
         campaign_id: input.campaign.id,
         recipient_id: recipientId,
-        // Phase 29 §5 — leadId may be null for static-imported
+        // leadId may be null for static-imported
         // recipients. Webhook reconciliation uses recipient_id; lead_id
         // is informational.
         lead_id: r.leadId ?? "",

@@ -13,7 +13,7 @@ const LABEL: Record<EntityKind, string> = {
 };
 
 /**
- * Phase 10 — show the post-archive sonner toast with an Undo action.
+ * show the post-archive sonner toast with an Undo action.
  * The action runs `onUndo()` which the caller wires to its
  * `restore<Entity>Action({ undoToken })` server action.
  *

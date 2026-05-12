@@ -9,7 +9,7 @@ import { WelcomeClient } from "./welcome-client";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 15 — JIT first-login welcome screen.
+ * JIT first-login welcome screen.
  *
  * Self-gating: rather than wiring a "first login" flag through the JWT, we
  * read users.first_login_at directly. If it's outside the 5-minute window

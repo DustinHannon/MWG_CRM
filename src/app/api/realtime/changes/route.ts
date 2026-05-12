@@ -33,9 +33,9 @@ const ALLOWED: ReadonlySet<RealtimeEntity> = new Set([
 const MAX_IDS_PER_ENTITY = 200;
 
 /**
- * Phase 11 — polling endpoint for the useRealtimePoll hook.
+ * polling endpoint for the useRealtimePoll hook.
  *
- *   GET /api/realtime/changes?entities=leads,accounts&since=<iso>
+ * GET /api/realtime/changes?entities=leads,accounts&since=<iso>
  *
  * Returns the IDs of records (within the viewer's allowed scope) whose
  * `updated_at` is greater than `since`, plus a `lastChangeAt` cursor

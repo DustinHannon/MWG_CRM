@@ -8,7 +8,7 @@ import { expectAffected } from "@/lib/db/concurrent-update";
 import { nameField } from "@/lib/validation/primitives";
 
 /**
- * Phase 9C (workflow) — direct Contact creation from `/contacts/new`,
+ * direct Contact creation from `/contacts/new`,
  * separate from the lead-conversion path (`src/lib/conversion.ts`).
  * Optional `accountId` lets the form prefill from `?accountId=X` so
  * the "New contact" button on Account detail flows naturally.
@@ -72,7 +72,7 @@ export async function createContact(
   return { id: inserted[0].id };
 }
 
-/** Phase 10 — soft-delete contacts. */
+/** soft-delete contacts. */
 export async function archiveContactsById(
   ids: string[],
   actorId: string,
@@ -86,14 +86,14 @@ export async function archiveContactsById(
       deletedAt: sql`now()`,
       deletedById: actorId,
       deleteReason: reason ?? null,
-      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(contacts.id, ids));
 }
 
-/** Phase 10 — restore archived contacts. */
+/** restore archived contacts. */
 export async function restoreContactsById(
   ids: string[],
   actorId: string,
@@ -106,21 +106,21 @@ export async function restoreContactsById(
       deletedAt: null,
       deletedById: null,
       deleteReason: null,
-      // Phase 12 — actor stamping for skip-self in Supabase Realtime.
+      // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
     .where(inArray(contacts.id, ids));
 }
 
-/** Phase 10 — admin hard-delete. */
+/** admin hard-delete. */
 export async function deleteContactsById(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.delete(contacts).where(inArray(contacts.id, ids));
 }
 
 /**
- * Phase 13 — paginated contact listing for /api/v1/contacts.
+ * paginated contact listing for /api/v1/contacts.
  */
 export async function listContactsForApi(args: {
   q?: string;

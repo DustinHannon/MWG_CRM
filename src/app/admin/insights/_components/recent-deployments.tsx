@@ -9,16 +9,16 @@ import {
 } from "@/lib/observability/vercel-api";
 
 /**
- * Phase 26 §4 — last 5 Vercel deployments.
+ * last 5 Vercel deployments.
  *
  * Pulls from the Vercel REST API via the foundation helper. Each row
  * shows commit message, branch, state pill, build duration, and a
  * click-through to the deployment on vercel.com.
  *
  * Failure modes:
- *   - `VercelNotConfiguredError` → render "not configured" empty state.
- *   - Other errors → render a generic error empty state with the
- *     message (admin-only page, so leaking the error is fine).
+ * `VercelNotConfiguredError` → render "not configured" empty state.
+ * Other errors → render a generic error empty state with the
+ * message (admin-only page, so leaking the error is fine).
  */
 const NOT_CONFIGURED_TITLE = "Vercel API not configured";
 const NOT_CONFIGURED_DESC =

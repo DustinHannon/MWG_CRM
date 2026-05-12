@@ -23,7 +23,7 @@ interface UserPanelProps {
 }
 
 /**
- * Phase 3B replaces the Phase 1/2 static identity block at the bottom
+ * replaces the/2 static identity block at the bottom
  * of the sidebar with a single clickable card. Clicking opens a popover
  * above the trigger with TWO items: Settings and Sign out.
  *

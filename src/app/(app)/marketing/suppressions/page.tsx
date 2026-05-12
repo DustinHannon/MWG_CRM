@@ -9,7 +9,7 @@ import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 19 — Suppressions read-only view.
+ * Suppressions read-only view.
  *
  * Sourced from SendGrid's authoritative suppression lists, mirrored by
  * the hourly /api/cron/marketing-sync-suppressions cron. Marketing

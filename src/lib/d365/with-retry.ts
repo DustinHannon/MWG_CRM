@@ -2,15 +2,15 @@ import "server-only";
 import { logger } from "@/lib/logger";
 
 /**
- * Phase 23 — retry wrapper for D365 OData calls.
+ * retry wrapper for D365 OData calls.
  *
  * Mirrors the v2 d365_sync.py retry semantics:
- *  - max 3 retries
- *  - exponential backoff (1s, 2s, 4s) capped at 30s
- *  - honors `Retry-After` on 429 (verbatim, capped at 60s)
- *  - retries on 429, 503, 504, network/timeout
- *  - does NOT retry on 400, 401, 403, 404 (caller handles 401 by
- *    invalidating cached token before retrying once)
+ * max 3 retries
+ * exponential backoff (1s, 2s, 4s) capped at 30s
+ * honors `Retry-After` on 429 (verbatim, capped at 60s)
+ * retries on 429, 503, 504, network/timeout
+ * does NOT retry on 400, 401, 403, 404 (caller handles 401 by
+ * invalidating cached token before retrying once)
  *
  * The wrapped function should throw `D365HttpError` for HTTP failures
  * so this wrapper can decide based on status. Other errors (network,

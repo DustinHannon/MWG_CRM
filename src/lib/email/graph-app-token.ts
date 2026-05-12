@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 import { EmailNotConfiguredError } from "./types";
 
 /**
- * Phase 15 — application-permissions Graph token via client-credentials flow.
+ * application-permissions Graph token via client-credentials flow.
  *
  * Reads ENTRA_CLIENT_ID/SECRET first, falls back to AUTH_MICROSOFT_ENTRA_ID_*
  * so the same Entra app powers both delegated SSO and app-permission Mail.Send
@@ -50,7 +50,7 @@ function getClient(): ConfidentialClientApplication {
 }
 
 /**
- * Phase 25 §4.4 — MSAL acquireTokenByClientCredential throws on 5xx from
+ * MSAL acquireTokenByClientCredential throws on 5xx from
  * login.microsoftonline.com and on network failures. Add a 3-attempt
  * exponential backoff so a transient AAD blip doesn't cascade into
  * every Graph-dependent feature failing. Auth/config errors (4xx) are
@@ -121,7 +121,7 @@ export async function getGraphAppToken(): Promise<string> {
           action: "graph.token.refresh.exhausted",
           targetType: "graph_token",
           after: {
-            // Phase 25 §4.4 P2 follow-up — `attempted` is clearer
+            // `attempted` is clearer
             // than `attempts` and the value is the total count
             // actually tried (1..N), not the zero-based loop index.
             attempted: attempt,

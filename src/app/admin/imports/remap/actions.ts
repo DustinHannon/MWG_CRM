@@ -12,9 +12,9 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
- * Phase 25 §7.5 — bulk remap every activity carrying a particular
+ * bulk remap every activity carrying a particular
  * imported_by_name string to a specific app user. Sets userId +
- * createdById on the activity, clears importedByName, audits per
+ * createdById on the activity, clears importedByName, audits
  * affected row.
  *
  * Admin-only (requireAdmin gates the page; this action enforces
@@ -72,7 +72,7 @@ export async function remapImportedByNameAction(
         )
         .returning({ id: activities.id });
 
-      // Audit per affected row. Phase 25 audit-events doc lists this
+      // Audit per affected row. audit-events doc lists this
       // canonical event name.
       for (const a of updated) {
         await writeAudit({

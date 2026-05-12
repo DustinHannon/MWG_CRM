@@ -14,7 +14,7 @@ import {
 } from "../view-actions";
 
 /**
- * Phase 25 §7.3 — Tasks view selector (parity-light version of the
+ * Tasks view selector (parity-light version of the
  * leads ViewToolbar). Renders the built-in views + per-user saved
  * views as a dropdown; "Save current as view" persists the current
  * URL-state filters/sort as a new saved view. Active saved views

@@ -4,7 +4,7 @@ import { UserTime } from "@/components/ui/user-time";
 import type { TaskRow } from "@/lib/tasks";
 
 /**
- * Phase 25 §7.3 — dashboard "My open tasks" widget. Top 5 by due date
+ * dashboard "My open tasks" widget. Top 5 by due date
  * for the current viewer (open or in_progress status). Overdue rows
  * are flagged via text color; the related entity (if any) appears
  * inline with a click-through link. Footer surfaces "View all" →

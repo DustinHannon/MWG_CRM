@@ -24,7 +24,7 @@ import {
 import { mapD365Task, type NewTask, type TaskMapContext } from "./task";
 
 /**
- * Phase 23 — mapping registry barrel.
+ * mapping registry barrel.
  *
  * Exports every entity-specific mapper plus a dispatcher
  * (`getMapperForEntity`) the orchestrator uses when iterating

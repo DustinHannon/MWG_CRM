@@ -10,7 +10,7 @@ const bodySchema = z.object({
 });
 
 /**
- * Phase 21 — Bulk-add leads to a marketing list. Delegates to the
+ * Bulk-add leads to a marketing list. Delegates to the
  * `bulkAddLeadsToListAction` server action so all auth, validation,
  * dedup, and audit logic lives in one place.
  */
