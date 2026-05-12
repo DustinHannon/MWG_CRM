@@ -78,7 +78,7 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
     <TooltipProvider delayDuration={300}>
       <ThemeSync theme={theme} />
       <BreadcrumbsProvider>
-        <div data-density={density} className="flex h-dvh text-foreground">
+        <div data-density={density} className="flex h-dvh overflow-hidden text-foreground">
           <Sidebar
             brand={brand ?? {}}
             nav={nav}
