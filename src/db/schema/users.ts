@@ -115,6 +115,12 @@ export const permissions = pgTable("permissions", {
   // Phase 19 — gates the Marketing tab (templates, lists, campaigns,
   // suppressions). Admin bypasses. Defaults to false; flip per user via
   // /admin/users/<id>/permissions.
+  //
+  // Phase 27 §4.6 — `canManageMarketing` remains the OPERATIVE gate
+  // for backwards compatibility. The 24 fine-grained `canMarketing*`
+  // permissions below are populated by the role-bundle apply UI and
+  // backfilled from `canManageMarketing` at migration time. Future
+  // phase migrates call sites to use the specific perms.
   canManageMarketing: boolean("can_manage_marketing").notNull().default(false),
   // Phase 25 §7.3 — task-scoped RBAC. Every user can always
   // view/edit/delete/complete THEIR OWN tasks (the "own" half of the
@@ -124,6 +130,32 @@ export const permissions = pgTable("permissions", {
   canEditOthersTasks: boolean("can_edit_others_tasks").notNull().default(false),
   canDeleteOthersTasks: boolean("can_delete_others_tasks").notNull().default(false),
   canReassignTasks: boolean("can_reassign_tasks").notNull().default(false),
+  // Phase 27 §4.6 — 24 fine-grained marketing permissions.
+  // Backfilled from `canManageMarketing` so behavior is preserved.
+  canMarketingTemplatesView: boolean("can_marketing_templates_view").notNull().default(false),
+  canMarketingTemplatesCreate: boolean("can_marketing_templates_create").notNull().default(false),
+  canMarketingTemplatesEdit: boolean("can_marketing_templates_edit").notNull().default(false),
+  canMarketingTemplatesDelete: boolean("can_marketing_templates_delete").notNull().default(false),
+  canMarketingTemplatesSendTest: boolean("can_marketing_templates_send_test").notNull().default(false),
+  canMarketingListsView: boolean("can_marketing_lists_view").notNull().default(false),
+  canMarketingListsCreate: boolean("can_marketing_lists_create").notNull().default(false),
+  canMarketingListsEdit: boolean("can_marketing_lists_edit").notNull().default(false),
+  canMarketingListsDelete: boolean("can_marketing_lists_delete").notNull().default(false),
+  canMarketingListsRefresh: boolean("can_marketing_lists_refresh").notNull().default(false),
+  canMarketingListsBulkAdd: boolean("can_marketing_lists_bulk_add").notNull().default(false),
+  canMarketingCampaignsView: boolean("can_marketing_campaigns_view").notNull().default(false),
+  canMarketingCampaignsCreate: boolean("can_marketing_campaigns_create").notNull().default(false),
+  canMarketingCampaignsEdit: boolean("can_marketing_campaigns_edit").notNull().default(false),
+  canMarketingCampaignsSchedule: boolean("can_marketing_campaigns_schedule").notNull().default(false),
+  canMarketingCampaignsCancel: boolean("can_marketing_campaigns_cancel").notNull().default(false),
+  canMarketingCampaignsDelete: boolean("can_marketing_campaigns_delete").notNull().default(false),
+  canMarketingCampaignsSendNow: boolean("can_marketing_campaigns_send_now").notNull().default(false),
+  canMarketingCampaignsSendTest: boolean("can_marketing_campaigns_send_test").notNull().default(false),
+  canMarketingSuppressionsView: boolean("can_marketing_suppressions_view").notNull().default(false),
+  canMarketingSuppressionsAdd: boolean("can_marketing_suppressions_add").notNull().default(false),
+  canMarketingSuppressionsRemove: boolean("can_marketing_suppressions_remove").notNull().default(false),
+  canMarketingReportsView: boolean("can_marketing_reports_view").notNull().default(false),
+  canMarketingAuditView: boolean("can_marketing_audit_view").notNull().default(false),
 });
 
 // =============================================================================

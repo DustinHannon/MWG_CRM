@@ -50,6 +50,8 @@ export interface ExistingDraft {
   replyToEmail: string | null;
   scheduledFor: string | null;
   status: string;
+  /** Phase 27 §4.8 — OCC version at load time. */
+  version: number;
 }
 
 interface CampaignWizardProps {
@@ -88,6 +90,13 @@ export function CampaignWizard({
   const [step, setStep] = useState<Step>(initialStep);
   const [campaignId, setCampaignId] = useState<string | null>(
     existing?.id ?? null,
+  );
+  // Phase 27 §4.8 — track OCC version locally so each update can pass
+  // the current expected version and detect concurrent edits from a
+  // second browser. Incremented after every successful mutation; reset
+  // by the user via reload on a ConflictError.
+  const [campaignVersion, setCampaignVersion] = useState<number | null>(
+    existing?.version ?? null,
   );
 
   // Step 1 — template
@@ -174,11 +183,19 @@ export function CampaignWizard({
           const res = await updateCampaignDraftAction({
             id: campaignId,
             templateId,
+            expectedVersion: campaignVersion ?? undefined,
           });
           if (!res.ok) {
+            if (res.code === "CONFLICT") {
+              setError(
+                "This campaign was updated by someone else. Reload to see the latest version.",
+              );
+              return;
+            }
             setError(res.error);
             return;
           }
+          if (campaignVersion !== null) setCampaignVersion(campaignVersion + 1);
         }
       }
 
@@ -206,11 +223,19 @@ export function CampaignWizard({
           const res = await updateCampaignDraftAction({
             id: campaignId,
             listId,
+            expectedVersion: campaignVersion ?? undefined,
           });
           if (!res.ok) {
+            if (res.code === "CONFLICT") {
+              setError(
+                "This campaign was updated by someone else. Reload to see the latest version.",
+              );
+              return;
+            }
             setError(res.error);
             return;
           }
+          if (campaignVersion !== null) setCampaignVersion(campaignVersion + 1);
         }
       }
 
@@ -222,11 +247,19 @@ export function CampaignWizard({
           fromEmail,
           fromName,
           replyToEmail: replyToEmail.trim() || "",
+          expectedVersion: campaignVersion ?? undefined,
         });
         if (!res.ok) {
+          if (res.code === "CONFLICT") {
+            setError(
+              "This campaign was updated by someone else. Reload to see the latest version.",
+            );
+            return;
+          }
           setError(res.error);
           return;
         }
+        if (campaignVersion !== null) setCampaignVersion(campaignVersion + 1);
       }
 
       setStep(target);

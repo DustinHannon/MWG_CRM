@@ -29,6 +29,7 @@ export default async function EditListPage({
       description: marketingLists.description,
       filterDsl: marketingLists.filterDsl,
       isDeleted: marketingLists.isDeleted,
+      version: marketingLists.version,
     })
     .from(marketingLists)
     .where(eq(marketingLists.id, id))
@@ -57,6 +58,7 @@ export default async function EditListPage({
           name: row.name,
           description: row.description,
           filterDsl: row.filterDsl as FilterDsl,
+          version: row.version,
         }}
       />
     </div>

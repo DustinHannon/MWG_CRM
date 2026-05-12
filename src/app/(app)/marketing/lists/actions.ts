@@ -56,6 +56,10 @@ const listInputBaseSchema = z.object({
 const listCreateSchema = listInputBaseSchema;
 const listUpdateSchema = listInputBaseSchema.extend({
   id: z.string().uuid(),
+  // Phase 27 §4.8 — OCC on list edits. List-edit UI passes the version
+  // it loaded; the UPDATE refuses to write if another writer bumped it.
+  // Optional only for programmatic API callers; the UI always passes.
+  expectedVersion: z.number().int().nonnegative().optional(),
 });
 
 const idSchema = z.string().uuid();
@@ -146,6 +150,7 @@ export async function updateListAction(input: {
   name: string;
   description?: string;
   filterDsl: FilterDsl;
+  expectedVersion?: number;
 }): Promise<ActionResult<never>> {
   return withErrorBoundary({ action: "marketing.list.update" }, async () => {
     const user = await requireMarketingManager();
@@ -174,7 +179,16 @@ export async function updateListAction(input: {
       throw new NotFoundError("marketing list");
     }
 
-    await db
+    // Phase 27 §4.8 — OCC: when caller passes `expectedVersion`, the
+    // UPDATE atomically requires `version = expectedVersion` AND bumps
+    // it. 0 rows affected ⇒ another writer beat us → ConflictError.
+    const whereClauses = [eq(marketingLists.id, parsed.data.id)];
+    if (parsed.data.expectedVersion !== undefined) {
+      whereClauses.push(
+        eq(marketingLists.version, parsed.data.expectedVersion),
+      );
+    }
+    const updated = await db
       .update(marketingLists)
       .set({
         name: parsed.data.name,
@@ -182,8 +196,18 @@ export async function updateListAction(input: {
         filterDsl: parsed.data.filterDsl,
         updatedById: user.id,
         updatedAt: sql`now()`,
+        version: sql`${marketingLists.version} + 1`,
       })
-      .where(eq(marketingLists.id, parsed.data.id));
+      .where(and(...whereClauses))
+      .returning({ id: marketingLists.id });
+    if (
+      updated.length === 0 &&
+      parsed.data.expectedVersion !== undefined
+    ) {
+      throw new ConflictError(
+        "Another user has updated this list. Reload to see the latest changes.",
+      );
+    }
 
     // Re-evaluate membership against the new DSL. Phase 25 §4.1 —
     // ValidationError rethrows to the user (bad DSL); any other failure

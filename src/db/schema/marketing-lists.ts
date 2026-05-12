@@ -58,6 +58,12 @@ export const marketingLists = pgTable(
     deletedById: uuid("deleted_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    /**
+     * Phase 27 §4.8 — OCC (optimistic concurrency) version. Incremented
+     * atomically on each update. The list-edit UI passes the version it
+     * loaded; the UPDATE refuses to write if another writer bumped it.
+     */
+    version: integer("version").notNull().default(1),
   },
   (t) => [
     index("mkt_list_status_idx")

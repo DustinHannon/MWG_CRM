@@ -74,6 +74,11 @@ const campaignDraftUpdateSchema = z.object({
     .max(254)
     .optional()
     .or(z.literal("")),
+  // Phase 27 §4.8 — OCC on draft edits. The campaign-edit UI passes the
+  // version it loaded; the UPDATE refuses to write if another writer
+  // bumped it. Optional only for programmatic API callers where the
+  // status='draft' TOCTOU close remains sufficient.
+  expectedVersion: z.number().int().nonnegative().optional(),
 });
 
 const campaignScheduleSchema = z.object({
@@ -231,6 +236,8 @@ export async function updateCampaignDraftAction(input: {
   fromEmail?: string;
   fromName?: string;
   replyToEmail?: string;
+  /** Phase 27 §4.8 — OCC: optional version loaded by the caller. */
+  expectedVersion?: number;
 }): Promise<ActionResult<never>> {
   return withErrorBoundary(
     {
@@ -295,19 +302,38 @@ export async function updateCampaignDraftAction(input: {
 
       // Mass-assignment guard — only the fields above were copied to
       // `patch`. The rest of the row is untouched.
-      await db
+      // Phase 27 §4.8 — OCC: when caller passes `expectedVersion`, the
+      // UPDATE atomically requires `version = expectedVersion` AND bumps
+      // it. 0 rows affected ⇒ another writer beat us → ConflictError.
+      const whereClauses = [
+        eq(marketingCampaigns.id, parsed.data.id),
+        eq(marketingCampaigns.status, "draft"),
+        eq(marketingCampaigns.isDeleted, false),
+      ];
+      if (parsed.data.expectedVersion !== undefined) {
+        whereClauses.push(
+          eq(marketingCampaigns.version, parsed.data.expectedVersion),
+        );
+      }
+      const updated = await db
         .update(marketingCampaigns)
         .set({
           ...patch,
+          version: sql`${marketingCampaigns.version} + 1`,
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(marketingCampaigns.id, parsed.data.id),
-            eq(marketingCampaigns.status, "draft"),
-            eq(marketingCampaigns.isDeleted, false),
-          ),
+        .where(and(...whereClauses))
+        .returning({ id: marketingCampaigns.id });
+      if (updated.length === 0) {
+        if (parsed.data.expectedVersion !== undefined) {
+          throw new ConflictError(
+            "Another user has updated this campaign. Reload to see the latest changes.",
+          );
+        }
+        throw new ConflictError(
+          "Only draft campaigns can be edited. Cancel the campaign to make changes.",
         );
+      }
 
       await writeAudit({
         actorId: user.id,

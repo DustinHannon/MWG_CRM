@@ -54,6 +54,39 @@ export async function requireAdmin(): Promise<SessionUser> {
   return u;
 }
 
+/**
+ * Phase 27 §4.6 — Fine-grained marketing permissions (24 keys).
+ *
+ * Backfilled from `canManageMarketing` at migration time so behavior is
+ * preserved. Future phase migrates call sites from `canManageMarketing`
+ * to specific marketing perm checks; until then, both gates exist.
+ */
+export type MarketingPermissionKey =
+  | "canMarketingTemplatesView"
+  | "canMarketingTemplatesCreate"
+  | "canMarketingTemplatesEdit"
+  | "canMarketingTemplatesDelete"
+  | "canMarketingTemplatesSendTest"
+  | "canMarketingListsView"
+  | "canMarketingListsCreate"
+  | "canMarketingListsEdit"
+  | "canMarketingListsDelete"
+  | "canMarketingListsRefresh"
+  | "canMarketingListsBulkAdd"
+  | "canMarketingCampaignsView"
+  | "canMarketingCampaignsCreate"
+  | "canMarketingCampaignsEdit"
+  | "canMarketingCampaignsSchedule"
+  | "canMarketingCampaignsCancel"
+  | "canMarketingCampaignsDelete"
+  | "canMarketingCampaignsSendNow"
+  | "canMarketingCampaignsSendTest"
+  | "canMarketingSuppressionsView"
+  | "canMarketingSuppressionsAdd"
+  | "canMarketingSuppressionsRemove"
+  | "canMarketingReportsView"
+  | "canMarketingAuditView";
+
 export type PermissionKey =
   | "canViewAllRecords"
   | "canCreateLeads"
@@ -70,7 +103,9 @@ export type PermissionKey =
   | "canViewOthersTasks"
   | "canEditOthersTasks"
   | "canDeleteOthersTasks"
-  | "canReassignTasks";
+  | "canReassignTasks"
+  // Phase 27 §4.6 — fine-grained marketing perms.
+  | MarketingPermissionKey;
 
 /**
  * Admin bypasses all per-feature permission checks.
@@ -190,6 +225,31 @@ export async function getPermissions(
       canEditOthersTasks: false,
       canDeleteOthersTasks: false,
       canReassignTasks: false,
+      // Phase 27 §4.6 — fine-grained marketing perms default to false.
+      canMarketingTemplatesView: false,
+      canMarketingTemplatesCreate: false,
+      canMarketingTemplatesEdit: false,
+      canMarketingTemplatesDelete: false,
+      canMarketingTemplatesSendTest: false,
+      canMarketingListsView: false,
+      canMarketingListsCreate: false,
+      canMarketingListsEdit: false,
+      canMarketingListsDelete: false,
+      canMarketingListsRefresh: false,
+      canMarketingListsBulkAdd: false,
+      canMarketingCampaignsView: false,
+      canMarketingCampaignsCreate: false,
+      canMarketingCampaignsEdit: false,
+      canMarketingCampaignsSchedule: false,
+      canMarketingCampaignsCancel: false,
+      canMarketingCampaignsDelete: false,
+      canMarketingCampaignsSendNow: false,
+      canMarketingCampaignsSendTest: false,
+      canMarketingSuppressionsView: false,
+      canMarketingSuppressionsAdd: false,
+      canMarketingSuppressionsRemove: false,
+      canMarketingReportsView: false,
+      canMarketingAuditView: false,
     };
   }
   const r = row[0];
@@ -207,5 +267,29 @@ export async function getPermissions(
     canEditOthersTasks: r.canEditOthersTasks,
     canDeleteOthersTasks: r.canDeleteOthersTasks,
     canReassignTasks: r.canReassignTasks,
+    canMarketingTemplatesView: r.canMarketingTemplatesView,
+    canMarketingTemplatesCreate: r.canMarketingTemplatesCreate,
+    canMarketingTemplatesEdit: r.canMarketingTemplatesEdit,
+    canMarketingTemplatesDelete: r.canMarketingTemplatesDelete,
+    canMarketingTemplatesSendTest: r.canMarketingTemplatesSendTest,
+    canMarketingListsView: r.canMarketingListsView,
+    canMarketingListsCreate: r.canMarketingListsCreate,
+    canMarketingListsEdit: r.canMarketingListsEdit,
+    canMarketingListsDelete: r.canMarketingListsDelete,
+    canMarketingListsRefresh: r.canMarketingListsRefresh,
+    canMarketingListsBulkAdd: r.canMarketingListsBulkAdd,
+    canMarketingCampaignsView: r.canMarketingCampaignsView,
+    canMarketingCampaignsCreate: r.canMarketingCampaignsCreate,
+    canMarketingCampaignsEdit: r.canMarketingCampaignsEdit,
+    canMarketingCampaignsSchedule: r.canMarketingCampaignsSchedule,
+    canMarketingCampaignsCancel: r.canMarketingCampaignsCancel,
+    canMarketingCampaignsDelete: r.canMarketingCampaignsDelete,
+    canMarketingCampaignsSendNow: r.canMarketingCampaignsSendNow,
+    canMarketingCampaignsSendTest: r.canMarketingCampaignsSendTest,
+    canMarketingSuppressionsView: r.canMarketingSuppressionsView,
+    canMarketingSuppressionsAdd: r.canMarketingSuppressionsAdd,
+    canMarketingSuppressionsRemove: r.canMarketingSuppressionsRemove,
+    canMarketingReportsView: r.canMarketingReportsView,
+    canMarketingAuditView: r.canMarketingAuditView,
   };
 }

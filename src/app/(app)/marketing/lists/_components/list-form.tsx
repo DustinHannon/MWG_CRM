@@ -24,6 +24,8 @@ interface Props {
     name: string;
     description: string | null;
     filterDsl: FilterDsl;
+    /** Phase 27 §4.8 — OCC version captured at load time. */
+    version: number;
   };
 }
 
@@ -69,8 +71,20 @@ export function ListForm({ mode, initial }: Props) {
           name,
           description: description.trim() || undefined,
           filterDsl: dsl,
+          // Phase 27 §4.8 — pass the version we loaded so the action
+          // refuses to write if another user beat us to it.
+          expectedVersion: initial.version,
         });
         if (!result.ok) {
+          // 409 Conflict ⇒ another user updated the list since load.
+          // Surfacing as a directive toast (reload). Future enhancement:
+          // render the side-by-side OCCConflictDialog.
+          if (result.code === "CONFLICT") {
+            toast.error(
+              "This list was updated by someone else. Reload to see the latest version.",
+            );
+            return;
+          }
           toast.error(result.error);
           return;
         }

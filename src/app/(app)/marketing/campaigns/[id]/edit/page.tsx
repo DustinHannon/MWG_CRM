@@ -135,6 +135,7 @@ export default async function EditCampaignPage({ params }: Props) {
             ? campaign.scheduledFor.toISOString()
             : null,
           status: campaign.status,
+          version: campaign.version,
         }}
         defaultListId={null}
         defaultTemplateId={null}

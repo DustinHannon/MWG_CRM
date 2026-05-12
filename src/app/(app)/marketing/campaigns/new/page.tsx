@@ -106,6 +106,7 @@ export default async function NewCampaignPage({ searchParams }: Props) {
                 fromEmail: existing.fromEmail,
                 fromName: existing.fromName,
                 replyToEmail: existing.replyToEmail,
+                version: existing.version,
                 scheduledFor: existing.scheduledFor
                   ? existing.scheduledFor.toISOString()
                   : null,
