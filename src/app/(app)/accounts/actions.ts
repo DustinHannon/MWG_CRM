@@ -233,6 +233,13 @@ export async function updateAccountAction(
         );
       }
 
+      // Cycle prevention for parent_account_id. DB CHECK already
+      // blocks A→A self-parenting; this guards the multi-hop case.
+      if (parsed.parentAccountId) {
+        const { assertNoParentCycle } = await import("@/lib/accounts");
+        await assertNoParentCycle(parsed.id, parsed.parentAccountId);
+      }
+
       await updateAccountForApi(
         parsed.id,
         {

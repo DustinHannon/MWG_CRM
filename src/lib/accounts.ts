@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
 import { writeAudit } from "@/lib/audit";
 import { expectAffected } from "@/lib/db/concurrent-update";
+import { ConflictError } from "@/lib/errors";
 import { urlField } from "@/lib/validation/primitives";
 
 /**
@@ -249,6 +250,41 @@ export async function getAccountForApi(
  * throws `ConflictError` (via expectAffected) when it doesn't match.
  * When omitted, last-write-wins semantics apply.
  */
+/**
+ * Walk the parent_account_id chain starting from `proposedParentId`
+ * and throw `ConflictError` if `selfId` appears anywhere in the chain.
+ * Blocks multi-hop cycles like A→B→A (single-hop A→A is already
+ * blocked by the `crm_accounts_no_self_parent` CHECK constraint).
+ *
+ * Bounded at 64 hops as a safety net against runaway loops; in
+ * practice the chain length is far smaller.
+ */
+export async function assertNoParentCycle(
+  selfId: string,
+  proposedParentId: string | null,
+): Promise<void> {
+  if (proposedParentId == null) return;
+  if (proposedParentId === selfId) {
+    // Defense-in-depth — the DB CHECK already catches this.
+    throw new ConflictError("An account cannot be its own parent.");
+  }
+  let cursor: string | null = proposedParentId;
+  for (let hop = 0; hop < 64 && cursor != null; hop++) {
+    if (cursor === selfId) {
+      throw new ConflictError(
+        "Parent assignment would create a cycle in the account hierarchy.",
+      );
+    }
+    const [row] = await db
+      .select({ parent: crmAccounts.parentAccountId })
+      .from(crmAccounts)
+      .where(eq(crmAccounts.id, cursor))
+      .limit(1);
+    if (!row) return;
+    cursor = row.parent;
+  }
+}
+
 export async function updateAccountForApi(
   id: string,
   patch: Partial<{

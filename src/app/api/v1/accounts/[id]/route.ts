@@ -167,6 +167,19 @@ export const PATCH = withApi<{ id: string }>(
       patch.primaryContactId = m.primary_contact_id ?? null;
     }
     if (m.owner_id !== undefined) patch.ownerId = m.owner_id ?? null;
+    // Cycle check before the update lands. The DB CHECK blocks A→A,
+    // this blocks A→B→A and longer.
+    if (m.parent_account_id) {
+      const { assertNoParentCycle } = await import("@/lib/accounts");
+      try {
+        await assertNoParentCycle(params.id, m.parent_account_id);
+      } catch (err) {
+        if (err instanceof ConflictError) {
+          return errorResponse(409, "CONFLICT", err.publicMessage);
+        }
+        throw err;
+      }
+    }
     try {
       await updateAccountForApi(
         params.id,

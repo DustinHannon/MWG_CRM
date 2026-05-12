@@ -42,6 +42,15 @@ export const D365_AUDIT_EVENTS = {
   AUTH_FAILED: "d365.import.auth.failed",
   /** JIT owner provisioning failed for a record. */
   OWNER_JIT_FAILED: "d365.import.owner.jit_failed",
+  /**
+   * commit-batch tried to resolve a related D365 GUID (e.g.
+   * contact._parentcustomerid_value, account._parentaccountid_value,
+   * account._primarycontactid_value) to a local UUID via external_ids
+   * but the foreign record hasn't been imported yet. The FK is left
+   * null on the committed row; a re-import will resolve once the
+   * foreign record lands.
+   */
+  RECORD_FK_UNRESOLVED: "d365.import.record.fk_unresolved",
 } as const;
 
 export type D365AuditEvent =

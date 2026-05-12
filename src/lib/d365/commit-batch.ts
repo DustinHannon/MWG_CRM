@@ -263,10 +263,14 @@ async function commitOneRecord(
     // local rows that have been previously imported. If the foreign
     // record hasn't been imported yet, the FK stays null — the user
     // can either re-run the import (which will resolve on second pass)
-    // or set the FK manually via the edit form.
+    // or set the FK manually via the edit form. Each unresolved FK
+    // emits a RECORD_FK_UNRESOLVED audit row so operators can see
+    // how many follow-up resolutions are pending.
+    const unresolved: Array<{ field: string; sourceId: string; targetEntity: string }> = [];
     if (entityType === "contact" && accountSourceId) {
       const localAccountId = await lookupLocalId(tx, "account", accountSourceId);
       if (localAccountId) cleanPayload.accountId = localAccountId;
+      else unresolved.push({ field: "accountId", sourceId: accountSourceId, targetEntity: "account" });
     }
     if (entityType === "account") {
       if (parentAccountSourceId) {
@@ -276,6 +280,12 @@ async function commitOneRecord(
           parentAccountSourceId,
         );
         if (localParentId) cleanPayload.parentAccountId = localParentId;
+        else
+          unresolved.push({
+            field: "parentAccountId",
+            sourceId: parentAccountSourceId,
+            targetEntity: "account",
+          });
       }
       if (primaryContactSourceId) {
         const localContactId = await lookupLocalId(
@@ -284,7 +294,29 @@ async function commitOneRecord(
           primaryContactSourceId,
         );
         if (localContactId) cleanPayload.primaryContactId = localContactId;
+        else
+          unresolved.push({
+            field: "primaryContactId",
+            sourceId: primaryContactSourceId,
+            targetEntity: "contact",
+          });
       }
+    }
+    for (const u of unresolved) {
+      await writeAudit({
+        actorId,
+        action: D365_AUDIT_EVENTS.RECORD_FK_UNRESOLVED,
+        targetType: "d365_import_record",
+        targetId: rec.id,
+        after: {
+          sourceEntityType: rec.sourceEntityType,
+          sourceId: rec.sourceId,
+          field: u.field,
+          foreignEntity: u.targetEntity,
+          foreignSourceId: u.sourceId,
+          remediation: "re-import after the foreign record lands, or set manually via the edit form",
+        },
+      });
     }
 
     // Activities path — insert into `activities` and link parent FK.
