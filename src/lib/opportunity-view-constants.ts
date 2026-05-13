@@ -13,6 +13,7 @@ export const AVAILABLE_OPPORTUNITY_COLUMNS = [
   { key: "expectedCloseDate", label: "Expected close" },
   { key: "owner", label: "Owner" },
   { key: "closedAt", label: "Closed" },
+  { key: "tags", label: "Tags" },
   { key: "createdAt", label: "Created" },
   { key: "updatedAt", label: "Updated" },
 ] as const;

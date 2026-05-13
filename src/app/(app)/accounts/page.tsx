@@ -13,6 +13,10 @@ import { UserTime } from "@/components/ui/user-time";
 import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { canDeleteAccount } from "@/lib/access/can-delete";
+import { listTags } from "@/lib/tags";
+import { BulkTagButton } from "@/components/tags/bulk-tag-button";
+import { TagFilterSelect } from "@/components/tags/tag-filter-select";
+import { TagsCell } from "@/components/tags/tags-cell";
 import { AccountListMobile } from "./_components/account-list-mobile";
 import { AccountRowActions } from "./_components/account-row-actions";
 import { MobileAccountFilterSelect } from "./_components/filters-mobile";
@@ -52,6 +56,7 @@ interface SearchParams {
   owner?: string;
   industry?: string;
   recentlyUpdatedDays?: string;
+  tag?: string;
   page?: string;
   cols?: string;
   sort?: string;
@@ -123,6 +128,12 @@ export default async function AccountsPage({
     recentlyUpdatedDays: sp.recentlyUpdatedDays
       ? Number(sp.recentlyUpdatedDays) || undefined
       : undefined,
+    tags: sp.tag
+      ? sp.tag
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+      : undefined,
   };
 
   // ---- Resolve column list -----------------------------------------------
@@ -171,6 +182,10 @@ export default async function AccountsPage({
     userId: user.id,
     canViewAll,
   });
+  // preload the tags catalogue for the filter dropdown and the
+  // BulkTagButton picker. Tags table is small; one fetch per page
+  // render is acceptable.
+  const allTags = await listTags();
   const ownerPickerRows = canViewAll
     ? await db
         .select({ id: users.id, displayName: users.displayName })
@@ -206,13 +221,14 @@ export default async function AccountsPage({
     Boolean(sp.owner) ||
     Boolean(sp.industry) ||
     Boolean(sp.recentlyUpdatedDays) ||
+    Boolean(sp.tag) ||
     Boolean(sp.sort) ||
     Boolean(sp.dir);
 
   const modifiedFields: string[] = [];
   if (columnsModified) modifiedFields.push("columns");
   if (sp.q) modifiedFields.push("search");
-  if (sp.owner || sp.industry || sp.recentlyUpdatedDays) {
+  if (sp.owner || sp.industry || sp.recentlyUpdatedDays || sp.tag) {
     modifiedFields.push("filters");
   }
   if (sp.sort || sp.dir) modifiedFields.push("sort");
@@ -260,6 +276,16 @@ export default async function AccountsPage({
                 Archived
               </Link>
             ) : null}
+            {/* bulk-tag toolbar. Acts on the currently
+                visible recordIds (same pattern as leads); backed by
+                bulkTagAction. Permission-gated server-side. */}
+            <div className="hidden md:inline-flex">
+              <BulkTagButton
+                entityType="account"
+                recordIds={result.rows.map((r) => r.id)}
+                availableTags={allTags}
+              />
+            </div>
             <Link
               href="/accounts/new"
               className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
@@ -360,7 +386,8 @@ export default async function AccountsPage({
               {sp.q ||
               sp.owner ||
               sp.industry ||
-              sp.recentlyUpdatedDays ? (
+              sp.recentlyUpdatedDays ||
+              sp.tag ? (
                 <Link
                   href={`/accounts?view=${encodeURIComponent(activeViewParam)}`}
                   className="shrink-0 rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground/90"
@@ -392,6 +419,16 @@ export default async function AccountsPage({
                 options={recentlyUpdatedOptions}
                 placeholder="Updated"
               />
+              <TagFilterSelect
+                name="tag"
+                options={allTags.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  color: t.color,
+                }))}
+                defaultValue={sp.tag}
+                placeholder="Tags"
+              />
               <button
                 type="submit"
                 className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
@@ -401,7 +438,8 @@ export default async function AccountsPage({
               {sp.q ||
               sp.owner ||
               sp.industry ||
-              sp.recentlyUpdatedDays ? (
+              sp.recentlyUpdatedDays ||
+              sp.tag ? (
                 <Link
                   href={`/accounts?view=${encodeURIComponent(activeViewParam)}`}
                   className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground/90"
@@ -659,6 +697,8 @@ function renderCell(row: AccountRow, col: AccountColumnKey) {
           {row.wonDeals > 0 ? row.wonDeals : "—"}
         </span>
       );
+    case "tags":
+      return <TagsCell tags={row.tags} />;
     case "createdAt":
       return (
         <span className="text-muted-foreground">

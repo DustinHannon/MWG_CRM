@@ -5,6 +5,7 @@ import { createLeadAction, updateLeadAction } from "./actions";
 import type { ActionResult } from "@/lib/server-action";
 import { DuplicateWarning } from "@/components/leads/duplicate-warning";
 import { TagInput } from "@/components/tags/tag-input";
+import { TagSectionClient } from "@/components/tags/tag-section-client";
 import {
   LEAD_RATINGS,
   LEAD_SOURCES,
@@ -64,9 +65,14 @@ const empty: LeadFormValues = {
 export function LeadForm({
   mode,
   lead,
+  canApplyTags,
+  canManageTagDefinitions,
 }: {
   mode: "create" | "edit";
   lead?: LeadFormValues;
+  /** Tag permissions resolved server-side; only consumed in edit mode. */
+  canApplyTags?: boolean;
+  canManageTagDefinitions?: boolean;
 }) {
   const initial: ActionResult<never> = { ok: true };
   const action = mode === "create" ? createLeadAction : updateLeadAction;
@@ -134,16 +140,30 @@ export function LeadForm({
             defaultValue={v.estimatedCloseDate ?? ""}
           />
         </Row>
-        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-          Tags
-          <div className="mt-1">
-            <TagInput
-              value={selectedTags}
-              onChange={setSelectedTags}
-              hiddenInputName="tagIds"
-            />
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground">Tags</h3>
+          <div className="mt-2">
+            {mode === "edit" && lead?.id ? (
+              <TagSectionClient
+                entityType="lead"
+                entityId={lead.id}
+                initialTags={selectedTags}
+                canApply={canApplyTags ?? false}
+                canManage={canManageTagDefinitions ?? false}
+              />
+            ) : canApplyTags ? (
+              <TagInput
+                value={selectedTags}
+                onChange={setSelectedTags}
+                hiddenInputName="tagIds"
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                You don&apos;t have permission to apply tags.
+              </p>
+            )}
           </div>
-        </label>
+        </div>
         <ContactPreferences
           initialDoNotContact={v.doNotContact}
           initialDoNotEmail={v.doNotEmail}

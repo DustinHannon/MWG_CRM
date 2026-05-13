@@ -50,6 +50,10 @@ export default async function EditLeadPage({
 
       <LeadForm
         mode="edit"
+        canApplyTags={user.isAdmin || perms.canApplyTags}
+        canManageTagDefinitions={
+          user.isAdmin || perms.canManageTagDefinitions
+        }
         lead={{
           id: lead.id,
           version: lead.version,

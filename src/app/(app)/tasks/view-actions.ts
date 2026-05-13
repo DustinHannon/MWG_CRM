@@ -11,10 +11,15 @@ import {
   createSavedTaskView,
   deleteSavedTaskView,
   getSavedTaskView,
+  setTaskAdhocColumns,
   taskViewSchema,
   updateSavedTaskView,
   type TaskViewInput,
 } from "@/lib/task-views";
+import {
+  TASK_COLUMN_KEYS,
+  type TaskColumnKey,
+} from "@/lib/task-view-constants";
 import { writeAudit } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
@@ -77,16 +82,51 @@ export async function createTaskViewAction(
       throw new ValidationError("Invalid task view input.");
     }
     const result = await createSavedTaskView(session.id, parsed.data);
+    // Auto-revert adhoc on save: when the user crystallises the
+    // current state into a new saved view, clear the built-in
+    // view's adhoc column choice so switching back shows defaults.
+    await setTaskAdhocColumns(session.id, null);
     await writeAudit({
       actorId: session.id,
       action: "task_view.create",
       targetType: "saved_views",
       targetId: result.id,
-      after: { name: parsed.data.name, filters: parsed.data.filters },
+      after: {
+        name: parsed.data.name,
+        filters: parsed.data.filters,
+        columns: parsed.data.columns,
+        adhocReverted: true,
+      },
     });
     revalidatePath("/tasks");
     return result;
   });
+}
+
+// Adhoc column visibility for /tasks. Mirrors the contacts/accounts
+// pattern: when a built-in view is active and the user toggles a
+// column on/off via the Columns menu, we persist the choice on
+// user_preferences.adhocColumns (per-entity map) so it survives a
+// hard reload.
+const adhocSchema = z.object({
+  columns: z
+    .array(
+      z.enum(TASK_COLUMN_KEYS as [TaskColumnKey, ...TaskColumnKey[]]),
+    )
+    .nullable(),
+});
+
+export async function setTaskAdhocColumnsAction(
+  payload: z.infer<typeof adhocSchema>,
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "task.view.set_adhoc_columns" },
+    async () => {
+      const session = await requireSession();
+      const parsed = adhocSchema.parse(payload);
+      await setTaskAdhocColumns(session.id, parsed.columns);
+    },
+  );
 }
 
 const updateActionSchema = taskViewSchema.partial().extend({

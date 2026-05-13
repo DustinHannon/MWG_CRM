@@ -90,6 +90,7 @@ export function OpportunityViewToolbar({
       "closingWithinDays",
       "minAmount",
       "maxAmount",
+      "tag",
       "cols",
       "sort",
       "dir",
@@ -493,6 +494,14 @@ function SaveViewDialog({
     if (params.get("maxAmount")) {
       const n = Number(params.get("maxAmount"));
       if (Number.isFinite(n) && n >= 0) filters.maxAmount = n;
+    }
+    if (params.get("tag")) {
+      const raw = params.get("tag") ?? "";
+      const list = raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      if (list.length > 0) filters.tags = list;
     }
 
     const sortField = params.get("sort") ?? "expectedCloseDate";

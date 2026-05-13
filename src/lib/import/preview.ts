@@ -7,7 +7,9 @@
 import "server-only";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
-import { and, eq, inArray } from "drizzle-orm";
+import { tags } from "@/db/schema/tags";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { tagName } from "@/lib/validation/primitives";
 import {
   resolveByNames,
   resolveOwnerEmails,
@@ -27,6 +29,13 @@ export interface ImportPreview {
   emailActivitiesToCreate: number;
 
   opportunitiesToCreate: number;
+
+  // Distinct valid tag names referenced across all OK rows.
+  distinctTagCount: number;
+  // Subset of distinctTagCount that does NOT yet exist in the tags
+  // table (case-insensitive). These will be created on commit with a
+  // rotated palette colour.
+  newTagCount: number;
 
   smartDetectEnabled: boolean;
 
@@ -202,6 +211,39 @@ export async function buildImportPreview({
     opportunitiesToCreate += r.opportunities.length;
   }
 
+  // Tag preview — collect every valid distinct tag name and figure
+  // out how many would be newly created on commit. Mirrors the same
+  // primitive-validation gate used in `commit.ts` so the preview's
+  // counts match the commit's actual writes.
+  const distinctTagNames = new Set<string>();
+  for (const r of okRows) {
+    if (!r.leadPatch.tags) continue;
+    for (const t of r.leadPatch.tags.split(",")) {
+      const trimmed = t.trim();
+      if (trimmed.length === 0) continue;
+      const parsed = tagName.safeParse(trimmed);
+      if (!parsed.success) continue;
+      distinctTagNames.add(parsed.data);
+    }
+  }
+  let newTagCount = 0;
+  if (distinctTagNames.size > 0) {
+    const lowered = Array.from(distinctTagNames).map((n) => n.toLowerCase());
+    const existing = await db
+      .select({ name: tags.name })
+      .from(tags)
+      .where(
+        sql`lower(${tags.name}) IN (${sql.join(
+          lowered.map((n) => sql`${n}`),
+          sql`, `,
+        )})`,
+      );
+    const existingLowered = new Set(existing.map((e) => e.name.toLowerCase()));
+    for (const n of distinctTagNames) {
+      if (!existingLowered.has(n.toLowerCase())) newTagCount += 1;
+    }
+  }
+
   // Header-level warnings.
   if (unknownHeaders.length > 0) {
     pushWarning(
@@ -229,6 +271,8 @@ export async function buildImportPreview({
     noteActivitiesToCreate,
     emailActivitiesToCreate,
     opportunitiesToCreate,
+    distinctTagCount: distinctTagNames.size,
+    newTagCount,
     smartDetectEnabled: smartDetect,
     warnings: Array.from(warningGroups.values()),
     errors,

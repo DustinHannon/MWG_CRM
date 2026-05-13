@@ -469,7 +469,7 @@ export interface LeadRow {
   // the same leftJoin that gives us ownerDisplayName. Null when the
   // owner has no photo synced from Graph yet.
   ownerPhotoUrl: string | null;
-  tags: string[] | null;
+  tags: Array<{ id: string; name: string; color: string | null }> | null;
   city: string | null;
   state: string | null;
   estimatedValue: string | null;
@@ -670,10 +670,24 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
         ownerId: leads.ownerId,
         ownerDisplayName: users.displayName,
         ownerPhotoUrl: users.photoBlobUrl,
-        // hydrate tag names from the relational lead_tags
-        // join. Legacy `leads.tags text[]` column was dropped.
-        tags: sql<string[] | null>`(
-          SELECT array_agg(t.name ORDER BY t.name)
+        // hydrate full tag objects ({id,name,color}) from the
+        // relational lead_tags join so the list cell can render
+        // proper TagChip components. Legacy `leads.tags text[]`
+        // column was dropped.
+        tags: sql<
+          Array<{ id: string; name: string; color: string | null }> | null
+        >`(
+          SELECT COALESCE(
+            jsonb_agg(
+              jsonb_build_object(
+                'id', t.id,
+                'name', t.name,
+                'color', t.color
+              )
+              ORDER BY t.name
+            ),
+            '[]'::jsonb
+          )
           FROM lead_tags lt
           JOIN tags t ON t.id = lt.tag_id
           WHERE lt.lead_id = ${leads.id}

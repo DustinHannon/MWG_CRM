@@ -11,16 +11,26 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { listTasksForUser } from "@/lib/tasks";
+import { listTags } from "@/lib/tags";
+import { BulkTagButton } from "@/components/tags/bulk-tag-button";
+import { TagFilterSelect } from "@/components/tags/tag-filter-select";
 import {
   BUILTIN_TASK_VIEWS,
   findBuiltinTaskView,
   getSavedTaskView,
+  getTaskPreferences,
   listSavedTaskViewsForUser,
   type TaskViewDefinition,
   type TaskViewFilters,
   type TaskViewSort,
 } from "@/lib/task-views";
+import {
+  DEFAULT_TASK_COLUMNS,
+  TASK_COLUMN_KEYS,
+  type TaskColumnKey,
+} from "@/lib/task-view-constants";
 import { TaskTableClient } from "./_components/task-table-client";
+import { TaskColumnsMenu } from "./_components/task-columns-menu";
 import { TaskViewSelector } from "./_components/task-view-selector";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +62,8 @@ export default async function TasksPage({
     sort?: string;
     dir?: string;
     q?: string;
+    tag?: string;
+    cols?: string;
     cursor?: string;
   }>;
 }) {
@@ -59,6 +71,9 @@ export default async function TasksPage({
   const perms = await getPermissions(session.id);
   const canViewOthers = session.isAdmin || perms.canViewOthersTasks;
   const canReassign = session.isAdmin || perms.canReassignTasks;
+  const canApplyTags = session.isAdmin || perms.canApplyTags;
+  const canManageTagDefinitions =
+    session.isAdmin || perms.canManageTagDefinitions;
 
   const sp = await searchParams;
   const prefs = await getCurrentUserTimePrefs();
@@ -96,6 +111,36 @@ export default async function TasksPage({
   }
   if (!activeView) activeView = findBuiltinTaskView("builtin:my-open")!;
 
+  // Resolve visible column list. Precedence:
+  //   1. ?cols= URL param (in-session toggle)
+  //   2. user_preferences.adhocColumns.task (built-in views only)
+  //   3. activeView.columns (saved view's stored choice)
+  //   4. DEFAULT_TASK_COLUMNS (fallback)
+  const taskPrefs = await getTaskPreferences(session.id);
+  const baseColumns =
+    activeView.columns && activeView.columns.length > 0
+      ? activeView.columns
+      : DEFAULT_TASK_COLUMNS;
+  const urlCols = sp.cols
+    ? (sp.cols
+        .split(",")
+        .filter((c): c is TaskColumnKey =>
+          TASK_COLUMN_KEYS.includes(c as TaskColumnKey),
+        ) as TaskColumnKey[])
+    : null;
+  let activeColumns: TaskColumnKey[];
+  if (urlCols && urlCols.length > 0) {
+    activeColumns = urlCols;
+  } else if (
+    activeView.source === "builtin" &&
+    taskPrefs.adhocColumns &&
+    taskPrefs.adhocColumns.length > 0
+  ) {
+    activeColumns = taskPrefs.adhocColumns;
+  } else {
+    activeColumns = baseColumns;
+  }
+
   // URL params override the view's defaults so the user can tweak
   // and save-as-new without losing intermediate state.
   const filters: TaskViewFilters = {
@@ -125,6 +170,14 @@ export default async function TasksPage({
       ? { dueRange: sp.due as TaskViewFilters["dueRange"] }
       : {}),
     ...(sp.q ? { q: sp.q } : {}),
+    ...(sp.tag
+      ? {
+          tags: sp.tag
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter((s: string) => s.length > 0),
+        }
+      : {}),
   };
 
   const sort: TaskViewSort =
@@ -153,6 +206,7 @@ export default async function TasksPage({
     relatedEntity: filters.relatedEntity,
     dueRange: filters.dueRange,
     q: filters.q,
+    tags: filters.tags,
     sort,
     cursor: sp.cursor,
     pageSize: 50,
@@ -164,6 +218,11 @@ export default async function TasksPage({
   // (presence of the override param = drift). On reset, the page
   // re-derives filters/sort from the active view because navigation
   // strips the override params.
+  // column drift — when the URL or adhoc pref overrides the base list.
+  const columnsModified =
+    activeColumns.length !== baseColumns.length ||
+    activeColumns.some((c, i) => baseColumns[i] !== c);
+
   const viewModified =
     Boolean(sp.q) ||
     Boolean(sp.status) ||
@@ -172,18 +231,22 @@ export default async function TasksPage({
     Boolean(sp.relation) ||
     Boolean(sp.related) ||
     Boolean(sp.due) ||
+    Boolean(sp.tag) ||
     Boolean(sp.sort) ||
-    Boolean(sp.dir);
+    Boolean(sp.dir) ||
+    columnsModified;
 
   const modifiedFields: string[] = [];
   if (sp.q) modifiedFields.push("search");
+  if (columnsModified) modifiedFields.push("columns");
   if (
     sp.status ||
     sp.priority ||
     sp.assignee ||
     sp.relation ||
     sp.related ||
-    sp.due
+    sp.due ||
+    sp.tag
   ) {
     modifiedFields.push("filters");
   }
@@ -191,6 +254,9 @@ export default async function TasksPage({
 
   // Saved views for the picker. Built-ins filtered by team perm.
   const savedViews = await listSavedTaskViewsForUser(session.id);
+
+  // preload tags catalogue for filter dropdown + bulk-tag picker.
+  const allTags = await listTags();
   const visibleBuiltins = canViewOthers
     ? BUILTIN_TASK_VIEWS
     : BUILTIN_TASK_VIEWS.filter((v) => v.id !== "builtin:team-open");
@@ -236,14 +302,36 @@ export default async function TasksPage({
         title="Tasks"
         fontFamily="display"
         actions={
-          session.isAdmin ? (
-            <Link
-              href="/tasks/archived"
-              className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 whitespace-nowrap transition hover:bg-muted md:inline-flex"
-            >
-              Archived
-            </Link>
-          ) : null
+          <>
+            {/* column-chooser dropdown. URL `?cols=` is the in-session
+                source of truth; built-in views also persist the
+                choice to user_preferences.adhocColumns.task. */}
+            <div className="hidden md:inline-flex">
+              <TaskColumnsMenu
+                activeColumns={activeColumns}
+                activeViewId={activeView.id}
+                baseColumns={baseColumns}
+              />
+            </div>
+            {/* bulk-tag toolbar. Acts on the currently visible
+                recordIds; backed by bulkTagAction. Permission-gated
+                server-side. */}
+            <div className="hidden md:inline-flex">
+              <BulkTagButton
+                entityType="task"
+                recordIds={tasks.map((t) => t.id)}
+                availableTags={allTags}
+              />
+            </div>
+            {session.isAdmin ? (
+              <Link
+                href="/tasks/archived"
+                className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 whitespace-nowrap transition hover:bg-muted md:inline-flex"
+              >
+                Archived
+              </Link>
+            ) : null}
+          </>
         }
       />
 
@@ -257,6 +345,7 @@ export default async function TasksPage({
           savedViews={savedViews}
           currentFilters={filters}
           currentSort={sort}
+          currentColumns={activeColumns}
           viewModified={viewModified}
           modifiedFields={modifiedFields}
         />
@@ -268,6 +357,8 @@ export default async function TasksPage({
           relatedEntity={filters.relatedEntity}
           dueRange={filters.dueRange ?? "all"}
           q={filters.q ?? ""}
+          tag={sp.tag ?? ""}
+          allTags={allTags}
           canViewOthers={canViewOthers}
         />
       </div>
@@ -281,6 +372,9 @@ export default async function TasksPage({
           assignableUsers={assignableUsers}
           prefs={prefs}
           sort={sort}
+          columns={activeColumns}
+          canApplyTags={canApplyTags}
+          canManageTagDefinitions={canManageTagDefinitions}
         />
       </GlassCard>
 
@@ -363,6 +457,8 @@ function FilterBar({
   relatedEntity,
   dueRange,
   q,
+  tag,
+  allTags,
   canViewOthers,
 }: {
   assignee: string;
@@ -372,6 +468,8 @@ function FilterBar({
   relatedEntity: string | undefined;
   dueRange: string;
   q: string;
+  tag: string;
+  allTags: Array<{ id: string; name: string; color: string | null }>;
   canViewOthers: boolean;
 }) {
   return (
@@ -480,6 +578,19 @@ function FilterBar({
             className="h-8 w-40 rounded-md border border-border bg-input/60 px-2 text-xs"
           />
         </label>
+        <div className="flex flex-col gap-1">
+          <span className="text-muted-foreground">Tags</span>
+          <TagFilterSelect
+            name="tag"
+            options={allTags.map((t) => ({
+              id: t.id,
+              name: t.name,
+              color: t.color,
+            }))}
+            defaultValue={tag}
+            placeholder="Tags"
+          />
+        </div>
         <button
           type="submit"
           className="h-8 rounded-md border border-primary/40 bg-primary/10 px-3 text-xs font-medium text-primary hover:bg-primary/20"

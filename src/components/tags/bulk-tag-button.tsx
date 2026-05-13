@@ -1,22 +1,24 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Tags } from "lucide-react";
 import { toast } from "sonner";
-import { bulkTagLeadsAction } from "@/components/tags/actions";
-import { TagChip } from "@/components/tags/tag-chip";
+import { bulkTagAction } from "./actions";
+import { TagChip } from "./tag-chip";
 import { cn } from "@/lib/utils";
 
 /**
- * bulk-tag toolbar surface. Mirrors the
- * AddVisibleToListButton pattern: acts on the leadIds currently
- * visible in the table (passed in as a prop) rather than a per-row
- * selection model. When per-row selection lands, swap the leadIds
- * source.
+ * Bulk-tag toolbar surface for any tag-aware entity list. Mirrors the
+ * AddVisibleToListButton pattern: acts on `recordIds` currently
+ * visible (or selected) — passed in as a prop — rather than a per-row
+ * selection model.
  *
- * Backend: `bulkTagLeadsAction({ leadIds, tagIds, operation })`
- * already supports add + remove. UI exposes tag picker + Add/Remove
- * radio + Confirm.
+ * Backend: `bulkTagAction({ entityType, recordIds, tagIds, operation })`.
+ * Supports add + remove. UI exposes tag picker + Add/Remove radio.
+ *
+ * Originally lived at `src/app/(app)/leads/_components/bulk-tag-button.tsx`
+ * scoped to leads only. Relocated and generalised so all five
+ * entities share one implementation.
  */
 export interface AvailableTag {
   id: string;
@@ -24,11 +26,28 @@ export interface AvailableTag {
   color: string | null;
 }
 
+export type BulkTagEntityType =
+  | "lead"
+  | "account"
+  | "contact"
+  | "opportunity"
+  | "task";
+
+const ENTITY_NOUN: Record<BulkTagEntityType, { single: string; plural: string }> = {
+  lead: { single: "lead", plural: "leads" },
+  account: { single: "account", plural: "accounts" },
+  contact: { single: "contact", plural: "contacts" },
+  opportunity: { single: "opportunity", plural: "opportunities" },
+  task: { single: "task", plural: "tasks" },
+};
+
 export function BulkTagButton({
-  leadIds,
+  entityType,
+  recordIds,
   availableTags,
 }: {
-  leadIds: string[];
+  entityType: BulkTagEntityType;
+  recordIds: string[];
   availableTags: AvailableTag[];
 }) {
   const [open, setOpen] = useState(false);
@@ -36,7 +55,20 @@ export function BulkTagButton({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [op, setOp] = useState<"add" | "remove">("add");
 
-  if (leadIds.length === 0 || availableTags.length === 0) return null;
+  // Escape closes the dialog — WCAG 2.1.2. Without this, keyboard
+  // users cannot dismiss the modal.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !pending) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, pending]);
+
+  if (recordIds.length === 0 || availableTags.length === 0) return null;
+
+  const noun = ENTITY_NOUN[entityType];
 
   function toggleTag(id: string) {
     setPicked((prev) => {
@@ -53,24 +85,23 @@ export function BulkTagButton({
       return;
     }
     startTransition(async () => {
-      const res = await bulkTagLeadsAction({
-        leadIds,
+      const res = await bulkTagAction({
+        entityType,
+        recordIds,
         tagIds: Array.from(picked),
         operation: op,
       });
       if (res.ok) {
-        const { leadsTouched, tagsAdded, tagsRemoved } = res.data;
+        const { recordsTouched, tagsAdded, tagsRemoved } = res.data;
+        const recordWord =
+          recordsTouched === 1 ? noun.single : noun.plural;
         if (op === "add") {
           toast.success(
-            `Added ${tagsAdded} tag(s) across ${leadsTouched} lead${
-              leadsTouched === 1 ? "" : "s"
-            }.`,
+            `Added ${tagsAdded} tag(s) across ${recordsTouched} ${recordWord}.`,
           );
         } else {
           toast.success(
-            `Removed ${tagsRemoved} tag(s) across ${leadsTouched} lead${
-              leadsTouched === 1 ? "" : "s"
-            }.`,
+            `Removed ${tagsRemoved} tag(s) across ${recordsTouched} ${recordWord}.`,
           );
         }
         setOpen(false);
@@ -97,20 +128,23 @@ export function BulkTagButton({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Bulk add or remove tags from visible leads"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          aria-label={`Bulk add or remove tags from visible ${noun.plural}`}
+          onClick={() => {
+            if (!pending) setOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
         >
           <div
-            className="w-full max-w-md rounded-lg border border-border bg-[var(--popover)] p-5 text-[var(--popover-foreground)] shadow-2xl"
+            className="w-full max-w-md rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-semibold">
-              Bulk tag {leadIds.length.toLocaleString()} lead
-              {leadIds.length === 1 ? "" : "s"}
+              Bulk tag {recordIds.length.toLocaleString()}{" "}
+              {recordIds.length === 1 ? noun.single : noun.plural}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Apply the selected tags to every lead currently visible.
-              Each lead gets its own audit row.
+              Apply the selected tags to every {noun.single} currently
+              visible. Each {noun.single} gets its own audit row.
             </p>
 
             <div className="mt-4 flex items-center gap-4 text-sm">

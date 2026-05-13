@@ -18,6 +18,7 @@ export const AVAILABLE_CONTACT_COLUMNS = [
   { key: "doNotContact", label: "DNC" },
   { key: "doNotMail", label: "No postal mail" },
   { key: "owner", label: "Owner" },
+  { key: "tags", label: "Tags" },
   { key: "createdAt", label: "Created" },
   { key: "updatedAt", label: "Updated" },
 ] as const;

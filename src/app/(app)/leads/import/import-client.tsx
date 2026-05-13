@@ -117,6 +117,18 @@ function LeadPreviewView({
         />
       </Section>
 
+      <Section title="Tags">
+        <Stat
+          label="Distinct tags"
+          value={preview.distinctTagCount}
+        />
+        <Stat
+          label="New tags to create"
+          value={preview.newTagCount}
+          tone={preview.newTagCount > 0 ? "ok" : "neutral"}
+        />
+      </Section>
+
       {preview.warnings.length > 0 ? (
         <CollapsibleList
           title={`Warnings (${preview.warnings.length})`}

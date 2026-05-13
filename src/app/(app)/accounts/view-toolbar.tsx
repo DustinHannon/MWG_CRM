@@ -87,6 +87,7 @@ export function AccountViewToolbar({
       "owner",
       "industry",
       "recentlyUpdatedDays",
+      "tag",
       "cols",
       "sort",
       "dir",
@@ -474,6 +475,15 @@ function SaveViewDialog({
     if (params.get("recentlyUpdatedDays")) {
       const n = Number(params.get("recentlyUpdatedDays"));
       if (Number.isFinite(n) && n > 0) filters.recentlyUpdatedDays = n;
+    }
+    if (params.get("tag")) {
+      // tag accepts a comma-separated list (multi-select).
+      const raw = params.get("tag") ?? "";
+      const list = raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      if (list.length > 0) filters.tags = list;
     }
 
     const sortField = params.get("sort") ?? "updatedAt";

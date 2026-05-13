@@ -30,6 +30,18 @@ export interface FieldMeta {
   values?: readonly string[];
   /** True if this column has the soft-delete column on the same table. */
   filterable?: boolean;
+  /**
+   * Virtual columns are resolved by a correlated subquery rather than
+   * a direct column read on the entity table. Currently used for the
+   * `tags` aggregate (string_agg over the relational <entity>_tags
+   * join). Virtual fields:
+   *   - cannot be used in group_by (would explode rows),
+   *   - cannot be used as metric `field` (string output),
+   *   - support `ilike` filter (substring match against the
+   *     comma-joined tag list),
+   *   - render as a comma-separated string in flat queries.
+   */
+  virtual?: boolean;
 }
 
 export interface EntityMeta {
@@ -157,6 +169,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
       { column: "created_at", label: "Created", kind: "date" },
       { column: "updated_at", label: "Updated", kind: "date" },
       { column: "last_activity_at", label: "Last activity", kind: "date" },
+      { column: "tags", label: "Tags", kind: "string", virtual: true },
     ],
   },
   account: {
@@ -174,6 +187,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
       { column: "owner_id", label: "Owner", kind: "uuid" },
       { column: "created_at", label: "Created", kind: "date" },
       { column: "updated_at", label: "Updated", kind: "date" },
+      { column: "tags", label: "Tags", kind: "string", virtual: true },
     ],
   },
   contact: {
@@ -193,6 +207,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
       { column: "owner_id", label: "Owner", kind: "uuid" },
       { column: "created_at", label: "Created", kind: "date" },
       { column: "updated_at", label: "Updated", kind: "date" },
+      { column: "tags", label: "Tags", kind: "string", virtual: true },
     ],
   },
   opportunity: {
@@ -218,6 +233,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
       { column: "created_at", label: "Created", kind: "date" },
       { column: "updated_at", label: "Updated", kind: "date" },
       { column: "closed_at", label: "Closed", kind: "date" },
+      { column: "tags", label: "Tags", kind: "string", virtual: true },
     ],
   },
   task: {
@@ -251,6 +267,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
       { column: "opportunity_id", label: "Opportunity", kind: "uuid" },
       { column: "created_at", label: "Created", kind: "date" },
       { column: "updated_at", label: "Updated", kind: "date" },
+      { column: "tags", label: "Tags", kind: "string", virtual: true },
     ],
   },
   activity: {
@@ -383,4 +400,65 @@ export function isValidField(
   column: string,
 ): boolean {
   return REPORT_ENTITIES[entityType].fields.some((f) => f.column === column);
+}
+
+/** True when the field is a virtual (correlated-subquery) column. */
+export function isVirtualField(
+  entityType: ReportEntityType,
+  column: string,
+): boolean {
+  return REPORT_ENTITIES[entityType].fields.some(
+    (f) => f.column === column && f.virtual === true,
+  );
+}
+
+/**
+ * The set of entity types that have a relational tags junction table.
+ * Used by access.ts to resolve the virtual `tags` column to the
+ * correct `<entity>_tags` table.
+ */
+export type TagBearingEntityType =
+  | "lead"
+  | "account"
+  | "contact"
+  | "opportunity"
+  | "task";
+
+const TAG_BEARING: ReadonlySet<ReportEntityType> = new Set<ReportEntityType>([
+  "lead",
+  "account",
+  "contact",
+  "opportunity",
+  "task",
+]);
+
+export function isTagBearingEntity(
+  entityType: ReportEntityType,
+): entityType is TagBearingEntityType {
+  return TAG_BEARING.has(entityType);
+}
+
+/**
+ * Resolve the junction-table name + entity-id column for an entity's
+ * tags. Throws for non-tag-bearing entities — callers must gate via
+ * `isTagBearingEntity` first.
+ */
+export function tagJunctionFor(
+  entityType: TagBearingEntityType,
+): { junctionTable: string; entityIdColumn: string } {
+  switch (entityType) {
+    case "lead":
+      return { junctionTable: "lead_tags", entityIdColumn: "lead_id" };
+    case "account":
+      return { junctionTable: "account_tags", entityIdColumn: "account_id" };
+    case "contact":
+      return { junctionTable: "contact_tags", entityIdColumn: "contact_id" };
+    case "opportunity":
+      return {
+        junctionTable: "opportunity_tags",
+        entityIdColumn: "opportunity_id",
+      };
+    case "task":
+      return { junctionTable: "task_tags", entityIdColumn: "task_id" };
+  }
 }

@@ -161,7 +161,6 @@ export const adminCrumbs = {
     { label: "Scoring", href: "/admin/scoring" },
     { label: "Help" },
   ],
-  tags: (): Breadcrumb[] => [ADMIN, { label: "Tags" }],
   apiKeys: (): Breadcrumb[] => [ADMIN, { label: "API keys" }],
   apiUsage: (): Breadcrumb[] => [ADMIN, { label: "API usage" }],
   data: (): Breadcrumb[] => [ADMIN, { label: "Data" }],

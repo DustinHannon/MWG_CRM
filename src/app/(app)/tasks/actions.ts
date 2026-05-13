@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth-helpers";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import {
   archiveTasksById,
   createTask,
@@ -94,6 +94,35 @@ export async function updateTaskAction(
       const parsed = updateActionSchema.parse(raw);
 
       const { id, version, ...patch } = parsed;
+
+      // Defence-in-depth access gate. Admin or canEditOthersTasks
+      // can touch any task; otherwise the actor must be the
+      // creator or assignee. This matches the canDeleteTask gate.
+      const [row] = await db
+        .select({
+          createdById: tasks.createdById,
+          assignedToId: tasks.assignedToId,
+        })
+        .from(tasks)
+        .where(eq(tasks.id, id))
+        .limit(1);
+      if (!row) {
+        throw new ForbiddenError("Task not found.");
+      }
+      const perms = await getPermissions(session.id);
+      const isOwnerOrAssignee =
+        row.createdById === session.id || row.assignedToId === session.id;
+      const canEditOthers = session.isAdmin || perms.canEditOthersTasks;
+      if (!canEditOthers && !isOwnerOrAssignee) {
+        await writeAudit({
+          actorId: session.id,
+          action: "access.denied.task.update",
+          targetType: "task",
+          targetId: id,
+        });
+        throw new ForbiddenError("You can't edit this task.");
+      }
+
       const result = await updateTask(
         id,
         version,

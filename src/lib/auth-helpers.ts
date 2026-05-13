@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
+import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
+import { tasks } from "@/db/schema/tasks";
 import { permissions, users } from "@/db/schema/users";
 
 export interface SessionUser {
@@ -109,6 +111,9 @@ export type PermissionKey =
   | "canEditOthersTasks"
   | "canDeleteOthersTasks"
   | "canReassignTasks"
+  // tag governance — apply/remove on records, manage tag library.
+  | "canApplyTags"
+  | "canManageTagDefinitions"
   // fine-grained marketing perms.
   | MarketingPermissionKey;
 
@@ -176,6 +181,105 @@ export async function requireLeadAccess(
   if (perm[0]?.canViewAllRecords) return { ownerId: row[0].ownerId };
 
   throw new ForbiddenError("You don't have access to this lead.");
+}
+
+/**
+ * Verify the user can access a specific CRM entity (account / contact /
+ * opportunity). Mirrors `requireLeadAccess`: admin always passes; non-admin
+ * must own the row OR carry `canViewAllRecords`. Throws ForbiddenError
+ * otherwise. Tasks are gated separately via `requireTaskAccess` because
+ * their access model is creator/assignee/admin rather than owner-based.
+ *
+ * The wide entity union keeps the helper general — every CRM entity that
+ * uses owner-based access shares the same SQL/checks.
+ */
+export async function requireOwnedEntityAccess(
+  user: SessionUser,
+  entityType: "account" | "contact" | "opportunity",
+  entityId: string,
+): Promise<{ ownerId: string | null }> {
+  let ownerId: string | null = null;
+  if (entityType === "account") {
+    const row = await db
+      .select({ ownerId: crmAccounts.ownerId, isDeleted: crmAccounts.isDeleted })
+      .from(crmAccounts)
+      .where(eq(crmAccounts.id, entityId))
+      .limit(1);
+    if (!row[0] || row[0].isDeleted) {
+      throw new ForbiddenError("Account not found.");
+    }
+    ownerId = row[0].ownerId;
+  } else if (entityType === "contact") {
+    const row = await db
+      .select({ ownerId: contacts.ownerId, isDeleted: contacts.isDeleted })
+      .from(contacts)
+      .where(eq(contacts.id, entityId))
+      .limit(1);
+    if (!row[0] || row[0].isDeleted) {
+      throw new ForbiddenError("Contact not found.");
+    }
+    ownerId = row[0].ownerId;
+  } else {
+    const row = await db
+      .select({
+        ownerId: opportunities.ownerId,
+        isDeleted: opportunities.isDeleted,
+      })
+      .from(opportunities)
+      .where(eq(opportunities.id, entityId))
+      .limit(1);
+    if (!row[0] || row[0].isDeleted) {
+      throw new ForbiddenError("Opportunity not found.");
+    }
+    ownerId = row[0].ownerId;
+  }
+
+  if (user.isAdmin) return { ownerId };
+  if (ownerId === user.id) return { ownerId };
+
+  const perm = await db
+    .select({ canViewAllRecords: permissions.canViewAllRecords })
+    .from(permissions)
+    .where(eq(permissions.userId, user.id))
+    .limit(1);
+  if (perm[0]?.canViewAllRecords) return { ownerId };
+
+  throw new ForbiddenError(`You don't have access to this ${entityType}.`);
+}
+
+/**
+ * Verify the user can access a specific task. Tasks use a different
+ * access model than other CRM entities: admin OR creator OR assignee
+ * OR `canViewOthersTasks` may interact. Throws ForbiddenError otherwise.
+ */
+export async function requireTaskAccess(
+  user: SessionUser,
+  taskId: string,
+): Promise<{ createdById: string | null; assignedToId: string | null }> {
+  const row = await db
+    .select({
+      createdById: tasks.createdById,
+      assignedToId: tasks.assignedToId,
+      isDeleted: tasks.isDeleted,
+    })
+    .from(tasks)
+    .where(eq(tasks.id, taskId))
+    .limit(1);
+  if (!row[0] || row[0].isDeleted) {
+    throw new ForbiddenError("Task not found.");
+  }
+  if (user.isAdmin) return row[0];
+  if (row[0].createdById === user.id || row[0].assignedToId === user.id) {
+    return row[0];
+  }
+  const perm = await db
+    .select({ canViewOthersTasks: permissions.canViewOthersTasks })
+    .from(permissions)
+    .where(eq(permissions.userId, user.id))
+    .limit(1);
+  if (perm[0]?.canViewOthersTasks) return row[0];
+
+  throw new ForbiddenError("You don't have access to this task.");
 }
 
 /**
@@ -257,6 +361,9 @@ export async function getPermissions(
       // + §7 — static-list import + CD migrations admin.
       canMarketingListsImport: false,
       canMarketingMigrationsRun: false,
+      // tag governance — apply tags + manage tag library.
+      canApplyTags: false,
+      canManageTagDefinitions: false,
     };
   }
   const r = row[0];
@@ -299,5 +406,7 @@ export async function getPermissions(
     canMarketingAuditView: r.canMarketingAuditView,
     canMarketingListsImport: r.canMarketingListsImport,
     canMarketingMigrationsRun: r.canMarketingMigrationsRun,
+    canApplyTags: r.canApplyTags,
+    canManageTagDefinitions: r.canManageTagDefinitions,
   };
 }

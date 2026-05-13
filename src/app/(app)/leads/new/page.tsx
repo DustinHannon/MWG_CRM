@@ -32,7 +32,13 @@ export default async function NewLeadPage() {
         }
       />
 
-      <LeadForm mode="create" />
+      <LeadForm
+        mode="create"
+        canApplyTags={user.isAdmin || perms.canApplyTags}
+        canManageTagDefinitions={
+          user.isAdmin || perms.canManageTagDefinitions
+        }
+      />
     </div>
   );
 }

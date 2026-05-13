@@ -15,6 +15,10 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { canDeleteOpportunity } from "@/lib/access/can-delete";
 import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
+import { listTags } from "@/lib/tags";
+import { BulkTagButton } from "@/components/tags/bulk-tag-button";
+import { TagFilterSelect } from "@/components/tags/tag-filter-select";
+import { TagsCell } from "@/components/tags/tags-cell";
 import { OpportunityListMobile } from "./_components/opportunity-list-mobile";
 import { OpportunityRowActions } from "./_components/opportunity-row-actions";
 import { MobileOpportunityFilterSelect } from "./_components/filters-mobile";
@@ -57,6 +61,7 @@ interface SearchParams {
   closingWithinDays?: string;
   minAmount?: string;
   maxAmount?: string;
+  tag?: string;
   page?: string;
   cols?: string;
   sort?: string;
@@ -149,6 +154,12 @@ export default async function OpportunitiesPage({
         ? Number(sp.maxAmount)
         : undefined
       : undefined,
+    tags: sp.tag
+      ? sp.tag
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+      : undefined,
   };
 
   // ---- Resolve column list -----------------------------------------------
@@ -197,6 +208,8 @@ export default async function OpportunitiesPage({
     userId: user.id,
     canViewAll,
   });
+  // preload the tags catalogue for the filter dropdown + bulk-tag picker.
+  const allTags = await listTags();
   const ownerPickerRows = canViewAll
     ? await db
         .select({ id: users.id, displayName: users.displayName })
@@ -235,6 +248,7 @@ export default async function OpportunitiesPage({
     Boolean(sp.closingWithinDays) ||
     Boolean(sp.minAmount) ||
     Boolean(sp.maxAmount) ||
+    Boolean(sp.tag) ||
     Boolean(sp.sort) ||
     Boolean(sp.dir);
 
@@ -247,7 +261,8 @@ export default async function OpportunitiesPage({
     sp.stage ||
     sp.closingWithinDays ||
     sp.minAmount ||
-    sp.maxAmount
+    sp.maxAmount ||
+    sp.tag
   ) {
     modifiedFields.push("filters");
   }
@@ -319,6 +334,15 @@ export default async function OpportunitiesPage({
                 Archived
               </Link>
             ) : null}
+            {/* bulk-tag toolbar. Acts on the currently
+                visible recordIds; backed by bulkTagAction. */}
+            <div className="hidden md:inline-flex">
+              <BulkTagButton
+                entityType="opportunity"
+                recordIds={result.rows.map((r) => r.id)}
+                availableTags={allTags}
+              />
+            </div>
             <Link
               href="/opportunities/new"
               className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
@@ -484,6 +508,16 @@ export default async function OpportunitiesPage({
                 placeholder="Max $"
                 className="w-24 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               />
+              <TagFilterSelect
+                name="tag"
+                options={allTags.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  color: t.color,
+                }))}
+                defaultValue={sp.tag}
+                placeholder="Tags"
+              />
               <button
                 type="submit"
                 className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
@@ -496,7 +530,8 @@ export default async function OpportunitiesPage({
               sp.stage ||
               sp.closingWithinDays ||
               sp.minAmount ||
-              sp.maxAmount ? (
+              sp.maxAmount ||
+              sp.tag ? (
                 <Link
                   href={`/opportunities?view=${encodeURIComponent(activeViewParam)}`}
                   className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground/90"
@@ -738,6 +773,8 @@ function renderCell(row: OpportunityRow, col: OpportunityColumnKey) {
       ) : (
         <span className="text-muted-foreground/80">—</span>
       );
+    case "tags":
+      return <TagsCell tags={row.tags} />;
     case "createdAt":
       return (
         <span className="text-muted-foreground">

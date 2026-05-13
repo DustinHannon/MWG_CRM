@@ -7,6 +7,7 @@ import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
+import { TagSection } from "@/components/tags/tag-section";
 import { ContactEditForm } from "./_components/contact-edit-form";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,10 @@ export default async function EditContactPage({
           doNotMail: contact.doNotMail,
         }}
       />
+
+      <div className="mt-8 max-w-3xl">
+        <TagSection entityType="contact" entityId={contact.id} />
+      </div>
     </div>
   );
 }

@@ -39,6 +39,12 @@ export interface AccountViewFilters {
   country?: string;
   hasParentAccount?: boolean;
   recentlyUpdatedDays?: number;
+  /**
+   * Filter to accounts bearing ANY of the given tag names (OR
+   * semantics). Names are case-insensitive; matched against the
+   * `tags` table via the `account_tags` junction.
+   */
+  tags?: string[];
 }
 
 export interface AccountViewSort {
@@ -138,6 +144,7 @@ export const accountViewSchema = z.object({
       country: z.string().trim().max(80).optional(),
       hasParentAccount: z.boolean().optional(),
       recentlyUpdatedDays: z.number().int().min(1).max(3650).optional(),
+      tags: z.array(z.string().max(80)).optional(),
     })
     .default({}),
   columns: z
@@ -420,6 +427,7 @@ export interface AccountRow {
   ownerDisplayName: string | null;
   ownerPhotoUrl: string | null;
   wonDeals: number;
+  tags: Array<{ id: string; name: string; color: string | null }> | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -507,6 +515,20 @@ export async function runAccountView(
       ),
     );
   }
+  if (merged.tags?.length) {
+    // tag membership via the relational account_tags table joined to
+    // tags.name (case-insensitive). OR semantics: a record matches
+    // when it bears ANY selected tag.
+    wheres.push(
+      sql`EXISTS (
+        SELECT 1 FROM account_tags at
+        JOIN tags t ON t.id = at.tag_id
+        WHERE at.account_id = ${crmAccounts.id} AND lower(t.name) = ANY(
+          SELECT lower(x) FROM unnest(${merged.tags}::text[]) AS x
+        )
+      )`,
+    );
+  }
 
   const sort = opts.sort ?? view.sort;
   const sortColumn = (() => {
@@ -590,6 +612,26 @@ export async function runAccountView(
         ownerDisplayName: users.displayName,
         ownerPhotoUrl: users.photoBlobUrl,
         wonDeals: wonDealsExpr,
+        // hydrate full tag objects ({id,name,color}) so the list cell
+        // can render TagChip components without a follow-up query.
+        tags: sql<
+          Array<{ id: string; name: string; color: string | null }> | null
+        >`(
+          SELECT COALESCE(
+            jsonb_agg(
+              jsonb_build_object(
+                'id', t.id,
+                'name', t.name,
+                'color', t.color
+              )
+              ORDER BY t.name
+            ),
+            '[]'::jsonb
+          )
+          FROM account_tags at
+          JOIN tags t ON t.id = at.tag_id
+          WHERE at.account_id = ${crmAccounts.id}
+        )`,
         createdAt: crmAccounts.createdAt,
         updatedAt: crmAccounts.updatedAt,
       })

@@ -19,7 +19,9 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserChip } from "@/components/user-display";
 import { AddVisibleToListButton } from "./_components/add-visible-to-list-button";
-import { BulkTagButton } from "./_components/bulk-tag-button";
+import { BulkTagButton } from "@/components/tags/bulk-tag-button";
+import { TagFilterSelect } from "@/components/tags/tag-filter-select";
+import { TagsCell } from "@/components/tags/tags-cell";
 import { SortableLeadsHeaders } from "./_components/sortable-leads-headers";
 import { listTags } from "@/lib/tags";
 import { MobileFilterSelect } from "./_components/filters-mobile";
@@ -136,7 +138,15 @@ export default async function LeadsPage({
     status: sp.status ? [sp.status] : undefined,
     rating: sp.rating ? [sp.rating] : undefined,
     source: sp.source ? [sp.source] : undefined,
-    tags: sp.tag ? [sp.tag] : undefined,
+    // multi-select tag filter. `?tag=` accepts a comma-separated list;
+    // the saved-view layer continues to serialise filters.tags as a
+    // string[] for compatibility with the existing tag SQL.
+    tags: sp.tag
+      ? sp.tag
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+      : undefined,
   };
 
   // ---- Resolve column list -----------------------------------------------
@@ -303,11 +313,12 @@ export default async function LeadsPage({
               />
             </div>
             {/* bulk-tag toolbar. Acts on the currently
-                visible leadIds (same pattern as AddVisibleToList);
-                backed by the existing bulkTagLeadsAction. */}
+                visible recordIds (same pattern as AddVisibleToList);
+                backed by bulkTagAction. */}
             <div className="hidden md:inline-flex">
               <BulkTagButton
-                leadIds={result.rows.map((r) => r.id)}
+                entityType="lead"
+                recordIds={result.rows.map((r) => r.id)}
                 availableTags={allTags}
               />
             </div>
@@ -438,6 +449,16 @@ export default async function LeadsPage({
               defaultValue={sp.source}
               options={LEAD_SOURCES}
               placeholder="Source"
+            />
+            <TagFilterSelect
+              name="tag"
+              options={allTags.map((t) => ({
+                id: t.id,
+                name: t.name,
+                color: t.color,
+              }))}
+              defaultValue={sp.tag}
+              placeholder="Tags"
             />
             <button
               type="submit"
@@ -650,11 +671,7 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
         <span className="text-muted-foreground">Unassigned</span>
       );
     case "tags":
-      return (
-        <span className="text-xs text-muted-foreground">
-          {lead.tags?.length ? lead.tags.join(", ") : "—"}
-        </span>
-      );
+      return <TagsCell tags={lead.tags} />;
     case "city":
       return <span className="text-muted-foreground">{lead.city ?? "—"}</span>;
     case "state":

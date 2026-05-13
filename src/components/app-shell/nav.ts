@@ -133,7 +133,6 @@ export function isLink(item: NavItem): item is NavLink {
 export const ADMIN_NAV_ITEMS: NavLink[] = [
   { label: "Overview", href: "/admin", iconKey: "Home" },
   { label: "Users", href: "/admin/users", iconKey: "UserCog" },
-  { label: "Tags", href: "/admin/tags", iconKey: "Tag" },
   { label: "Scoring", href: "/admin/scoring", iconKey: "Star" },
   { label: "Settings", href: "/admin/settings", iconKey: "SlidersHorizontal" },
   { label: "Audit log", href: "/admin/audit", iconKey: "ScrollText" },

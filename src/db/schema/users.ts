@@ -152,6 +152,13 @@ export const permissions = pgTable("permissions", {
   canMarketingMigrationsRun: boolean("can_marketing_migrations_run")
     .notNull()
     .default(false),
+  // Tag governance permissions. canApplyTags gates apply/remove on entity
+  // records; canManageTagDefinitions gates rename/recolor/delete of tag
+  // definitions in the inline tag library popover.
+  canApplyTags: boolean("can_apply_tags").notNull().default(false),
+  canManageTagDefinitions: boolean("can_manage_tag_definitions")
+    .notNull()
+    .default(false),
 });
 
 // =============================================================================

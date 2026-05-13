@@ -296,11 +296,13 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
             size={Math.min(6, meta.fields.length)}
           >
-            {meta.fields.map((f) => (
-              <option key={f.column} value={f.column}>
-                {f.label}
-              </option>
-            ))}
+            {meta.fields
+              .filter((f) => !f.virtual)
+              .map((f) => (
+                <option key={f.column} value={f.column}>
+                  {f.label}
+                </option>
+              ))}
           </select>
         </Section>
 

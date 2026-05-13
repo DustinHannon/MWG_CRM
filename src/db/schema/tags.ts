@@ -8,6 +8,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { leads } from "./leads";
+import { crmAccounts, contacts, opportunities } from "./crm-records";
+import { tasks } from "./tasks";
 import { users } from "./users";
 
 /**
@@ -53,6 +55,97 @@ export const leadTags = pgTable(
   (t) => [
     primaryKey({ columns: [t.leadId, t.tagId], name: "lead_tags_pkey" }),
     index("lead_tags_tag_idx").on(t.tagId),
+  ],
+);
+
+export const accountTags = pgTable(
+  "account_tags",
+  {
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => crmAccounts.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    addedById: uuid("added_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    primaryKey({ columns: [t.accountId, t.tagId], name: "account_tags_pkey" }),
+    index("account_tags_tag_idx").on(t.tagId),
+  ],
+);
+
+export const contactTags = pgTable(
+  "contact_tags",
+  {
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    addedById: uuid("added_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    primaryKey({ columns: [t.contactId, t.tagId], name: "contact_tags_pkey" }),
+    index("contact_tags_tag_idx").on(t.tagId),
+  ],
+);
+
+export const opportunityTags = pgTable(
+  "opportunity_tags",
+  {
+    opportunityId: uuid("opportunity_id")
+      .notNull()
+      .references(() => opportunities.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    addedById: uuid("added_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.opportunityId, t.tagId],
+      name: "opportunity_tags_pkey",
+    }),
+    index("opportunity_tags_tag_idx").on(t.tagId),
+  ],
+);
+
+export const taskTags = pgTable(
+  "task_tags",
+  {
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    addedById: uuid("added_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    primaryKey({ columns: [t.taskId, t.tagId], name: "task_tags_pkey" }),
+    index("task_tags_tag_idx").on(t.tagId),
   ],
 );
 

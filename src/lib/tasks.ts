@@ -103,6 +103,7 @@ export interface TaskRow {
   contactName: string | null;
   opportunityId: string | null;
   opportunityName: string | null;
+  tags: Array<{ id: string; name: string; color: string | null }> | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -132,6 +133,26 @@ const baseSelect = {
     sql<string | null>`CASE WHEN ${contacts.id} IS NULL THEN NULL ELSE concat_ws(' ', ${contacts.firstName}, ${contacts.lastName}) END`,
   opportunityId: tasks.opportunityId,
   opportunityName: opportunities.name,
+  // hydrate full tag objects from the relational task_tags join so
+  // the list cell can render TagChip components.
+  tags: sql<
+    Array<{ id: string; name: string; color: string | null }> | null
+  >`(
+    SELECT COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', t.id,
+          'name', t.name,
+          'color', t.color
+        )
+        ORDER BY t.name
+      ),
+      '[]'::jsonb
+    )
+    FROM task_tags tt
+    JOIN tags t ON t.id = tt.tag_id
+    WHERE tt.task_id = ${tasks.id}
+  )`,
   createdAt: tasks.createdAt,
   updatedAt: tasks.updatedAt,
 };
@@ -182,6 +203,12 @@ export async function listTasksForUser(args: {
   cursor?: string | null;
   /** 0 disables pagination (legacy callers). Defaults to 50. */
   pageSize?: number;
+  /**
+   * Filter to tasks bearing ANY of the given tag names (OR
+   * semantics, case-insensitive). Matched via the task_tags
+   * junction to tags.name.
+   */
+  tags?: string[];
 }): Promise<ListTasksResult> {
   const wheres: SQL[] = [];
   // exclude soft-deleted tasks from every listing.
@@ -283,6 +310,19 @@ export async function listTasksForUser(args: {
   if (args.q && args.q.trim()) {
     const pattern = `%${args.q.trim()}%`;
     wheres.push(sql`${tasks.title} ILIKE ${pattern}`);
+  }
+  // tag-name filter via the task_tags junction. OR semantics,
+  // case-insensitive.
+  if (args.tags && args.tags.length > 0) {
+    wheres.push(
+      sql`EXISTS (
+        SELECT 1 FROM task_tags tt
+        JOIN tags t ON t.id = tt.tag_id
+        WHERE tt.task_id = ${tasks.id} AND lower(t.name) = ANY(
+          SELECT lower(x) FROM unnest(${args.tags}::text[]) AS x
+        )
+      )`,
+    );
   }
 
   const pageSize = args.pageSize ?? 50;

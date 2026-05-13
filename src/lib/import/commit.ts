@@ -29,6 +29,16 @@ export interface CommitResult {
   skippedActivityCount: number;
   insertedOpportunityIds: string[];
   failedRows: Array<{ rowNumber: number; reason: string }>;
+  // Tag-application totals for the import audit summary. `tagsApplied`
+  // is the number of new (lead, tag) pairs written to lead_tags
+  // (ON CONFLICT DO NOTHING skips already-applied pairs). `tagsCreated`
+  // is the number of new tag rows ensureTags inserted. `newTagIds`
+  // are the ids of those new rows. Per the audit-event taxonomy, the
+  // import emits one `tag.imported` row with these fields rather than
+  // per-row `tag.applied`.
+  tagsApplied: number;
+  tagsCreated: number;
+  newTagIds: string[];
 }
 
 const CHUNK_SIZE = 100;
@@ -53,6 +63,9 @@ export async function commitImport({
     skippedActivityCount: 0,
     insertedOpportunityIds: [],
     failedRows: [],
+    tagsApplied: 0,
+    tagsCreated: 0,
+    newTagIds: [],
   };
 
   // Resolve owner emails + opportunity-owner emails + activity By-names
@@ -96,7 +109,10 @@ export async function commitImport({
       tagNames.add(parsed.data);
     }
   }
-  const tagMap = await ensureTags(Array.from(tagNames), importerUserId);
+  const ensured = await ensureTags(Array.from(tagNames), importerUserId);
+  const tagMap = ensured.map;
+  result.tagsCreated = ensured.newTagIds.length;
+  result.newTagIds = ensured.newTagIds;
 
   // External-ID lookup for re-import.
   const externalIds = rows
@@ -179,6 +195,26 @@ export async function commitImport({
       failedRows: result.failedRows.length,
     },
   });
+
+  // Tag-application summary. One audit row per import (not per row) so
+  // tag.applied events don't flood the audit log for large imports.
+  // Only emitted when the run actually touched tags — silent no-op
+  // otherwise.
+  if (result.tagsApplied > 0 || result.tagsCreated > 0) {
+    await writeAudit({
+      actorId: importerUserId,
+      action: "tag.imported",
+      targetType: "import_job",
+      targetId: importJobId ?? "ad-hoc",
+      after: {
+        entityType: "lead",
+        jobId: importJobId ?? null,
+        tagsApplied: result.tagsApplied,
+        tagsCreated: result.tagsCreated,
+        newTagIds: result.newTagIds,
+      },
+    });
+  }
 
   return result;
 }
@@ -455,14 +491,19 @@ async function processChunk(args: {
         const tagId = args.tagMap.get(parsed.data.toLowerCase());
         if (!tagId) continue;
         // ON CONFLICT DO NOTHING — leadTags has a (lead_id, tag_id) PK.
-        await db
+        // .returning() tells us whether the row was actually inserted
+        // vs. skipped as a duplicate, so the import audit can report
+        // accurate `tagsApplied` counts.
+        const ins = await db
           .insert(leadTags)
           .values({
             leadId,
             tagId,
             addedById: args.importerUserId,
           })
-          .onConflictDoNothing();
+          .onConflictDoNothing()
+          .returning({ leadId: leadTags.leadId });
+        if (ins.length > 0) args.result.tagsApplied += 1;
       }
     }
 
@@ -484,9 +525,10 @@ async function processChunk(args: {
 async function ensureTags(
   names: string[],
   actorId: string,
-): Promise<Map<string, string>> {
+): Promise<{ map: Map<string, string>; newTagIds: string[] }> {
   const map = new Map<string, string>();
-  if (names.length === 0) return map;
+  const newTagIds: string[] = [];
+  if (names.length === 0) return { map, newTagIds };
   const lower = names.map((n) => n.toLowerCase());
   const existing = await db
     .select({ id: tags.id, name: tags.name })
@@ -499,17 +541,49 @@ async function ensureTags(
     );
   for (const e of existing) map.set(e.name.toLowerCase(), e.id);
 
+  // Auto-created tags get a palette colour rotated by position so
+  // freshly-imported batches don't all land as `slate`. Matches the
+  // `nextDefaultPaletteColor` helper in `@/components/tags/helpers`
+  // — replicated as a string array here to avoid a client-bundle
+  // helper import inside the server-only commit pipeline.
+  const PALETTE = [
+    "slate",
+    "navy",
+    "blue",
+    "teal",
+    "green",
+    "amber",
+    "gold",
+    "orange",
+    "rose",
+    "violet",
+    "gray",
+  ] as const;
+  // Seed the rotation from the count of existing tags so new imports
+  // continue where the prior set left off rather than always starting
+  // at slate. countAll is cheap (small table, indexed PK).
+  const [{ count: totalTags = 0 } = { count: 0 }] = (await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(tags)) as Array<{ count: number }>;
+  let rotation = totalTags;
+
   const missing = names.filter((n) => !map.has(n.toLowerCase()));
   for (const m of missing) {
     const slug = slugify(m);
+    const color = PALETTE[rotation % PALETTE.length];
+    rotation += 1;
     const ins = await db
       .insert(tags)
-      .values({ name: m, slug, color: "slate", createdById: actorId })
+      .values({ name: m, slug, color, createdById: actorId })
       .onConflictDoNothing()
       .returning({ id: tags.id, name: tags.name });
-    if (ins[0]) map.set(ins[0].name.toLowerCase(), ins[0].id);
-    else {
-      // Conflict — re-select by name (more permissive than slug).
+    if (ins[0]) {
+      map.set(ins[0].name.toLowerCase(), ins[0].id);
+      newTagIds.push(ins[0].id);
+    } else {
+      // Conflict — re-select by name (more permissive than slug). The
+      // tag already existed under a slightly different slug; we treat
+      // this as "already existed" rather than "newly created".
       const r = await db
         .select({ id: tags.id })
         .from(tags)
@@ -518,7 +592,7 @@ async function ensureTags(
       if (r[0]) map.set(m.toLowerCase(), r[0].id);
     }
   }
-  return map;
+  return { map, newTagIds };
 }
 
 function slugify(name: string): string {

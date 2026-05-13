@@ -157,7 +157,7 @@ const REPORTS: BuiltinReport[] = [
   {
     name: "Aging Leads",
     description:
-      "Leads sorted by last activity date. Phase 12 will add a >30-day filter; for now this surfaces the entire list ordered by last activity.",
+      "Leads sorted by last activity date — surfaces the entire list ordered so the oldest activity floats to the top.",
     entityType: "lead",
     fields: [
       "first_name",
@@ -165,6 +165,7 @@ const REPORTS: BuiltinReport[] = [
       "company_name",
       "status",
       "last_activity_at",
+      "tags",
     ],
     filters: {},
     groupBy: [],
@@ -174,7 +175,7 @@ const REPORTS: BuiltinReport[] = [
   {
     name: "Overdue Tasks",
     description:
-      "Open tasks grouped by assignee. Phase 12 will add a due_at < now() filter; for now this surfaces all open + in-progress tasks.",
+      "Open and in-progress tasks grouped by assignee.",
     entityType: "task",
     fields: [],
     filters: {
@@ -248,7 +249,7 @@ const REPORTS: BuiltinReport[] = [
   {
     name: "Transactional Email Volume",
     description:
-      "Phase 15 transactional email log (lead-activity sends, digests, welcome emails, password rotations). Grouped by feature + status.",
+      "Transactional email log (lead-activity sends, digests, welcome emails, password rotations). Grouped by feature + status.",
     entityType: "email_send_log",
     fields: [],
     filters: {},

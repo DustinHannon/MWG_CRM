@@ -43,6 +43,12 @@ export interface OpportunityViewFilters {
   closingWithinDays?: number;
   minAmount?: number;
   maxAmount?: number;
+  /**
+   * Filter to opportunities bearing ANY of the given tag names (OR
+   * semantics). Names are case-insensitive; matched against the
+   * `tags` table via the `opportunity_tags` junction.
+   */
+  tags?: string[];
 }
 
 export interface OpportunityViewSort {
@@ -173,6 +179,7 @@ export const opportunityViewSchema = z.object({
       closingWithinDays: z.number().int().min(1).max(3650).optional(),
       minAmount: z.number().nonnegative().optional(),
       maxAmount: z.number().nonnegative().optional(),
+      tags: z.array(z.string().max(80)).optional(),
     })
     .default({}),
   columns: z
@@ -436,6 +443,7 @@ export interface OpportunityRow {
   ownerDisplayName: string | null;
   ownerPhotoUrl: string | null;
   closedAt: Date | null;
+  tags: Array<{ id: string; name: string; color: string | null }> | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -560,6 +568,19 @@ export async function runOpportunityView(
   if (typeof merged.maxAmount === "number" && Number.isFinite(merged.maxAmount)) {
     wheres.push(lte(opportunities.amount, String(merged.maxAmount)));
   }
+  if (merged.tags?.length) {
+    // tag membership via the relational opportunity_tags table joined
+    // to tags.name (case-insensitive). OR semantics.
+    wheres.push(
+      sql`EXISTS (
+        SELECT 1 FROM opportunity_tags ot
+        JOIN tags t ON t.id = ot.tag_id
+        WHERE ot.opportunity_id = ${opportunities.id} AND lower(t.name) = ANY(
+          SELECT lower(x) FROM unnest(${merged.tags}::text[]) AS x
+        )
+      )`,
+    );
+  }
 
   const sort = opts.sort ?? view.sort;
   const sortColumn = (() => {
@@ -644,6 +665,26 @@ export async function runOpportunityView(
         ownerDisplayName: users.displayName,
         ownerPhotoUrl: users.photoBlobUrl,
         closedAt: opportunities.closedAt,
+        // hydrate full tag objects ({id,name,color}) so the list cell
+        // can render TagChip components.
+        tags: sql<
+          Array<{ id: string; name: string; color: string | null }> | null
+        >`(
+          SELECT COALESCE(
+            jsonb_agg(
+              jsonb_build_object(
+                'id', t.id,
+                'name', t.name,
+                'color', t.color
+              )
+              ORDER BY t.name
+            ),
+            '[]'::jsonb
+          )
+          FROM opportunity_tags ot
+          JOIN tags t ON t.id = ot.tag_id
+          WHERE ot.opportunity_id = ${opportunities.id}
+        )`,
         createdAt: opportunities.createdAt,
         updatedAt: opportunities.updatedAt,
       })

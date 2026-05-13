@@ -10,6 +10,10 @@ import type {
   TaskViewSort,
 } from "@/lib/task-views";
 import {
+  DEFAULT_TASK_COLUMNS,
+  type TaskColumnKey,
+} from "@/lib/task-view-constants";
+import {
   createTaskViewAction,
   deleteTaskViewAction,
   resetTaskViewAction,
@@ -29,6 +33,7 @@ export function TaskViewSelector({
   savedViews,
   currentFilters,
   currentSort,
+  currentColumns,
   viewModified,
   modifiedFields,
 }: {
@@ -43,6 +48,12 @@ export function TaskViewSelector({
   savedViews: TaskViewDefinition[];
   currentFilters: TaskViewFilters;
   currentSort: TaskViewSort;
+  /**
+   * Currently visible columns. Passed through to "Save current as
+   * view" so the persisted view captures the user's column choice.
+   * Defaults to DEFAULT_TASK_COLUMNS so older callers stay valid.
+   */
+  currentColumns?: TaskColumnKey[];
   /**
    * When true, the URL carries filter / sort / search params that
    * override the active view's stored definition. Surfaces the
@@ -72,6 +83,7 @@ export function TaskViewSelector({
         isPinned: false,
         filters: currentFilters,
         sort: currentSort,
+        columns: currentColumns ?? DEFAULT_TASK_COLUMNS,
       });
       if (res.ok) {
         toast.success(`Saved "${name.trim()}"`);

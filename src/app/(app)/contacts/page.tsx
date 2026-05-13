@@ -14,6 +14,10 @@ import { UserChip } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { canDeleteContact } from "@/lib/access/can-delete";
 import { formatPersonName } from "@/lib/format/person-name";
+import { listTags } from "@/lib/tags";
+import { BulkTagButton } from "@/components/tags/bulk-tag-button";
+import { TagFilterSelect } from "@/components/tags/tag-filter-select";
+import { TagsCell } from "@/components/tags/tags-cell";
 import { ContactListMobile } from "./_components/contact-list-mobile";
 import { ContactRowActions } from "./_components/contact-row-actions";
 import {
@@ -63,6 +67,7 @@ interface SearchParams {
   state?: string;
   country?: string;
   recentlyUpdatedDays?: string;
+  tag?: string;
   page?: string;
   cols?: string;
   sort?: string;
@@ -139,6 +144,12 @@ export default async function ContactsPage({
     recentlyUpdatedDays: sp.recentlyUpdatedDays
       ? Number(sp.recentlyUpdatedDays) || undefined
       : undefined,
+    tags: sp.tag
+      ? sp.tag
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+      : undefined,
   };
 
   // ---- Resolve column list -----------------------------------------------
@@ -187,6 +198,8 @@ export default async function ContactsPage({
     userId: user.id,
     canViewAll,
   });
+  // preload the tags catalogue for the filter dropdown + bulk-tag picker.
+  const allTags = await listTags();
   const ownerPickerRows = canViewAll
     ? await db
         .select({ id: users.id, displayName: users.displayName })
@@ -225,6 +238,7 @@ export default async function ContactsPage({
     Boolean(sp.doNotEmail) ||
     Boolean(sp.doNotCall) ||
     Boolean(sp.recentlyUpdatedDays) ||
+    Boolean(sp.tag) ||
     Boolean(sp.sort) ||
     Boolean(sp.dir);
 
@@ -237,7 +251,8 @@ export default async function ContactsPage({
     sp.doNotContact ||
     sp.doNotEmail ||
     sp.doNotCall ||
-    sp.recentlyUpdatedDays
+    sp.recentlyUpdatedDays ||
+    sp.tag
   ) {
     modifiedFields.push("filters");
   }
@@ -269,7 +284,8 @@ export default async function ContactsPage({
     sp.doNotContact ||
     sp.doNotEmail ||
     sp.doNotCall ||
-    sp.recentlyUpdatedDays;
+    sp.recentlyUpdatedDays ||
+    sp.tag;
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -298,6 +314,15 @@ export default async function ContactsPage({
                 Archived
               </Link>
             ) : null}
+            {/* bulk-tag toolbar. Acts on the currently
+                visible recordIds; backed by bulkTagAction. */}
+            <div className="hidden md:inline-flex">
+              <BulkTagButton
+                entityType="contact"
+                recordIds={result.rows.map((r) => r.id)}
+                availableTags={allTags}
+              />
+            </div>
             <Link
               href="/contacts/new"
               className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
@@ -456,6 +481,16 @@ export default async function ContactsPage({
                 name="doNotCall"
                 defaultChecked={sp.doNotCall === "1"}
                 label="No call"
+              />
+              <TagFilterSelect
+                name="tag"
+                options={allTags.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  color: t.color,
+                }))}
+                defaultValue={sp.tag}
+                placeholder="Tags"
               />
               <button
                 type="submit"
@@ -704,6 +739,8 @@ function renderCell(row: ContactRow, col: ContactColumnKey) {
       ) : (
         <span className="text-muted-foreground">Unassigned</span>
       );
+    case "tags":
+      return <TagsCell tags={row.tags} />;
     case "createdAt":
       return (
         <span className="text-muted-foreground">

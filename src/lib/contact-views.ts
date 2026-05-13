@@ -42,6 +42,12 @@ export interface ContactViewFilters {
   state?: string;
   country?: string;
   recentlyUpdatedDays?: number;
+  /**
+   * Filter to contacts bearing ANY of the given tag names (OR
+   * semantics). Names are case-insensitive; matched against the
+   * `tags` table via the `contact_tags` junction.
+   */
+  tags?: string[];
 }
 
 export interface ContactViewSort {
@@ -144,6 +150,7 @@ export const contactViewSchema = z.object({
       state: z.string().trim().max(120).optional(),
       country: z.string().trim().max(80).optional(),
       recentlyUpdatedDays: z.number().int().min(1).max(3650).optional(),
+      tags: z.array(z.string().max(80)).optional(),
     })
     .default({}),
   columns: z
@@ -424,6 +431,7 @@ export interface ContactRow {
   ownerId: string | null;
   ownerDisplayName: string | null;
   ownerPhotoUrl: string | null;
+  tags: Array<{ id: string; name: string; color: string | null }> | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -517,6 +525,19 @@ export async function runContactView(
       ),
     );
   }
+  if (merged.tags?.length) {
+    // tag membership via the relational contact_tags table joined to
+    // tags.name (case-insensitive). OR semantics.
+    wheres.push(
+      sql`EXISTS (
+        SELECT 1 FROM contact_tags ct
+        JOIN tags t ON t.id = ct.tag_id
+        WHERE ct.contact_id = ${contacts.id} AND lower(t.name) = ANY(
+          SELECT lower(x) FROM unnest(${merged.tags}::text[]) AS x
+        )
+      )`,
+    );
+  }
 
   const sort = opts.sort ?? view.sort;
   const sortColumn = (() => {
@@ -588,6 +609,25 @@ export async function runContactView(
         ownerId: contacts.ownerId,
         ownerDisplayName: users.displayName,
         ownerPhotoUrl: users.photoBlobUrl,
+        // hydrate full tag objects so the cell renders TagChip.
+        tags: sql<
+          Array<{ id: string; name: string; color: string | null }> | null
+        >`(
+          SELECT COALESCE(
+            jsonb_agg(
+              jsonb_build_object(
+                'id', t.id,
+                'name', t.name,
+                'color', t.color
+              )
+              ORDER BY t.name
+            ),
+            '[]'::jsonb
+          )
+          FROM contact_tags ct
+          JOIN tags t ON t.id = ct.tag_id
+          WHERE ct.contact_id = ${contacts.id}
+        )`,
         createdAt: contacts.createdAt,
         updatedAt: contacts.updatedAt,
       })

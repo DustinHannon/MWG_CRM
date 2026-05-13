@@ -9,7 +9,13 @@ import {
 import { ForbiddenError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { getPermissions } from "@/lib/auth-helpers";
-import { isValidField, REPORT_ENTITIES } from "./schemas";
+import {
+  isTagBearingEntity,
+  isValidField,
+  isVirtualField,
+  REPORT_ENTITIES,
+  tagJunctionFor,
+} from "./schemas";
 
 /**
  * report execution.
@@ -57,6 +63,41 @@ function escapeIdent(s: string): string {
 
 function quote(ident: string): string {
   return `"${escapeIdent(ident)}"`;
+}
+
+/**
+ * Build the SELECT expression for a (possibly virtual) column.
+ *
+ * Plain columns become `"col"`. The virtual `tags` column expands to a
+ * correlated subquery that joins the entity's `*_tags` junction table
+ * to `tags` and produces a comma-separated alphabetised string. The
+ * alias matches the column name so downstream column-array bookkeeping
+ * does not need a special case.
+ */
+function selectExprFor(
+  entityType: ReportEntityType,
+  column: string,
+): string {
+  const safe = escapeIdent(column);
+  if (!isVirtualField(entityType, column)) {
+    return `"${safe}"`;
+  }
+  // Only `tags` is virtual today and only on tag-bearing entities.
+  if (column === "tags" && isTagBearingEntity(entityType)) {
+    const { junctionTable, entityIdColumn } = tagJunctionFor(entityType);
+    const meta = REPORT_ENTITIES[entityType];
+    return (
+      `COALESCE(` +
+      `(SELECT string_agg(t.name, ', ' ORDER BY t.name) ` +
+      `FROM ${quote(junctionTable)} jt ` +
+      `JOIN "tags" t ON t.id = jt.${quote("tag_id")} ` +
+      `WHERE jt.${quote(entityIdColumn)} = ${quote(meta.table)}.${quote("id")}` +
+      `), '') AS "tags"`
+    );
+  }
+  // Unknown virtual — degrade to NULL rather than emit an invalid
+  // identifier into the SQL.
+  return `NULL AS "${safe}"`;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -248,6 +289,16 @@ function buildFilterClauses(
     if (!isValidField(entityType, field)) continue;
     if (!raw || typeof raw !== "object") continue;
     const op = raw as Record<string, unknown>;
+    // Virtual columns (e.g. `tags`) need a special filter path. The
+    // tag filter is OR-semantics over tag names: `ilike "vip"` matches
+    // any record that has a tag whose name ILIKE 'vip'; `in [a,b]` is
+    // any record carrying tag a OR tag b (case-insensitive). Anything
+    // else on a virtual column is silently ignored.
+    if (isVirtualField(entityType, field)) {
+      const clauses = buildVirtualTagFilterClauses(entityType, op, params);
+      for (const c of clauses) out.push(c);
+      continue;
+    }
     // Cast on the column side so enum-typed columns (lead.status,
     // opportunity.stage, task.status, task.priority, etc.) compare
     // cleanly against the JSON-encoded string filter values without
@@ -286,6 +337,47 @@ function buildFilterClauses(
   return out;
 }
 
+/**
+ * Build EXISTS subquery clauses for the virtual `tags` column. Only
+ * `ilike` (substring match against tag.name) and `in` (one-of tag
+ * names, case-insensitive) are supported. Operators that don't make
+ * sense on an aggregate string (gte/lte/gt/lt/eq) are silently
+ * ignored.
+ */
+function buildVirtualTagFilterClauses(
+  entityType: ReportEntityType,
+  op: Record<string, unknown>,
+  params: unknown[],
+): string[] {
+  if (!isTagBearingEntity(entityType)) return [];
+  const meta = REPORT_ENTITIES[entityType];
+  const { junctionTable, entityIdColumn } = tagJunctionFor(entityType);
+  const out: string[] = [];
+
+  if ("ilike" in op && typeof op.ilike === "string" && op.ilike.length > 0) {
+    params.push(`%${op.ilike}%`);
+    out.push(
+      `EXISTS (SELECT 1 FROM ${quote(junctionTable)} jtf ` +
+        `JOIN "tags" tf ON tf.id = jtf.${quote("tag_id")} ` +
+        `WHERE jtf.${quote(entityIdColumn)} = ${quote(meta.table)}.${quote("id")} ` +
+        `AND tf.name ILIKE $${params.length})`,
+    );
+  }
+
+  if ("in" in op && Array.isArray(op.in) && op.in.length > 0) {
+    const lowered = op.in.map((v) => String(v).toLowerCase());
+    params.push(lowered);
+    out.push(
+      `EXISTS (SELECT 1 FROM ${quote(junctionTable)} jtf ` +
+        `JOIN "tags" tf ON tf.id = jtf.${quote("tag_id")} ` +
+        `WHERE jtf.${quote(entityIdColumn)} = ${quote(meta.table)}.${quote("id")} ` +
+        `AND lower(tf.name) = ANY($${params.length}::text[]))`,
+    );
+  }
+
+  return out;
+}
+
 /* ---------------------------------------------------------------------- */
 /* Flat query (no group_by, no aggregations) */
 /* ---------------------------------------------------------------------- */
@@ -307,10 +399,18 @@ async function runFlatQuery(
   }
 
   const meta = REPORT_ENTITIES[entityType];
-  const cols = safeColumns.map(quote).join(", ");
-  const orderClause = isValidField(entityType, "updated_at")
-    ? ' ORDER BY "updated_at" DESC NULLS LAST'
-    : "";
+  // Virtual columns expand to a correlated subquery; concrete columns
+  // are quoted in place. ORDER BY still applies to the underlying
+  // `updated_at` column (never a virtual), so the order clause is
+  // unaffected.
+  const cols = safeColumns
+    .map((c) => selectExprFor(entityType, c))
+    .join(", ");
+  const orderClause =
+    isValidField(entityType, "updated_at") &&
+    !isVirtualField(entityType, "updated_at")
+      ? ' ORDER BY "updated_at" DESC NULLS LAST'
+      : "";
   const sqlText = `SELECT ${cols} FROM ${quote(meta.table)}${whereSql}${orderClause} LIMIT ${Number(limit) | 0}`;
 
   const rows = (await sqlClient.unsafe(sqlText, params as never[])) as Record<
@@ -333,8 +433,15 @@ async function runAggregateQuery(
   params: unknown[],
   limit: number,
 ): Promise<ExecutedReport> {
+  // Virtual columns (e.g. `tags`) cannot participate in group-by —
+  // grouping on a correlated subquery would either explode rows or
+  // collapse meaningful detail; users who want per-tag aggregations
+  // should build a marketing-style join report instead. Filter them
+  // out silently rather than throw.
   const safeGroups = groupBy
-    .filter((c) => isValidField(entityType, c))
+    .filter(
+      (c) => isValidField(entityType, c) && !isVirtualField(entityType, c),
+    )
     .map(escapeIdent);
   if (safeGroups.length === 0) {
     return { rows: [], totalCount: 0, columns: [] };
@@ -348,7 +455,11 @@ async function runAggregateQuery(
     if (m.fn === "count") {
       metricSelects.push(`count(*) AS "${alias}"`);
       aliasOut.push(alias);
-    } else if (m.field && isValidField(entityType, m.field)) {
+    } else if (
+      m.field &&
+      isValidField(entityType, m.field) &&
+      !isVirtualField(entityType, m.field)
+    ) {
       const safeField = escapeIdent(m.field);
       const fn = m.fn;
       if (fn === "sum" || fn === "avg" || fn === "min" || fn === "max") {

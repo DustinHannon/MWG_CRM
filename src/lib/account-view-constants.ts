@@ -18,6 +18,7 @@ export const AVAILABLE_ACCOUNT_COLUMNS = [
   { key: "annualRevenue", label: "Revenue" },
   { key: "owner", label: "Owner" },
   { key: "wonDeals", label: "Won deals" },
+  { key: "tags", label: "Tags" },
   { key: "createdAt", label: "Created" },
   { key: "updatedAt", label: "Updated" },
 ] as const;

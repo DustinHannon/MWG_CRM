@@ -6,6 +6,7 @@ import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { TagSection } from "@/components/tags/tag-section";
 import { AccountEditForm } from "./_components/account-edit-form";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +83,10 @@ export default async function EditAccountPage({
         contactOptions={await listContactPickerOptions(account.id)}
         parentOptions={await listAccountPickerOptions(account.id)}
       />
+
+      <div className="mt-8 max-w-3xl">
+        <TagSection entityType="account" entityId={account.id} />
+      </div>
     </div>
   );
 }

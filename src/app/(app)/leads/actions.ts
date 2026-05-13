@@ -93,8 +93,16 @@ export async function createLeadAction(
       // persist tag selections from the
       // combobox into the relational lead_tags table. setLeadTags is
       // idempotent (full-replace inside a tx); empty list is a no-op.
+      // Gate on canApplyTags so users without the tag-apply perm
+      // cannot back-door tag application via the create-lead form.
+      // Admin bypasses requirePermission.
       const tagIds = parseTagIds(formData);
       if (tagIds.length > 0) {
+        if (!user.isAdmin && !perms.canApplyTags) {
+          throw new ForbiddenError(
+            "You don't have permission to apply tags.",
+          );
+        }
         await setLeadTags(id, tagIds, user.id);
       }
       await writeAudit({
@@ -156,12 +164,22 @@ export async function updateLeadAction(
       await updateLead(user, id, version, parsed.data);
 
       // sync tag selections from the
-      // combobox. setLeadTags is full-replace, so removing all chips
-      // and submitting clears the lead's tags. The hidden tagIds input
-      // is always present in the form (even when empty) so we can
-      // distinguish "no tags" from "field not on form".
-      const tagIds = parseTagIds(formData);
-      await setLeadTags(id, tagIds, user.id);
+      // combobox only when the form actually submitted a tagIds field
+      // (legacy path). Edit forms now apply/remove tags inline via
+      // applyTagAction/removeTagAction, so the field is omitted; an
+      // absent field must not be interpreted as "clear all tags".
+      // Gate on canApplyTags so users without the perm cannot
+      // back-door tag application via the update-lead form.
+      if (formData.has("tagIds")) {
+        const editPerms = await getPermissions(user.id);
+        if (!user.isAdmin && !editPerms.canApplyTags) {
+          throw new ForbiddenError(
+            "You don't have permission to apply tags.",
+          );
+        }
+        const tagIds = parseTagIds(formData);
+        await setLeadTags(id, tagIds, user.id);
+      }
 
       await writeAudit({
         actorId: user.id,

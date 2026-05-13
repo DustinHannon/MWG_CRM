@@ -40,6 +40,11 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
     ],
   },
   {
+    id: "tags",
+    label: "Tags",
+    keys: ["canApplyTags", "canManageTagDefinitions"],
+  },
+  {
     id: "marketing-templates",
     label: "Marketing — Templates",
     keys: [
@@ -153,6 +158,14 @@ export const PERMISSION_LABELS: Record<
   canReassignTasks: {
     label: "Reassign tasks",
     hint: "Change the assignee of any task.",
+  },
+  canApplyTags: {
+    label: "Apply tags to records",
+    hint: "Add or remove tags on leads, accounts, contacts, opportunities, and tasks.",
+  },
+  canManageTagDefinitions: {
+    label: "Manage tag library",
+    hint: "Rename, recolor, or delete tag definitions globally.",
   },
   canMarketingTemplatesView: {
     label: "View templates",

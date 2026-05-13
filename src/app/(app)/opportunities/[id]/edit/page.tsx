@@ -6,6 +6,7 @@ import { opportunities } from "@/db/schema/crm-records";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { TagSection } from "@/components/tags/tag-section";
 import { OpportunityEditForm } from "./_components/opportunity-edit-form";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +64,10 @@ export default async function EditOpportunityPage({
           description: opp.description,
         }}
       />
+
+      <div className="mt-8 max-w-2xl">
+        <TagSection entityType="opportunity" entityId={opp.id} />
+      </div>
     </div>
   );
 }

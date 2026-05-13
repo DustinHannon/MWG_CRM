@@ -1,9 +1,14 @@
 import "server-only";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { savedViews } from "@/db/schema/views";
+import { savedViews, userPreferences } from "@/db/schema/views";
 import { expectAffected } from "@/lib/db/concurrent-update";
+import {
+  DEFAULT_TASK_COLUMNS,
+  TASK_COLUMN_KEYS,
+  type TaskColumnKey,
+} from "@/lib/task-view-constants";
 
 /**
  * Tasks saved-view layer. Parallel to `src/lib/views.ts`
@@ -30,6 +35,12 @@ export interface TaskViewFilters {
   relatedEntity?: "lead" | "account" | "contact" | "opportunity";
   dueRange?: "overdue" | "today" | "this_week" | "later" | "none" | "all";
   q?: string;
+  /**
+   * Filter to tasks bearing ANY of the given tag names (OR semantics).
+   * Names are case-insensitive; matched against the `tags` table via
+   * the `task_tags` junction.
+   */
+  tags?: string[];
 }
 
 export interface TaskViewSort {
@@ -50,6 +61,14 @@ export interface TaskViewDefinition {
   isPinned: boolean;
   filters: TaskViewFilters;
   sort: TaskViewSort;
+  /**
+   * Visible columns for this view. Built-in views use the
+   * DEFAULT_TASK_COLUMNS list; saved views persist their own choice.
+   * The empty array sentinel on read is mapped to DEFAULT_TASK_COLUMNS
+   * so a saved view created before column-chooser support still
+   * renders sensibly.
+   */
+  columns: TaskColumnKey[];
   version?: number;
 }
 
@@ -70,6 +89,7 @@ export const BUILTIN_TASK_VIEWS: TaskViewDefinition[] = [
       dueRange: "all",
     },
     sort: { field: "dueAt", direction: "asc" },
+    columns: DEFAULT_TASK_COLUMNS,
   },
   {
     id: "builtin:my-due-today",
@@ -82,6 +102,7 @@ export const BUILTIN_TASK_VIEWS: TaskViewDefinition[] = [
       dueRange: "today",
     },
     sort: { field: "priority", direction: "desc" },
+    columns: DEFAULT_TASK_COLUMNS,
   },
   {
     id: "builtin:my-overdue",
@@ -94,6 +115,7 @@ export const BUILTIN_TASK_VIEWS: TaskViewDefinition[] = [
       dueRange: "overdue",
     },
     sort: { field: "dueAt", direction: "asc" },
+    columns: DEFAULT_TASK_COLUMNS,
   },
   {
     id: "builtin:my-high-priority",
@@ -106,6 +128,7 @@ export const BUILTIN_TASK_VIEWS: TaskViewDefinition[] = [
       priority: ["high", "urgent"],
     },
     sort: { field: "dueAt", direction: "asc" },
+    columns: DEFAULT_TASK_COLUMNS,
   },
   {
     id: "builtin:my-standalone",
@@ -118,6 +141,7 @@ export const BUILTIN_TASK_VIEWS: TaskViewDefinition[] = [
       relation: "standalone",
     },
     sort: { field: "dueAt", direction: "asc" },
+    columns: DEFAULT_TASK_COLUMNS,
   },
   {
     id: "builtin:my-completed-recent",
@@ -126,6 +150,7 @@ export const BUILTIN_TASK_VIEWS: TaskViewDefinition[] = [
     isPinned: false,
     filters: { assignee: "me", status: ["completed"] },
     sort: { field: "dueAt", direction: "desc" },
+    columns: DEFAULT_TASK_COLUMNS,
   },
   // Team view — gated server-side by canViewOthersTasks; if the
   // current user doesn't have the perm, the page filters this entry
@@ -140,6 +165,7 @@ export const BUILTIN_TASK_VIEWS: TaskViewDefinition[] = [
       status: ["open", "in_progress"],
     },
     sort: { field: "dueAt", direction: "asc" },
+    columns: DEFAULT_TASK_COLUMNS,
   },
 ];
 
@@ -165,6 +191,7 @@ const taskFiltersSchema = z.object({
     .enum(["overdue", "today", "this_week", "later", "none", "all"])
     .optional(),
   q: z.string().max(200).optional(),
+  tags: z.array(z.string().max(80)).optional(),
 });
 
 const taskSortSchema = z.object({
@@ -179,11 +206,18 @@ const taskSortSchema = z.object({
   direction: z.enum(["asc", "desc"]),
 });
 
+const taskColumnsSchema = z
+  .array(
+    z.enum(TASK_COLUMN_KEYS as [TaskColumnKey, ...TaskColumnKey[]]),
+  )
+  .max(TASK_COLUMN_KEYS.length);
+
 export const taskViewSchema = z.object({
   name: z.string().trim().min(1).max(60),
   isPinned: z.boolean().default(false),
   filters: taskFiltersSchema.default({}),
   sort: taskSortSchema.default({ field: "dueAt", direction: "asc" }),
+  columns: taskColumnsSchema.default(DEFAULT_TASK_COLUMNS),
 });
 
 export type TaskViewInput = z.infer<typeof taskViewSchema>;
@@ -236,9 +270,10 @@ export async function createSavedTaskView(
       // `scope` stays at its default — the assignee filter in filters
       // is the per-task equivalent of leads' owner-scope.
       filters: input.filters as object,
-      // `columns` is unused for tasks (table columns are fixed in
-      // this iteration); persist an empty array.
-      columns: [],
+      // Persist the user's column visibility choice when saving the
+      // view. Default to DEFAULT_TASK_COLUMNS when not supplied; the
+      // reader maps the empty-array legacy sentinel to defaults too.
+      columns: (input.columns ?? DEFAULT_TASK_COLUMNS) as object,
       sort: input.sort as object,
     })
     .returning({ id: savedViews.id });
@@ -260,6 +295,7 @@ export async function updateSavedTaskView(
   if (input.isPinned !== undefined) set.isPinned = input.isPinned;
   if (input.filters !== undefined) set.filters = input.filters;
   if (input.sort !== undefined) set.sort = input.sort;
+  if (input.columns !== undefined) set.columns = input.columns as object;
   set.version = expectedVersion + 1;
   const rows = await db
     .update(savedViews)
@@ -300,6 +336,15 @@ function taskRowToDefinition(
   // handles undefined / missing fields anyway.
   const filtersRaw = row.filters as TaskViewFilters | null;
   const sortRaw = row.sort as TaskViewSort | null;
+  const columnsRaw = row.columns as unknown;
+  let columns: TaskColumnKey[] = DEFAULT_TASK_COLUMNS;
+  if (Array.isArray(columnsRaw) && columnsRaw.length > 0) {
+    const known = new Set<string>(TASK_COLUMN_KEYS);
+    const filtered = columnsRaw.filter(
+      (k): k is TaskColumnKey => typeof k === "string" && known.has(k),
+    );
+    if (filtered.length > 0) columns = filtered;
+  }
   return {
     id: `saved:${row.id}`,
     source: "saved",
@@ -307,6 +352,88 @@ function taskRowToDefinition(
     isPinned: row.isPinned,
     filters: filtersRaw ?? {},
     sort: sortRaw ?? { field: "dueAt", direction: "asc" },
+    columns,
     version: row.version,
   };
+}
+
+// =============================================================================
+// Adhoc column persistence (built-in views) — mirrors contact-views.ts.
+// =============================================================================
+
+/**
+ * Read the current user's task preferences. Returns the per-user
+ * adhoc column override for the /tasks list — used when a built-in
+ * view is active and the user has toggled the Tags column on (or
+ * any other non-default column). Saved views carry their own
+ * column array on the saved_views row instead.
+ */
+export async function getTaskPreferences(userId: string): Promise<{
+  adhocColumns: TaskColumnKey[] | null;
+}> {
+  const row = await db
+    .select({ adhoc: userPreferences.adhocColumns })
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+  if (!row[0]) {
+    return { adhocColumns: null };
+  }
+  const adhoc = readAdhocTask(row[0].adhoc);
+  return { adhocColumns: adhoc };
+}
+
+function readAdhocTask(raw: unknown): TaskColumnKey[] | null {
+  // Per the contact-views pattern: the legacy bare-array form is
+  // leads-only. Tasks reads from the per-entity object form.
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const v = (raw as Record<string, unknown>).task;
+  if (!Array.isArray(v)) return null;
+  const known = new Set<string>(TASK_COLUMN_KEYS);
+  const out = v.filter(
+    (k): k is TaskColumnKey => typeof k === "string" && known.has(k),
+  );
+  return out.length > 0 ? out : null;
+}
+
+/**
+ * Persist the user's adhoc column choice for /tasks. Pass `null` to
+ * clear the override and revert to the active view's columns. The
+ * read-merge-write keeps other entities' adhoc choices intact.
+ */
+export async function setTaskAdhocColumns(
+  userId: string,
+  columns: TaskColumnKey[] | null,
+): Promise<void> {
+  const [existing] = await db
+    .select({ adhoc: userPreferences.adhocColumns })
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+  const base = coerceAdhocMap(existing?.adhoc);
+  if (columns === null) {
+    delete base.task;
+  } else {
+    base.task = columns;
+  }
+  await db
+    .insert(userPreferences)
+    .values({
+      userId,
+      adhocColumns: base as object,
+    })
+    .onConflictDoUpdate({
+      target: userPreferences.userId,
+      set: {
+        adhocColumns: base as object,
+        updatedAt: sql`now()`,
+      },
+    });
+}
+
+function coerceAdhocMap(raw: unknown): Record<string, unknown> {
+  if (Array.isArray(raw)) return { lead: raw };
+  if (raw && typeof raw === "object")
+    return { ...(raw as Record<string, unknown>) };
+  return {};
 }

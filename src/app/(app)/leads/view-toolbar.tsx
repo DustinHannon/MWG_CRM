@@ -466,7 +466,14 @@ function SaveViewDialog({
     if (params.get("status")) filters.status = [params.get("status")];
     if (params.get("rating")) filters.rating = [params.get("rating")];
     if (params.get("source")) filters.source = [params.get("source")];
-    if (params.get("tag")) filters.tags = [params.get("tag")];
+    if (params.get("tag")) {
+      // tag accepts a comma-separated list (multi-select tag filter).
+      const raw = params.get("tag") ?? "";
+      filters.tags = raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    }
 
     const payload = {
       name: name.trim(),
