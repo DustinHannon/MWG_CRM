@@ -1,12 +1,14 @@
 "use client";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { StandardEmptyState } from "./standard-empty-state";
@@ -242,19 +244,39 @@ export function StandardListPage<T, F>({
         Skip to results
       </a>
 
-      <div id="list-actions">
-        <StandardPageHeader {...header} />
+      {/* Sticky chrome group — header + filters + banner + count line
+          pin to the viewport beneath the AppShell TopBar (h-14). One
+          sticky wrapper avoids per-element z-index stacking and the
+          "filters appear to scroll over the title" jitter that comes
+          from multiple sticky siblings with different top offsets. The
+          group sits at `top-14` so it docks immediately below the
+          TopBar (z-30); group itself is z-20 so it composes correctly
+          with the bulk-action toolbar (z-20, bottom). */}
+      <div className="sticky top-14 z-20 -mx-4 space-y-3 border-b border-border/40 bg-background/85 px-4 pb-3 pt-3 backdrop-blur-md sm:-mx-6 sm:px-6 xl:-mx-10 xl:px-10">
+        <div id="list-actions">
+          <StandardPageHeader {...header} />
+        </div>
+
+        {filtersSlot ? <div id="list-filters">{filtersSlot}</div> : null}
+
+        {(() => {
+          if (!bulkActions) return null;
+          if (isBulkActionsSlotObject(bulkActions)) {
+            return bulkActions.banner ? <div>{bulkActions.banner}</div> : null;
+          }
+          return <div>{bulkActions}</div>;
+        })()}
+
+        {/* Showing N of M affordance — rendered above the list, not
+            inside the virtualized scroller. The dedicated live region
+            below owns screen-reader announcements; this visible line is
+            plain text so we don't double-announce on page loads. */}
+        {!isPending && !isError && rows.length > 0 ? (
+          <div className="text-xs text-muted-foreground">
+            {`Showing ${loadedCount.toLocaleString()} of ${total.toLocaleString()}`}
+          </div>
+        ) : null}
       </div>
-
-      {filtersSlot ? <div id="list-filters">{filtersSlot}</div> : null}
-
-      {(() => {
-        if (!bulkActions) return null;
-        if (isBulkActionsSlotObject(bulkActions)) {
-          return bulkActions.banner ? <div>{bulkActions.banner}</div> : null;
-        }
-        return <div>{bulkActions}</div>;
-      })()}
 
       <div
         aria-live="polite"
@@ -262,16 +284,6 @@ export function StandardListPage<T, F>({
         className="sr-only"
         ref={liveRef}
       />
-
-      {/* Showing N of M affordance — rendered above the list, not inside
-          the virtualized scroller. The dedicated live region above owns
-          screen-reader announcements; this visible line is plain text so
-          we don't double-announce on page loads. */}
-      {!isPending && !isError && rows.length > 0 ? (
-        <div className="text-xs text-muted-foreground">
-          {`Showing ${loadedCount.toLocaleString()} of ${total.toLocaleString()}`}
-        </div>
-      ) : null}
 
       <div id="list-results">
         {isPending ? (
@@ -377,11 +389,15 @@ interface VirtualScrollContainerProps<T> {
  * intersection sentinel that triggers `fetchNextPage` (suppressed when
  * `reducedMotion` is true), and per-URL scroll restoration.
  *
- * The container itself owns the scrolling — Tailwind sets a fixed
- * viewport height (`h-[calc(100vh-220px)]`) so the virtualizer has a
- * scrollElement to measure against. The 220px subtracts approximate
- * heights of the topbar + page header + filters; pages can override
- * with their own outer wrapper when needed.
+ * Uses `useWindowVirtualizer` so the page itself is the scroll surface
+ * (window). The list reports its `offsetTop` as `scrollMargin` so the
+ * virtualizer can translate virtual-item offsets back into the list
+ * container's local coordinate space. The container has NO height
+ * constraint and NO `overflow-auto` — it grows to the virtualizer's
+ * total size and the document body scrolls.
+ *
+ * See CLAUDE.md "List page scroll behavior" for the architectural
+ * contract.
  */
 function VirtualScrollContainer<T>({
   rows,
@@ -396,19 +412,62 @@ function VirtualScrollContainer<T>({
   // TanStack Virtual returns functions that cannot be safely memoized;
   // opt this component out of the React Compiler to preserve correct
   // scroll measurements. See @tanstack/react-virtual docs on
-  // `useVirtualizer` and React Compiler interop.
+  // `useWindowVirtualizer` and React Compiler interop.
   "use no memo";
   const parentRef = useRef<HTMLDivElement | null>(null);
-  useScrollRestoration(parentRef, scope);
+  useScrollRestoration(scope);
+
+  // Track the container's offset from the page top. Window virtualizer
+  // needs this so `virtualItem.start` (which is in window coordinates)
+  // translates back to the list's local coordinate system. Measured in
+  // a layout effect so the value is correct on the first paint;
+  // resize/scroll events update it for responsive layouts and dynamic
+  // chrome (e.g., the sticky filter group changing height as filters
+  // wrap on narrow viewports).
+  const [listOffset, setListOffset] = useState(0);
+  useLayoutEffect(() => {
+    const node = parentRef.current;
+    if (!node) return;
+    const measure = () => {
+      const here = parentRef.current;
+      if (!here) return;
+      const offset = here.getBoundingClientRect().top + window.scrollY;
+      // Only update state when the offset materially changes — sub-
+      // pixel jitter from re-measurements would otherwise cascade
+      // into useWindowVirtualizer re-renders and visible row
+      // repositioning. 1px threshold is enough for any practical
+      // chrome shift.
+      setListOffset((prev) =>
+        Math.abs(prev - offset) >= 1 ? offset : prev,
+      );
+    };
+    measure();
+    // ResizeObserver on document.body catches the cases where chrome
+    // above the list changes height (filter row wraps onto a second
+    // row at narrower widths, MODIFIED badge appears/disappears,
+    // bulk-selection banner shows/hides) without firing a `resize`
+    // event. Falls back gracefully when RO is unavailable (very old
+    // browsers / SSR — we're inside useLayoutEffect so window exists).
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => measure())
+        : null;
+    observer?.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 
   // Count includes a trailing sentinel row when more pages exist.
   const count = hasNextPage ? rows.length + 1 : rows.length;
 
-  const virtualizer = useVirtualizer({
+  const virtualizer = useWindowVirtualizer({
     count,
-    getScrollElement: () => parentRef.current,
     estimateSize: () => estimateSize,
     overscan: 6,
+    scrollMargin: listOffset,
     // measureElement allows variable-height rows; we attach it via ref below.
   });
 
@@ -438,7 +497,7 @@ function VirtualScrollContainer<T>({
       ref={parentRef}
       role="feed"
       aria-busy={isFetchingNextPage}
-      className="relative h-[calc(100vh-220px)] min-h-[400px] overflow-auto rounded-lg border border-border bg-card"
+      className="relative rounded-lg border border-border bg-card"
     >
       <div
         style={{
@@ -459,7 +518,7 @@ function VirtualScrollContainer<T>({
                 top: 0,
                 left: 0,
                 width: "100%",
-                transform: `translateY(${virtualItem.start}px)`,
+                transform: `translateY(${virtualItem.start - virtualizer.options.scrollMargin}px)`,
               }}
             >
               {isSentinel ? (

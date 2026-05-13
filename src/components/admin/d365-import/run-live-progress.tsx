@@ -91,7 +91,7 @@ export function RunLiveProgress({
   const snapshot = useRunRealtime({ runId, initial });
 
   return (
-    <GlassCard className="sticky top-4 z-10 p-4">
+    <GlassCard className="sticky top-[calc(3.5rem+1rem)] z-10 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={cn(

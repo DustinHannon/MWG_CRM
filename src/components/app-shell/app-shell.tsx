@@ -74,18 +74,28 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
     timeFormat: prefs.timeFormat === "24h" ? ("24h" as const) : ("12h" as const),
   };
 
+  // Window-scoped scroll: the page (html/body) is the single scroll
+  // surface. The sidebar is `position: fixed` on lg+ and reserves
+  // its width via a CSS variable `--sidebar-width` set on <html> by
+  // the client `Sidebar` component (useLayoutEffect, pre-paint). The
+  // main wrapper consumes it as its left margin with a 240px fallback
+  // so the first paint matches the expanded layout even before the
+  // client effect runs. Subsequent toggles update the variable and
+  // both the rail width and the main margin animate in lockstep.
+  const initialCollapsed = prefs.sidebarCollapsed === true;
+
   return (
     <TooltipProvider delayDuration={300}>
       <ThemeSync theme={theme} />
       <BreadcrumbsProvider>
-        <div data-density={density} className="flex h-dvh overflow-hidden text-foreground">
+        <div data-density={density} className="min-h-dvh text-foreground">
           <Sidebar
             brand={brand ?? {}}
             nav={nav}
             user={user}
-            initialCollapsed={prefs.sidebarCollapsed === true}
+            initialCollapsed={initialCollapsed}
           />
-          <main className="flex h-dvh min-w-0 flex-1 flex-col">
+          <div className="min-w-0 lg:ml-[var(--sidebar-width,240px)]">
             <TopBar
               unreadCount={unreadCount}
               recent={recentNotifs}
@@ -94,8 +104,8 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
                 <MobileSidebar brand={brand ?? {}} nav={nav} user={user} />
               }
             />
-            <div className="flex-1 overflow-y-auto">{children}</div>
-          </main>
+            <main>{children}</main>
+          </div>
         </div>
         <CommandPalette recent={recentViews} />
         <Toaster theme="dark" position="bottom-right" />

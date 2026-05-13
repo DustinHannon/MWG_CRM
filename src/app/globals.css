@@ -304,6 +304,15 @@ body {
   min-height: 100dvh;
 }
 
+/* List pages and detail anchor links use window-scoped scroll. The
+   sticky TopBar (h-14) sits above the document; reserve that height
+   plus 1rem of breathing room as scroll-padding so anchor jumps
+   (`#section`) and `scrollIntoView()` land below the chrome rather
+   than underneath it. */
+html {
+  scroll-padding-top: calc(3.5rem + 1rem);
+}
+
 body {
   background: var(--bg-gradient);
   background-attachment: fixed;

@@ -3,7 +3,7 @@
 import { ChevronDown, ChevronsLeft, ChevronsRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { UserPanel } from "@/components/user-panel/user-panel";
 import {
   Tooltip,
@@ -50,11 +50,26 @@ export function Sidebar({
   const { collapsed, toggle } = useSidebarState(initialCollapsed);
   const pathname = usePathname();
 
+  // Keep the `--sidebar-width` CSS variable on <html> in sync with
+  // the collapsed state. The main column reads it via
+  // `lg:ml-[var(--sidebar-width)]` so its left margin tracks the
+  // fixed-position rail. useLayoutEffect runs before paint so the
+  // initial render reflects `initialCollapsed` without a flash; the
+  // same effect handles subsequent toggles. The variable lives on
+  // <html> so the cascade reaches every descendant unconditionally.
+  useLayoutEffect(() => {
+    const width = collapsed ? 64 : 240;
+    document.documentElement.style.setProperty(
+      "--sidebar-width",
+      `${width}px`,
+    );
+  }, [collapsed]);
+
   return (
     <aside
       data-collapsed={collapsed ? "true" : "false"}
       style={{ width: collapsed ? 64 : 240 }}
-      className="relative hidden h-dvh shrink-0 flex-col overflow-hidden border-r border-glass-border bg-glass-1 transition-[width] duration-200 ease-out [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))] lg:flex"
+      className="fixed left-0 top-0 z-30 hidden h-dvh flex-col overflow-hidden border-r border-glass-border bg-glass-1 transition-[width] duration-200 ease-out [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))] lg:flex"
     >
       <Brand subtitle={brand.subtitle} collapsed={collapsed} />
       <button

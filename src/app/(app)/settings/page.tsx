@@ -103,7 +103,7 @@ export default async function SettingsPage() {
     <div className="mx-auto flex max-w-7xl gap-8 px-10 py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Settings" }]} />
       {/* Left rail */}
-      <aside className="sticky top-10 hidden h-[calc(100vh-5rem)] w-48 shrink-0 lg:block">
+      <aside className="sticky top-[calc(3.5rem+1rem)] hidden h-[calc(100vh-5rem)] w-48 shrink-0 lg:block">
         <StandardPageHeader
           kicker="Settings"
           title={`${profile.displayName.split(" ")[0]}'s preferences`}

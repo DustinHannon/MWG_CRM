@@ -1,27 +1,31 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, type RefObject } from "react";
+import { useEffect } from "react";
 
 const STORAGE_PREFIX = "mwg-list-scroll:";
 
 /**
- * Persists and restores the `scrollTop` of a scroll container keyed by
- * the current URL (pathname + search params). On mount the container
- * is restored to its previous offset; on scroll and on page hide the
- * offset is saved.
+ * Persists and restores `window.scrollY` keyed by the current URL
+ * (pathname + search params). On mount the window is restored to its
+ * previous offset; on scroll and on page hide the offset is saved.
  *
  * The save key changes whenever the route or query string changes, so
  * each filter / sort / saved-view URL has its own restoration slot.
  * sessionStorage is used so the offset survives in-tab navigations
  * but does not persist across tabs or sessions.
+ *
+ * List pages use window-scoped scroll (the page itself is the scroll
+ * surface — see CLAUDE.md "List page scroll behavior"). Earlier
+ * versions of this hook accepted a container `RefObject` and read
+ * `scrollTop` off it; that contract is no longer applicable.
  */
 export function useScrollRestoration(
-  containerRef: RefObject<HTMLElement | null>,
   /**
    * Optional discriminator appended to the storage key. Use this when
-   * the same URL renders multiple scrollable surfaces (e.g., desktop
-   * table + mobile cards) and each needs its own offset.
+   * the same URL renders multiple list surfaces (e.g., desktop table
+   * + mobile cards) and each needs its own offset, even though both
+   * scroll the window.
    */
   scope?: string,
 ) {
@@ -30,60 +34,105 @@ export function useScrollRestoration(
   const search = searchParams ? searchParams.toString() : "";
   const key = `${STORAGE_PREFIX}${pathname ?? ""}?${search}${scope ? `#${scope}` : ""}`;
 
-  // Restore on mount or whenever the key changes.
+  // Combined restore + save lifecycle. Restoration runs first and
+  // gates the save listener so we don't overwrite the saved key with
+  // the intermediate (clamped) scrollY values while the document
+  // height is still growing into the virtualized total size.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const node = containerRef.current;
-    if (!node) return;
+
+    let saved: number | null = null;
     try {
-      const saved = window.sessionStorage.getItem(key);
-      if (saved !== null) {
-        const offset = Number.parseInt(saved, 10);
-        if (Number.isFinite(offset) && offset >= 0) {
-          // Defer one frame so the virtualizer can lay out before we scroll.
-          window.requestAnimationFrame(() => {
-            if (containerRef.current) {
-              containerRef.current.scrollTop = offset;
-            }
-          });
-        }
+      const raw = window.sessionStorage.getItem(key);
+      if (raw !== null) {
+        const parsed = Number.parseInt(raw, 10);
+        if (Number.isFinite(parsed) && parsed >= 0) saved = parsed;
       }
     } catch {
-      // sessionStorage may be unavailable (private mode, cookies blocked).
+      // sessionStorage may be unavailable (private mode, cookies
+      // blocked). The save listener will degrade similarly below.
     }
-  }, [key, containerRef]);
 
-  // Save on scroll (rAF-throttled) and on page hide.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const node = containerRef.current;
-    if (!node) return;
+    let restorationDone = saved === null;
+    let aborted = false;
+    let pendingSave = false;
 
-    let pending = false;
     const save = () => {
-      pending = false;
+      pendingSave = false;
+      // Don't overwrite the saved value while we're still trying to
+      // restore — intermediate scrollY values during the document
+      // growth window are 0 / clamped to the partial body height.
+      if (!restorationDone) return;
       try {
-        window.sessionStorage.setItem(key, String(node.scrollTop));
+        window.sessionStorage.setItem(key, String(window.scrollY));
       } catch {
         // sessionStorage may be unavailable; ignore.
       }
     };
+
     const onScroll = () => {
-      if (pending) return;
-      pending = true;
+      if (pendingSave) return;
+      pendingSave = true;
       window.requestAnimationFrame(save);
     };
     const onPageHide = () => save();
 
-    node.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("beforeunload", onPageHide);
+
+    if (saved !== null) {
+      // Poll until the document is tall enough to honor the target
+      // scroll, capped at ~1 second so a genuinely shorter page (e.g.,
+      // filters changed since) doesn't loop forever. Abort if the
+      // user scrolls during the wait so we don't fight their input.
+      const start = performance.now();
+      const target = saved;
+      let expectingProgrammatic = false;
+
+      const onUserScrollDuringRestore = () => {
+        if (expectingProgrammatic) {
+          expectingProgrammatic = false;
+          return;
+        }
+        aborted = true;
+        restorationDone = true;
+        window.removeEventListener("scroll", onUserScrollDuringRestore);
+      };
+      window.addEventListener("scroll", onUserScrollDuringRestore, {
+        passive: true,
+      });
+
+      const tick = () => {
+        if (aborted) return;
+        const docHeight =
+          document.documentElement.scrollHeight - window.innerHeight;
+        if (docHeight >= target || performance.now() - start > 1000) {
+          expectingProgrammatic = true;
+          window.scrollTo(0, target);
+          window.requestAnimationFrame(() => {
+            restorationDone = true;
+            window.removeEventListener(
+              "scroll",
+              onUserScrollDuringRestore,
+            );
+          });
+          return;
+        }
+        window.requestAnimationFrame(tick);
+      };
+      window.requestAnimationFrame(tick);
+    }
+
     return () => {
-      node.removeEventListener("scroll", onScroll);
+      aborted = true;
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeunload", onPageHide);
-      // Capture once more on unmount so SPA navigations also persist.
-      save();
+      // Capture once more on unmount so SPA navigations also persist
+      // — but only if restoration completed; otherwise we'd save the
+      // partial-height clamped value.
+      if (restorationDone) save();
     };
-  }, [key, containerRef]);
+  }, [key]);
 }

@@ -44,7 +44,7 @@ export function TopBar({
   mobileNavTrigger,
 }: TopBarProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-glass-border bg-glass-1/40 px-3 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))] sm:gap-3 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-glass-border bg-glass-1/80 px-3 [backdrop-filter:blur(var(--glass-blur))_saturate(var(--glass-saturate))] sm:gap-3 sm:px-6">
       {mobileNavTrigger}
       <div className="min-w-0 flex-1 overflow-hidden">
         <Breadcrumbs />
