@@ -21,9 +21,10 @@ import {
   updateLead,
 } from "@/lib/leads";
 import { setLeadTags } from "@/lib/tags";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
+import { tags as tagsTable } from "@/db/schema/tags";
 import { cleanupBlobsForLeads, gatherBlobsForLeads } from "@/lib/blob-cleanup";
 import { logger } from "@/lib/logger";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
@@ -104,6 +105,30 @@ export async function createLeadAction(
           );
         }
         await setLeadTags(id, tagIds, user.id);
+        // Per-tag audit emission so the create-with-tags path matches
+        // the inline applyTagAction forensic surface. Without this,
+        // creating a lead with 5 tags would write only the lead.create
+        // audit row while inline-applying 5 tags writes 5 tag.applied
+        // rows. Inconsistent forensics confuse downstream audit queries.
+        const tagRows = await db
+          .select({ id: tagsTable.id, name: tagsTable.name })
+          .from(tagsTable)
+          .where(inArray(tagsTable.id, tagIds));
+        for (const t of tagRows) {
+          await writeAudit({
+            actorId: user.id,
+            action: "tag.applied",
+            targetType: "lead",
+            targetId: id,
+            after: {
+              entityType: "lead" as const,
+              entityId: id,
+              tagId: t.id,
+              tagName: t.name,
+              source: "lead.create",
+            },
+          });
+        }
       }
       await writeAudit({
         actorId: user.id,

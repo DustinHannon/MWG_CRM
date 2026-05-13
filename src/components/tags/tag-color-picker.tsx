@@ -76,7 +76,16 @@ export function TagColorPicker({ value, onChange }: TagColorPickerProps) {
               type="text"
               value={hexDraft}
               onChange={(e) => {
-                setHexDraft(e.target.value.trim());
+                // Auto-prefix `#` when the user types/pastes a bare
+                // 6-char hex (common when copying from a color picker
+                // that doesn't include the prefix). Without this, the
+                // input shows "1A2B3C" and Apply errors with "use a
+                // six-digit hex like #1a2b3c" — non-obvious UX.
+                let next = e.target.value.trim();
+                if (next.length > 0 && !next.startsWith("#")) {
+                  next = `#${next}`;
+                }
+                setHexDraft(next);
                 setHexError(null);
               }}
               onBlur={() => {

@@ -7,7 +7,7 @@
 // with the next chunk so partial success is preserved.
 
 import "server-only";
-import { and, eq, sql, inArray } from "drizzle-orm";
+import { and, eq, ilike, sql, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { activities } from "@/db/schema/activities";
@@ -581,13 +581,18 @@ async function ensureTags(
       map.set(ins[0].name.toLowerCase(), ins[0].id);
       newTagIds.push(ins[0].id);
     } else {
-      // Conflict — re-select by name (more permissive than slug). The
-      // tag already existed under a slightly different slug; we treat
-      // this as "already existed" rather than "newly created".
+      // Conflict — case-INSENSITIVE re-select. The conflict could be
+      // on the slug (e.g. "Hot-Lead" and "hot lead" both slugify to
+      // "hot-lead") which means the existing tag's name may differ
+      // in case or whitespace from the import row's name. A
+      // case-sensitive `eq(tags.name, m)` would miss the existing row
+      // and silently drop the tag from the map — records that
+      // referenced this tag would import without it. ilike on the
+      // name reliably finds the colliding row regardless of case.
       const r = await db
         .select({ id: tags.id })
         .from(tags)
-        .where(eq(tags.name, m))
+        .where(ilike(tags.name, m))
         .limit(1);
       if (r[0]) map.set(m.toLowerCase(), r[0].id);
     }

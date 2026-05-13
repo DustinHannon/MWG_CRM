@@ -71,6 +71,12 @@ export default async function TasksPage({
   const perms = await getPermissions(session.id);
   const canViewOthers = session.isAdmin || perms.canViewOthersTasks;
   const canReassign = session.isAdmin || perms.canReassignTasks;
+  // Mirrors the updateTaskAction server-side gate so the per-row Edit
+  // button can hide for users who would be rejected anyway. Server
+  // gate still enforces — this prop only hides the affordance so the
+  // user doesn't waste effort filling out a dialog that the server
+  // would refuse on submit.
+  const canEditOthersTasks = session.isAdmin || perms.canEditOthersTasks;
   const canApplyTags = session.isAdmin || perms.canApplyTags;
   const canManageTagDefinitions =
     session.isAdmin || perms.canManageTagDefinitions;
@@ -369,6 +375,7 @@ export default async function TasksPage({
           userId={session.id}
           isAdmin={session.isAdmin}
           canReassign={canReassign}
+          canEditOthersTasks={canEditOthersTasks}
           assignableUsers={assignableUsers}
           prefs={prefs}
           sort={sort}

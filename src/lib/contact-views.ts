@@ -150,7 +150,8 @@ export const contactViewSchema = z.object({
       state: z.string().trim().max(120).optional(),
       country: z.string().trim().max(80).optional(),
       recentlyUpdatedDays: z.number().int().min(1).max(3650).optional(),
-      tags: z.array(z.string().max(80)).optional(),
+      // 50-char cap aligned with the tagName primitive.
+      tags: z.array(z.string().max(50)).optional(),
     })
     .default({}),
   columns: z

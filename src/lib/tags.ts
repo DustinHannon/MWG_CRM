@@ -11,7 +11,7 @@ import {
   type TagColor,
 } from "@/db/schema/tags";
 import { writeAudit } from "@/lib/audit";
-import { ValidationError } from "@/lib/errors";
+import { ConflictError, ValidationError } from "@/lib/errors";
 
 export type TagRow = typeof tags.$inferSelect;
 
@@ -336,6 +336,23 @@ export async function renameTag(
     .slice(0, 60);
   const finalSlug =
     slug.length === 0 ? `tag-${Math.random().toString(16).slice(2, 10)}` : slug;
+  // Slug-collision pre-check. Name UNIQUE is enforced by the caller
+  // (renameTagAction does a case-insensitive findTagByNameCaseInsensitive).
+  // Slug UNIQUE can collide independently: name "B Tag" (slug=b-tag)
+  // renamed to "Hot Lead!" recomputes slug=hot-lead which collides
+  // with an existing tag named "Hot-Lead". Pre-checking yields a clear
+  // ConflictError naming the colliding tag instead of a generic
+  // "value is already in use" surfaced from the translated 23505.
+  const slugClash = await db
+    .select({ id: tags.id, name: tags.name })
+    .from(tags)
+    .where(eq(tags.slug, finalSlug))
+    .limit(1);
+  if (slugClash[0] && slugClash[0].id !== id) {
+    throw new ConflictError(
+      `A tag named "${slugClash[0].name}" already uses a similar slug. Pick a more distinctive name.`,
+    );
+  }
   const [updated] = await db
     .update(tags)
     .set({ name: trimmed, slug: finalSlug, updatedAt: sql`now()` })
@@ -402,6 +419,12 @@ export async function getOrCreateTag(
   const finalSlug =
     slug.length === 0 ? `tag-${Math.random().toString(16).slice(2, 10)}` : slug;
 
+  // Race-safe insert: two concurrent callers seeing no existing row
+  // would both reach the INSERT. The UNIQUE constraint on name (and
+  // slug) would cause one to fail with 23505 and surface a confusing
+  // ConflictError for what is logically idempotent. onConflictDoNothing
+  // + case-insensitive re-select makes the operation safe under
+  // concurrency: the loser of the race resolves to the winner's row.
   const inserted = await db
     .insert(tags)
     .values({
@@ -410,8 +433,20 @@ export async function getOrCreateTag(
       color,
       createdById,
     })
+    .onConflictDoNothing()
     .returning();
-  return inserted[0];
+  if (inserted[0]) return inserted[0];
+
+  const reselect = await db
+    .select()
+    .from(tags)
+    .where(ilike(tags.name, trimmed))
+    .limit(1);
+  if (reselect[0]) return reselect[0];
+
+  throw new ValidationError(
+    "Could not create or retrieve tag (unexpected DB state)",
+  );
 }
 
 export async function updateTag(

@@ -215,7 +215,11 @@ export async function buildImportPreview({
   // out how many would be newly created on commit. Mirrors the same
   // primitive-validation gate used in `commit.ts` so the preview's
   // counts match the commit's actual writes.
-  const distinctTagNames = new Set<string>();
+  //
+  // Distinctness is case-INSENSITIVE so "Hot, hot, HOT" registers as
+  // ONE distinct tag (commit creates only one). A case-sensitive Set
+  // would overstate both counts by treating each variant separately.
+  const distinctTagNamesLower = new Set<string>();
   for (const r of okRows) {
     if (!r.leadPatch.tags) continue;
     for (const t of r.leadPatch.tags.split(",")) {
@@ -223,12 +227,12 @@ export async function buildImportPreview({
       if (trimmed.length === 0) continue;
       const parsed = tagName.safeParse(trimmed);
       if (!parsed.success) continue;
-      distinctTagNames.add(parsed.data);
+      distinctTagNamesLower.add(parsed.data.toLowerCase());
     }
   }
   let newTagCount = 0;
-  if (distinctTagNames.size > 0) {
-    const lowered = Array.from(distinctTagNames).map((n) => n.toLowerCase());
+  if (distinctTagNamesLower.size > 0) {
+    const lowered = Array.from(distinctTagNamesLower);
     const existing = await db
       .select({ name: tags.name })
       .from(tags)
@@ -239,8 +243,8 @@ export async function buildImportPreview({
         )})`,
       );
     const existingLowered = new Set(existing.map((e) => e.name.toLowerCase()));
-    for (const n of distinctTagNames) {
-      if (!existingLowered.has(n.toLowerCase())) newTagCount += 1;
+    for (const n of distinctTagNamesLower) {
+      if (!existingLowered.has(n)) newTagCount += 1;
     }
   }
 
@@ -271,7 +275,7 @@ export async function buildImportPreview({
     noteActivitiesToCreate,
     emailActivitiesToCreate,
     opportunitiesToCreate,
-    distinctTagCount: distinctTagNames.size,
+    distinctTagCount: distinctTagNamesLower.size,
     newTagCount,
     smartDetectEnabled: smartDetect,
     warnings: Array.from(warningGroups.values()),

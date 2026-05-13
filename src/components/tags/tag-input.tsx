@@ -99,10 +99,27 @@ export function TagInput(props: TagInputProps) {
   const exactMatch = results.some(
     (r) => r.name.toLowerCase() === query.trim().toLowerCase(),
   );
-  const showCreate = query.trim().length > 0 && !exactMatch;
-  const items: Array<SelectedTag | { kind: "create"; name: string }> = [
+  // Check whether the typed query matches the name of a tag already
+  // applied to this entity. If so, the "Create" affordance would
+  // mislead the user — clicking it triggers an action that resolves
+  // to the existing tag and applies (no-op). Render a hint instead.
+  const alreadyAppliedExact =
+    query.trim().length > 0 &&
+    value.some(
+      (v) => v.name.toLowerCase() === query.trim().toLowerCase(),
+    );
+  const showCreate =
+    query.trim().length > 0 && !exactMatch && !alreadyAppliedExact;
+  const items: Array<
+    | SelectedTag
+    | { kind: "create"; name: string }
+    | { kind: "already-applied"; name: string }
+  > = [
     ...results,
     ...(showCreate ? [{ kind: "create" as const, name: query.trim() }] : []),
+    ...(alreadyAppliedExact
+      ? [{ kind: "already-applied" as const, name: query.trim() }]
+      : []),
   ];
 
   function commitFormHidden(next: SelectedTag[]) {
@@ -226,11 +243,12 @@ export function TagInput(props: TagInputProps) {
       e.preventDefault();
       const item = items[active];
       if (!item) return;
-      if ("kind" in item && item.kind === "create") {
-        handleCreate(item.name);
-      } else {
-        handleSelect(item as SelectedTag);
+      if ("kind" in item) {
+        if (item.kind === "create") handleCreate(item.name);
+        // already-applied: Enter is a no-op (the item is informational).
+        return;
       }
+      handleSelect(item as SelectedTag);
     } else if (e.key === "Backspace" && query === "" && value.length > 0) {
       // Form-hidden mode: backspace pops the local-state chip (no
       // server call, fully reversible at submit). Action mode does
@@ -296,28 +314,46 @@ export function TagInput(props: TagInputProps) {
         <div className="glass-surface glass-surface--3 absolute z-20 mt-1 w-full overflow-hidden rounded-md p-1 shadow-lg">
           {items.map((item, i) => {
             if ("kind" in item) {
+              if (item.kind === "create") {
+                return (
+                  <button
+                    key="__create"
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleCreate(item.name);
+                    }}
+                    className={
+                      "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm " +
+                      (active === i ? "bg-accent/40" : "hover:bg-accent/30")
+                    }
+                    onMouseEnter={() => setActive(i)}
+                  >
+                    <span>
+                      Create{" "}
+                      <span className="font-medium">
+                        &ldquo;{item.name}&rdquo;
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      Enter
+                    </span>
+                  </button>
+                );
+              }
+              // kind === "already-applied" — informational, not clickable.
               return (
-                <button
-                  key="__create"
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    handleCreate(item.name);
-                  }}
-                  className={
-                    "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm " +
-                    (active === i ? "bg-accent/40" : "hover:bg-accent/30")
-                  }
-                  onMouseEnter={() => setActive(i)}
+                <div
+                  key="__already-applied"
+                  className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm text-muted-foreground"
                 >
                   <span>
-                    Create{" "}
-                    <span className="font-medium">&ldquo;{item.name}&rdquo;</span>
+                    Already applied:{" "}
+                    <span className="font-medium">
+                      &ldquo;{item.name}&rdquo;
+                    </span>
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    Enter
-                  </span>
-                </button>
+                </div>
               );
             }
             const tag = item as SelectedTag;

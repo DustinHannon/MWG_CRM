@@ -104,7 +104,12 @@ export function TaskEditDialog({
       aria-modal="true"
       aria-label={`Edit task ${task.title}`}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={() => {
+        // Backdrop click dismisses, but not during an in-flight save —
+        // matches the BulkTagButton pattern so users don't lose their
+        // edits to an accidental click while pending.
+        if (!pending) onClose();
+      }}
     >
       <div
         className="w-full max-w-xl rounded-lg border border-border bg-[var(--popover)] p-5 text-[var(--popover-foreground)] shadow-2xl"

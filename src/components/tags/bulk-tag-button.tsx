@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Tags } from "lucide-react";
 import { toast } from "sonner";
 import { bulkTagAction } from "./actions";
@@ -54,6 +54,8 @@ export function BulkTagButton({
   const [pending, startTransition] = useTransition();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [op, setOp] = useState<"add" | "remove">("add");
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const firstFocusRef = useRef<HTMLInputElement>(null);
 
   // Escape closes the dialog — WCAG 2.1.2. Without this, keyboard
   // users cannot dismiss the modal.
@@ -65,6 +67,27 @@ export function BulkTagButton({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, pending]);
+
+  // Focus management — WCAG 2.4.3 Focus Order. When the dialog opens,
+  // move focus into it (first focusable: the Add radio). When the
+  // dialog closes (after having been open), return focus to the
+  // trigger so keyboard users land back where they started. A
+  // `hasOpened` ref guards the close branch so the first render with
+  // `open=false` does NOT yank focus from whatever else is focused.
+  const hasOpenedRef = useRef(false);
+  useEffect(() => {
+    if (open) {
+      hasOpenedRef.current = true;
+      // setTimeout 0 so the focus call runs after the DOM mounts.
+      const handle = setTimeout(() => {
+        firstFocusRef.current?.focus();
+      }, 0);
+      return () => clearTimeout(handle);
+    }
+    if (hasOpenedRef.current) {
+      triggerRef.current?.focus();
+    }
+  }, [open]);
 
   if (recordIds.length === 0 || availableTags.length === 0) return null;
 
@@ -115,6 +138,7 @@ export function BulkTagButton({
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
         disabled={pending}
@@ -150,6 +174,7 @@ export function BulkTagButton({
             <div className="mt-4 flex items-center gap-4 text-sm">
               <label className="flex items-center gap-1.5">
                 <input
+                  ref={firstFocusRef}
                   type="radio"
                   name="op"
                   value="add"

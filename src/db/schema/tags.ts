@@ -55,6 +55,13 @@ export const leadTags = pgTable(
   (t) => [
     primaryKey({ columns: [t.leadId, t.tagId], name: "lead_tags_pkey" }),
     index("lead_tags_tag_idx").on(t.tagId),
+    // Matches the live DB partial index introduced earlier and mirrored
+    // by drizzle/0011_phase32_6_added_by_id_indexes.sql on the other
+    // four junction tables. Declared here for parity so pnpm db:generate
+    // does not emit a DROP INDEX.
+    index("lead_tags_added_by_id_idx")
+      .on(t.addedById)
+      .where(sql`${t.addedById} IS NOT NULL`),
   ],
 );
 
@@ -77,6 +84,13 @@ export const accountTags = pgTable(
   (t) => [
     primaryKey({ columns: [t.accountId, t.tagId], name: "account_tags_pkey" }),
     index("account_tags_tag_idx").on(t.tagId),
+    // Partial index on the FK column matches the live DB migration
+    // (drizzle/0011_phase32_6_added_by_id_indexes.sql) and the canonical
+    // lead_tags_added_by_id_idx posture. Required so future pnpm
+    // db:generate runs do not emit a DROP INDEX for the live index.
+    index("account_tags_added_by_id_idx")
+      .on(t.addedById)
+      .where(sql`${t.addedById} IS NOT NULL`),
   ],
 );
 
@@ -99,6 +113,9 @@ export const contactTags = pgTable(
   (t) => [
     primaryKey({ columns: [t.contactId, t.tagId], name: "contact_tags_pkey" }),
     index("contact_tags_tag_idx").on(t.tagId),
+    index("contact_tags_added_by_id_idx")
+      .on(t.addedById)
+      .where(sql`${t.addedById} IS NOT NULL`),
   ],
 );
 
@@ -124,6 +141,9 @@ export const opportunityTags = pgTable(
       name: "opportunity_tags_pkey",
     }),
     index("opportunity_tags_tag_idx").on(t.tagId),
+    index("opportunity_tags_added_by_id_idx")
+      .on(t.addedById)
+      .where(sql`${t.addedById} IS NOT NULL`),
   ],
 );
 
@@ -146,6 +166,9 @@ export const taskTags = pgTable(
   (t) => [
     primaryKey({ columns: [t.taskId, t.tagId], name: "task_tags_pkey" }),
     index("task_tags_tag_idx").on(t.tagId),
+    index("task_tags_added_by_id_idx")
+      .on(t.addedById)
+      .where(sql`${t.addedById} IS NOT NULL`),
   ],
 );
 

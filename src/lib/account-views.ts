@@ -144,7 +144,10 @@ export const accountViewSchema = z.object({
       country: z.string().trim().max(80).optional(),
       hasParentAccount: z.boolean().optional(),
       recentlyUpdatedDays: z.number().int().min(1).max(3650).optional(),
-      tags: z.array(z.string().max(80)).optional(),
+      // 50-char cap aligned with the tagName primitive (no tag can be
+      // longer than 50 chars; allowing 80 here would persist filter
+      // values that match no row).
+      tags: z.array(z.string().max(50)).optional(),
     })
     .default({}),
   columns: z

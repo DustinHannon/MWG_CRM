@@ -179,7 +179,8 @@ export const opportunityViewSchema = z.object({
       closingWithinDays: z.number().int().min(1).max(3650).optional(),
       minAmount: z.number().nonnegative().optional(),
       maxAmount: z.number().nonnegative().optional(),
-      tags: z.array(z.string().max(80)).optional(),
+      // 50-char cap aligned with the tagName primitive.
+      tags: z.array(z.string().max(50)).optional(),
     })
     .default({}),
   columns: z

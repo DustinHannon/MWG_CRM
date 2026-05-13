@@ -19,7 +19,7 @@ import {
 } from "@/lib/tags";
 import { auditLog } from "@/db/schema/audit";
 import { TAG_COLORS, tags as tagsTable } from "@/db/schema/tags";
-import { users } from "@/db/schema/users";
+import { permissions, users } from "@/db/schema/users";
 import { eq, sql } from "drizzle-orm";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -139,7 +139,24 @@ export async function getOrCreateTagAction(
       // app sees the new tag in the typeahead. Gate on canApplyTags
       // so users without the perm can't seed the tag library through
       // the legacy combobox path.
-      await requirePermission(session, "canApplyTags");
+      //
+      // Inline ForbiddenError rather than requirePermission, which
+      // redirects to /dashboard — bouncing a user mid-form-fill to a
+      // different route would lose their in-flight form state. Throwing
+      // here lets withErrorBoundary return a clean ActionResult so
+      // the caller (TagInput) surfaces a toast and the form survives.
+      if (!session.isAdmin) {
+        const perm = await db
+          .select({ canApplyTags: permissions.canApplyTags })
+          .from(permissions)
+          .where(eq(permissions.userId, session.id))
+          .limit(1);
+        if (!perm[0]?.canApplyTags) {
+          throw new ForbiddenError(
+            "You don't have permission to apply tags.",
+          );
+        }
+      }
       const trimmed = name.trim();
       if (trimmed.length === 0) return null;
       const validated = tagName.parse(trimmed);
@@ -548,13 +565,29 @@ export async function bulkTagAction(
       // otherwise see. The loop short-circuits on the first
       // inaccessible record so the operation either applies to all
       // selected records or none.
+      //
+      // Catch is narrowed: ForbiddenError (the access helper's
+      // primary failure mode) is translated to the generic batch
+      // message that doesn't leak which specific record id failed.
+      // Other KnownError subclasses (NotFoundError, ConflictError,
+      // db connection errors) propagate so withErrorBoundary
+      // surfaces them honestly instead of masking real bugs as
+      // permission failures.
       for (const id of parsed.recordIds) {
         try {
           await requireTagApplicabilityAccess(session, parsed.entityType, id);
-        } catch {
-          throw new ForbiddenError(
-            `You don't have access to one or more of the selected ${parsed.entityType}s.`,
-          );
+        } catch (err) {
+          if (err instanceof ForbiddenError) {
+            throw new ForbiddenError(
+              `You don't have access to one or more of the selected ${parsed.entityType}s.`,
+            );
+          }
+          logger.warn("tag.bulk.access_check_unexpected_error", {
+            entityType: parsed.entityType,
+            recordId: id,
+            errorMessage: err instanceof Error ? err.message : String(err),
+          });
+          throw err;
         }
       }
 

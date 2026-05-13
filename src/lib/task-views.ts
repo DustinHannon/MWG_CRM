@@ -191,7 +191,8 @@ const taskFiltersSchema = z.object({
     .enum(["overdue", "today", "this_week", "later", "none", "all"])
     .optional(),
   q: z.string().max(200).optional(),
-  tags: z.array(z.string().max(80)).optional(),
+  // 50-char cap aligned with the tagName primitive.
+  tags: z.array(z.string().max(50)).optional(),
 });
 
 const taskSortSchema = z.object({

@@ -62,6 +62,12 @@ export interface TaskTableClientProps {
    * URL `?cols=` + adhoc preference. */
   columns: TaskColumnKey[];
   /**
+   * Whether the user can edit tasks they don't own/assign. Mirrors
+   * the updateTaskAction server gate. Drives per-row Edit button
+   * visibility so users don't open a dialog the server would refuse.
+   */
+  canEditOthersTasks: boolean;
+  /**
    * Tag permission flags. The server gate still enforces; these
    * props only hide affordances client-side so users without the
    * perm don't see broken controls.
@@ -75,6 +81,7 @@ export function TaskTableClient({
   userId,
   isAdmin,
   canReassign,
+  canEditOthersTasks,
   assignableUsers,
   prefs,
   sort,
@@ -322,6 +329,11 @@ export function TaskTableClient({
                 onToggleSelect={() => toggleRow(t.id)}
                 onToggleComplete={() => toggleComplete(t)}
                 onEdit={() => setEditingTask(t)}
+                canEdit={
+                  canEditOthersTasks ||
+                  t.createdById === userId ||
+                  t.assignedToId === userId
+                }
                 viewerId={userId}
                 prefs={prefs}
                 disabled={pending}
@@ -436,6 +448,7 @@ function TaskTableRow({
   disabled,
   columns,
   onEdit,
+  canEdit,
 }: {
   task: TaskRow;
   checked: boolean;
@@ -446,6 +459,8 @@ function TaskTableRow({
   disabled: boolean;
   columns: TaskColumnKey[];
   onEdit: () => void;
+  /** Whether the viewer can edit this specific task. Drives Edit button. */
+  canEdit: boolean;
 }) {
   const overdue =
     task.dueAt !== null &&
@@ -493,15 +508,26 @@ function TaskTableRow({
         </td>
       ))}
       <td className="px-2 py-2 text-right align-middle">
-        <button
-          type="button"
-          onClick={onEdit}
-          disabled={disabled}
-          aria-label={`Edit ${task.title}`}
-          className="rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-foreground/80 transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          Edit
-        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={disabled}
+            aria-label={`Edit ${task.title}`}
+            className="rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-foreground/80 transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Edit
+          </button>
+        ) : (
+          // Render a disabled placeholder with the same width so column
+          // alignment is preserved across the table for non-editor rows.
+          <span
+            aria-hidden
+            className="inline-block rounded-md border border-transparent px-2 py-1 text-[11px] opacity-0"
+          >
+            Edit
+          </span>
+        )}
       </td>
     </tr>
   );

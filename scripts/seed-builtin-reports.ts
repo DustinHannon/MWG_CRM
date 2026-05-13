@@ -1,7 +1,7 @@
 /**
  * scripts/seed-builtin-reports.ts
  *
- * Phase 11 — idempotent seeder for the 9 built-in reports.
+ * Idempotent seeder for the built-in reports catalog.
  *
  * Run:    pnpm dlx tsx --env-file .env.local scripts/seed-builtin-reports.ts
  *         (the project doesn't ship `tsx` as a dep — use dlx, or wire
@@ -60,7 +60,7 @@ interface BuiltinReport {
     | "opportunity"
     | "activity"
     | "task"
-    // Phase 24 — marketing/email entities (admin + canManageMarketing only).
+    // marketing/email entities (admin + canManageMarketing only).
     | "marketing_campaign"
     | "marketing_email_event"
     | "email_send_log";
@@ -195,7 +195,7 @@ const REPORTS: BuiltinReport[] = [
     metrics: [{ fn: "sum", field: "amount", alias: "pipeline" }],
     visualization: "kpi",
   },
-  // ----- Phase 24 — marketing/email built-ins -----
+  // ----- Marketing / email built-ins -----
   // Visible only to admins + users with canManageMarketing per
   // src/lib/reports/access.ts assertCanViewReport gate.
   {
@@ -257,7 +257,7 @@ const REPORTS: BuiltinReport[] = [
     metrics: [{ fn: "count", alias: "count" }],
     visualization: "bar",
   },
-  // ----- Phase 24 — second wave of marketing/email built-ins -----
+  // ----- Second wave of marketing/email built-ins -----
   {
     name: "Template Usage",
     description:
@@ -389,7 +389,7 @@ async function upsertReport(ownerId: string, def: BuiltinReport) {
 }
 
 async function main() {
-  console.log("=== Phase 11: built-in reports seeder ===");
+  console.log("=== Built-in reports seeder ===");
   const ownerId = await ensureSystemUser();
   console.log(`System service user: ${ownerId} (${SYSTEM_EMAIL})`);
 

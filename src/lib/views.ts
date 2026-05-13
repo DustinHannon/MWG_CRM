@@ -190,7 +190,8 @@ export const savedViewSchema = z.object({
       status: z.array(z.enum(LEAD_STATUSES)).optional(),
       rating: z.array(z.enum(LEAD_RATINGS)).optional(),
       source: z.array(z.enum(LEAD_SOURCES)).optional(),
-      tags: z.array(z.string().max(80)).optional(),
+      // 50-char cap aligned with the tagName primitive.
+      tags: z.array(z.string().max(50)).optional(),
       search: z.string().trim().max(200).optional(),
       doNotContact: z.boolean().nullable().optional(),
       createdSinceDays: z.number().int().min(1).max(3650).optional(),
