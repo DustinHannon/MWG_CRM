@@ -29,6 +29,8 @@
     "@sendgrid/eventwebhook": "^8.0.0",
     "@sendgrid/mail": "^8.1.6",
     "@supabase/supabase-js": "^2.105.4",
+    "@tanstack/react-query": "^5.100.10",
+    "@tanstack/react-virtual": "^3.13.24",
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.3.3",
     "@vercel/functions": "^3.5.1",

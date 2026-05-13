@@ -10,7 +10,11 @@ export {
   StandardDetailHeader,
   type StandardDetailHeaderProps,
 } from "./standard-detail-header";
-export { StandardListPage, type StandardListPageProps } from "./standard-list-page";
+export {
+  StandardListPage,
+  type StandardListPageProps,
+  type StandardListPagePage,
+} from "./standard-list-page";
 export {
   StandardLoadingState,
   type StandardLoadingStateProps,

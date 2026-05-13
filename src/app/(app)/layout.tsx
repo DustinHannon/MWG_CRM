@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ADMIN_NAV_ITEMS, type NavItem } from "@/components/app-shell/nav";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { PageRealtime } from "@/components/realtime/page-realtime";
 import { RealtimeProvider } from "@/components/realtime/realtime-provider";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -72,19 +73,21 @@ export default async function AppLayout({
       ]
     : navWithMarketing;
   return (
-    <RealtimeProvider userId={user.id}>
-      {/*
-        layout-level notifications subscription so the topbar
-        bell updates everywhere without each page re-mounting it. Filter
-        scopes to the current user; RLS doubly enforces that.
-      */}
-      <PageRealtime
-        entities={["notifications"]}
-        filter={`user_id=eq.${user.id}`}
-      />
-      <AppShell user={user} nav={nav}>
-        {children}
-      </AppShell>
-    </RealtimeProvider>
+    <QueryProvider>
+      <RealtimeProvider userId={user.id}>
+        {/*
+          layout-level notifications subscription so the topbar
+          bell updates everywhere without each page re-mounting it. Filter
+          scopes to the current user; RLS doubly enforces that.
+        */}
+        <PageRealtime
+          entities={["notifications"]}
+          filter={`user_id=eq.${user.id}`}
+        />
+        <AppShell user={user} nav={nav}>
+          {children}
+        </AppShell>
+      </RealtimeProvider>
+    </QueryProvider>
   );
 }
