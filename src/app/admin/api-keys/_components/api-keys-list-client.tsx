@@ -2,18 +2,37 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import {
+  StandardEmptyState,
+  StandardListPage,
+  type StandardListPagePage,
+} from "@/components/standard";
 import { ALL_SCOPES, ENTITIES, SCOPE_PRESETS } from "@/lib/api/scopes";
 import {
   deleteApiKeyAction,
   generateApiKeyAction,
   revokeApiKeyAction,
 } from "../actions";
-import type { SerializedKeyRow } from "../page";
+
+export interface ApiKeyRow {
+  id: string;
+  name: string;
+  description: string | null;
+  prefix: string;
+  scopes: string[];
+  rateLimitPerMinute: number;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  createdAt: string;
+  createdByName: string | null;
+}
 
 type Status = "active" | "revoked" | "expired";
 
-function statusOf(row: SerializedKeyRow): Status {
+function statusOf(row: ApiKeyRow): Status {
   if (row.revokedAt) return "revoked";
   if (row.expiresAt && new Date(row.expiresAt).getTime() < Date.now()) {
     return "expired";
@@ -30,126 +49,153 @@ function fmtDateTime(iso: string | null): string {
   }
 }
 
-export function ApiKeysAdminClient({ rows }: { rows: SerializedKeyRow[] }) {
+interface ApiKeysFilters {
+  q: string;
+  status: "all" | "active" | "revoked" | "expired";
+}
+
+const EMPTY_FILTERS: ApiKeysFilters = { q: "", status: "all" };
+
+export function ApiKeysListClient() {
+  const [filters, setFilters] = useState<ApiKeysFilters>(EMPTY_FILTERS);
+  const [draft, setDraft] = useState<ApiKeysFilters>(EMPTY_FILTERS);
+
   const [generateOpen, setGenerateOpen] = useState(false);
   const [plaintext, setPlaintext] = useState<{
     plaintext: string;
     prefix: string;
   } | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<SerializedKeyRow | null>(
-    null,
+  const [deleteTarget, setDeleteTarget] = useState<ApiKeyRow | null>(null);
+
+  const memoizedFilters = useMemo<ApiKeysFilters>(() => filters, [filters]);
+
+  const fetchPage = useCallback(
+    async (
+      cursor: string | null,
+      f: ApiKeysFilters,
+    ): Promise<StandardListPagePage<ApiKeyRow>> => {
+      const params = new URLSearchParams();
+      if (cursor) params.set("cursor", cursor);
+      if (f.q) params.set("q", f.q);
+      if (f.status !== "all") params.set("status", f.status);
+      const res = await fetch(`/api/admin/api-keys/list?${params.toString()}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) {
+        throw new Error(`Could not load API keys (${res.status})`);
+      }
+      return (await res.json()) as StandardListPagePage<ApiKeyRow>;
+    },
+    [],
+  );
+
+  const renderRow = useCallback(
+    (row: ApiKeyRow) => (
+      <ApiKeyDesktopRow row={row} onDelete={() => setDeleteTarget(row)} />
+    ),
+    [],
+  );
+
+  const renderCard = useCallback(
+    (row: ApiKeyRow) => (
+      <ApiKeyMobileCard row={row} onDelete={() => setDeleteTarget(row)} />
+    ),
+    [],
+  );
+
+  const applyDraft = () => setFilters(draft);
+  const clearFilters = () => {
+    setDraft(EMPTY_FILTERS);
+    setFilters(EMPTY_FILTERS);
+  };
+  const filtersAreModified = Boolean(filters.q || filters.status !== "all");
+
+  const filtersSlot = (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        applyDraft();
+      }}
+      className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card p-3"
+    >
+      <input
+        type="search"
+        value={draft.q}
+        onChange={(e) => setDraft({ ...draft, q: e.target.value })}
+        placeholder="Search name, description, or prefix"
+        className="min-w-[220px] flex-1 rounded-md border border-border bg-input px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+      />
+      <select
+        value={draft.status}
+        onChange={(e) => {
+          const next = {
+            ...draft,
+            status: e.target.value as ApiKeysFilters["status"],
+          };
+          setDraft(next);
+          setFilters(next);
+        }}
+        className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+      >
+        <option value="all">All statuses</option>
+        <option value="active">Active</option>
+        <option value="revoked">Revoked</option>
+        <option value="expired">Expired</option>
+      </select>
+      <button
+        type="submit"
+        className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+      >
+        Apply
+      </button>
+      {filtersAreModified ? (
+        <button
+          type="button"
+          onClick={clearFilters}
+          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+        >
+          Clear
+        </button>
+      ) : null}
+    </form>
+  );
+
+  const headerActions = (
+    <button
+      type="button"
+      onClick={() => setGenerateOpen(true)}
+      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
+    >
+      Generate key
+    </button>
   );
 
   return (
-    <div>
-      <div className="flex items-center justify-between gap-3 px-5 py-4">
-        <p className="text-sm text-muted-foreground">
-          {rows.length} {rows.length === 1 ? "key" : "keys"} total.
-        </p>
-        <button
-          type="button"
-          onClick={() => setGenerateOpen(true)}
-          className="rounded-md border border-glass-border bg-input/60 px-3 py-1.5 text-xs font-medium uppercase tracking-wide hover:bg-accent/40"
-        >
-          Generate Key
-        </button>
-      </div>
-
-      <div className="border-t border-border/60">
-        <table className="data-table min-w-full divide-y divide-border/60">
-          <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-              <th className="px-5 py-3 font-medium">Name</th>
-              <th className="px-5 py-3 font-medium">Prefix</th>
-              <th className="px-5 py-3 font-medium">Scopes</th>
-              <th className="px-5 py-3 font-medium text-right">Rate / min</th>
-              <th className="px-5 py-3 font-medium">Expires</th>
-              <th className="px-5 py-3 font-medium">Last used</th>
-              <th className="px-5 py-3 font-medium">Status</th>
-              <th className="px-5 py-3 font-medium" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/60">
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={8}
-                  className="px-5 py-8 text-center text-sm text-muted-foreground"
-                >
-                  No keys yet. Generate one to get started.
-                </td>
-              </tr>
-            ) : null}
-            {rows.map((row) => {
-              const status = statusOf(row);
-              return (
-                <tr key={row.id} className="text-sm">
-                  <td className="px-5 py-3">
-                    <div className="font-medium text-foreground">{row.name}</div>
-                    {row.description ? (
-                      <div className="text-xs text-muted-foreground">
-                        {row.description}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td className="px-5 py-3">
-                    <Link
-                      href={`/admin/api-usage?key_id=${row.id}`}
-                      className="font-mono text-xs text-foreground/80 hover:underline"
-                      title="View usage for this key"
-                    >
-                      {row.prefix}…
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {row.scopes.map((s) => (
-                        <span
-                          key={s}
-                          className="inline-block rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-right tabular-nums text-foreground/80">
-                    {row.rateLimitPerMinute}
-                  </td>
-                  <td className="px-5 py-3 text-foreground/80">
-                    {fmtDateTime(row.expiresAt)}
-                  </td>
-                  <td className="px-5 py-3 text-foreground/80">
-                    <div>{fmtDateTime(row.lastUsedAt)}</div>
-                    {row.lastUsedIp ? (
-                      <div className="text-xs text-muted-foreground font-mono">
-                        {row.lastUsedIp}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td className="px-5 py-3">
-                    <StatusPill status={status} />
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <div className="flex justify-end gap-1.5">
-                      {status === "active" ? (
-                        <RevokeButton keyId={row.id} keyName={row.name} />
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(row)}
-                        className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-destructive/20 hover:text-destructive-foreground"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    <>
+      <StandardListPage<ApiKeyRow, ApiKeysFilters>
+        queryKey={["admin-api-keys"]}
+        fetchPage={fetchPage}
+        filters={memoizedFilters}
+        renderRow={renderRow}
+        renderCard={renderCard}
+        rowEstimateSize={72}
+        cardEstimateSize={160}
+        emptyState={
+          <StandardEmptyState
+            title="No API keys yet"
+            description="Generate one to give an external integration scoped access."
+          />
+        }
+        header={{
+          kicker: "Admin",
+          title: "API keys",
+          fontFamily: "display",
+          description:
+            "Bearer tokens for external integrations. Tokens act with org-wide visibility regardless of which user generated them.",
+          actions: headerActions,
+        }}
+        filtersSlot={filtersSlot}
+      />
 
       {generateOpen ? (
         <GenerateModal
@@ -170,11 +216,136 @@ export function ApiKeysAdminClient({ rows }: { rows: SerializedKeyRow[] }) {
       ) : null}
 
       {deleteTarget ? (
-        <DeleteModal
-          row={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-        />
+        <DeleteModal row={deleteTarget} onClose={() => setDeleteTarget(null)} />
       ) : null}
+    </>
+  );
+}
+
+function ApiKeyDesktopRow({
+  row,
+  onDelete,
+}: {
+  row: ApiKeyRow;
+  onDelete: () => void;
+}) {
+  const status = statusOf(row);
+  return (
+    <div
+      className="flex items-start gap-4 border-b border-border bg-card px-4 py-3 text-sm transition hover:bg-accent/20"
+      data-row-flash="new"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-foreground">{row.name}</div>
+        {row.description ? (
+          <div className="text-xs text-muted-foreground">
+            {row.description}
+          </div>
+        ) : null}
+      </div>
+      <div className="hidden w-32 shrink-0 md:block">
+        <Link
+          href={`/admin/api-usage?api_key_id=${row.id}`}
+          className="font-mono text-xs text-foreground/80 hover:underline"
+          title="View usage for this key"
+        >
+          {row.prefix}…
+        </Link>
+      </div>
+      <div className="hidden w-48 shrink-0 lg:block">
+        <div className="flex flex-wrap gap-1">
+          {row.scopes.slice(0, 4).map((s) => (
+            <span
+              key={s}
+              className="inline-block rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
+            >
+              {s}
+            </span>
+          ))}
+          {row.scopes.length > 4 ? (
+            <span className="text-[10px] text-muted-foreground">
+              +{row.scopes.length - 4}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="hidden w-20 shrink-0 text-right tabular-nums text-foreground/80 lg:block">
+        {row.rateLimitPerMinute}/min
+      </div>
+      <div className="hidden w-32 shrink-0 text-xs text-foreground/80 xl:block">
+        <div>Expires: {fmtDateTime(row.expiresAt)}</div>
+        <div>Last used: {fmtDateTime(row.lastUsedAt)}</div>
+      </div>
+      <div className="w-24 shrink-0">
+        <StatusPill status={status} />
+      </div>
+      <div className="w-32 shrink-0 text-right">
+        <div className="flex justify-end gap-1.5">
+          {status === "active" ? (
+            <RevokeButton keyId={row.id} keyName={row.name} />
+          ) : null}
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-destructive/20 hover:text-destructive-foreground"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ApiKeyMobileCard({
+  row,
+  onDelete,
+}: {
+  row: ApiKeyRow;
+  onDelete: () => void;
+}) {
+  const status = statusOf(row);
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-md border border-border bg-card p-3"
+      data-row-flash="new"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-foreground">
+            {row.name}
+          </div>
+          <Link
+            href={`/admin/api-usage?api_key_id=${row.id}`}
+            className="font-mono text-xs text-foreground/80 hover:underline"
+          >
+            {row.prefix}…
+          </Link>
+        </div>
+        <StatusPill status={status} />
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {row.scopes.map((s) => (
+          <span
+            key={s}
+            className="inline-block rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
+          >
+            {s}
+          </span>
+        ))}
+      </div>
+      <div className="flex justify-end gap-1.5">
+        {status === "active" ? (
+          <RevokeButton keyId={row.id} keyName={row.name} />
+        ) : null}
+        <button
+          type="button"
+          onClick={onDelete}
+          className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-destructive/20 hover:text-destructive-foreground"
+        >
+          Delete
+        </button>
+      </div>
     </div>
   );
 }
@@ -243,7 +414,9 @@ function GenerateModal({ onClose, onGenerated }: GenerateModalProps) {
   const [description, setDescription] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
   const [rateLimit, setRateLimit] = useState(60);
-  const [expiry, setExpiry] = useState<"never" | "30d" | "90d" | "1y" | "custom">("never");
+  const [expiry, setExpiry] = useState<
+    "never" | "30d" | "90d" | "1y" | "custom"
+  >("never");
   const [customExpires, setCustomExpires] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -364,7 +537,10 @@ function GenerateModal({ onClose, onGenerated }: GenerateModalProps) {
                 {ALL_SCOPES.filter(
                   (s) => s === "read:users" || s === "admin",
                 ).map((s) => (
-                  <label key={s} className="flex items-center gap-2 py-0.5 text-xs">
+                  <label
+                    key={s}
+                    className="flex items-center gap-2 py-0.5 text-xs"
+                  >
                     <input
                       type="checkbox"
                       checked={scopes.includes(s)}
@@ -492,10 +668,6 @@ function PlaintextModal({
           <button
             type="button"
             onClick={() => {
-              // best-effort: clipboard write can fail on permission deny,
-              // unfocused window, or non-HTTPS context. UI optimistically
-              // flips to "Copied!"; the plaintext stays visible above so
-              // the user can manually copy if the API call dropped it.
               navigator.clipboard.writeText(plaintext).catch(() => {});
               setCopied(true);
             }}
@@ -525,7 +697,7 @@ function DeleteModal({
   row,
   onClose,
 }: {
-  row: SerializedKeyRow;
+  row: ApiKeyRow;
   onClose: () => void;
 }) {
   const router = useRouter();

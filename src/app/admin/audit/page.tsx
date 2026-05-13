@@ -1,16 +1,12 @@
-import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { auditLog } from "@/db/schema/audit";
-import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { RetentionBanner } from "@/components/admin/retention-banner";
-import { UserTime } from "@/components/ui/user-time";
-import { UserChip } from "@/components/user-display";
-import { encodeCursor, parseCursor } from "@/lib/leads";
+import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
+import { adminCrumbs } from "@/lib/navigation/breadcrumbs";
+import { requireAdmin } from "@/lib/auth-helpers";
+import { listAuditTargetTypes } from "@/lib/audit-cursor";
+import { AuditListClient } from "./_components/audit-list-client";
 
 export const dynamic = "force-dynamic";
-
-const PAGE_SIZE = 100;
 
 interface AuditSearchParams {
   q?: string;
@@ -19,7 +15,6 @@ interface AuditSearchParams {
   request_id?: string;
   created_at_gte?: string;
   created_at_lte?: string;
-  cursor?: string;
 }
 
 export default async function AuditLogPage({
@@ -27,358 +22,31 @@ export default async function AuditLogPage({
 }: {
   searchParams: Promise<AuditSearchParams>;
 }) {
+  await requireAdmin();
   const sp = await searchParams;
+  const [timePrefs, targetTypes] = await Promise.all([
+    getCurrentUserTimePrefs(),
+    listAuditTargetTypes(),
+  ]);
 
-  // cursor pagination on (created_at DESC, id DESC). The
-  // composite index `audit_log_created_at_id_idx` supports millisecond-
-  // bursting writes (e.g. bulk admin actions) without losing ordering.
-  const cursor = parseCursor(sp.cursor);
-  const wheres = [];
-  if (sp.q && sp.q.trim()) {
-    const pattern = `%${sp.q.trim()}%`;
-    wheres.push(
-      or(
-        ilike(auditLog.action, pattern),
-        ilike(auditLog.targetType, pattern),
-        ilike(auditLog.targetId, pattern),
-        ilike(users.displayName, pattern),
-        ilike(users.email, pattern),
-      ),
-    );
-  }
-  if (sp.action) wheres.push(eq(auditLog.action, sp.action));
-  if (sp.target_type) wheres.push(eq(auditLog.targetType, sp.target_type));
-  // dedicated exact-match field for
-  // requestId. Previously folded into the `q` ilike-OR; that scaled
-  // poorly as audit_log grows since request_id has no index and the
-  // wildcard pattern forced a full scan. The Request column's
-  // click-through link uses this param, not `q`, so the per-request
-  // correlation lens hits a fast equality predicate.
-  if (sp.request_id && sp.request_id.trim()) {
-    wheres.push(eq(auditLog.requestId, sp.request_id.trim()));
-  }
-  if (sp.created_at_gte) {
-    const d = new Date(sp.created_at_gte);
-    if (!Number.isNaN(d.getTime())) {
-      wheres.push(gte(auditLog.createdAt, d));
-    }
-  }
-  if (sp.created_at_lte) {
-    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(sp.created_at_lte);
-    const d = isDateOnly
-      ? new Date(`${sp.created_at_lte}T23:59:59.999Z`)
-      : new Date(sp.created_at_lte);
-    if (!Number.isNaN(d.getTime())) {
-      wheres.push(lte(auditLog.createdAt, d));
-    }
-  }
-  if (cursor && cursor.ts) {
-    wheres.push(
-      sql`(
-        ${auditLog.createdAt} < ${cursor.ts.toISOString()}::timestamptz
-        OR (${auditLog.createdAt} = ${cursor.ts.toISOString()}::timestamptz AND ${auditLog.id} < ${cursor.id}::uuid)
-      )`,
-    );
-  }
-  const where = wheres.length > 0 ? and(...wheres) : undefined;
-
-  // guard slow searches: ILIKE %q% scans across multiple
-  // text columns can be expensive on a 1M-row audit log. 5s cap is
-  // generous enough for normal browsing and forces a quick fail when
-  // the table grows past the trigram-less threshold.
-  if (sp.q && sp.q.trim()) {
-    await db.execute(sql`SET LOCAL statement_timeout = '5s'`);
-  }
-
-  const rowsRaw = await db
-    .select({
-      id: auditLog.id,
-      actorId: auditLog.actorId,
-      actorDisplayName: users.displayName,
-      action: auditLog.action,
-      targetType: auditLog.targetType,
-      targetId: auditLog.targetId,
-      beforeJson: auditLog.beforeJson,
-      afterJson: auditLog.afterJson,
-      requestId: auditLog.requestId,
-      createdAt: auditLog.createdAt,
-    })
-    .from(auditLog)
-    .leftJoin(users, eq(auditLog.actorId, users.id))
-    .where(where)
-    .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
-    .limit(PAGE_SIZE + 1);
-
-  const hasMore = rowsRaw.length > PAGE_SIZE;
-  const rows = hasMore ? rowsRaw.slice(0, PAGE_SIZE) : rowsRaw;
-  const last = rows[rows.length - 1];
-  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
-
-  // Distinct entity-type list for the dropdown. Cheap query against the
-  // `audit_target_idx` index. Cached in-page (server component) so it
-  // re-runs only on each page render.
-  const targetTypeRows = await db
-    .selectDistinct({ targetType: auditLog.targetType })
-    .from(auditLog)
-    .where(sql`${auditLog.targetType} IS NOT NULL`)
-    .orderBy(auditLog.targetType);
-  const targetTypes = targetTypeRows
-    .map((r) => r.targetType)
-    .filter((v): v is string => typeof v === "string" && v.length > 0);
-
-  // Build the filter-preserving export URL.
-  const exportParams = new URLSearchParams();
-  if (sp.q) exportParams.set("q", sp.q);
-  if (sp.action) exportParams.set("action", sp.action);
-  if (sp.target_type) exportParams.set("target_type", sp.target_type);
-  if (sp.request_id) exportParams.set("request_id", sp.request_id);
-  if (sp.created_at_gte) exportParams.set("created_at_gte", sp.created_at_gte);
-  if (sp.created_at_lte) exportParams.set("created_at_lte", sp.created_at_lte);
-  const exportHref = `/admin/audit/export${
-    exportParams.toString() ? `?${exportParams.toString()}` : ""
-  }`;
+  const initialFilters = {
+    q: sp.q ?? "",
+    action: sp.action ?? "",
+    targetType: sp.target_type ?? "",
+    requestId: sp.request_id ?? "",
+    from: sp.created_at_gte ?? "",
+    to: sp.created_at_lte ?? "",
+  };
 
   return (
-    <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
-      <BreadcrumbsSetter
-        crumbs={[
-          { label: "Admin", href: "/admin" },
-          { label: "Audit log" },
-        ]}
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
+      <BreadcrumbsSetter crumbs={adminCrumbs.audit()} />
+      <RetentionBanner days={730} label="Activity logs" />
+      <AuditListClient
+        timePrefs={timePrefs}
+        targetTypes={targetTypes}
+        initialFilters={initialFilters}
       />
-      <h1 className="text-2xl font-semibold">Audit log</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {/* cursor pagination skips the COUNT query. The
-            "Append-only" claim still applies. */}
-        Showing {rows.length}{nextCursor ? "+" : ""} {rows.length === 1 ? "event" : "events"}. Append-only.
-      </p>
-
-      <div className="mt-6">
-        <RetentionBanner days={730} label="Activity logs" />
-      </div>
-
-      <form className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Search
-          <input
-            name="q"
-            defaultValue={sp.q ?? ""}
-            placeholder="action / target / actor…"
-            className="min-w-[260px] rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Action
-          <input
-            name="action"
-            defaultValue={sp.action ?? ""}
-            placeholder="lead.update"
-            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Entity type
-          <select
-            name="target_type"
-            defaultValue={sp.target_type ?? ""}
-            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          >
-            <option value="">Any</option>
-            {targetTypes.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          From
-          <input
-            type="date"
-            name="created_at_gte"
-            defaultValue={sp.created_at_gte ?? ""}
-            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          To
-          <input
-            type="date"
-            name="created_at_lte"
-            defaultValue={sp.created_at_lte ?? ""}
-            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </label>
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
-          >
-            Apply
-          </button>
-          <a
-            href="/admin/audit"
-            className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
-          >
-            Reset
-          </a>
-          <a
-            href={exportHref}
-            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted"
-            title="Download up to 50,000 matching rows as CSV"
-          >
-            Export CSV
-          </a>
-        </div>
-      </form>
-
-      {/* Same horizontal-scroll pattern as /admin/api-usage so the dense
-          forensic table doesn't clip the rightmost columns at mid-range
-          viewports (~900px with sidebar). */}
-      <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-muted/40 backdrop-blur-xl">
-        <table className="data-table min-w-[1000px] divide-y divide-border/60 text-sm">
-          <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-              <th className="px-5 py-3 font-medium">When</th>
-              <th className="px-5 py-3 font-medium">Actor</th>
-              <th className="px-5 py-3 font-medium">Action</th>
-              <th className="px-5 py-3 font-medium">Target</th>
-              <th className="px-5 py-3 font-medium">Request</th>
-              <th className="px-5 py-3 font-medium">Diff</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/60">
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
-                  No audit events match.
-                </td>
-              </tr>
-            ) : null}
-            {rows.map((r) => (
-              <tr key={r.id} className="align-top">
-                <td className="px-5 py-3 text-xs text-muted-foreground tabular-nums">
-                  <UserTime value={r.createdAt} />
-                </td>
-                <td className="px-5 py-3">
-                  {/* UserChip; email subline dropped per the
-                      "names only on actor surfaces" directive. Hover card
-                      omitted — page renders up to 100 rows. */}
-                  {r.actorId ? (
-                    <UserChip
-                      user={{
-                        id: r.actorId,
-                        displayName: r.actorDisplayName,
-                        photoUrl: null,
-                      }}
-                    />
-                  ) : (
-                    <span className="text-muted-foreground/80">system</span>
-                  )}
-                </td>
-                <td className="px-5 py-3 font-mono text-xs text-foreground/90">
-                  {r.action}
-                </td>
-                <td className="px-5 py-3 text-xs text-muted-foreground">
-                  {r.targetType ? (
-                    <>
-                      <span className="text-foreground/90">{r.targetType}</span>
-                      {r.targetId ? (
-                        <div className="font-mono text-[10px] text-muted-foreground/80">
-                          {r.targetId}
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="px-5 py-3 text-xs text-muted-foreground">
-                  {/* requestId surface for cross-line
-                      log correlation. Render as a clickable filter that
-                      narrows the audit log to the same correlation id;
-                      title attribute shows the full id on hover so the
-                      truncated 12-char preview doesn't hide it. */}
-                  {r.requestId ? (
-                    <a
-                      href={`/admin/audit?request_id=${encodeURIComponent(r.requestId)}`}
-                      className="font-mono text-[10px] text-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
-                      title={r.requestId}
-                    >
-                      {r.requestId.slice(0, 12)}
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="px-5 py-3 text-xs text-muted-foreground">
-                  {r.beforeJson || r.afterJson ? (
-                    <details>
-                      <summary className="cursor-pointer text-foreground/80 underline-offset-4 hover:underline">
-                        view
-                      </summary>
-                      <pre className="mt-2 max-w-md overflow-x-auto rounded bg-black/30 p-2 font-mono text-[10px] text-foreground/90">
-                        {JSON.stringify(
-                          { before: r.beforeJson, after: r.afterJson },
-                          null,
-                          2,
-                        )}
-                      </pre>
-                    </details>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {nextCursor || sp.cursor ? (
-        <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
-          <span>{sp.cursor ? "Showing more results" : "Showing first 100"}</span>
-          <div className="flex gap-2">
-            {sp.cursor ? (
-              <CursorLink sp={sp} cursor={null}>
-                ← Back to start
-              </CursorLink>
-            ) : null}
-            {nextCursor ? (
-              <CursorLink sp={sp} cursor={nextCursor}>
-                Load more →
-              </CursorLink>
-            ) : null}
-          </div>
-        </nav>
-      ) : null}
     </div>
-  );
-}
-
-function CursorLink({
-  sp,
-  cursor,
-  children,
-}: {
-  sp: AuditSearchParams;
-  cursor: string | null;
-  children: React.ReactNode;
-}) {
-  const params = new URLSearchParams();
-  if (sp.q) params.set("q", sp.q);
-  if (sp.action) params.set("action", sp.action);
-  if (sp.target_type) params.set("target_type", sp.target_type);
-  if (sp.request_id) params.set("request_id", sp.request_id);
-  if (sp.created_at_gte) params.set("created_at_gte", sp.created_at_gte);
-  if (sp.created_at_lte) params.set("created_at_lte", sp.created_at_lte);
-  if (cursor) params.set("cursor", cursor);
-  return (
-    <a
-      href={`/admin/audit?${params.toString()}`}
-      className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
-    >
-      {children}
-    </a>
   );
 }

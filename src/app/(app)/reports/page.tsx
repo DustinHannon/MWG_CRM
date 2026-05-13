@@ -3,33 +3,29 @@ import { Plus } from "lucide-react";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
 import { BuiltInReports } from "@/components/reports/built-in-reports";
-import { ReportList } from "@/components/reports/report-list";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { isMarketingReportEntity } from "@/lib/reports/categories";
-import {
-  listBuiltinReports,
-  listUserAndSharedReports,
-} from "@/lib/reports/repository";
+import { listBuiltinReports } from "@/lib/reports/repository";
+import { ReportsListClient } from "./_components/reports-list-client";
 
 export const dynamic = "force-dynamic";
 
 /**
- * /reports — top-level list. Two sections (built-in + your reports +
- * shared). New report CTA in the top right.
+ * /reports — top-level list. Two sections (built-in collapsible
+ * catalog + user-and-shared infinite scroll). New report CTA in the
+ * top right.
  */
 export default async function ReportsListPage() {
   const viewer = await requireSession();
-  const [builtin, mine, perms] = await Promise.all([
+  const [builtin, perms] = await Promise.all([
     listBuiltinReports(),
-    listUserAndSharedReports(viewer.id),
     getPermissions(viewer.id),
   ]);
 
   // Marketing-entity reports are gated to admin + canMarketingReportsView
   // per src/lib/reports/access.ts. Filter them out of the built-in
   // list before the categorization layer so non-marketing users
-  // don't see cards that would 403 on click. Mirrors the same
-  // entity-set used for category bucketing.
+  // don't see cards that would 403 on click.
   const canSeeMarketing = viewer.isAdmin || perms.canMarketingReportsView;
   const visibleBuiltin = canSeeMarketing
     ? builtin
@@ -67,14 +63,7 @@ export default async function ReportsListPage() {
       </section>
 
       <section className="mt-10">
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Your reports &amp; shared
-        </h2>
-        <ReportList
-          reports={mine}
-          emptyMessage="No saved reports yet. Create one from New report."
-          showOwner
-        />
+        <ReportsListClient />
       </section>
     </div>
   );
