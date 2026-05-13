@@ -23,6 +23,7 @@ import { logger } from "@/lib/logger";
 import {
   getPermissions,
   requireSession,
+  type MarketingPermissionKey,
   type SessionUser,
 } from "@/lib/auth-helpers";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
@@ -46,8 +47,9 @@ import {
  * Marketing list server actions.
  *
  * Every action runs through `withErrorBoundary`, gates on session +
- * canManageMarketing (or admin), validates input via Zod, mutates via
- * the lib helpers, and writes an audit event.
+ * the specific fine-grained list permission for the action (or admin),
+ * validates input via Zod, mutates via the lib helpers, and writes an
+ * audit event.
  */
 
 const listInputBaseSchema = z.object({
@@ -119,11 +121,16 @@ const bulkAddSchema = z.object({
     .max(5000),
 });
 
-async function requireMarketingManager(): Promise<SessionUser> {
+async function requireListPermission(
+  perm: MarketingPermissionKey,
+): Promise<SessionUser> {
   const user = await requireSession();
+  if (user.isAdmin) return user;
   const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canManageMarketing) {
-    throw new ForbiddenError("You don't have permission to manage marketing.");
+  if (!perms[perm]) {
+    throw new ForbiddenError(
+      "You don't have permission to perform this list action.",
+    );
   }
   return user;
 }
@@ -137,7 +144,7 @@ export async function createListAction(input: {
   sourceEntity?: MarketingListSourceEntity;
 }): Promise<ActionResult<{ id: string }>> {
   return withErrorBoundary({ action: "marketing.list.create" }, async () => {
-    const user = await requireMarketingManager();
+    const user = await requireListPermission("canMarketingListsCreate");
     const parsed = listCreateSchema.safeParse(input);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
@@ -207,7 +214,7 @@ export async function updateListAction(input: {
   expectedVersion?: number;
 }): Promise<ActionResult<never>> {
   return withErrorBoundary({ action: "marketing.list.update" }, async () => {
-    const user = await requireMarketingManager();
+    const user = await requireListPermission("canMarketingListsEdit");
     const parsed = listUpdateSchema.safeParse(input);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
@@ -306,7 +313,7 @@ export async function deleteListAction(
   id: string,
 ): Promise<ActionResult<never>> {
   return withErrorBoundary({ action: "marketing.list.delete" }, async () => {
-    const user = await requireMarketingManager();
+    const user = await requireListPermission("canMarketingListsDelete");
     const parsedId = idSchema.safeParse(id);
     if (!parsedId.success) throw new ValidationError("Invalid list id.");
 
@@ -383,7 +390,7 @@ export async function refreshListAction(
   return withErrorBoundary(
     { action: "marketing.list.refresh" },
     async () => {
-      const user = await requireMarketingManager();
+      const user = await requireListPermission("canMarketingListsRefresh");
       const parsedId = idSchema.safeParse(id);
       if (!parsedId.success) throw new ValidationError("Invalid list id.");
 
@@ -405,7 +412,7 @@ export async function bulkAddLeadsToListAction(input: {
   return withErrorBoundary(
     { action: "marketing.list.member_bulk_add" },
     async () => {
-      const user = await requireMarketingManager();
+      const user = await requireListPermission("canMarketingListsBulkAdd");
       const parsed = bulkAddSchema.safeParse(input);
       if (!parsed.success) {
         const first = parsed.error.issues[0];
@@ -538,7 +545,7 @@ async function requireStaticListEditAccess(
   if (user.isAdmin) return list;
   const perms = await getPermissions(user.id);
   const isCreator = list.createdById === user.id;
-  const hasEditAll = perms.canMarketingListsEdit || perms.canManageMarketing;
+  const hasEditAll = perms.canMarketingListsEdit;
   if (!hasEditAll && !isCreator) {
     throw new ForbiddenError(
       "You don't have permission to edit this list.",
@@ -563,16 +570,14 @@ export async function createStaticListAction(input: {
   return withErrorBoundary(
     { action: "marketing.list.create" },
     async () => {
-      const user = await requireMarketingManager();
-      const perms = await getPermissions(user.id);
-      if (
-        !user.isAdmin &&
-        !perms.canMarketingListsImport &&
-        !perms.canMarketingListsCreate
-      ) {
-        throw new ForbiddenError(
-          "You don't have permission to import static lists.",
-        );
+      const user = await requireSession();
+      if (!user.isAdmin) {
+        const perms = await getPermissions(user.id);
+        if (!perms.canMarketingListsImport && !perms.canMarketingListsCreate) {
+          throw new ForbiddenError(
+            "You don't have permission to import static lists.",
+          );
+        }
       }
       const parsed = staticListCreateSchema.safeParse(input);
       if (!parsed.success) {

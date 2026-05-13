@@ -140,3 +140,54 @@ export const ROLE_BUNDLE_LABELS: Record<MarketingRoleBundle, string> = {
   marketing_sender: "Sender — send only; no authoring",
   marketing_admin: "Admin — everything including suppressions management",
 };
+
+/**
+ * True if the user holds at least one marketing view permission. Used by
+ * the app shell to decide whether to render the Marketing nav link, and
+ * by the marketing layout to decide whether to bounce.
+ */
+export function hasAnyMarketingView(
+  perms: Pick<
+    Record<MarketingPermissionKey, boolean>,
+    | "canMarketingTemplatesView"
+    | "canMarketingListsView"
+    | "canMarketingCampaignsView"
+    | "canMarketingSuppressionsView"
+    | "canMarketingReportsView"
+    | "canMarketingAuditView"
+  >,
+): boolean {
+  return (
+    perms.canMarketingTemplatesView ||
+    perms.canMarketingListsView ||
+    perms.canMarketingCampaignsView ||
+    perms.canMarketingSuppressionsView ||
+    perms.canMarketingReportsView ||
+    perms.canMarketingAuditView
+  );
+}
+
+/**
+ * Returns the bundle name whose permission set exactly matches the user's
+ * marketing permissions, or `"custom"` when no bundle matches. Used by the
+ * RoleBundleSelector to pre-select the dropdown.
+ */
+export function detectBundle(
+  perms: Record<MarketingPermissionKey, boolean>,
+): MarketingRoleBundle | "custom" {
+  for (const name of Object.keys(ROLE_BUNDLES) as MarketingRoleBundle[]) {
+    if (permsMatchBundle(perms, name)) return name;
+  }
+  return "custom";
+}
+
+function permsMatchBundle(
+  perms: Record<MarketingPermissionKey, boolean>,
+  bundle: MarketingRoleBundle,
+): boolean {
+  const expected = resolveBundle(bundle);
+  for (const key of ALL_MARKETING_KEYS) {
+    if (Boolean(perms[key]) !== Boolean(expected[key])) return false;
+  }
+  return true;
+}

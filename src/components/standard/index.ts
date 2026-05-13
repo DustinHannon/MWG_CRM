@@ -23,3 +23,4 @@ export {
   StandardConfirmDialog,
   type StandardConfirmDialogProps,
 } from "./standard-confirm-dialog";
+export { StandardCollapsibleSection } from "./standard-collapsible-section";

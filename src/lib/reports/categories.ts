@@ -16,7 +16,7 @@ import type { ReportListItem } from "@/lib/reports/repository";
  *
  * NOTE: this module is intentionally pure data. The server page
  * filters marketing-entity reports out for users without
- * `canManageMarketing` BEFORE the reports reach this module — no
+ * `canMarketingReportsView` BEFORE the reports reach this module — no
  * permission logic here.
  */
 
@@ -111,8 +111,8 @@ export function groupBuiltinReports(
  * Returns true if the given entity type belongs to the
  * marketing/email category — used by the server page to filter the
  * fetched-but-gated reports list when the viewer lacks
- * canManageMarketing. Kept here so the gating uses the SAME entity
- * list as the category buckets.
+ * canMarketingReportsView. Kept here so the gating uses the SAME
+ * entity list as the category buckets.
  */
 const MARKETING_CATEGORY = REPORT_CATEGORIES.find((c) => c.key === "marketing");
 const MARKETING_ENTITY_SET = new Set<string>(

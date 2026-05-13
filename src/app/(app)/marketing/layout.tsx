@@ -1,11 +1,14 @@
 import { redirect } from "next/navigation";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { hasAnyMarketingView } from "@/lib/permissions/role-bundles";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Marketing tab gate. Authenticated users without admin OR
- * canManageMarketing get bounced. Mirrors the Reports gate pattern.
+ * Marketing tab gate. Authenticated users without admin and with no
+ * marketing view permission get bounced. Mirrors the Reports gate
+ * pattern. Child pages enforce their own granular permission per
+ * action.
  */
 export default async function MarketingLayout({
   children,
@@ -14,7 +17,7 @@ export default async function MarketingLayout({
 }) {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canManageMarketing) {
+  if (!user.isAdmin && !hasAnyMarketingView(perms)) {
     redirect("/dashboard");
   }
   return <>{children}</>;

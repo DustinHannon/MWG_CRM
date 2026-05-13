@@ -49,7 +49,7 @@ async function authorize(templateId: string): Promise<
 
   const user = await requireSession();
   const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canManageMarketing) {
+  if (!user.isAdmin && !perms.canMarketingTemplatesEdit) {
     return {
       ok: false,
       response: NextResponse.json({ error: "Forbidden." }, { status: 403 }),

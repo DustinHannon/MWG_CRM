@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Admin / canManageMarketing test-send.
+ * Admin / canMarketingTemplatesSendTest test-send.
  *
  * Sends a single inline-HTML email through SendGrid for diagnostic
  * purposes. The recipient defaults to the requester's own email so a
@@ -38,10 +38,10 @@ const REQUEST_BODY_SCHEMA = z.object({
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const user = await requireSession();
-  // canManageMarketing OR admin. Admin already implies all permissions
-  // via getPermissions but we surface both for clarity.
+  // Admin bypasses; otherwise the template send-test permission gates
+  // this preview endpoint.
   const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canManageMarketing) {
+  if (!user.isAdmin && !perms.canMarketingTemplatesSendTest) {
     return NextResponse.json(
       { ok: false, error: "forbidden" },
       { status: 403 },

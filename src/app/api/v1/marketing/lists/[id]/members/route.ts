@@ -41,7 +41,7 @@ export async function GET(
     async () => {
       const user = await requireSession();
       const perms = await getPermissions(user.id);
-      if (!user.isAdmin && !perms.canManageMarketing) {
+      if (!user.isAdmin && !perms.canMarketingListsView) {
         throw new ForbiddenError("Marketing access required.");
       }
       const { id } = await ctx.params;

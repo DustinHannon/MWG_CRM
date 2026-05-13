@@ -32,7 +32,7 @@ export default async function EditTemplatePage({
 }) {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canManageMarketing) {
+  if (!user.isAdmin && !perms.canMarketingTemplatesEdit) {
     redirect("/dashboard");
   }
   const { id } = await params;

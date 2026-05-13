@@ -7,6 +7,7 @@ import { users } from "@/db/schema/users";
 import {
   getPermissions,
   requireSession,
+  type MarketingPermissionKey,
 } from "@/lib/auth-helpers";
 import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { likeContains } from "@/lib/security/like-escape";
@@ -44,10 +45,11 @@ const createBodySchema = z.object({
   filterDsl: filterDslSchema,
 });
 
-async function requireMarketingAccess() {
+async function requireListsApiAccess(perm: MarketingPermissionKey) {
   const user = await requireSession();
+  if (user.isAdmin) return user;
   const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canManageMarketing) {
+  if (!perms[perm]) {
     throw new ForbiddenError("Marketing access required.");
   }
   return user;
@@ -57,7 +59,7 @@ export async function GET(req: Request) {
   const result = await withErrorBoundary(
     { action: "marketing.lists.list" },
     async () => {
-      await requireMarketingAccess();
+      await requireListsApiAccess("canMarketingListsView");
       const url = new URL(req.url);
       const parsed = listQuerySchema.safeParse(
         Object.fromEntries(url.searchParams.entries()),
@@ -120,7 +122,7 @@ export async function POST(req: Request) {
   const result = await withErrorBoundary(
     { action: "marketing.lists.create" },
     async () => {
-      const user = await requireMarketingAccess();
+      const user = await requireListsApiAccess("canMarketingListsCreate");
       const json = await req.json().catch(() => null);
       const parsed = createBodySchema.safeParse(json);
       if (!parsed.success) {

@@ -294,11 +294,12 @@ export default async function LeadsPage({
             ) : null}
             {/* bulk add visible leads to a marketing list. Gated
                 upstream so the button only renders for admins / users with
-                canManageMarketing. Desktop-only to match Import/Export. */}
+                the marketing-lists bulk-add permission. Desktop-only to
+                match Import/Export. */}
             <div className="hidden md:inline-flex">
               <AddVisibleToListButton
                 leadIds={result.rows.map((r) => r.id)}
-                canManage={user.isAdmin || perms.canManageMarketing}
+                canManage={user.isAdmin || perms.canMarketingListsBulkAdd}
               />
             </div>
             {/* bulk-tag toolbar. Acts on the currently

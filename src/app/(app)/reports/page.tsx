@@ -25,12 +25,12 @@ export default async function ReportsListPage() {
     getPermissions(viewer.id),
   ]);
 
-  // Marketing-entity reports are gated to admin + canManageMarketing
+  // Marketing-entity reports are gated to admin + canMarketingReportsView
   // per src/lib/reports/access.ts. Filter them out of the built-in
   // list before the categorization layer so non-marketing users
   // don't see cards that would 403 on click. Mirrors the same
   // entity-set used for category bucketing.
-  const canSeeMarketing = viewer.isAdmin || perms.canManageMarketing;
+  const canSeeMarketing = viewer.isAdmin || perms.canMarketingReportsView;
   const visibleBuiltin = canSeeMarketing
     ? builtin
     : builtin.filter((r) => !isMarketingReportEntity(r.entityType));

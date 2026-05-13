@@ -121,13 +121,13 @@ export async function executeReport(
 
 /**
  * Marketing-entity reports are gated to admins + users with the
- * canManageMarketing permission. Returns true when the viewer is
+ * canMarketingReportsView permission. Returns true when the viewer is
  * allowed to access the entity type, false otherwise.
  */
 async function canViewMarketingEntity(viewer: SessionUser): Promise<boolean> {
   if (viewer.isAdmin) return true;
   const perms = await getPermissions(viewer.id);
-  return perms.canManageMarketing === true;
+  return perms.canMarketingReportsView === true;
 }
 
 export async function assertCanViewReport(
@@ -218,8 +218,9 @@ async function buildViewerScope(
     case "activity":
       return { column: "user_id", value: viewer.id };
     // Marketing entities — access is gated at assertCanViewReport
-    // (admin OR canManageMarketing). Once past that gate, no per-row
-    // viewer scope applies; marketing data isn't per-user-owned.
+    // (admin OR canMarketingReportsView). Once past that gate, no
+    // per-row viewer scope applies; marketing data isn't
+    // per-user-owned.
     case "marketing_campaign":
     case "marketing_email_event":
     case "email_send_log":

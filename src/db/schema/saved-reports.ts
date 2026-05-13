@@ -81,14 +81,14 @@ export const REPORT_ENTITY_TYPES = [
   "activity",
   "task",
   // + marketing/email entities. Visible to admins +
-  // users with canManageMarketing only — see access.ts assertCanViewReport.
+  // users with canMarketingReportsView only — see access.ts assertCanViewReport.
   "marketing_campaign",
   "marketing_email_event",
   "email_send_log",
 ] as const;
 export type ReportEntityType = (typeof REPORT_ENTITY_TYPES)[number];
 
-/** Entity types that should only be visible to admins / canManageMarketing. */
+/** Entity types that should only be visible to admins / canMarketingReportsView. */
 export const MARKETING_REPORT_ENTITY_TYPES: readonly ReportEntityType[] = [
   "marketing_campaign",
   "marketing_email_event",

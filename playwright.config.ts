@@ -45,6 +45,10 @@ export default defineConfig({
       use: { ...devices["iPhone 14"] },
     },
     {
+      name: "mobile-pixel",
+      use: { ...devices["Pixel 7"] },
+    },
+    {
       name: "tablet-ipad",
       use: { ...devices["iPad (gen 7)"] },
     },

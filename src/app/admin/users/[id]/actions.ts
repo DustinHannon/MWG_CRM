@@ -5,68 +5,183 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { permissions, users } from "@/db/schema/users";
-import { requireAdmin } from "@/lib/auth-helpers";
+import {
+  getPermissions,
+  requireAdmin,
+  type PermissionKey,
+} from "@/lib/auth-helpers";
 import { writeAudit } from "@/lib/audit";
 import { hashPassword } from "@/lib/password";
 import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  ValidationError,
 } from "@/lib/errors";
+import {
+  ROLE_BUNDLES,
+  resolveBundle,
+  type MarketingRoleBundle,
+} from "@/lib/permissions/role-bundles";
+import { PERMISSION_CATEGORIES } from "@/lib/permissions/ui-categories";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
-const PERMISSION_KEYS = [
-  "canViewAllRecords",
-  "canCreateLeads",
-  "canEditLeads",
-  "canDeleteLeads",
-  "canImport",
-  "canExport",
-  "canSendEmail",
-  "canViewReports",
-] as const;
-type PermissionKey = (typeof PERMISSION_KEYS)[number];
+/**
+ * Set of every permission key that may be written through the admin
+ * UI. Derived from the same source-of-truth used to render the
+ * UI so the action accepts exactly what the form can submit.
+ */
+const ALL_PERMISSION_KEYS: ReadonlySet<PermissionKey> = new Set(
+  PERMISSION_CATEGORIES.flatMap((c) => c.keys),
+);
 
-export async function updatePermission(
-  formData: FormData,
+function filterToKnownKeys(
+  input: Record<string, boolean>,
+): Partial<Record<PermissionKey, boolean>> {
+  const out: Partial<Record<PermissionKey, boolean>> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (!ALL_PERMISSION_KEYS.has(key as PermissionKey)) continue;
+    out[key as PermissionKey] = value;
+  }
+  return out;
+}
+
+function computeDiff(
+  before: Record<PermissionKey, boolean>,
+  after: Record<PermissionKey, boolean>,
+): Record<string, { before: boolean; after: boolean }> {
+  const diff: Record<string, { before: boolean; after: boolean }> = {};
+  for (const key of ALL_PERMISSION_KEYS) {
+    const k = key as PermissionKey;
+    if (before[k] !== after[k]) {
+      diff[k] = { before: before[k], after: after[k] };
+    }
+  }
+  return diff;
+}
+
+const updatePermissionsSchema = z.object({
+  userId: z.string().uuid(),
+  permissions: z.record(z.string(), z.boolean()),
+});
+
+/**
+ * Atomically update every permission column for the target user. Reads
+ * before + after snapshots so the audit row captures the full diff in
+ * a single event rather than one event per toggle.
+ */
+export async function updateUserPermissions(
+  input: unknown,
 ): Promise<ActionResult> {
   return withErrorBoundary(
-    { action: "user.permission_change" },
+    { action: "permissions.bulk_change" },
     async () => {
       const admin = await requireAdmin();
+      const parsed = updatePermissionsSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new ValidationError("Invalid permission payload.");
+      }
 
-      const userId = z.string().uuid().parse(formData.get("userId"));
-      const key = z.enum(PERMISSION_KEYS).parse(formData.get("key"));
-      const value = formData.get("value") === "true";
-
-      const before = await db
-        .select({ [key]: permissions[key as PermissionKey] })
-        .from(permissions)
-        .where(eq(permissions.userId, userId))
+      const target = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, parsed.data.userId))
         .limit(1);
+      if (!target[0]) throw new NotFoundError("user");
 
-      // upsert: insert if missing, otherwise update.
+      const filtered = filterToKnownKeys(parsed.data.permissions);
+
+      const before = await getPermissions(parsed.data.userId);
+
       await db
         .insert(permissions)
-        .values({ userId, [key]: value })
+        .values({ userId: parsed.data.userId, ...filtered })
         .onConflictDoUpdate({
           target: permissions.userId,
-          set: { [key]: value },
+          set: filtered,
         });
+
+      const after = await getPermissions(parsed.data.userId);
+      const diff = computeDiff(before, after);
+
+      // Skip the audit row when nothing actually changed (admin
+      // clicked Save with a no-op payload). The UI already guards
+      // against this via the dirty flag; this is defense-in-depth.
+      if (Object.keys(diff).length > 0) {
+        await writeAudit({
+          actorId: admin.id,
+          action: "permissions.bulk_change",
+          targetType: "user",
+          targetId: parsed.data.userId,
+          before: { permissions: before },
+          after: { permissions: after, diff },
+        });
+      }
+
+      revalidatePath(`/admin/users/${parsed.data.userId}`);
+    },
+  );
+}
+
+const applyBundleSchema = z.object({
+  userId: z.string().uuid(),
+  bundleName: z.enum(
+    Object.keys(ROLE_BUNDLES) as [MarketingRoleBundle, ...MarketingRoleBundle[]],
+  ),
+});
+
+/**
+ * Apply a marketing role bundle by overwriting every marketing
+ * permission column on the target user. Other permission columns are
+ * left untouched.
+ */
+export async function applyRoleBundleAction(
+  input: unknown,
+): Promise<ActionResult> {
+  return withErrorBoundary(
+    { action: "permissions.role_bundle.apply" },
+    async () => {
+      const admin = await requireAdmin();
+      const parsed = applyBundleSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new ValidationError("Invalid bundle payload.");
+      }
+
+      const target = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, parsed.data.userId))
+        .limit(1);
+      if (!target[0]) throw new NotFoundError("user");
+
+      const before = await getPermissions(parsed.data.userId);
+      const bundlePerms = resolveBundle(parsed.data.bundleName);
+
+      await db
+        .insert(permissions)
+        .values({ userId: parsed.data.userId, ...bundlePerms })
+        .onConflictDoUpdate({
+          target: permissions.userId,
+          set: bundlePerms,
+        });
+
+      const after = await getPermissions(parsed.data.userId);
+      const diff = computeDiff(before, after);
 
       await writeAudit({
         actorId: admin.id,
-        action: "user.permission_change",
+        action: "permissions.role_bundle.apply",
         targetType: "user",
-        targetId: userId,
-        before: {
-          [key]:
-            (before[0] as Record<string, boolean> | undefined)?.[key] ?? null,
+        targetId: parsed.data.userId,
+        before: { permissions: before },
+        after: {
+          bundleName: parsed.data.bundleName,
+          permissions: after,
+          diff,
         },
-        after: { [key]: value },
       });
 
-      revalidatePath(`/admin/users/${userId}`);
+      revalidatePath(`/admin/users/${parsed.data.userId}`);
     },
   );
 }

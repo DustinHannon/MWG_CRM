@@ -11,7 +11,11 @@ import {
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { writeAudit } from "@/lib/audit";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import {
+  getPermissions,
+  requireSession,
+  type MarketingPermissionKey,
+} from "@/lib/auth-helpers";
 import { env, sendgridConfigured } from "@/lib/env";
 import {
   ConflictError,
@@ -104,12 +108,13 @@ const campaignTestSchema = z.object({
 /* Permission helper */
 /* ------------------------------------------------------------------ */
 
-async function requireMarketingPermission() {
+async function requireCampaignPermission(perm: MarketingPermissionKey) {
   const user = await requireSession();
+  if (user.isAdmin) return user;
   const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canManageMarketing) {
+  if (!perms[perm]) {
     throw new ForbiddenError(
-      "You don't have permission to manage marketing campaigns.",
+      "You don't have permission to perform this campaign action.",
     );
   }
   return user;
@@ -137,7 +142,7 @@ export async function createCampaignDraftAction(input: {
   return withErrorBoundary(
     { action: MARKETING_AUDIT_EVENTS.CAMPAIGN_CREATE },
     async () => {
-      const user = await requireMarketingPermission();
+      const user = await requireCampaignPermission("canMarketingCampaignsCreate");
       const parsed = campaignDraftCreateSchema.safeParse(input);
       if (!parsed.success) {
         const first = parsed.error.issues[0];
@@ -246,7 +251,7 @@ export async function updateCampaignDraftAction(input: {
       entityId: input.id,
     },
     async () => {
-      const user = await requireMarketingPermission();
+      const user = await requireCampaignPermission("canMarketingCampaignsEdit");
       const parsed = campaignDraftUpdateSchema.safeParse(input);
       if (!parsed.success) {
         const first = parsed.error.issues[0];
@@ -366,7 +371,7 @@ export async function scheduleCampaignAction(input: {
       entityId: input.id,
     },
     async () => {
-      const user = await requireMarketingPermission();
+      const user = await requireCampaignPermission("canMarketingCampaignsSchedule");
       const parsed = campaignScheduleSchema.safeParse(input);
       if (!parsed.success) {
         throw new ValidationError(
@@ -467,7 +472,7 @@ export async function cancelCampaignAction(
       entityId: id,
     },
     async () => {
-      const user = await requireMarketingPermission();
+      const user = await requireCampaignPermission("canMarketingCampaignsCancel");
       const parsedId = uuidSchema.parse(id);
 
       const campaign = await loadCampaign(parsedId);
@@ -521,7 +526,7 @@ export async function sendCampaignNowAction(
       entityId: id,
     },
     async () => {
-      const user = await requireMarketingPermission();
+      const user = await requireCampaignPermission("canMarketingCampaignsSendNow");
       if (!sendgridConfigured) {
         throw new ValidationError(
           "SendGrid is not configured for this environment.",
@@ -632,7 +637,7 @@ export async function deleteCampaignAction(
       entityId: id,
     },
     async () => {
-      const user = await requireMarketingPermission();
+      const user = await requireCampaignPermission("canMarketingCampaignsDelete");
       const parsedId = uuidSchema.parse(id);
 
       const campaign = await loadCampaign(parsedId);
@@ -682,7 +687,7 @@ export async function sendCampaignTestAction(input: {
       entityId: input.id,
     },
     async () => {
-      const user = await requireMarketingPermission();
+      const user = await requireCampaignPermission("canMarketingCampaignsSendTest");
       if (!sendgridConfigured) {
         throw new ValidationError(
           "SendGrid is not configured for this environment.",
@@ -785,7 +790,7 @@ export async function getCampaignRecipientPageAction(input: {
   return withErrorBoundary(
     { action: "marketing.campaign.recipients_page" },
     async () => {
-      const user = await requireMarketingPermission();
+      const user = await requireCampaignPermission("canMarketingCampaignsView");
       void user;
       const id = uuidSchema.parse(input.id);
       const page = Math.max(1, Math.floor(input.page ?? 1));

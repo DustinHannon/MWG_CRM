@@ -12,6 +12,7 @@ import {
   getPermissions,
   requireAdmin,
   requireSession,
+  type MarketingPermissionKey,
 } from "@/lib/auth-helpers";
 import {
   ConflictError,
@@ -112,11 +113,14 @@ function formToObject(formData: FormData): Record<string, unknown> {
   return obj;
 }
 
-async function requireMarketingPermission(userId: string): Promise<void> {
+async function requireTemplatePermission(
+  userId: string,
+  perm: MarketingPermissionKey,
+): Promise<void> {
   const perms = await getPermissions(userId);
-  if (!perms.canManageMarketing) {
+  if (!perms[perm]) {
     throw new ForbiddenError(
-      "You don't have permission to manage marketing templates.",
+      "You don't have permission to perform this template action.",
     );
   }
 }
@@ -130,7 +134,8 @@ export async function createTemplateAction(
 ): Promise<ActionResult<{ id: string }>> {
   return withErrorBoundary({ action: "marketing.template.create" }, async () => {
     const user = await requireSession();
-    if (!user.isAdmin) await requireMarketingPermission(user.id);
+    if (!user.isAdmin)
+      await requireTemplatePermission(user.id, "canMarketingTemplatesCreate");
 
     const parsed = createTemplateSchema.safeParse(formToObject(formData));
     if (!parsed.success) {
@@ -200,7 +205,8 @@ export async function updateTemplateAction(input: {
 }): Promise<ActionResult<never>> {
   return withErrorBoundary({ action: "marketing.template.update" }, async () => {
     const user = await requireSession();
-    if (!user.isAdmin) await requireMarketingPermission(user.id);
+    if (!user.isAdmin)
+      await requireTemplatePermission(user.id, "canMarketingTemplatesEdit");
 
     const parsed = updateTemplateSchema.safeParse(input);
     if (!parsed.success) {
@@ -367,7 +373,8 @@ export async function archiveTemplateAction(
 ): Promise<ActionResult<never>> {
   return withErrorBoundary({ action: "marketing.template.archive" }, async () => {
     const user = await requireSession();
-    if (!user.isAdmin) await requireMarketingPermission(user.id);
+    if (!user.isAdmin)
+      await requireTemplatePermission(user.id, "canMarketingTemplatesDelete");
     const parsed = idSchema.safeParse({ id });
     if (!parsed.success) throw new ValidationError("Invalid template id.");
 
@@ -547,7 +554,11 @@ export async function sendTestTemplateAction(input: {
     { action: "marketing.template.test_send" },
     async () => {
       const user = await requireSession();
-      if (!user.isAdmin) await requireMarketingPermission(user.id);
+      if (!user.isAdmin)
+        await requireTemplatePermission(
+          user.id,
+          "canMarketingTemplatesSendTest",
+        );
 
       const parsed = sendTestSchema.safeParse(input);
       if (!parsed.success) {
@@ -636,11 +647,7 @@ export async function cloneTemplateAction(
     async () => {
       const user = await requireSession();
       const perms = user.isAdmin ? null : await getPermissions(user.id);
-      if (
-        !user.isAdmin &&
-        !perms?.canMarketingTemplatesCreate &&
-        !perms?.canManageMarketing
-      ) {
+      if (!user.isAdmin && !perms?.canMarketingTemplatesCreate) {
         throw new ForbiddenError(
           "You don't have permission to create marketing templates.",
         );
@@ -747,7 +754,8 @@ export async function changeTemplateScopeAction(
     { action: "marketing.template.scope_change" },
     async () => {
       const user = await requireSession();
-      if (!user.isAdmin) await requireMarketingPermission(user.id);
+      if (!user.isAdmin)
+        await requireTemplatePermission(user.id, "canMarketingTemplatesEdit");
 
       const parsed = changeScopeSchema.safeParse(formToObject(formData));
       if (!parsed.success) {

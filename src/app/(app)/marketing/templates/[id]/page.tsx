@@ -85,13 +85,13 @@ export default async function TemplateDetailPage({
     isAdmin: user.isAdmin,
   });
   const canEdit =
-    (user.isAdmin || perms.canManageMarketing) && editGate && !lockedByOther;
-  // Clone is gated on canMarketingTemplatesCreate
-  // (or canManageMarketing for backward compat). Visible regardless
+    (user.isAdmin || perms.canMarketingTemplatesEdit) &&
+    editGate &&
+    !lockedByOther;
+  // Clone is gated on canMarketingTemplatesCreate. Visible regardless
   // of whether the user can edit the source — that's the whole
   // point: a non-editor can take a private copy and iterate.
-  const canClone =
-    user.isAdmin || perms.canMarketingTemplatesCreate || perms.canManageMarketing;
+  const canClone = user.isAdmin || perms.canMarketingTemplatesCreate;
 
   return (
     <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">

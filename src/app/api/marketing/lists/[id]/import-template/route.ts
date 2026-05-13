@@ -48,7 +48,6 @@ export async function GET(
     user.isAdmin ||
     perms.canMarketingListsImport ||
     perms.canMarketingListsEdit ||
-    perms.canManageMarketing ||
     isCreator;
   if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

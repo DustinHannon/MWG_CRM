@@ -166,7 +166,6 @@ async function requireStaticListImportAccess(
   if (
     !perms.canMarketingListsImport &&
     !perms.canMarketingListsEdit &&
-    !perms.canManageMarketing &&
     !isCreator
   ) {
     throw new ForbiddenError(

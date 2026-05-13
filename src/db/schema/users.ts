@@ -112,16 +112,6 @@ export const permissions = pgTable("permissions", {
   // are tracked in ROADMAP — schema landed first so the column is
   // available for future work.
   canViewTeamRecords: boolean("can_view_team_records").notNull().default(false),
-  // gates the Marketing tab (templates, lists, campaigns,
-  // suppressions). Admin bypasses. Defaults to false; flip per user via
-  // /admin/users/<id>/permissions.
-  //
-  // `canManageMarketing` remains the OPERATIVE gate
-  // for backwards compatibility. The 24 fine-grained `canMarketing*`
-  // permissions below are populated by the role-bundle apply UI and
-  // backfilled from `canManageMarketing` at migration time. Future
-  // phase migrates call sites to use the specific perms.
-  canManageMarketing: boolean("can_manage_marketing").notNull().default(false),
   // task-scoped RBAC. Every user can always
   // view/edit/delete/complete THEIR OWN tasks (the "own" half of the
   // brief's permission constants is implicit). These four gate
@@ -130,8 +120,9 @@ export const permissions = pgTable("permissions", {
   canEditOthersTasks: boolean("can_edit_others_tasks").notNull().default(false),
   canDeleteOthersTasks: boolean("can_delete_others_tasks").notNull().default(false),
   canReassignTasks: boolean("can_reassign_tasks").notNull().default(false),
-  // 24 fine-grained marketing permissions.
-  // Backfilled from `canManageMarketing` so behavior is preserved.
+  // 24 fine-grained marketing permissions enforced per-action across
+  // the marketing surface. Defaults to false; flip per user via
+  // /admin/users/<id>.
   canMarketingTemplatesView: boolean("can_marketing_templates_view").notNull().default(false),
   canMarketingTemplatesCreate: boolean("can_marketing_templates_create").notNull().default(false),
   canMarketingTemplatesEdit: boolean("can_marketing_templates_edit").notNull().default(false),

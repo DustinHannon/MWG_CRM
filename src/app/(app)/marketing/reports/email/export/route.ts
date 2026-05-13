@@ -18,7 +18,7 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canManageMarketing) {
+  if (!user.isAdmin && !perms.canMarketingReportsView) {
     return new Response("Forbidden", { status: 403 });
   }
 

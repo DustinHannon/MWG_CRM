@@ -55,7 +55,6 @@ export default async function StaticListImportPage({
     user.isAdmin ||
     perms.canMarketingListsImport ||
     perms.canMarketingListsEdit ||
-    perms.canManageMarketing ||
     isCreator;
   if (!allowed) {
     redirect(`/marketing/lists/${id}`);

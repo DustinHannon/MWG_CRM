@@ -55,11 +55,13 @@ export async function requireAdmin(): Promise<SessionUser> {
 }
 
 /**
- * Fine-grained marketing permissions (24 keys).
+ * Fine-grained marketing permissions (24 keys plus the
+ * static-list-import and CD migrations grants).
  *
- * Backfilled from `canManageMarketing` at migration time so behavior is
- * preserved. Future phase migrates call sites from `canManageMarketing`
- * to specific marketing perm checks; until then, both gates exist.
+ * Every marketing call site reads a specific permission key; admin
+ * always bypasses. The five `MarketingRoleBundle` presets in
+ * `@/lib/permissions/role-bundles` populate these in bulk for common
+ * roles.
  */
 export type MarketingPermissionKey =
   | "canMarketingTemplatesView"
@@ -100,7 +102,7 @@ export type PermissionKey =
   | "canExport"
   | "canSendEmail"
   | "canViewReports"
-  | "canManageMarketing"
+  | "canViewTeamRecords"
   // task-scoped RBAC. "Own" perms are implicit
   // (any user can manage their own tasks); these gate cross-user
   // actions. Admins bypass via the existing isAdmin shortcut.
@@ -224,7 +226,7 @@ export async function getPermissions(
       canExport: false,
       canSendEmail: true,
       canViewReports: true,
-      canManageMarketing: false,
+      canViewTeamRecords: false,
       canViewOthersTasks: false,
       canEditOthersTasks: false,
       canDeleteOthersTasks: false,
@@ -269,7 +271,7 @@ export async function getPermissions(
     canExport: r.canExport,
     canSendEmail: r.canSendEmail,
     canViewReports: r.canViewReports,
-    canManageMarketing: r.canManageMarketing,
+    canViewTeamRecords: r.canViewTeamRecords,
     canViewOthersTasks: r.canViewOthersTasks,
     canEditOthersTasks: r.canEditOthersTasks,
     canDeleteOthersTasks: r.canDeleteOthersTasks,

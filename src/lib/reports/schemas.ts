@@ -283,7 +283,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
     table: "marketing_campaigns",
     timestampColumn: "updated_at",
     // Marketing data is not per-user-owned; the access layer falls
-    // back to admin/canManageMarketing gating on the entity type
+    // back to admin/canMarketingReportsView gating on the entity type
     // rather than per-row owner scoping.
     ownerColumn: "created_by_id",
     softDeleteColumn: "is_deleted",

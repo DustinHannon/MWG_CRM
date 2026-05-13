@@ -30,7 +30,7 @@ export async function POST(
     async () => {
       const user = await requireSession();
       const perms = await getPermissions(user.id);
-      if (!user.isAdmin && !perms.canManageMarketing) {
+      if (!user.isAdmin && !perms.canMarketingListsRefresh) {
         throw new ForbiddenError("Marketing access required.");
       }
       const { id } = await ctx.params;

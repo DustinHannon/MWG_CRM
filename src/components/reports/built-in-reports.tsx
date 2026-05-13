@@ -1,4 +1,4 @@
-import { CategorySection } from "@/components/reports/category-section";
+import { StandardCollapsibleSection } from "@/components/standard";
 import { ReportList } from "@/components/reports/report-list";
 import { groupBuiltinReports } from "@/lib/reports/categories";
 import type { ReportListItem } from "@/lib/reports/repository";
@@ -8,12 +8,12 @@ import type { ReportListItem } from "@/lib/reports/repository";
  * expandable category sections.
  *
  * The card grid (`<ReportList>`) is rendered HERE on the server,
- * inside each `<CategorySection>` as children. The CategorySection
- * itself is a "use client" component that owns the toggle state and
- * visibility wrapper. This split keeps `server-only` modules
- * (UserTime in ReportList, auth in user-time, etc.) out of the
- * client bundle while still letting the disclosure toggle live in a
- * client component.
+ * inside each `<StandardCollapsibleSection>` as children. The
+ * collapsible section itself is a "use client" component that owns
+ * the toggle state and visibility wrapper. This split keeps
+ * `server-only` modules (UserTime in ReportList, auth in user-time,
+ * etc.) out of the client bundle while still letting the disclosure
+ * toggle live in a client component.
  *
  * Your-reports stays a flat `<ReportList>` (rendered directly on
  * the page) because the "last edited" order matters more than topic
@@ -38,18 +38,20 @@ export function BuiltInReports({ reports }: BuiltInReportsProps) {
   return (
     <div className="flex flex-col gap-3">
       {groups.map((group, index) => (
-        <CategorySection
+        <StandardCollapsibleSection
           key={group.category.key}
-          categoryKey={group.category.key}
+          sectionKey={group.category.key}
           label={group.category.label}
-          count={group.reports.length}
+          badge={group.reports.length}
           // First non-empty category opens by default; rest start
           // collapsed. localStorage overrides this on subsequent
           // visits.
           defaultExpanded={index === 0}
+          storagePrefix="mwgcrm.reports.category."
+          domIdPrefix="reports-category-"
         >
           <ReportList reports={group.reports} emptyMessage="" />
-        </CategorySection>
+        </StandardCollapsibleSection>
       ))}
     </div>
   );

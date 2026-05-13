@@ -15,8 +15,8 @@ import { bulkAddLeadsToListAction } from "@/app/(app)/marketing/lists/actions";
  * selection set without touching the action wiring.
  *
  * Visibility is gated upstream by `canManage` (admin or
- * canManageMarketing) so the button never renders for users without
- * marketing permissions.
+ * canMarketingListsBulkAdd) so the button never renders for users
+ * without bulk-add permission.
  */
 interface Props {
   leadIds: string[];

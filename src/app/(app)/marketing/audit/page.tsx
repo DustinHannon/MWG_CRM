@@ -29,15 +29,17 @@ interface Props {
  * listing of every `marketing.*` event in `audit_log`. Filters surface
  * via query params (`?user`, `?from`, `?to`, `?type`).
  *
- * Marketing role required (the layout enforces `canManageMarketing`).
- * Admin can filter by other users; non-admin only sees their own
- * actions plus system-fired events.
+ * Marketing role required (the layout gates entry to /marketing). This
+ * page requires the audit view permission specifically. Admin can
+ * filter by other users; non-admin only sees their own actions plus
+ * system-fired events.
  */
 export default async function MarketingAuditPage({ searchParams }: Props) {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
-  // Layout already gates on `canManageMarketing`; defensive check.
-  if (!user.isAdmin && !perms.canManageMarketing) {
+  // Layout gates entry to /marketing — this page requires the audit
+  // view permission specifically.
+  if (!user.isAdmin && !perms.canMarketingAuditView) {
     return (
       <div className="px-4 py-6 text-sm text-muted-foreground sm:px-6 sm:py-8 xl:px-10 xl:py-10">
         You don&apos;t have access to the marketing audit log.

@@ -6,6 +6,7 @@ import { marketingLists } from "@/db/schema/marketing-lists";
 import {
   getPermissions,
   requireSession,
+  type MarketingPermissionKey,
 } from "@/lib/auth-helpers";
 import {
   ForbiddenError,
@@ -43,10 +44,11 @@ const putBodySchema = z.object({
   filterDsl: filterDslSchema,
 });
 
-async function requireMarketingAccess() {
+async function requireListApiAccess(perm: MarketingPermissionKey) {
   const user = await requireSession();
+  if (user.isAdmin) return user;
   const perms = await getPermissions(user.id);
-  if (!user.isAdmin && !perms.canManageMarketing) {
+  if (!perms[perm]) {
     throw new ForbiddenError("Marketing access required.");
   }
   return user;
@@ -59,7 +61,7 @@ export async function GET(
   const result = await withErrorBoundary(
     { action: "marketing.lists.get" },
     async () => {
-      await requireMarketingAccess();
+      await requireListApiAccess("canMarketingListsView");
       const { id } = await ctx.params;
       if (!idSchema.safeParse(id).success) {
         throw new ValidationError("Invalid list id.");
@@ -87,7 +89,7 @@ export async function PUT(
   const result = await withErrorBoundary(
     { action: "marketing.lists.update" },
     async () => {
-      const user = await requireMarketingAccess();
+      const user = await requireListApiAccess("canMarketingListsEdit");
       const { id } = await ctx.params;
       if (!idSchema.safeParse(id).success) {
         throw new ValidationError("Invalid list id.");
@@ -181,7 +183,7 @@ export async function DELETE(
   const result = await withErrorBoundary(
     { action: "marketing.lists.delete" },
     async () => {
-      const user = await requireMarketingAccess();
+      const user = await requireListApiAccess("canMarketingListsDelete");
       const { id } = await ctx.params;
       if (!idSchema.safeParse(id).success) {
         throw new ValidationError("Invalid list id.");

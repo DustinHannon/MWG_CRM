@@ -3,6 +3,7 @@ import { ADMIN_NAV_ITEMS, type NavItem } from "@/components/app-shell/nav";
 import { PageRealtime } from "@/components/realtime/page-realtime";
 import { RealtimeProvider } from "@/components/realtime/realtime-provider";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { hasAnyMarketingView } from "@/lib/permissions/role-bundles";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,8 @@ const APP_NAV: NavItem[] = [
   { label: "Reports", href: "/reports", iconKey: "BarChart3" },
 ];
 
-// Marketing nav. Inserted after Reports for users with
-// canManageMarketing or admin. The page-level gate in
+// Marketing nav. Inserted after Reports for users with any marketing
+// view permission (or admin). The page-level gate in
 // /marketing/layout.tsx is the source of truth — this nav entry just
 // hides the link from non-permitted users so it doesn't bounce.
 const MARKETING_NAV_ITEM: NavItem = {
@@ -45,10 +46,11 @@ export default async function AppLayout({
       ? APP_NAV
       : APP_NAV.filter((item) => !("href" in item) || item.href !== "/dashboard");
 
-  // append Marketing for users with canManageMarketing (or admin).
-  // The /marketing layout double-checks; this just hides the link.
+  // append Marketing for users with any marketing view permission
+  // (or admin). The /marketing layout double-checks; this just hides
+  // the link.
   const navWithMarketing: NavItem[] =
-    user.isAdmin || perms.canManageMarketing
+    user.isAdmin || hasAnyMarketingView(perms)
       ? [...baseNav, MARKETING_NAV_ITEM]
       : baseNav;
 

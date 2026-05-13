@@ -66,11 +66,7 @@ const postBodySchema = z.object({
 async function requireListAccess(listId: string) {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
-  if (
-    !user.isAdmin &&
-    !perms.canManageMarketing &&
-    !perms.canMarketingListsView
-  ) {
+  if (!user.isAdmin && !perms.canMarketingListsView) {
     throw new ForbiddenError("Marketing access required.");
   }
   const [list] = await db
@@ -150,6 +146,7 @@ export async function POST(
         !user.isAdmin &&
         !perms.canMarketingListsImport &&
         !perms.canMarketingListsCreate &&
+        !perms.canMarketingListsBulkAdd &&
         list.createdById !== user.id
       ) {
         throw new ForbiddenError(
