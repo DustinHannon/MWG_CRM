@@ -44,7 +44,7 @@ export { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES };
 const emptyToUndef = <T extends z.ZodTypeAny>(s: T) =>
   z.preprocess((v) => (v === "" || v === null ? undefined : v), s);
 
-export const leadFiltersSchema = z.object({
+const leadFiltersSchema = z.object({
   q: emptyToUndef(z.string().trim().max(200)).optional(),
   status: emptyToUndef(z.enum(LEAD_STATUSES)).optional(),
   rating: emptyToUndef(z.enum(LEAD_RATINGS)).optional(),
@@ -57,11 +57,6 @@ export const leadFiltersSchema = z.object({
     z.enum(["lastActivity", "created", "name", "company", "value"]),
   ).default("lastActivity"),
   dir: emptyToUndef(z.enum(["asc", "desc"])).default("desc"),
-  // cursor pagination. Cursor format is `<iso8601>:<uuid>`
-  // where the timestamp matches the active sort column and the uuid
-  // is the row's id. When present, callers SHOULD NOT also pass `page`
-  // (cursor wins; offset is ignored).
-  cursor: emptyToUndef(z.string().trim().max(80)).optional(),
 });
 
 /**
@@ -182,7 +177,7 @@ export const leadCreateSchema = leadCreateSchemaBase.refine(dncRefinement, {
  * turns a ZodObject into ZodEffects, which doesn't have .partial(). Re-
  * apply the DNC refinement after .partial().
  */
-export const leadUpdateSchema = leadCreateSchemaBase
+const leadUpdateSchema = leadCreateSchemaBase
   .partial()
   .extend({ id: z.string().uuid() })
   .refine(dncRefinement, {
@@ -226,12 +221,6 @@ export interface LeadListResult {
   total: number;
   page: number;
   pageSize: number;
-  /**
-   * opaque cursor that callers pass back via `?cursor=…` to
-   * load the next page. Null when there are no more rows. Always set
-   * when cursor pagination is active (ignored on offset paths).
-   */
-  nextCursor: string | null;
 }
 
 export async function listLeads(
@@ -305,41 +294,11 @@ export async function listLeads(
   })();
   const order = filters.dir === "asc" ? asc(sortColumn) : desc(sortColumn);
 
-  // ------------------------------------------------------------------
-  // cursor pagination on the default sort
-  // (last_activity_at DESC, id DESC). Fast path: when the sort is the
-  // default and a cursor is provided, append a tuple-style WHERE clause
-  // and skip the OFFSET. Slow path (custom sort field, or paginated by
-  // ?page=N for the existing UI) falls back to OFFSET. The export route
-  // pulls 10k rows in a single page=1 request and never sets a cursor,
-  // so it stays on the offset path unchanged.
-  // ------------------------------------------------------------------
-  const useCursor =
-    !!filters.cursor && filters.sort === "lastActivity" && filters.dir === "desc";
-  const cursor = useCursor ? parseCursor(filters.cursor) : null;
-  const cursorWhere = (() => {
-    if (!useCursor || !cursor) return undefined;
-    // (last_activity_at, id) < (cursorTs, cursorId) with NULLS LAST.
-    // PG row-comparison would treat NULL specially, so we expand it.
-    if (cursor.ts === null) {
-      // NULL last_activity_at means we're already past the
-      // non-null block; only id-tiebreak remains.
-      return sql`(${leads.lastActivityAt} IS NULL AND ${leads.id} < ${cursor.id})`;
-    }
-    return sql`(
-      ${leads.lastActivityAt} < ${cursor.ts.toISOString()}::timestamptz
-      OR (${leads.lastActivityAt} = ${cursor.ts.toISOString()}::timestamptz AND ${leads.id} < ${cursor.id})
-    )`;
-  })();
-  const finalWhere = cursorWhere
-    ? whereExpr
-      ? and(whereExpr, cursorWhere)
-      : cursorWhere
-    : whereExpr;
-
-  const offset = useCursor ? 0 : (filters.page - 1) * filters.pageSize;
-  // pageSize+1 lets us detect "more available" cheaply without a count.
-  const sliceLimit = useCursor ? filters.pageSize + 1 : filters.pageSize;
+  // Offset pagination only. The migrated UI uses runView() in views.ts
+  // which has its own cursor path; listLeads is only reached from the
+  // export route (?page=1, pageSize=10_000) and the public REST API
+  // (/api/v1/leads, ?page=N).
+  const offset = (filters.page - 1) * filters.pageSize;
 
   const [rowsRaw, totalRow] = await Promise.all([
     db
@@ -371,207 +330,21 @@ export async function listLeads(
       })
       .from(leads)
       .leftJoin(users, eq(leads.ownerId, users.id))
-      .where(finalWhere)
+      .where(whereExpr)
       .orderBy(order, desc(leads.id))
-      .limit(sliceLimit)
+      .limit(filters.pageSize)
       .offset(offset),
-    // total count is only required for offset pagination
-    // (footer "Page X of Y"). Cursor mode skips it; the +1 row trick
-    // tells us whether another page exists, which is what the UI needs.
-    useCursor
-      ? Promise.resolve([{ count: 0 }])
-      : db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(leads)
-          .where(whereExpr),
-  ]);
-
-  let nextCursor: string | null = null;
-  let rows = rowsRaw;
-  if (useCursor && rowsRaw.length > filters.pageSize) {
-    rows = rowsRaw.slice(0, filters.pageSize);
-    const last = rows[rows.length - 1];
-    nextCursor = encodeCursor(last.lastActivityAt, last.id);
-  }
-
-  return {
-    rows,
-    total: totalRow[0]?.count ?? 0,
-    page: filters.page,
-    pageSize: filters.pageSize,
-    nextCursor,
-  };
-}
-
-/**
- * Filter shape for the canonical cursor-paginated list. Mirrors the
- * subset of `leadFiltersSchema` that the new StandardListPage UI sends
- * — sort and direction are fixed (`lastActivity DESC`) so the result
- * matches the partial index `leads_last_activity_id_idx`.
- */
-export interface LeadCursorFilters {
-  q?: string;
-  status?: (typeof LEAD_STATUSES)[number];
-  rating?: (typeof LEAD_RATINGS)[number];
-  source?: (typeof LEAD_SOURCES)[number];
-  ownerId?: string;
-  tag?: string;
-}
-
-export interface LeadCursorRow {
-  id: string;
-  firstName: string;
-  lastName: string | null;
-  companyName: string | null;
-  email: string | null;
-  phone: string | null;
-  status: (typeof LEAD_STATUSES)[number];
-  rating: (typeof LEAD_RATINGS)[number];
-  source: (typeof LEAD_SOURCES)[number];
-  ownerId: string | null;
-  ownerDisplayName: string | null;
-  estimatedValue: string | null;
-  lastActivityAt: Date | null;
-  updatedAt: Date;
-  createdAt: Date;
-  tags: string[] | null;
-}
-
-/**
- * Canonical cursor-paginated list. Sort is fixed
- * `(last_activity_at DESC NULLS LAST, id DESC)` so the query stays on
- * `leads_last_activity_id_idx`.
- *
- * Returns `{ data, nextCursor, total }`:
- * - `data` — up to `pageSize` rows.
- * - `nextCursor` — opaque token for the next page, or `null` when the
- *   result set is exhausted.
- * - `total` — full result-set count for the same filters (used by the
- *   "Showing N of M" affordance).
- *
- * Permission scoping mirrors `listLeads`: non-admin without
- * `canViewAllRecords` sees only their own.
- */
-export async function listLeadsCursor(args: {
-  user: SessionUser;
-  filters: LeadCursorFilters;
-  cursor: string | null;
-  pageSize?: number;
-  canViewAll: boolean;
-}): Promise<{ data: LeadCursorRow[]; nextCursor: string | null; total: number }> {
-  const pageSize = args.pageSize ?? 50;
-  const { user, filters, canViewAll } = args;
-
-  const wheres = [];
-  if (filters.q) {
-    const pattern = `%${filters.q}%`;
-    wheres.push(
-      or(
-        ilike(leads.firstName, pattern),
-        ilike(leads.lastName, pattern),
-        ilike(leads.email, pattern),
-        ilike(leads.companyName, pattern),
-        ilike(leads.phone, pattern),
-      ),
-    );
-  }
-  if (filters.status) wheres.push(eq(leads.status, filters.status));
-  if (filters.rating) wheres.push(eq(leads.rating, filters.rating));
-  if (filters.source) wheres.push(eq(leads.source, filters.source));
-  if (filters.ownerId) wheres.push(eq(leads.ownerId, filters.ownerId));
-  if (filters.tag) {
-    wheres.push(
-      sql`EXISTS (
-        SELECT 1 FROM ${leadTags} lt
-        JOIN ${tagsTable} t ON t.id = lt.tag_id
-        WHERE lt.lead_id = ${leads.id} AND lower(t.name) = lower(${filters.tag})
-      )`,
-    );
-  }
-  if (!user.isAdmin && !canViewAll) {
-    wheres.push(eq(leads.ownerId, user.id));
-  }
-  wheres.push(eq(leads.isDeleted, false));
-
-  const baseWhere = wheres.length > 0 ? and(...wheres) : undefined;
-
-  // Cursor expansion. The default sort is
-  // `(last_activity_at DESC NULLS LAST, id DESC)`. PostgreSQL row
-  // comparison treats NULL specially, so we expand the tuple manually:
-  //   - non-null cursor: row's last_activity_at < cursor.ts, OR equal
-  //     and id < cursor.id, OR row's last_activity_at is NULL (already
-  //     past the non-null block).
-  //   - NULL cursor: row's last_activity_at IS NULL and id < cursor.id.
-  const parsedCursor = decodeStandardCursor(args.cursor, "desc");
-  const cursorWhere = (() => {
-    if (!parsedCursor) return undefined;
-    if (parsedCursor.ts === null) {
-      return sql`(${leads.lastActivityAt} IS NULL AND ${leads.id} < ${parsedCursor.id})`;
-    }
-    return sql`(
-      ${leads.lastActivityAt} < ${parsedCursor.ts.toISOString()}::timestamptz
-      OR (${leads.lastActivityAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${leads.id} < ${parsedCursor.id})
-      OR ${leads.lastActivityAt} IS NULL
-    )`;
-  })();
-
-  const finalWhere = cursorWhere
-    ? baseWhere
-      ? and(baseWhere, cursorWhere)
-      : cursorWhere
-    : baseWhere;
-
-  // Fetch pageSize+1 to detect "more available" without a second
-  // count query for the cursor side. `total` is a separate cheap count
-  // against the unfiltered-by-cursor where clause.
-  const [rowsRaw, totalRow] = await Promise.all([
-    db
-      .select({
-        id: leads.id,
-        firstName: leads.firstName,
-        lastName: leads.lastName,
-        companyName: leads.companyName,
-        email: leads.email,
-        phone: leads.phone,
-        status: leads.status,
-        rating: leads.rating,
-        source: leads.source,
-        ownerId: leads.ownerId,
-        ownerDisplayName: users.displayName,
-        estimatedValue: leads.estimatedValue,
-        lastActivityAt: leads.lastActivityAt,
-        updatedAt: leads.updatedAt,
-        createdAt: leads.createdAt,
-        tags: sql<string[] | null>`(
-          SELECT array_agg(t.name ORDER BY t.name)
-          FROM ${leadTags} lt
-          JOIN ${tagsTable} t ON t.id = lt.tag_id
-          WHERE lt.lead_id = ${leads.id}
-        )`,
-      })
-      .from(leads)
-      .leftJoin(users, eq(leads.ownerId, users.id))
-      .where(finalWhere)
-      .orderBy(sql`${leads.lastActivityAt} DESC NULLS LAST`, desc(leads.id))
-      .limit(pageSize + 1),
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(leads)
-      .where(baseWhere),
+      .where(whereExpr),
   ]);
 
-  let nextCursor: string | null = null;
-  let data = rowsRaw;
-  if (rowsRaw.length > pageSize) {
-    data = rowsRaw.slice(0, pageSize);
-    const last = data[data.length - 1];
-    nextCursor = encodeStandardCursor(last.lastActivityAt, last.id, "desc");
-  }
-
   return {
-    data,
-    nextCursor,
+    rows: rowsRaw,
     total: totalRow[0]?.count ?? 0,
+    page: filters.page,
+    pageSize: filters.pageSize,
   };
 }
 

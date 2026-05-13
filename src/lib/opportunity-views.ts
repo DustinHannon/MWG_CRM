@@ -480,14 +480,14 @@ export interface RunOpportunityViewResult {
  * generic `parseCursor` from `@/lib/leads` (which expects an ISO ts)
  * doesn't apply.
  */
-export function encodeOpportunityCursor(
+function encodeOpportunityCursor(
   date: string | null,
   id: string,
 ): string {
   return `${date ?? "null"}:${id}`;
 }
 
-export function parseOpportunityCursor(
+function parseOpportunityCursor(
   raw: string | null | undefined,
 ): { date: string | null; id: string } | null {
   if (!raw) return null;

@@ -60,10 +60,9 @@ export function TagFilterSelect({
   }, [open]);
 
   // Auto-submit support — when the value changes and `autoSubmit` is
-  // set, trigger the enclosing form. Matches the MobileFilterSelect
-  // pattern in leads/_components/filters-mobile.tsx. The mount ref
-  // skips the initial render so the form does not auto-submit on
-  // first paint with the hydrated default value.
+  // set, trigger the enclosing form. The mount ref skips the initial
+  // render so the form does not auto-submit on first paint with the
+  // hydrated default value.
   const mountedRef = useRef(false);
   useEffect(() => {
     if (!autoSubmit) {

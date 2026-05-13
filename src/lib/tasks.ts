@@ -19,11 +19,11 @@ import { expectAffected } from "@/lib/db/concurrent-update";
  * due_at puts a row in the tail block — encoded with the literal
  * timestamp "null".
  */
-export interface ParsedTaskCursor {
+interface ParsedTaskCursor {
   due: Date | null;
   id: string;
 }
-export function parseTaskCursor(raw: string | undefined | null): ParsedTaskCursor | null {
+function parseTaskCursor(raw: string | undefined | null): ParsedTaskCursor | null {
   if (!raw) return null;
   const idx = raw.lastIndexOf(":");
   if (idx === -1) return null;
@@ -37,7 +37,7 @@ export function parseTaskCursor(raw: string | undefined | null): ParsedTaskCurso
   if (Number.isNaN(d.getTime())) return null;
   return { due: d, id: idPart };
 }
-export function encodeTaskCursor(due: Date | null, id: string): string {
+function encodeTaskCursor(due: Date | null, id: string): string {
   return `${due ? due.toISOString() : "null"}:${id}`;
 }
 
@@ -848,138 +848,6 @@ export async function getTaskForApi(
   }
   return row as unknown as typeof tasks.$inferSelect & {
     assignedToName: string | null;
-  };
-}
-
-/**
- * Filter shape for the canonical cursor-paginated task list. Sort is
- * fixed `(due_at ASC NULLS LAST, id DESC)` so the query stays on the
- * partial index `tasks_assigned_due_at_id_idx`.
- *
- * Distinct from the legacy `listTasksForUser` (which supports many
- * sort fields and filter dimensions); this entry point is the one
- * StandardListPage consumes via `/api/v1/tasks` and follows the same
- * `{ data, nextCursor, total }` envelope as the other 4 core entities.
- */
-export interface TaskCursorFilters {
-  status?: "open" | "in_progress" | "completed" | "cancelled";
-  priority?: "low" | "normal" | "high" | "urgent";
-  assignedToId?: string;
-  /** When supplied, only tasks linked to this lead are returned. */
-  leadId?: string;
-  /** When supplied, only tasks linked to this account are returned. */
-  accountId?: string;
-  /** When supplied, only tasks linked to this contact are returned. */
-  contactId?: string;
-  /** When supplied, only tasks linked to this opportunity are returned. */
-  opportunityId?: string;
-  q?: string;
-}
-
-/**
- * Canonical cursor-paginated task list. Sort fixed
- * `(due_at ASC NULLS LAST, id DESC)`. Returns
- * `{ data: TaskRow[], nextCursor, total }`.
- *
- * Permission scoping mirrors `listTasksForApi`: non-admin without
- * `canViewAllRecords` sees tasks assigned to OR created by themselves.
- *
- * NOTE — direction semantics. Tasks default to ASC on due_at (NULLS
- * LAST) because users expect to see the earliest-due task at the top
- * of the queue. The cursor's `dir` is encoded as `"asc"` so a re-sort
- * to DESC would reject the stale token gracefully.
- */
-export async function listTasksCursor(args: {
-  actorId: string;
-  isAdmin: boolean;
-  canViewAll: boolean;
-  filters: TaskCursorFilters;
-  cursor: string | null;
-  pageSize?: number;
-}): Promise<{
-  data: TaskRow[];
-  nextCursor: string | null;
-  total: number;
-}> {
-  const pageSize = args.pageSize ?? 50;
-  const { actorId, isAdmin, canViewAll, filters } = args;
-
-  const wheres: SQL[] = [eq(tasks.isDeleted, false)];
-  if (filters.status) wheres.push(eq(tasks.status, filters.status));
-  if (filters.priority) wheres.push(eq(tasks.priority, filters.priority));
-  if (filters.assignedToId) {
-    wheres.push(eq(tasks.assignedToId, filters.assignedToId));
-  }
-  if (filters.leadId) wheres.push(eq(tasks.leadId, filters.leadId));
-  if (filters.accountId) wheres.push(eq(tasks.accountId, filters.accountId));
-  if (filters.contactId) wheres.push(eq(tasks.contactId, filters.contactId));
-  if (filters.opportunityId) {
-    wheres.push(eq(tasks.opportunityId, filters.opportunityId));
-  }
-  if (filters.q && filters.q.trim()) {
-    const pattern = `%${filters.q.trim()}%`;
-    wheres.push(sql`${tasks.title} ILIKE ${pattern}`);
-  }
-  if (!isAdmin && !canViewAll) {
-    wheres.push(
-      or(
-        eq(tasks.assignedToId, actorId),
-        eq(tasks.createdById, actorId),
-      )!,
-    );
-  }
-  const baseWhere = and(...wheres);
-
-  // ASC NULLS LAST cursor expansion. For an ASC sort with NULLs at the
-  // tail:
-  //   - non-null cursor: row's due_at > cursor.ts (further into the
-  //     ordering), OR equal and id < cursor.id, OR row's due_at IS
-  //     NULL (the NULL tail block always comes after non-null values
-  //     in this ordering).
-  //   - NULL cursor (cursor.ts === null): row is already in the NULL
-  //     tail block; only id-tiebreak remains.
-  const parsedCursor = decodeStandardCursor(args.cursor, "asc");
-  const cursorWhere = (() => {
-    if (!parsedCursor) return undefined;
-    if (parsedCursor.ts === null) {
-      return sql`(${tasks.dueAt} IS NULL AND ${tasks.id} < ${parsedCursor.id})`;
-    }
-    return sql`(
-      ${tasks.dueAt} > ${parsedCursor.ts.toISOString()}::timestamptz
-      OR (${tasks.dueAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${tasks.id} < ${parsedCursor.id})
-      OR ${tasks.dueAt} IS NULL
-    )`;
-  })();
-
-  const finalWhere = cursorWhere ? and(baseWhere, cursorWhere) : baseWhere;
-
-  const [rowsRaw, totalRow] = await Promise.all([
-    db
-      .select(baseSelect)
-      .from(tasks)
-      .leftJoin(users, eq(users.id, tasks.assignedToId))
-      .leftJoin(leads, eq(leads.id, tasks.leadId))
-      .leftJoin(crmAccounts, eq(crmAccounts.id, tasks.accountId))
-      .leftJoin(contacts, eq(contacts.id, tasks.contactId))
-      .leftJoin(opportunities, eq(opportunities.id, tasks.opportunityId))
-      .where(finalWhere)
-      .orderBy(sql`${tasks.dueAt} ASC NULLS LAST`, desc(tasks.id))
-      .limit(pageSize + 1),
-    db.select({ n: sql<number>`count(*)::int` }).from(tasks).where(baseWhere),
-  ]);
-
-  let nextCursor: string | null = null;
-  let data = rowsRaw;
-  if (rowsRaw.length > pageSize) {
-    data = rowsRaw.slice(0, pageSize);
-    const last = data[data.length - 1];
-    nextCursor = encodeStandardCursor(last.dueAt, last.id, "asc");
-  }
-
-  return {
-    data,
-    nextCursor,
-    total: totalRow[0]?.n ?? 0,
   };
 }
 

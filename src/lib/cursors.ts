@@ -34,7 +34,7 @@ const cursorPayloadSchema = z.object({
 
 export type CursorDirection = "asc" | "desc";
 
-export interface CursorPayload {
+interface CursorPayload {
   /** ISO 8601 timestamp string, or `null` when the sort column is NULL. */
   ts: string | null;
   /** Row uuid used as tiebreaker. */
@@ -62,7 +62,7 @@ export interface ParsedCursor {
  * changes to the codec MUST be backward-compatible (e.g., add an
  * optional field; never rename or repurpose an existing field).
  */
-export function encodeCursor(payload: CursorPayload): string {
+function encodeCursor(payload: CursorPayload): string {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
