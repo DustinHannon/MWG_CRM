@@ -168,24 +168,45 @@ rules:
     severity: WARNING
 
   # ---- Phase references: code comments ------------------------------
-  # Phase 30 — phase numbers leak design-history scaffolding into the
-  # codebase. After the cleanup phase, comments must describe WHAT
-  # invariants the code guarantees (or WHY a non-obvious choice was
-  # made), not when they were wired up. Identifiers, type names, and
-  # variable names with phase numbers are still allowed — those are
-  # stable internal references.
+  # Phase numbers leak design-history scaffolding into the codebase.
+  # Comments must describe WHAT invariants the code guarantees (or WHY
+  # a non-obvious choice was made), not when they were wired up.
+  # Identifiers, type names, and variable names with phase numbers are
+  # still allowed — those are stable internal references.
   #
-  # Excluded paths: src/scripts/phase23/* (dev-only fixture script
-  # whose identifiers carry the phase number by convention).
+  # Scope: every executable source file in the repo (src/, scripts/,
+  # drizzle/). Excluded paths:
+  #   - src/scripts/phase23/** — dev-only fixture script whose
+  #     identifiers carry the phase number by convention.
+  #   - tools/clickdimensions-migration/** — internal one-shot
+  #     migration tool; comments are historical and the tool will be
+  #     removed once migration is complete.
+  #   - **/CLAUDE.md, **/STANDARDS.md, **/README.md, **/PHASE*-*.md,
+  #     .tmp/**, archive/** — historical-context documentation files
+  #     where phase references are legitimate references to past work.
   - id: mwg-code-comment-no-phase-reference
     languages: [generic]
     paths:
       include:
         - "src/**/*.tsx"
         - "src/**/*.ts"
+        - "scripts/**/*.ts"
+        - "scripts/**/*.tsx"
+        - "scripts/**/*.mjs"
+        - "scripts/**/*.js"
+        - "drizzle/**/*.ts"
+        - "drizzle/**/*.tsx"
       exclude:
         - "src/scripts/phase23/**"
-        - "tools/**"
+        - "tools/clickdimensions-migration/**"
+        - "**/CLAUDE.md"
+        - "**/STANDARDS.md"
+        - "**/README.md"
+        - "**/PHASE*-*.md"
+        - ".tmp/**"
+        - "archive/**"
+        - "node_modules/**"
+        - ".next/**"
     patterns:
       - pattern-either:
           # Line comments
@@ -228,9 +249,23 @@ rules:
         - "src/hooks/**/*.tsx"
         - "src/hooks/**/*.ts"
         - "src/lib/**/*.ts"
+        - "scripts/**/*.ts"
+        - "scripts/**/*.tsx"
+        - "scripts/**/*.mjs"
+        - "scripts/**/*.js"
+        - "drizzle/**/*.ts"
+        - "drizzle/**/*.tsx"
       exclude:
         - "src/scripts/phase23/**"
-        - "tools/**"
+        - "tools/clickdimensions-migration/**"
+        - "**/CLAUDE.md"
+        - "**/STANDARDS.md"
+        - "**/README.md"
+        - "**/PHASE*-*.md"
+        - ".tmp/**"
+        - "archive/**"
+        - "node_modules/**"
+        - ".next/**"
     patterns:
       - pattern-either:
           # Double-quoted strings containing Phase N

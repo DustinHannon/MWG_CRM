@@ -1,4 +1,6 @@
-// Phase 8E auditor — generates targeted import edge-case XLSX fixtures.
+// Import edge-case fixture generator — produces targeted XLSX files
+// that exercise rare parser paths the production smoke workbook
+// doesn't cover.
 // Usage: pnpm dlx tsx scripts/phase8e-fixtures.ts
 
 import ExcelJS from "exceljs";

@@ -1,8 +1,8 @@
-// Phase 6H — generates a synthetic test workbook that exercises every
-// code path the production batch-0447 file is supposed to hit:
-// Topic-only rows, Phone Calls multi-line cells, Linked Opportunity
-// blocks, NULL last_name, unresolvable owner names, voicemail (no
-// duration) variant, meeting with attendees + duplicates.
+// Generates a synthetic test workbook that exercises every code path
+// the production batch-0447 file is supposed to hit: Topic-only rows,
+// Phone Calls multi-line cells, Linked Opportunity blocks, NULL
+// last_name, unresolvable owner names, voicemail (no duration)
+// variant, meeting with attendees + duplicates.
 //
 // Output: ./test-data/mwg-crm-leads-batch-synthetic.xlsx
 //
@@ -22,7 +22,7 @@ interface Row {
 }
 
 const rows: Row[] = [
-  // 1. Bettina Overbeck — meeting + 2 calls. Phase 6H spot-check #1.
+  // 1. Bettina Overbeck — meeting + 2 calls. Smoke spot-check #1.
   {
     firstName: "Bettina",
     lastName: "Overbeck",
@@ -84,7 +84,7 @@ Phone Calls:
     email: "mary@sue-smith.test",
     externalId: "TEST-MARY-004",
   },
-  // 5. Amy — NULL last_name. Phase 6A nullability check.
+  // 5. Amy — NULL last_name. Last-name nullability check.
   {
     firstName: "Amy",
     email: "amy@example.test",

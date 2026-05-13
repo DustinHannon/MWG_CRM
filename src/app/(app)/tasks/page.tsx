@@ -327,6 +327,7 @@ export default async function TasksPage({
                 entityType="task"
                 recordIds={tasks.map((t) => t.id)}
                 availableTags={allTags}
+                canApply={canApplyTags}
               />
             </div>
             {session.isAdmin ? (

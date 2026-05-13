@@ -117,7 +117,9 @@ export function TaskListClient({
                         </p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           {t.dueAt ? (
-                            <span>Due {formatUserTime(t.dueAt, prefs)}</span>
+                            <span>
+                              Due {formatUserTime(t.dueAt, prefs, "date")}
+                            </span>
                           ) : null}
                           {t.priority !== "normal" ? (
                             <PriorityPill priority={t.priority} />
@@ -229,7 +231,11 @@ function InlineCreate({ disabled }: { disabled: boolean }) {
     startTransition(async () => {
       const res = await createTaskAction({
         title: trimmed,
-        dueAt: dueAt ? new Date(dueAt) : null,
+        // Date-only input. Append explicit local-midnight so the
+        // bare YYYY-MM-DD isn't parsed as UTC by `new Date()`.
+        // All task surfaces use the same convention so the displayed
+        // day matches the stored instant in the user's TZ.
+        dueAt: dueAt ? new Date(`${dueAt}T00:00:00`) : null,
         priority: "normal",
       });
       if (res.ok) {
@@ -254,10 +260,11 @@ function InlineCreate({ disabled }: { disabled: boolean }) {
         className="h-9 flex-1 rounded-md border border-glass-border bg-input/60 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
       />
       <input
-        type="datetime-local"
+        type="date"
         value={dueAt}
         disabled={disabled}
         onChange={(e) => setDueAt(e.target.value)}
+        aria-label="Due date"
         className="h-9 rounded-md border border-glass-border bg-input/60 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
       />
       <button

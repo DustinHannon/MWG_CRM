@@ -47,11 +47,17 @@ async function logMarketingSendFailure(args: {
     // API key), fall back to looking up an admin tied to the from-email
     // domain. As a last resort, drop the log write — the structured
     // logger.error below preserves the failure trail.
+    //
+    // Email comparison normalizes case: every DB email row is stored
+    // lowercase (entra-provisioning and breakglass both lowercase at
+    // insert time), so callers passing mixed-case fromEmail would
+    // otherwise silently fail to attribute the send.
     if (!fromUserId) {
+      const normalizedFrom = args.fromEmail.toLowerCase();
       const [u] = await db
         .select({ id: users.id, email: users.email })
         .from(users)
-        .where(eq(users.email, args.fromEmail))
+        .where(eq(users.email, normalizedFrom))
         .limit(1);
       if (u) {
         fromUserId = u.id;

@@ -188,23 +188,9 @@ export async function updateLeadAction(
 
       await updateLead(user, id, version, parsed.data);
 
-      // sync tag selections from the
-      // combobox only when the form actually submitted a tagIds field
-      // (legacy path). Edit forms now apply/remove tags inline via
-      // applyTagAction/removeTagAction, so the field is omitted; an
-      // absent field must not be interpreted as "clear all tags".
-      // Gate on canApplyTags so users without the perm cannot
-      // back-door tag application via the update-lead form.
-      if (formData.has("tagIds")) {
-        const editPerms = await getPermissions(user.id);
-        if (!user.isAdmin && !editPerms.canApplyTags) {
-          throw new ForbiddenError(
-            "You don't have permission to apply tags.",
-          );
-        }
-        const tagIds = parseTagIds(formData);
-        await setLeadTags(id, tagIds, user.id);
-      }
+      // Tag changes flow through the inline applyTagAction /
+      // removeTagAction actions on the edit page (TagSectionClient),
+      // not through the lead-form payload. No tag handling here.
 
       await writeAudit({
         actorId: user.id,

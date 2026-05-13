@@ -66,22 +66,23 @@ export async function addSuppressionAction(
       // Dedup: refuse if any existing row (any source) already
       // suppresses this address. Surface a friendly error instead of
       // silently succeeding — operators need to know the address was
-      // already on the list.
-      const [existing] = await db
-        .select({ email: marketingSuppressions.email })
-        .from(marketingSuppressions)
-        .where(eq(marketingSuppressions.email, email))
-        .limit(1);
-      if (existing) {
+      // already on the list. INSERT … ON CONFLICT DO NOTHING is
+      // race-safe (vs the SELECT-then-INSERT pattern, which lets two
+      // concurrent admins both pass the existence check then collide
+      // on PK); the empty RETURNING means the row was already present.
+      const inserted = await db
+        .insert(marketingSuppressions)
+        .values({
+          email,
+          suppressionType: "manual",
+          reason: parsed.data.reason,
+          addedByUserId: user.id,
+        })
+        .onConflictDoNothing({ target: marketingSuppressions.email })
+        .returning({ email: marketingSuppressions.email });
+      if (inserted.length === 0) {
         throw new ConflictError("This email is already suppressed.");
       }
-
-      await db.insert(marketingSuppressions).values({
-        email,
-        suppressionType: "manual",
-        reason: parsed.data.reason,
-        addedByUserId: user.id,
-      });
 
       await writeAudit({
         actorId: user.id,

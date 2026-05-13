@@ -1,7 +1,7 @@
-// Phase 6H — runs the import pipeline (parse + preview build) against
-// a workbook on disk and dumps the preview. Does NOT commit — write
-// path requires DB access via the server-only db client which would
-// fail outside a Next runtime.
+// Runs the import pipeline (parse + preview build) against a workbook
+// on disk and dumps the preview. Does NOT commit — write path requires
+// DB access via the server-only db client which would fail outside a
+// Next runtime.
 //
 // Usage:
 //   pnpm dlx tsx scripts/import-smoke-run.ts [path-to-xlsx]

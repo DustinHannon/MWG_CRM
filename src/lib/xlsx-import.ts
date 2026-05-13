@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { eq, ilike, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { z } from "zod";
 import { db } from "@/db";
@@ -328,12 +328,15 @@ export async function importLeadsFromBuffer(
       }
     }
 
-    // Email-match dedup: flag for review (don't auto-merge).
+    // Email-match dedup: flag for review (don't auto-merge). The
+    // comparison is case-insensitive because legacy lead rows may
+    // carry mixed-case emails; `User@Example.Com` should dedup
+    // against `user@example.com`.
     if (d.email) {
       const dup = await db
         .select({ id: leads.id })
         .from(leads)
-        .where(eq(leads.email, d.email))
+        .where(ilike(leads.email, d.email))
         .limit(1);
       if (dup[0]) {
         needsReview.push({

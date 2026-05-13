@@ -49,7 +49,10 @@ export function EntityTasksQuickAdd({
       const res = await createTaskAction({
         title: trimmed,
         priority,
-        dueAt: dueDate ? new Date(dueDate) : null,
+        // Date-only input. Append explicit local-midnight so
+        // `new Date("YYYY-MM-DD")` is not interpreted as UTC, which
+        // would shift one calendar day west in negative-UTC zones.
+        dueAt: dueDate ? new Date(`${dueDate}T00:00:00`) : null,
         assignedToId: defaultAssigneeId,
         ...fkPatch,
       });

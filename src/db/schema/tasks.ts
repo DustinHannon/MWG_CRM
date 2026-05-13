@@ -52,6 +52,15 @@ export const tasks = pgTable(
     description: text("description"),
     status: taskStatusEnum("status").notNull().default("open"),
     priority: taskPriorityEnum("priority").notNull().default("normal"),
+    // Stored as TIMESTAMPTZ for historical reasons. UI surfaces all
+    // treat dueAt as date-only: inputs use <input type="date"> and
+    // normalize to local-midnight at submit time
+    // (`new Date("YYYY-MM-DDT00:00:00")`), displays use
+    // `formatUserTime(value, prefs, "date")` which renders in the
+    // user's configured timezone (default America/Chicago).
+    // Maintaining the local-midnight convention ensures the stored
+    // instant resolves to the same calendar day across all viewers
+    // who share the same TZ preference.
     dueAt: timestamp("due_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     assignedToId: uuid("assigned_to_id").references(() => users.id, {

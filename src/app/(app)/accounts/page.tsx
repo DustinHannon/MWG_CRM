@@ -284,6 +284,7 @@ export default async function AccountsPage({
                 entityType="account"
                 recordIds={result.rows.map((r) => r.id)}
                 availableTags={allTags}
+                canApply={user.isAdmin || perms.canApplyTags}
               />
             </div>
             <Link

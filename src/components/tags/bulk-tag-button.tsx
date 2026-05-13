@@ -45,10 +45,19 @@ export function BulkTagButton({
   entityType,
   recordIds,
   availableTags,
+  canApply,
 }: {
   entityType: BulkTagEntityType;
   recordIds: string[];
   availableTags: AvailableTag[];
+  /**
+   * Whether the current user has `canApplyTags`. When false the
+   * component renders nothing — the server `bulkTagAction` enforces
+   * the same gate as defence-in-depth, but hiding the button avoids
+   * the failed-UX path of "click → fill picker → permission denied".
+   * Admins always pass; pages pass `user.isAdmin || perms.canApplyTags`.
+   */
+  canApply: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -89,6 +98,7 @@ export function BulkTagButton({
     }
   }, [open]);
 
+  if (!canApply) return null;
   if (recordIds.length === 0 || availableTags.length === 0) return null;
 
   const noun = ENTITY_NOUN[entityType];

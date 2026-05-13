@@ -1,4 +1,4 @@
-// Phase 6C — manual smoke runner for the activity parser.
+// Manual smoke runner for the activity parser.
 // Not part of the test suite; run with: pnpm tsx scripts/parse-smoke.ts
 //
 // Pastes representative inputs through the parser and dumps the
