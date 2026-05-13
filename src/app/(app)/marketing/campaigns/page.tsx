@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -10,6 +11,7 @@ import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +21,12 @@ export const dynamic = "force-dynamic";
  * implementation lands in the next pass.
  */
 export default async function CampaignsPage() {
+  const user = await requireSession();
+  const perms = await getPermissions(user.id);
+  if (!user.isAdmin && !perms.canMarketingCampaignsView) {
+    redirect("/marketing");
+  }
+
   const rows = await db
     .select({
       id: marketingCampaigns.id,

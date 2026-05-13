@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -6,6 +7,7 @@ import { StandardEmptyState, StandardPageHeader } from "@/components/standard";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,12 @@ export default async function ListsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  const user = await requireSession();
+  const perms = await getPermissions(user.id);
+  if (!user.isAdmin && !perms.canMarketingListsView) {
+    redirect("/marketing");
+  }
+
   const sp = await searchParams;
   const typeFilter =
     sp.type === "dynamic" || sp.type === "static_imported"

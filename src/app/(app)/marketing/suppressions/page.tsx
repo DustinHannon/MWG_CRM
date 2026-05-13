@@ -1,9 +1,11 @@
+import { redirect } from "next/navigation";
 import { desc } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardEmptyState, StandardPageHeader } from "@/components/standard";
 import { marketingSuppressions } from "@/db/schema/marketing-events";
 import { UserTime } from "@/components/ui/user-time";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +19,12 @@ export const dynamic = "force-dynamic";
  * removal goes through SendGrid's console (audit trail lives there).
  */
 export default async function SuppressionsPage() {
+  const user = await requireSession();
+  const perms = await getPermissions(user.id);
+  if (!user.isAdmin && !perms.canMarketingSuppressionsView) {
+    redirect("/marketing");
+  }
+
   const rows = await db
     .select({
       email: marketingSuppressions.email,

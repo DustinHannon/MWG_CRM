@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -6,7 +7,7 @@ import { StandardEmptyState, StandardPageHeader } from "@/components/standard";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { users } from "@/db/schema/users";
 import { UserTime } from "@/components/ui/user-time";
-import { requireSession } from "@/lib/auth-helpers";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 import { templateVisibilityWhere } from "@/lib/marketing/templates";
 
@@ -27,6 +28,10 @@ export const dynamic = "force-dynamic";
  */
 export default async function TemplatesPage() {
   const user = await requireSession();
+  const perms = await getPermissions(user.id);
+  if (!user.isAdmin && !perms.canMarketingTemplatesView) {
+    redirect("/marketing");
+  }
 
   // visibility filter. Admins bypass by skipping the
   // visibility predicate (they see all rows including others'
