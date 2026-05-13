@@ -146,6 +146,7 @@ function LeadsListInner({
     async (
       cursor: string | null,
       f: LeadFilters,
+      signal?: AbortSignal,
     ): Promise<StandardListPagePage<LeadRow>> => {
       const params = new URLSearchParams();
       if (cursor) params.set("cursor", cursor);
@@ -158,6 +159,7 @@ function LeadsListInner({
       if (f.tag) params.set("tag", f.tag);
       const res = await fetch(`/api/leads/list?${params.toString()}`, {
         headers: { Accept: "application/json" },
+        signal,
       });
       if (!res.ok) {
         throw new Error(`Could not load leads (${res.status})`);
@@ -169,10 +171,14 @@ function LeadsListInner({
   );
 
   // Wrapped fetchPage that tracks loaded IDs + syncs selection counters
-  // so the bulk-action toolbar shows accurate counts.
+  // so the bulk-action toolbar shows accurate counts. The AbortSignal
+  // is forwarded to fetchPage so a stale in-flight request that's been
+  // cancelled by TanStack Query (filter / view change → new queryKey)
+  // does NOT write its result into setLoadedIds — it throws on the
+  // already-aborted signal before reaching the side-effect block.
   const fetchPageInstrumented = useCallback(
-    async (cursor: string | null, f: LeadFilters) => {
-      const page = await fetchPage(cursor, f);
+    async (cursor: string | null, f: LeadFilters, signal?: AbortSignal) => {
+      const page = await fetchPage(cursor, f, signal);
       if (cursor === null) {
         const ids = page.data.map((row) => row.id);
         setLoadedIds(ids);

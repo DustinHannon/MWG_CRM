@@ -55,14 +55,17 @@ export interface ViewDefinition {
   defaultExcludeStatuses?: readonly string[];
 }
 
-export type SortField =
-  | "lastActivityAt"
-  | "createdAt"
-  | "updatedAt"
-  | "name"
-  | "company"
-  | "value"
-  | "status";
+export const LEAD_SORT_FIELDS = [
+  "lastActivityAt",
+  "createdAt",
+  "updatedAt",
+  "name",
+  "company",
+  "value",
+  "status",
+] as const;
+
+export type SortField = (typeof LEAD_SORT_FIELDS)[number];
 
 export interface ViewFilters {
   status?: string[];

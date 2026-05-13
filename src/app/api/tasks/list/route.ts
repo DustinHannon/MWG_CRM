@@ -7,6 +7,8 @@ import {
 import {
   findBuiltinTaskView,
   getSavedTaskView,
+  TASK_SORT_FIELDS,
+  type TaskSortField,
   type TaskViewDefinition,
   type TaskViewFilters,
   type TaskViewSort,
@@ -143,13 +145,19 @@ export async function GET(req: NextRequest) {
   void urlCols; // resolution happens server-side; not needed by the
   // list helper.
 
-  const sortField = sp.get("sort");
-  const sortDir = sp.get("dir");
+  // Validate sort field against the task sort allowlist. Unknown
+  // values silently fall back to the view's default sort rather than
+  // 400-ing — matches the lenient public REST behavior.
+  const sortFieldRaw = sp.get("sort");
+  const sortDirRaw = sp.get("dir");
+  const sortFieldOk =
+    sortFieldRaw !== null &&
+    (TASK_SORT_FIELDS as readonly string[]).includes(sortFieldRaw);
   const sort: TaskViewSort =
-    sortField && sortDir === "asc"
-      ? { field: sortField as TaskViewSort["field"], direction: "asc" }
-      : sortField && sortDir === "desc"
-        ? { field: sortField as TaskViewSort["field"], direction: "desc" }
+    sortFieldOk && sortDirRaw === "asc"
+      ? { field: sortFieldRaw as TaskSortField, direction: "asc" }
+      : sortFieldOk && sortDirRaw === "desc"
+        ? { field: sortFieldRaw as TaskSortField, direction: "desc" }
         : activeView.sort;
 
   // Permission-gated team view; honour the override here too in

@@ -43,14 +43,19 @@ export interface TaskViewFilters {
   tags?: string[];
 }
 
+export const TASK_SORT_FIELDS = [
+  "dueAt",
+  "priority",
+  "title",
+  "assignee",
+  "status",
+  "createdAt",
+] as const;
+
+export type TaskSortField = (typeof TASK_SORT_FIELDS)[number];
+
 export interface TaskViewSort {
-  field:
-    | "dueAt"
-    | "priority"
-    | "title"
-    | "assignee"
-    | "status"
-    | "createdAt";
+  field: TaskSortField;
   direction: "asc" | "desc";
 }
 

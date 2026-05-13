@@ -262,6 +262,7 @@ function TasksListInner({
     async (
       cursor: string | null,
       f: TaskFilters,
+      signal?: AbortSignal,
     ): Promise<StandardListPagePage<TaskRow>> => {
       const params = new URLSearchParams();
       if (cursor) params.set("cursor", cursor);
@@ -282,6 +283,7 @@ function TasksListInner({
       if (sortDir) params.set("dir", sortDir);
       const res = await fetch(`/api/tasks/list?${params.toString()}`, {
         headers: { Accept: "application/json" },
+        signal,
       });
       if (!res.ok) {
         throw new Error(`Could not load tasks (${res.status})`);
@@ -292,10 +294,13 @@ function TasksListInner({
   );
 
   // Wrapped fetchPage that tracks loaded IDs + syncs bulk-tag
-  // selection counters so the toolbar shows accurate counts.
+  // selection counters so the toolbar shows accurate counts. Forwards
+  // the AbortSignal so a stale in-flight request cancelled by
+  // TanStack Query (filter / view / sort change) does NOT write into
+  // setLoadedIds.
   const fetchPageInstrumented = useCallback(
-    async (cursor: string | null, f: TaskFilters) => {
-      const page = await fetchPage(cursor, f);
+    async (cursor: string | null, f: TaskFilters, signal?: AbortSignal) => {
+      const page = await fetchPage(cursor, f, signal);
       if (cursor === null) {
         const ids = page.data.map((row) => row.id);
         setLoadedIds(ids);

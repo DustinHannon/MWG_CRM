@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import {
   OPPORTUNITY_COLUMN_KEYS,
+  OPPORTUNITY_SORT_FIELDS,
   type OpportunityColumnKey,
   type OpportunitySortField,
 } from "@/lib/opportunity-view-constants";
@@ -128,14 +129,16 @@ export async function GET(req: NextRequest) {
   const activeColumns =
     urlCols && urlCols.length > 0 ? urlCols : activeView.columns;
 
-  const sortField = sp.get("sort");
+  const sortFieldRaw = sp.get("sort");
   const sortDir = sp.get("dir") === "asc" ? "asc" : "desc";
-  const sort = sortField
-    ? {
-        field: sortField as OpportunitySortField,
-        direction: sortDir as "asc" | "desc",
-      }
-    : undefined;
+  const sort =
+    sortFieldRaw &&
+    (OPPORTUNITY_SORT_FIELDS as readonly string[]).includes(sortFieldRaw)
+      ? {
+          field: sortFieldRaw as OpportunitySortField,
+          direction: sortDir as "asc" | "desc",
+        }
+      : undefined;
 
   const cursor = sp.get("cursor");
   const pageSize = 50;

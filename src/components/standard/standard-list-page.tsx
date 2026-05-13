@@ -69,6 +69,7 @@ export interface StandardListPageProps<T, F> {
   fetchPage: (
     cursor: string | null,
     filters: F,
+    signal?: AbortSignal,
   ) => Promise<StandardListPagePage<T>>;
   /** Active filters. Spread into the query key by the caller — included verbatim in the fetch. */
   filters: F;
@@ -148,7 +149,8 @@ export function StandardListPage<T, F>({
 
   const query = useInfiniteQuery<StandardListPagePage<T>, Error>({
     queryKey: [...queryKey, filters],
-    queryFn: ({ pageParam }) => fetchPage((pageParam as string | null) ?? null, filters),
+    queryFn: ({ pageParam, signal }) =>
+      fetchPage((pageParam as string | null) ?? null, filters, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
@@ -179,27 +181,52 @@ export function StandardListPage<T, F>({
   // ---- ARIA live region announcement ----
   const liveRef = useRef<HTMLDivElement | null>(null);
   const lastAnnouncedCount = useRef(0);
+  const lastQueryKeyRef = useRef<string>("");
+  // Stable serialization of the active query identity. When the user
+  // changes filter / view / sort, this string changes and the live
+  // region's "loaded N more" counter resets so it doesn't announce
+  // (new first page size − old loaded count) as if the user had
+  // paginated.
+  const queryKeySerialized = useMemo(
+    () => JSON.stringify([...queryKey, filters]),
+    [queryKey, filters],
+  );
   useEffect(() => {
     if (!liveRef.current) return;
+    if (lastQueryKeyRef.current !== queryKeySerialized) {
+      lastAnnouncedCount.current = 0;
+      lastQueryKeyRef.current = queryKeySerialized;
+    }
     if (rows.length === 0) return;
     const delta = rows.length - lastAnnouncedCount.current;
     if (delta > 0 && lastAnnouncedCount.current > 0) {
       liveRef.current.textContent = `Loaded ${delta} more ${delta === 1 ? "item" : "items"}. ${rows.length} of ${total} shown.`;
     }
     lastAnnouncedCount.current = rows.length;
-  }, [rows.length, total]);
+  }, [rows.length, total, queryKeySerialized]);
+
+  // Window-scoped scroll restoration. Owned at the page level so the
+  // single restoration applies regardless of which virtualized
+  // container (desktop / mobile) is visible — both scroll the same
+  // window. Per-container scope discriminators are unnecessary under
+  // window virtualization.
+  useScrollRestoration();
 
   return (
     <div
       className={["space-y-3", className ?? ""].filter(Boolean).join(" ")}
     >
-      {/* Skip-links: visible on focus only, follow Tab order. */}
-      <a
-        href="#list-filters"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-1.5 focus:text-sm focus:text-popover-foreground focus:shadow-md focus:outline-none focus:ring-2 focus:ring-ring"
-      >
-        Skip to filters
-      </a>
+      {/* Skip-links: visible on focus only, follow Tab order. The
+          "Skip to filters" link only renders when a filtersSlot was
+          provided so it can never point at a missing anchor. */}
+      {filtersSlot ? (
+        <a
+          href="#list-filters"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-1.5 focus:text-sm focus:text-popover-foreground focus:shadow-md focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          Skip to filters
+        </a>
+      ) : null}
       <a
         href="#list-actions"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-1.5 focus:text-sm focus:text-popover-foreground focus:shadow-md focus:outline-none focus:ring-2 focus:ring-ring"
@@ -276,7 +303,6 @@ export function StandardListPage<T, F>({
                 isFetchingNextPage={isFetchingNextPage}
                 fetchNextPage={fetchNextPage}
                 reducedMotion={reducedMotion}
-                scope="desktop"
               />
             </div>
 
@@ -290,7 +316,6 @@ export function StandardListPage<T, F>({
                 isFetchingNextPage={isFetchingNextPage}
                 fetchNextPage={fetchNextPage}
                 reducedMotion={reducedMotion}
-                scope="mobile"
               />
             </div>
 
@@ -341,8 +366,6 @@ interface VirtualScrollContainerProps<T> {
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;
   reducedMotion: boolean;
-  /** Storage scope so desktop and mobile scrollers don't collide. */
-  scope: "desktop" | "mobile";
 }
 
 /**
@@ -368,7 +391,6 @@ function VirtualScrollContainer<T>({
   isFetchingNextPage,
   fetchNextPage,
   reducedMotion,
-  scope,
 }: VirtualScrollContainerProps<T>) {
   // TanStack Virtual returns functions that cannot be safely memoized;
   // opt this component out of the React Compiler to preserve correct
@@ -376,7 +398,6 @@ function VirtualScrollContainer<T>({
   // `useWindowVirtualizer` and React Compiler interop.
   "use no memo";
   const parentRef = useRef<HTMLDivElement | null>(null);
-  useScrollRestoration(scope);
 
   // Track the container's offset from the page top. Window virtualizer
   // needs this so `virtualItem.start` (which is in window coordinates)

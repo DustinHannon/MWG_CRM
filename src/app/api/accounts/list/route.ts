@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import {
   ACCOUNT_COLUMN_KEYS,
+  ACCOUNT_SORT_FIELDS,
   type AccountColumnKey,
   type AccountSortField,
 } from "@/lib/account-view-constants";
@@ -103,14 +104,16 @@ export async function GET(req: NextRequest) {
   const activeColumns =
     urlCols && urlCols.length > 0 ? urlCols : activeView.columns;
 
-  const sortField = sp.get("sort");
+  const sortFieldRaw = sp.get("sort");
   const sortDir = sp.get("dir") === "asc" ? "asc" : "desc";
-  const sort = sortField
-    ? {
-        field: sortField as AccountSortField,
-        direction: sortDir as "asc" | "desc",
-      }
-    : undefined;
+  const sort =
+    sortFieldRaw &&
+    (ACCOUNT_SORT_FIELDS as readonly string[]).includes(sortFieldRaw)
+      ? {
+          field: sortFieldRaw as AccountSortField,
+          direction: sortDir as "asc" | "desc",
+        }
+      : undefined;
 
   const cursor = sp.get("cursor");
   const pageSize = 50;

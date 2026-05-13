@@ -189,6 +189,7 @@ function OpportunitiesListInner({
     async (
       cursor: string | null,
       f: OpportunityFilters,
+      signal?: AbortSignal,
     ): Promise<StandardListPagePage<OpportunityRow>> => {
       const params = new URLSearchParams();
       if (cursor) params.set("cursor", cursor);
@@ -205,6 +206,7 @@ function OpportunitiesListInner({
       if (f.tag) params.set("tag", f.tag);
       const res = await fetch(`/api/opportunities/list?${params.toString()}`, {
         headers: { Accept: "application/json" },
+        signal,
       });
       if (!res.ok) {
         throw new Error(`Could not load opportunities (${res.status})`);
@@ -215,10 +217,12 @@ function OpportunitiesListInner({
   );
 
   // Wrapped fetchPage that tracks loaded IDs + syncs selection counters
-  // so the bulk-action toolbar shows accurate counts.
+  // so the bulk-action toolbar shows accurate counts. Forwards the
+  // AbortSignal so a stale in-flight request cancelled by TanStack
+  // Query (filter / view change) does NOT write into setLoadedIds.
   const fetchPageInstrumented = useCallback(
-    async (cursor: string | null, f: OpportunityFilters) => {
-      const page = await fetchPage(cursor, f);
+    async (cursor: string | null, f: OpportunityFilters, signal?: AbortSignal) => {
+      const page = await fetchPage(cursor, f, signal);
       if (cursor === null) {
         const ids = page.data.map((row) => row.id);
         setLoadedIds(ids);

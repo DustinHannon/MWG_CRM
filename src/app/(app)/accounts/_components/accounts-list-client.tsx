@@ -157,6 +157,7 @@ function AccountsListInner({
     async (
       cursor: string | null,
       f: AccountFilters,
+      signal?: AbortSignal,
     ): Promise<StandardListPagePage<AccountRow>> => {
       const params = new URLSearchParams();
       if (cursor) params.set("cursor", cursor);
@@ -170,6 +171,7 @@ function AccountsListInner({
       if (f.tag) params.set("tag", f.tag);
       const res = await fetch(`/api/accounts/list?${params.toString()}`, {
         headers: { Accept: "application/json" },
+        signal,
       });
       if (!res.ok) {
         throw new Error(`Could not load accounts (${res.status})`);
@@ -180,10 +182,12 @@ function AccountsListInner({
   );
 
   // Wrapped fetchPage that tracks loaded IDs + syncs selection counters
-  // so the bulk-action toolbar shows accurate counts.
+  // so the bulk-action toolbar shows accurate counts. Forwards the
+  // AbortSignal so a stale in-flight request cancelled by TanStack
+  // Query (filter / view change) does NOT write into setLoadedIds.
   const fetchPageInstrumented = useCallback(
-    async (cursor: string | null, f: AccountFilters) => {
-      const page = await fetchPage(cursor, f);
+    async (cursor: string | null, f: AccountFilters, signal?: AbortSignal) => {
+      const page = await fetchPage(cursor, f, signal);
       if (cursor === null) {
         const ids = page.data.map((row) => row.id);
         setLoadedIds(ids);

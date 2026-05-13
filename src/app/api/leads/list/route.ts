@@ -7,7 +7,9 @@ import {
 import {
   findBuiltinView,
   getSavedView,
+  LEAD_SORT_FIELDS,
   runView,
+  type SortField,
   type ViewDefinition,
 } from "@/lib/views";
 
@@ -80,14 +82,20 @@ export async function GET(req: NextRequest) {
     : null;
   const activeColumns = urlCols && urlCols.length > 0 ? urlCols : activeView.columns;
 
-  const sortField = sp.get("sort");
+  // Validate sort field against the lead sort allowlist before
+  // forwarding to runView. Unknown values silently fall back to the
+  // view's default sort rather than 400-ing — matches the lenient
+  // behavior of the public REST surface.
+  const sortFieldRaw = sp.get("sort");
   const sortDir = sp.get("dir") === "asc" ? "asc" : "desc";
-  const sort = sortField
-    ? {
-        field: sortField as never,
-        direction: sortDir as "asc" | "desc",
-      }
-    : undefined;
+  const sort =
+    sortFieldRaw &&
+    (LEAD_SORT_FIELDS as readonly string[]).includes(sortFieldRaw)
+      ? {
+          field: sortFieldRaw as SortField,
+          direction: sortDir as "asc" | "desc",
+        }
+      : undefined;
 
   const cursor = sp.get("cursor");
   const pageSize = 50;
