@@ -823,6 +823,17 @@ export async function commitBatchAction(
       if (batch.status === "committed") {
         throw new ValidationError("Batch already committed.");
       }
+      if (batch.status === "committing") {
+        // F-05 follow-up: commit-batch sets this transient state at
+        // the start of its loop. If a second click lands here the
+        // first run is still in flight; bounce instead of attempting
+        // a parallel commit. If the first run crashed mid-loop the
+        // catch handler resets to `reviewing`, so reaching this gate
+        // means a real in-flight run.
+        throw new ValidationError(
+          "Batch commit already in progress — wait for it to finish.",
+        );
+      }
       if (batch.status === "failed") {
         throw new ValidationError(
           "Batch is in failed state — re-review required before commit.",

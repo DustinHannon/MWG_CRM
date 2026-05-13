@@ -151,6 +151,14 @@ export const importBatches = pgTable(
         "reviewing",
         "approved",
         "rejected",
+        // Transient lock state set by commit-batch at the start of its
+        // loop and flipped to `committed` or `failed` at the end. If a
+        // batch is found in `committing` state after a Vercel function
+        // crash, the next commit attempt fails the action-layer
+        // status gate; admin must manually reset to `reviewing` /
+        // `approved` after inspection (rare path; explicit so it can't
+        // be missed).
+        "committing",
         "committed",
         "failed",
       ],
@@ -169,6 +177,13 @@ export const importBatches = pgTable(
     recordCountCommitted: integer("record_count_committed").notNull().default(0),
     recordCountConflicts: integer("record_count_conflicts").notNull().default(0),
     recordCountFailed: integer("record_count_failed").notNull().default(0),
+    // commit-batch increments this on every record that returns
+    // `outcome: "skipped"` (dedup_skip from the reviewer, bad-lead
+    // quality auto-skip from map-batch, or missing-parent activity
+    // skip from commit-batch). Prior to this column the skipped count
+    // was returned to the action caller but silently dropped from the
+    // batch row — operators saw committed + failed only.
+    recordCountSkipped: integer("record_count_skipped").notNull().default(0),
     notes: text("notes"),
   },
   (t) => [
