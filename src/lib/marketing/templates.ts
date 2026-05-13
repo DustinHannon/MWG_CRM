@@ -1,6 +1,12 @@
 import "server-only";
-import { and, eq, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
+import { db } from "@/db";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
+import { users } from "@/db/schema/users";
+import {
+  decodeCursor as decodeStandardCursor,
+  encodeFromValues as encodeStandardCursor,
+} from "@/lib/cursors";
 
 /**
  * Visibility-aware query helpers for marketing
@@ -88,4 +94,133 @@ export function canViewTemplate(input: {
   if (input.isAdmin) return true;
   if (input.template.scope === "global") return true;
   return input.template.createdById === input.userId;
+}
+
+/**
+ * Row shape returned by `listTemplatesCursor`. Mirrors the columns the
+ * templates list page renders today (name + subject + status pill +
+ * visibility pill + creator + updated timestamp).
+ */
+export interface MarketingTemplateRow {
+  id: string;
+  name: string;
+  subject: string;
+  status: "draft" | "ready" | "archived";
+  scope: "global" | "personal";
+  updatedAt: Date;
+  createdAt: Date;
+  createdById: string;
+  createdByName: string | null;
+}
+
+export interface MarketingTemplateCursorFilters {
+  search?: string;
+  status?: "draft" | "ready" | "archived" | "all";
+  scope?: "global" | "personal" | "all";
+}
+
+/**
+ * Cursor-paginated visibility-aware list of marketing templates.
+ *
+ * Default sort: `(updated_at DESC NULLS LAST, id DESC)`. The cursor is
+ * the canonical opaque `(ts, id)` tuple from `@/lib/cursors`; the
+ * tuple comparison expands manually because `updated_at` is `NOT NULL`
+ * (no NULL-block branch needed today, but the codec stays consistent
+ * with leads so the cursor decoder is shared).
+ *
+ * Visibility: composed via `templateVisibilityWhere(user.id)` unless
+ * `isAdmin === true`, in which case admin sees every template.
+ */
+export async function listTemplatesCursor(args: {
+  userId: string;
+  isAdmin: boolean;
+  filters: MarketingTemplateCursorFilters;
+  cursor: string | null;
+  pageSize?: number;
+}): Promise<{
+  data: MarketingTemplateRow[];
+  nextCursor: string | null;
+  total: number;
+}> {
+  const pageSize = args.pageSize ?? 50;
+  const { userId, isAdmin, filters } = args;
+
+  const wheres: SQL[] = [eq(marketingTemplates.isDeleted, false)];
+
+  if (!isAdmin) {
+    wheres.push(templateVisibilityWhere(userId));
+  }
+  if (filters.search) {
+    const pattern = `%${filters.search}%`;
+    const searchClause = or(
+      ilike(marketingTemplates.name, pattern),
+      ilike(marketingTemplates.subject, pattern),
+    );
+    if (searchClause) wheres.push(searchClause);
+  }
+  if (filters.status && filters.status !== "all") {
+    wheres.push(eq(marketingTemplates.status, filters.status));
+  }
+  if (filters.scope && filters.scope !== "all") {
+    wheres.push(eq(marketingTemplates.scope, filters.scope));
+  }
+
+  const baseWhere = and(...wheres);
+
+  const parsedCursor = decodeStandardCursor(args.cursor, "desc");
+  const cursorWhere = (() => {
+    if (!parsedCursor) return undefined;
+    // updated_at is NOT NULL, so the simple (ts, id) lexicographic
+    // expansion is sufficient.
+    if (parsedCursor.ts === null) {
+      // Defensive — shouldn't happen for NOT NULL columns. Treat as
+      // "no cursor" rather than throwing so a malformed bookmark
+      // gracefully degrades to the first page.
+      return undefined;
+    }
+    return sql`(
+      ${marketingTemplates.updatedAt} < ${parsedCursor.ts.toISOString()}::timestamptz
+      OR (${marketingTemplates.updatedAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${marketingTemplates.id} < ${parsedCursor.id})
+    )`;
+  })();
+
+  const finalWhere = cursorWhere ? and(baseWhere, cursorWhere) : baseWhere;
+
+  const [rowsRaw, totalRow] = await Promise.all([
+    db
+      .select({
+        id: marketingTemplates.id,
+        name: marketingTemplates.name,
+        subject: marketingTemplates.subject,
+        status: marketingTemplates.status,
+        scope: marketingTemplates.scope,
+        updatedAt: marketingTemplates.updatedAt,
+        createdAt: marketingTemplates.createdAt,
+        createdById: marketingTemplates.createdById,
+        createdByName: users.displayName,
+      })
+      .from(marketingTemplates)
+      .leftJoin(users, eq(users.id, marketingTemplates.createdById))
+      .where(finalWhere)
+      .orderBy(desc(marketingTemplates.updatedAt), desc(marketingTemplates.id))
+      .limit(pageSize + 1),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(marketingTemplates)
+      .where(baseWhere),
+  ]);
+
+  let nextCursor: string | null = null;
+  let data = rowsRaw;
+  if (rowsRaw.length > pageSize) {
+    data = rowsRaw.slice(0, pageSize);
+    const last = data[data.length - 1];
+    nextCursor = encodeStandardCursor(last.updatedAt, last.id, "desc");
+  }
+
+  return {
+    data,
+    nextCursor,
+    total: totalRow[0]?.count ?? 0,
+  };
 }
