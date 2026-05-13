@@ -102,7 +102,6 @@ export type PermissionKey =
   | "canExport"
   | "canSendEmail"
   | "canViewReports"
-  | "canViewTeamRecords"
   // task-scoped RBAC. "Own" perms are implicit
   // (any user can manage their own tasks); these gate cross-user
   // actions. Admins bypass via the existing isAdmin shortcut.
@@ -226,7 +225,6 @@ export async function getPermissions(
       canExport: false,
       canSendEmail: true,
       canViewReports: true,
-      canViewTeamRecords: false,
       canViewOthersTasks: false,
       canEditOthersTasks: false,
       canDeleteOthersTasks: false,
@@ -271,7 +269,6 @@ export async function getPermissions(
     canExport: r.canExport,
     canSendEmail: r.canSendEmail,
     canViewReports: r.canViewReports,
-    canViewTeamRecords: r.canViewTeamRecords,
     canViewOthersTasks: r.canViewOthersTasks,
     canEditOthersTasks: r.canEditOthersTasks,
     canDeleteOthersTasks: r.canDeleteOthersTasks,

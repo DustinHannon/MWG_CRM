@@ -105,13 +105,6 @@ export const permissions = pgTable("permissions", {
   canExport: boolean("can_export").notNull().default(false),
   canSendEmail: boolean("can_send_email").notNull().default(true),
   canViewReports: boolean("can_view_reports").notNull().default(true),
-  // grants visibility into records owned by the user's
-  // direct reports (per Microsoft Entra `manager` field). Independent
-  // of canViewAllRecords; manager users can flip this without unlocking
-  // org-wide visibility. Access-gate wiring + entity-level UI surfaces
-  // are tracked in ROADMAP — schema landed first so the column is
-  // available for future work.
-  canViewTeamRecords: boolean("can_view_team_records").notNull().default(false),
   // task-scoped RBAC. Every user can always
   // view/edit/delete/complete THEIR OWN tasks (the "own" half of the
   // brief's permission constants is implicit). These four gate

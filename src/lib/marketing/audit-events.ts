@@ -69,6 +69,13 @@ export const MARKETING_AUDIT_EVENTS = {
 
   SUPPRESSION_ADDED: "marketing.suppression.added",
   SUPPRESSION_REMOVED: "marketing.suppression.removed",
+  // operator-initiated additions/removals from the
+  // admin UI. Distinct from the generic SUPPRESSION_ADDED/REMOVED
+  // (which are reserved for system-sourced webhook + cron events)
+  // so the audit log can distinguish operator action from automated
+  // mirroring.
+  SUPPRESSION_MANUALLY_ADDED: "marketing.suppression.manually_added",
+  SUPPRESSION_MANUALLY_REMOVED: "marketing.suppression.manually_removed",
 
   // ClickDimensions template-migration worklist events.
   // Fired both by the receiving API endpoints (extracted/imported/

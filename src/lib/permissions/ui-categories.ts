@@ -24,7 +24,6 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
     label: "Records",
     keys: [
       "canViewAllRecords",
-      "canViewTeamRecords",
       "canCreateLeads",
       "canEditLeads",
       "canDeleteLeads",
@@ -126,10 +125,6 @@ export const PERMISSION_LABELS: Record<
   canViewAllRecords: {
     label: "View all records",
     hint: "See leads, accounts, contacts, and opportunities owned by anyone.",
-  },
-  canViewTeamRecords: {
-    label: "View team records",
-    hint: "See records owned by the user's direct reports (manager scope).",
   },
   canCreateLeads: {
     label: "Create leads",

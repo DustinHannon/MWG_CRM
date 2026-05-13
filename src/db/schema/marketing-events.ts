@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { leads } from "./leads";
 import { campaignRecipients, marketingCampaigns } from "./marketing-campaigns";
+import { users } from "./users";
 
 /**
  * Raw event stream from SendGrid Event Webhook.
@@ -100,6 +101,7 @@ export const marketingSuppressions = pgTable(
         "block",
         "spamreport",
         "invalid",
+        "manual",
       ],
     }).notNull(),
     reason: text("reason"),
@@ -109,6 +111,11 @@ export const marketingSuppressions = pgTable(
     syncedAt: timestamp("synced_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    // who manually added/removed this row. NULL for system-sourced
+    // rows (cron sync from SendGrid + webhook events).
+    addedByUserId: uuid("added_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
   },
   (t) => [
     index("mkt_sup_type_idx").on(t.suppressionType),
@@ -122,4 +129,5 @@ export type MarketingSuppressionType =
   | "bounce"
   | "block"
   | "spamreport"
-  | "invalid";
+  | "invalid"
+  | "manual";

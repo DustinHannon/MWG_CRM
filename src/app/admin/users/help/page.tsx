@@ -163,18 +163,6 @@ export default async function UsersHelpPage() {
               }
               defaultValue="ON"
             />
-            <FlagRow
-              flag="canViewTeamRecords"
-              effect={
-                <span className="italic text-muted-foreground">
-                  Reserved — manager-linked record visibility ships in a
-                  future phase. The schema column exists but no code reads
-                  it yet, and it is intentionally not exposed in the admin
-                  UI.
-                </span>
-              }
-              defaultValue="OFF"
-            />
             <tr className="text-sm">
               <td className="px-5 py-3 align-top">
                 <span className="font-mono text-xs text-foreground">isAdmin</span>
