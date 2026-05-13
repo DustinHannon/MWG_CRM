@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ADMIN_NAV_ITEMS, type NavItem } from "@/components/app-shell/nav";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { requireAdmin } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +21,10 @@ export default async function AdminLayout({
 }) {
   const user = await requireAdmin();
   return (
-    <AppShell user={user} brand={{ subtitle: "Admin" }} nav={ADMIN_NAV}>
-      {children}
-    </AppShell>
+    <QueryProvider>
+      <AppShell user={user} brand={{ subtitle: "Admin" }} nav={ADMIN_NAV}>
+        {children}
+      </AppShell>
+    </QueryProvider>
   );
 }
