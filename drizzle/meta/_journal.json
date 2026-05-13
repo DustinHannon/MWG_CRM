@@ -5,8 +5,99 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1778115170078,
+      "when": 1778116093000,
       "tag": "0000_sparkling_rhodey",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778597583000,
+      "tag": "0001_clickdimensions_migrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778597583001,
+      "tag": "0001_phase29_marketing_list_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778597583002,
+      "tag": "0001_phase29_marketing_template_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778597583003,
+      "tag": "0002_phase29_list_import_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778631586000,
+      "tag": "0003_phase32_5_drop_can_manage_marketing",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778632937000,
+      "tag": "0004_phase32_5_followup_drop_team_records_add_suppression_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778642407000,
+      "tag": "0005_phase32_6_account_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778642407001,
+      "tag": "0006_phase32_6_contact_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778642407002,
+      "tag": "0007_phase32_6_opportunity_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778642407003,
+      "tag": "0008_phase32_6_task_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778642407004,
+      "tag": "0009_phase32_6_can_apply_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778642407005,
+      "tag": "0010_phase32_6_can_manage_tag_definitions",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1778642407006,
+      "tag": "0011_phase32_6_added_by_id_indexes",
       "breakpoints": true
     }
   ]

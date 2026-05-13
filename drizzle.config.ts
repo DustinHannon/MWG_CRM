@@ -17,4 +17,15 @@ export default {
   },
   strict: true,
   verbose: true,
+  // Belt-and-suspenders: explicitly point the (unused) migrations runner at a
+  // sentinel table/schema name that doesn't exist. The deploy pipeline never
+  // invokes drizzle-kit migrate; production migrations apply via Supabase
+  // MCP `apply_migration` only. The drizzle journal (drizzle/meta/) is still
+  // maintained as a drift-detection ledger so `pnpm db:generate` and
+  // `pnpm db:check` continue to produce signal. See CLAUDE.md
+  // "Database / migrations / Drizzle" for the canonical workflow.
+  migrations: {
+    table: "__drizzle_migrations__do_not_use",
+    schema: "__drizzle_disabled__",
+  },
 } satisfies Config;
