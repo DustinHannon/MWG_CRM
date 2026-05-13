@@ -42,6 +42,7 @@ import { AddVisibleToListButton } from "./add-visible-to-list-button";
 import { LeadListMobile } from "./lead-list-mobile";
 import { LeadRowActions } from "./lead-row-actions";
 import { SortableLeadsHeaders } from "./sortable-leads-headers";
+import { ViewToolbar, type ViewSummary } from "../view-toolbar";
 
 interface AvailableTag {
   id: string;
@@ -58,7 +59,12 @@ export interface LeadsListClientProps {
   user: ActorLite;
   timePrefs: TimePrefs;
   activeViewParam: string;
+  activeViewName: string;
   activeColumns: ColumnKey[];
+  baseColumns: ColumnKey[];
+  views: ViewSummary[];
+  savedDirtyId: string | null;
+  subscribedViewIds: string[];
   allTags: AvailableTag[];
   canApplyTags: boolean;
   canMarketingListsBulkAdd: boolean;
@@ -109,7 +115,12 @@ function LeadsListInner({
   user,
   timePrefs,
   activeViewParam,
+  activeViewName,
   activeColumns,
+  baseColumns,
+  views,
+  savedDirtyId,
+  subscribedViewIds,
   allTags,
   canApplyTags,
   canMarketingListsBulkAdd,
@@ -217,10 +228,53 @@ function LeadsListInner({
       filters.tag,
   );
 
+  // MODIFIED badge detection — covers column drift AND any client
+  // filter divergence from the saved view's empty-filter baseline.
+  // Sort drift is not tracked client-side today (no sort interaction
+  // surface in the migrated list); columns and per-filter overlays
+  // are the live signals.
+  const columnsModified =
+    activeColumns.length !== baseColumns.length ||
+    activeColumns.some((c, i) => baseColumns[i] !== c);
+  const filtersAreModified = Boolean(
+    filters.q ||
+      filters.status ||
+      filters.rating ||
+      filters.source ||
+      filters.tag,
+  );
+  const viewModified = columnsModified || filtersAreModified;
+  const modifiedFields: string[] = [];
+  if (columnsModified) modifiedFields.push("columns");
+  if (filters.q) modifiedFields.push("search");
+  if (filters.status || filters.rating || filters.source || filters.tag) {
+    modifiedFields.push("filters");
+  }
+
   const exportHref = buildExportHref(activeViewParam, activeColumns, filters);
 
   const filtersSlot = (
     <div className="space-y-3">
+      {/* View selector + MODIFIED badge + Save-as-new + Columns
+          chooser. Desktop-only — these are power-user affordances
+          that don't fit the mobile chip toolbar. Lives inside the
+          client component so the MODIFIED badge can react to client
+          filter state (search / status / rating / source / tag). */}
+      <div className="hidden md:block">
+        <ViewToolbar
+          views={views}
+          activeViewId={activeViewParam}
+          activeViewName={activeViewName}
+          activeColumns={activeColumns}
+          baseColumns={baseColumns}
+          savedDirtyId={savedDirtyId}
+          columnsModified={columnsModified}
+          viewModified={viewModified}
+          modifiedFields={modifiedFields}
+          subscribedViewIds={subscribedViewIds}
+        />
+      </div>
+
       <LeadFiltersBar
         draft={draft}
         onDraftChange={setDraft}

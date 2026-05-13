@@ -21,7 +21,7 @@ import {
 } from "@/lib/views";
 import { listTags } from "@/lib/tags";
 import { LeadsListClient } from "./_components/leads-list-client";
-import { ViewToolbar, type ViewSummary } from "./view-toolbar";
+import { type ViewSummary } from "./view-toolbar";
 
 export const dynamic = "force-dynamic";
 
@@ -126,20 +126,6 @@ export default async function LeadsPage({
     })),
   ];
 
-  const columnsModified =
-    activeColumns.length !== baseColumns.length ||
-    activeColumns.some((c, i) => baseColumns[i] !== c);
-
-  // Filter / sort / search modification is now owned by the client
-  // component. The server-side modification flag covers only column
-  // drift; the client-side state never round-trips through the URL
-  // so it cannot trigger a "MODIFIED" badge today. Future work:
-  // surface filter modification via a separate pill driven by client
-  // state (see follow-up notes).
-  const viewModified = columnsModified;
-  const modifiedFields: string[] = [];
-  if (columnsModified) modifiedFields.push("columns");
-
   const savedDirtyId = activeView.source === "saved" ? activeView.id : null;
 
   return (
@@ -148,30 +134,17 @@ export default async function LeadsPage({
       <PageRealtime entities={["leads"]} />
       <PagePoll entities={["leads"]} />
 
-      {/* ViewToolbar is desktop-only — view selector, MODIFIED badge,
-          Save-as-new, Columns chooser are all power-user features
-          that don't fit the mobile toolbar. */}
-      <div className="mb-4 hidden md:block">
-        <ViewToolbar
-          views={allViews}
-          activeViewId={activeViewParam}
-          activeViewName={activeView.name}
-          activeColumns={activeColumns}
-          baseColumns={baseColumns}
-          savedDirtyId={savedDirtyId}
-          columnsModified={columnsModified}
-          viewModified={viewModified}
-          modifiedFields={modifiedFields}
-          subscribedViewIds={subscribedViewIds}
-        />
-      </div>
-
       <LeadsListClient
         key={activeViewParam}
         user={{ id: user.id, isAdmin: user.isAdmin }}
         timePrefs={timePrefs}
         activeViewParam={activeViewParam}
+        activeViewName={activeView.name}
         activeColumns={activeColumns}
+        baseColumns={baseColumns}
+        views={allViews}
+        savedDirtyId={savedDirtyId}
+        subscribedViewIds={subscribedViewIds}
         allTags={allTags.map((t) => ({
           id: t.id,
           name: t.name,
