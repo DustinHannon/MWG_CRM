@@ -31,7 +31,8 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnKey[] = [
 /**
  * Sortable subset of task columns. Used by the header link logic to
  * decide whether a column header is a clickable sort link or a plain
- * label. Mirrors the legacy hard-coded list in task-table-client.
+ * label. Mirrors the legacy hard-coded list previously inline in the
+ * task table client.
  */
 export const TASK_SORTABLE_COLUMNS: ReadonlySet<TaskColumnKey> = new Set([
   "title",

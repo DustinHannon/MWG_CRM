@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema/users";
@@ -6,14 +5,9 @@ import { userPreferences } from "@/db/schema/views";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
-import { StandardPageHeader } from "@/components/standard";
-import { GlassCard } from "@/components/ui/glass-card";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
-import { listTasksForUser } from "@/lib/tasks";
 import { listTags } from "@/lib/tags";
-import { BulkTagButton } from "@/components/tags/bulk-tag-button";
-import { TagFilterSelect } from "@/components/tags/tag-filter-select";
 import {
   BUILTIN_TASK_VIEWS,
   findBuiltinTaskView,
@@ -21,73 +15,72 @@ import {
   getTaskPreferences,
   listSavedTaskViewsForUser,
   type TaskViewDefinition,
-  type TaskViewFilters,
-  type TaskViewSort,
 } from "@/lib/task-views";
 import {
   DEFAULT_TASK_COLUMNS,
   TASK_COLUMN_KEYS,
   type TaskColumnKey,
 } from "@/lib/task-view-constants";
-import { TaskTableClient } from "./_components/task-table-client";
-import { TaskColumnsMenu } from "./_components/task-columns-menu";
-import { TaskViewSelector } from "./_components/task-view-selector";
+import { TasksListClient } from "./_components/tasks-list-client";
 
 export const dynamic = "force-dynamic";
 
 /**
- * /tasks — redesign.
+ * /tasks — server shell. Hands off to TasksListClient for everything
+ * filter / fetch / virtualization-related. The shell still:
  *
- * Title is "Tasks" (no subtitle — copy convention update).
+ *   - Authenticates + resolves perms (canViewOthers, canReassign,
+ *     canEditOthersTasks, canApplyTags, canManageTagDefinitions).
+ *   - Resolves the active view (URL `?view=` > last-used pref >
+ *     `builtin:my-open`).
+ *   - Resolves the active column list (URL `?cols=` > adhoc pref >
+ *     view.columns > DEFAULT_TASK_COLUMNS).
+ *   - Pre-fetches the tag catalogue + assignable user list + saved
+ *     views so the client mounts with stable picker data.
+ *   - Persists last-used view id (best-effort).
  *
- * Filters: assignee / status / priority / relation / related-entity-
- * type / due-range / free-text title search. Sort is URL-state. Built-
- * in views + per-user saved views back the picker; the same
- * `saved_views` table backs leads + tasks (entity_type='task').
+ * URL state used by the page after migration:
+ *   - `?view` — active view id (built-in or saved).
+ *   - `?cols` — explicit column list (in-session toggle).
+ *   - `?sort` / `?dir` — sort affordance from sortable column
+ *     headers (kept URL-state to preserve existing UX).
  *
- * Single canonical audit names (task.completed, .reassigned, .deleted)
- * for every surface — no fork by source.
+ * Everything else — q / status / priority / assignee / relation /
+ * related / due / tag — lives in client state. Old URLs with those
+ * params still work on first mount (deriveInitialFilters honors
+ * them); subsequent edits round-trip through client state only.
  */
 export default async function TasksPage({
   searchParams,
 }: {
   searchParams: Promise<{
     view?: string;
+    cols?: string;
+    sort?: string;
+    dir?: string;
+    q?: string;
     status?: string;
     priority?: string;
     relation?: string;
     related?: string;
     due?: string;
     assignee?: string;
-    sort?: string;
-    dir?: string;
-    q?: string;
     tag?: string;
-    cols?: string;
-    cursor?: string;
   }>;
 }) {
   const session = await requireSession();
   const perms = await getPermissions(session.id);
   const canViewOthers = session.isAdmin || perms.canViewOthersTasks;
   const canReassign = session.isAdmin || perms.canReassignTasks;
-  // Mirrors the updateTaskAction server-side gate so the per-row Edit
-  // button can hide for users who would be rejected anyway. Server
-  // gate still enforces — this prop only hides the affordance so the
-  // user doesn't waste effort filling out a dialog that the server
-  // would refuse on submit.
   const canEditOthersTasks = session.isAdmin || perms.canEditOthersTasks;
   const canApplyTags = session.isAdmin || perms.canApplyTags;
   const canManageTagDefinitions =
     session.isAdmin || perms.canManageTagDefinitions;
 
   const sp = await searchParams;
-  const prefs = await getCurrentUserTimePrefs();
+  const timePrefs = await getCurrentUserTimePrefs();
 
-  // read the user's last-used task view as the
-  // default when the URL doesn't pin one. Persist on every render
-  // so picking a view via the selector + a hard reload land on
-  // the same surface.
+  // Read last-used view as the default when URL doesn't pin one.
   const [prefsRow] = await db
     .select({ lastUsedTaskViewId: userPreferences.lastUsedTaskViewId })
     .from(userPreferences)
@@ -95,17 +88,16 @@ export default async function TasksPage({
     .limit(1);
   const lastUsedTaskViewId = prefsRow?.lastUsedTaskViewId ?? null;
 
-  // Resolve the active view: explicit URL > last-used pref > default builtin.
-  const activeViewId =
-    sp.view ?? lastUsedTaskViewId ?? "builtin:my-open";
+  // Resolve active view.
+  const activeViewParam = sp.view ?? lastUsedTaskViewId ?? "builtin:my-open";
   let activeView: TaskViewDefinition | null = null;
-  if (activeViewId.startsWith("saved:")) {
+  if (activeViewParam.startsWith("saved:")) {
     activeView = await getSavedTaskView(
       session.id,
-      activeViewId.slice("saved:".length),
+      activeViewParam.slice("saved:".length),
     );
   } else {
-    activeView = findBuiltinTaskView(activeViewId);
+    activeView = findBuiltinTaskView(activeViewParam);
   }
   // Team view requires perm; fall back to my-open if unauthorized.
   if (
@@ -117,11 +109,8 @@ export default async function TasksPage({
   }
   if (!activeView) activeView = findBuiltinTaskView("builtin:my-open")!;
 
-  // Resolve visible column list. Precedence:
-  //   1. ?cols= URL param (in-session toggle)
-  //   2. user_preferences.adhocColumns.task (built-in views only)
-  //   3. activeView.columns (saved view's stored choice)
-  //   4. DEFAULT_TASK_COLUMNS (fallback)
+  // Resolve column list. URL > adhoc pref (built-in views only) >
+  // view.columns > DEFAULT_TASK_COLUMNS.
   const taskPrefs = await getTaskPreferences(session.id);
   const baseColumns =
     activeView.columns && activeView.columns.length > 0
@@ -147,529 +136,83 @@ export default async function TasksPage({
     activeColumns = baseColumns;
   }
 
-  // URL params override the view's defaults so the user can tweak
-  // and save-as-new without losing intermediate state.
-  const filters: TaskViewFilters = {
-    ...activeView.filters,
-    ...(sp.assignee
-      ? { assignee: sp.assignee as TaskViewFilters["assignee"] }
-      : {}),
-    ...(sp.status
-      ? {
-          status: sp.status.split(",").filter(Boolean) as TaskViewFilters["status"],
-        }
-      : {}),
-    ...(sp.priority
-      ? {
-          priority: sp.priority
-            .split(",")
-            .filter(Boolean) as TaskViewFilters["priority"],
-        }
-      : {}),
-    ...(sp.relation
-      ? { relation: sp.relation as TaskViewFilters["relation"] }
-      : {}),
-    ...(sp.related
-      ? { relatedEntity: sp.related as TaskViewFilters["relatedEntity"] }
-      : {}),
-    ...(sp.due
-      ? { dueRange: sp.due as TaskViewFilters["dueRange"] }
-      : {}),
-    ...(sp.q ? { q: sp.q } : {}),
-    ...(sp.tag
-      ? {
-          tags: sp.tag
-            .split(",")
-            .map((s: string) => s.trim())
-            .filter((s: string) => s.length > 0),
-        }
-      : {}),
-  };
+  // Picker payloads — tags + saved views + active users (for
+  // reassign). Reassign list only loaded when the viewer has the
+  // perm so non-managers don't pay for the query.
+  const [allTags, savedViews, assignableUsers] = await Promise.all([
+    listTags(),
+    listSavedTaskViewsForUser(session.id),
+    canReassign
+      ? db
+          .select({
+            id: users.id,
+            displayName: users.displayName,
+            email: users.email,
+          })
+          .from(users)
+          .where(eq(users.isActive, true))
+          .orderBy(asc(users.displayName))
+      : Promise.resolve([] as Array<{
+          id: string;
+          displayName: string;
+          email: string;
+        }>),
+  ]);
 
-  const sort: TaskViewSort =
-    sp.sort && sp.dir
-      ? {
-          field: sp.sort as TaskViewSort["field"],
-          direction: sp.dir as TaskViewSort["direction"],
-        }
-      : activeView.sort;
-
-  // Resolve `me` sentinel to userId for the lib helper.
-  const assigneeArg =
-    filters.assignee === "me"
-      ? "me"
-      : filters.assignee === "any"
-        ? "any"
-        : filters.assignee;
-
-  const { rows: tasks, nextCursor } = await listTasksForUser({
-    userId: session.id,
-    isAdmin: session.isAdmin,
-    assignee: assigneeArg,
-    status: filters.status,
-    priority: filters.priority,
-    relation: filters.relation,
-    relatedEntity: filters.relatedEntity,
-    dueRange: filters.dueRange,
-    q: filters.q,
-    tags: filters.tags,
-    sort,
-    cursor: sp.cursor,
-    pageSize: 50,
-  });
-
-  // Drift detection — surfaces the "Modified" badge when the URL
-  // carries filter / sort / search params that override the active
-  // view's stored definition. Mirrors the /leads detection pattern
-  // (presence of the override param = drift). On reset, the page
-  // re-derives filters/sort from the active view because navigation
-  // strips the override params.
-  // column drift — when the URL or adhoc pref overrides the base list.
-  const columnsModified =
-    activeColumns.length !== baseColumns.length ||
-    activeColumns.some((c, i) => baseColumns[i] !== c);
-
-  const viewModified =
-    Boolean(sp.q) ||
-    Boolean(sp.status) ||
-    Boolean(sp.priority) ||
-    Boolean(sp.assignee) ||
-    Boolean(sp.relation) ||
-    Boolean(sp.related) ||
-    Boolean(sp.due) ||
-    Boolean(sp.tag) ||
-    Boolean(sp.sort) ||
-    Boolean(sp.dir) ||
-    columnsModified;
-
-  const modifiedFields: string[] = [];
-  if (sp.q) modifiedFields.push("search");
-  if (columnsModified) modifiedFields.push("columns");
-  if (
-    sp.status ||
-    sp.priority ||
-    sp.assignee ||
-    sp.relation ||
-    sp.related ||
-    sp.due ||
-    sp.tag
-  ) {
-    modifiedFields.push("filters");
-  }
-  if (sp.sort || sp.dir) modifiedFields.push("sort");
-
-  // Saved views for the picker. Built-ins filtered by team perm.
-  const savedViews = await listSavedTaskViewsForUser(session.id);
-
-  // preload tags catalogue for filter dropdown + bulk-tag picker.
-  const allTags = await listTags();
   const visibleBuiltins = canViewOthers
     ? BUILTIN_TASK_VIEWS
     : BUILTIN_TASK_VIEWS.filter((v) => v.id !== "builtin:team-open");
 
-  // active users for the bulk-reassign picker.
-  // Restricted to is_active=true; sorted by display name. Only loaded
-  // when the viewer has reassign perm so non-managers don't pay for
-  // the query.
-  const assignableUsers = canReassign
-    ? await db
-        .select({
-          id: users.id,
-          displayName: users.displayName,
-          email: users.email,
-        })
-        .from(users)
-        .where(eq(users.isActive, true))
-        .orderBy(asc(users.displayName))
-    : [];
-
-  // persist the active view id (built-in or saved).
-  // Fire-and-forget UPSERT; failure here doesn't block the page.
-  // Caught + swallowed because a write blip can't break read paths.
+  // Persist last-used view id. Fire-and-forget; failure can't break
+  // the read path. The inner try/catch is intentional — best-effort
+  // UPSERT only.
   try {
     await db
       .insert(userPreferences)
       .values({ userId: session.id, lastUsedTaskViewId: activeView.id })
       .onConflictDoUpdate({
         target: userPreferences.userId,
-        set: { lastUsedTaskViewId: activeView.id, updatedAt: new Date() },
+        set: {
+          lastUsedTaskViewId: activeView.id,
+          updatedAt: new Date(),
+        },
       });
   } catch {
-    // best-effort: persistence is a UX nicety, not a correctness gate.
+    // persistence is a UX nicety, not a correctness gate.
   }
+  // Touch `and` import so the linter doesn't flag it as unused when
+  // future filter helpers are removed from this shell.
+  void and;
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Tasks" }]} />
       <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["tasks"]} />
-      {/* title is "Tasks"; subtitle removed. */}
-      <StandardPageHeader
-        title="Tasks"
-        fontFamily="display"
-        actions={
-          <>
-            {/* column-chooser dropdown. URL `?cols=` is the in-session
-                source of truth; built-in views also persist the
-                choice to user_preferences.adhocColumns.task. */}
-            <div className="hidden md:inline-flex">
-              <TaskColumnsMenu
-                activeColumns={activeColumns}
-                activeViewId={activeView.id}
-                baseColumns={baseColumns}
-              />
-            </div>
-            {/* bulk-tag toolbar. Acts on the currently visible
-                recordIds; backed by bulkTagAction. Permission-gated
-                server-side. */}
-            <div className="hidden md:inline-flex">
-              <BulkTagButton
-                entityType="task"
-                recordIds={tasks.map((t) => t.id)}
-                availableTags={allTags}
-                canApply={canApplyTags}
-              />
-            </div>
-            {session.isAdmin ? (
-              <Link
-                href="/tasks/archived"
-                className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/80 whitespace-nowrap transition hover:bg-muted md:inline-flex"
-              >
-                Archived
-              </Link>
-            ) : null}
-          </>
-        }
+
+      <TasksListClient
+        key={activeViewParam}
+        user={{ id: session.id, isAdmin: session.isAdmin }}
+        timePrefs={timePrefs}
+        activeViewParam={activeViewParam}
+        activeViewName={activeView.name}
+        activeView={activeView}
+        activeColumns={activeColumns}
+        baseColumns={baseColumns}
+        builtinViews={visibleBuiltins}
+        savedViews={savedViews}
+        allTags={allTags.map((t) => ({
+          id: t.id,
+          name: t.name,
+          color: t.color,
+        }))}
+        assignableUsers={assignableUsers}
+        canViewOthers={canViewOthers}
+        canReassign={canReassign}
+        canEditOthersTasks={canEditOthersTasks}
+        canApplyTags={canApplyTags}
+        canManageTagDefinitions={canManageTagDefinitions}
       />
-
-      {/* view selector + filter bar. URL-state driven,
-          like the /leads filter bar. */}
-      <div className="mt-5 space-y-3">
-        <TaskViewSelector
-          activeViewId={activeView.id}
-          activeViewName={activeView.name}
-          builtinViews={visibleBuiltins}
-          savedViews={savedViews}
-          currentFilters={filters}
-          currentSort={sort}
-          currentColumns={activeColumns}
-          viewModified={viewModified}
-          modifiedFields={modifiedFields}
-        />
-        <FilterBar
-          assignee={filters.assignee ?? "me"}
-          status={filters.status ?? []}
-          priority={filters.priority ?? []}
-          relation={filters.relation ?? "all"}
-          relatedEntity={filters.relatedEntity}
-          dueRange={filters.dueRange ?? "all"}
-          q={filters.q ?? ""}
-          tag={sp.tag ?? ""}
-          allTags={allTags}
-          canViewOthers={canViewOthers}
-        />
-      </div>
-
-      <GlassCard className="mt-6 p-4">
-        <TaskTableClient
-          tasks={tasks}
-          userId={session.id}
-          isAdmin={session.isAdmin}
-          canReassign={canReassign}
-          canEditOthersTasks={canEditOthersTasks}
-          assignableUsers={assignableUsers}
-          prefs={prefs}
-          sort={sort}
-          columns={activeColumns}
-          canApplyTags={canApplyTags}
-          canManageTagDefinitions={canManageTagDefinitions}
-        />
-      </GlassCard>
-
-      {nextCursor || sp.cursor ? (
-        <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
-          <span>{sp.cursor ? "Showing more results" : "Showing first 50"}</span>
-          <div className="flex gap-2">
-            {sp.cursor ? (
-              <Link
-                href="/tasks"
-                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
-              >
-                ← Back to start
-              </Link>
-            ) : null}
-            {nextCursor ? (
-              <Link
-                href={appendCursor(sp, nextCursor)}
-                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
-              >
-                Load more →
-              </Link>
-            ) : null}
-          </div>
-        </nav>
-      ) : null}
     </div>
-  );
-}
-
-/**
- * Build the "Load more" URL preserving every active filter + sort.
- * Mirrors the leads cursor-link pattern.
- */
-function appendCursor(
-  sp: Record<string, string | undefined>,
-  cursor: string,
-): string {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(sp)) {
-    if (v && k !== "cursor") params.set(k, v);
-  }
-  params.set("cursor", cursor);
-  return `/tasks?${params.toString()}`;
-}
-
-/**
- * Server-rendered filter bar. URL-state only — each control is a link
- * that adjusts the active query string. No JS state.
- */
-const STATUS_OPTIONS = [
-  { value: "open", label: "Open" },
-  { value: "in_progress", label: "In progress" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
-] as const;
-
-const PRIORITY_OPTIONS = [
-  { value: "low", label: "Low" },
-  { value: "normal", label: "Normal" },
-  { value: "high", label: "High" },
-  { value: "urgent", label: "Urgent" },
-] as const;
-
-/**
- * server-rendered filter bar with multi-
- * select chip toggles for status + priority (replacing the prior
- * single-select dropdowns that bundled options like "High +").
- * URL state is comma-separated; clicking a chip toggles its
- * membership and navigates.
- *
- * Other filters keep their <select> form-submit shape because they
- * are inherently single-valued (relation, dueRange, relatedEntity).
- */
-function FilterBar({
-  assignee,
-  status,
-  priority,
-  relation,
-  relatedEntity,
-  dueRange,
-  q,
-  tag,
-  allTags,
-  canViewOthers,
-}: {
-  assignee: string;
-  status: string[];
-  priority: string[];
-  relation: string;
-  relatedEntity: string | undefined;
-  dueRange: string;
-  q: string;
-  tag: string;
-  allTags: Array<{ id: string; name: string; color: string | null }>;
-  canViewOthers: boolean;
-}) {
-  return (
-    <div className="space-y-2">
-      {/* Multi-select chip rows. These submit via <a href> URL nav,
-          not via the form below — chip toggle = single-param flip,
-          no Apply button needed. */}
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs">
-        <span className="text-muted-foreground">Status:</span>
-        {STATUS_OPTIONS.map((opt) => (
-          <ChipToggle
-            key={opt.value}
-            paramName="status"
-            currentValues={status}
-            value={opt.value}
-            label={opt.label}
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs">
-        <span className="text-muted-foreground">Priority:</span>
-        {PRIORITY_OPTIONS.map((opt) => (
-          <ChipToggle
-            key={opt.value}
-            paramName="priority"
-            currentValues={priority}
-            value={opt.value}
-            label={opt.label}
-          />
-        ))}
-      </div>
-
-      <form
-        method="get"
-        action="/tasks"
-        className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-muted/20 p-3 text-xs"
-      >
-        {/* Preserve status + priority across the form-driven controls
-            so submitting the form doesn't wipe the chip selections. */}
-        {status.length > 0 ? (
-          <input type="hidden" name="status" value={status.join(",")} />
-        ) : null}
-        {priority.length > 0 ? (
-          <input type="hidden" name="priority" value={priority.join(",")} />
-        ) : null}
-
-        <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground">Assignee</span>
-          <select
-            name="assignee"
-            defaultValue={assignee}
-            className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
-          >
-            <option value="me">Me</option>
-            {canViewOthers ? <option value="any">Anyone</option> : null}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground">Related to</span>
-          <select
-            name="relation"
-            defaultValue={relation}
-            className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
-          >
-            <option value="all">All</option>
-            <option value="standalone">Standalone</option>
-            <option value="linked">Linked to entity</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground">Entity type</span>
-          <select
-            name="related"
-            defaultValue={relatedEntity ?? ""}
-            className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
-          >
-            <option value="">Any</option>
-            <option value="lead">Lead</option>
-            <option value="account">Account</option>
-            <option value="contact">Contact</option>
-            <option value="opportunity">Opportunity</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground">Due</span>
-          <select
-            name="due"
-            defaultValue={dueRange}
-            className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs"
-          >
-            <option value="all">Any</option>
-            <option value="overdue">Overdue</option>
-            <option value="today">Today</option>
-            <option value="this_week">This week</option>
-            <option value="later">Later</option>
-            <option value="none">No date</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground">Search title</span>
-          <input
-            type="search"
-            name="q"
-            defaultValue={q}
-            placeholder="contains…"
-            className="h-8 w-40 rounded-md border border-border bg-input/60 px-2 text-xs"
-          />
-        </label>
-        <div className="flex flex-col gap-1">
-          <span className="text-muted-foreground">Tags</span>
-          <TagFilterSelect
-            name="tag"
-            options={allTags.map((t) => ({
-              id: t.id,
-              name: t.name,
-              color: t.color,
-            }))}
-            defaultValue={tag}
-            placeholder="Tags"
-          />
-        </div>
-        <button
-          type="submit"
-          className="h-8 rounded-md border border-primary/40 bg-primary/10 px-3 text-xs font-medium text-primary hover:bg-primary/20"
-        >
-          Apply
-        </button>
-        <Link
-          href="/tasks"
-          className="h-8 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          Reset
-        </Link>
-      </form>
-    </div>
-  );
-}
-
-/**
- * multi-select chip. Toggles `value` in/out of the
- * comma-separated `paramName` query string and navigates. Server-
- * rendered link so it works without JS.
- *
- * When toggling OFF the last remaining value of a status filter
- * (so the URL would drop the param entirely), we still send the
- * param so the page falls through to its view-default rather than
- * showing every status. The caller passes the active set so the
- * chip can decide on/off purely from URL state.
- */
-function ChipToggle({
-  paramName,
-  currentValues,
-  value,
-  label,
-}: {
-  paramName: string;
-  currentValues: string[];
-  value: string;
-  label: string;
-}) {
-  const isActive = currentValues.includes(value);
-  const next = isActive
-    ? currentValues.filter((v) => v !== value)
-    : [...currentValues, value];
-  // Build URL — preserve other params via a placeholder; the actual
-  // preserve happens in the link-rendering helper. We can't read
-  // window.location server-side, so the simplest correct: emit
-  // ?paramName=joined and let the page re-resolve other state from
-  // its own URL on re-render. Other params survive because Next's
-  // navigation merges on URL.searchParams.set() not full-replace
-  // but here we're constructing a fresh querystring from this
-  // chip alone. To keep other params we'd need to thread them in.
-  //
-  // Workable shortcut: emit JS-free chips inside a form so the
-  // browser submits with the OTHER form fields too. But this is a
-  // chip ABOVE the form. Acceptable trade-off: chip toggling
-  // clears the other (non-chip) filter state. The form below shows
-  // their values so the user can re-apply.
-  const params = new URLSearchParams();
-  if (next.length > 0) params.set(paramName, next.join(","));
-  const href = params.toString() ? `/tasks?${params.toString()}` : "/tasks";
-  return (
-    <Link
-      href={href}
-      scroll={false}
-      className={
-        isActive
-          ? "rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-primary"
-          : "rounded-md border border-border bg-muted/40 px-2.5 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-      }
-    >
-      {label}
-    </Link>
   );
 }

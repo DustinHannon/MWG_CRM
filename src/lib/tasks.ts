@@ -173,6 +173,14 @@ const baseSelect = {
 export interface ListTasksResult {
   rows: TaskRow[];
   nextCursor: string | null;
+  /**
+   * Total result-set count for the same WHERE filter. Populated only
+   * when the caller passes `withCount: true` (otherwise undefined to
+   * avoid the extra `count(*)` round-trip on cursor-paginated paths
+   * that don't need it). The `/api/tasks/list` endpoint uses this
+   * for the "Showing N of M" affordance and the Load-more label.
+   */
+  total?: number;
 }
 
 export async function listTasksForUser(args: {
@@ -213,6 +221,14 @@ export async function listTasksForUser(args: {
    * junction to tags.name.
    */
   tags?: string[];
+  /**
+   * When true, return the total result-set count alongside the rows
+   * for the "Showing N of M" affordance. Default false to avoid the
+   * extra `count(*)` round-trip on existing call sites that don't
+   * need it. The /api/tasks/list endpoint opts in; lead-detail tab
+   * and other legacy callers continue without.
+   */
+  withCount?: boolean;
 }): Promise<ListTasksResult> {
   const wheres: SQL[] = [];
   // exclude soft-deleted tasks from every listing.
@@ -330,6 +346,10 @@ export async function listTasksForUser(args: {
   }
 
   const pageSize = args.pageSize ?? 50;
+  // Capture the pre-cursor WHERE for the optional count query — the
+  // total result-set count must NOT shift as the user pages through.
+  const baseWhere = wheres.length === 0 ? undefined : and(...wheres);
+
   // cursor seeks via composite index
   // `tasks_assigned_due_at_id_idx (assigned_to_id, due_at NULLS LAST, id DESC)`.
   const cursor = pageSize > 0 ? parseTaskCursor(args.cursor) : null;
@@ -363,14 +383,29 @@ export async function listTasksForUser(args: {
     .orderBy(sql`${tasks.dueAt} ASC NULLS LAST`, desc(tasks.id))
     .$dynamic();
   if (sliceLimit) q = q.limit(sliceLimit);
-  const rowsRaw = await q;
+
+  const [rowsRaw, totalRow] = await Promise.all([
+    q,
+    args.withCount
+      ? db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(tasks)
+          .where(baseWhere)
+      : Promise.resolve(null),
+  ]);
+
+  const total = totalRow ? (totalRow[0]?.n ?? 0) : undefined;
 
   if (pageSize <= 0 || rowsRaw.length <= pageSize) {
-    return { rows: rowsRaw, nextCursor: null };
+    return { rows: rowsRaw, nextCursor: null, total };
   }
   const rows = rowsRaw.slice(0, pageSize);
   const last = rows[rows.length - 1];
-  return { rows, nextCursor: encodeTaskCursor(last.dueAt, last.id) };
+  return {
+    rows,
+    nextCursor: encodeTaskCursor(last.dueAt, last.id),
+    total,
+  };
 }
 
 export async function listTasksForLead(leadId: string): Promise<TaskRow[]> {
