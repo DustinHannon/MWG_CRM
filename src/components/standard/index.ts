@@ -14,6 +14,8 @@ export {
   StandardListPage,
   type StandardListPageProps,
   type StandardListPagePage,
+  type BulkActionsSlot,
+  type BulkActionsSlotObject,
 } from "./standard-list-page";
 export {
   StandardLoadingState,

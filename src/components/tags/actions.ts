@@ -39,6 +39,7 @@ import { logger } from "@/lib/logger";
 import { tagName } from "@/lib/validation/primitives";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { isHexColor, isPaletteColor, nextDefaultPaletteColor } from "./helpers";
+import type { BulkScope } from "@/lib/bulk-actions/scope";
 
 /**
  * Server actions for tag operations. Two layers:
@@ -524,12 +525,54 @@ export async function deleteTagAction(
 // entire batch for forensic traceability.
 // ---------------------------------------------------------------
 
-const bulkSchema = z.object({
+/**
+ * Bulk-tag inputs accept either:
+ *   - The legacy explicit-id shape: `recordIds: string[]` capped at
+ *     1000 for one-shot batches.
+ *   - The new scope shape: `scope: BulkScope` which is either an id
+ *     list (no cap — the action walks in 200-id batches) or a
+ *     `filtered` discriminator with the page-level filters that the
+ *     action expands server-side via the entity's cursor function.
+ *
+ * The `filtered` scope path is currently NOT enabled: each entity's
+ * cursor-page loader is owned by Sub-agent D and not yet present in
+ * `src/lib/<entity>.ts`. Until those land, the action returns a
+ * typed ValidationError on the `filtered` path so call sites get a
+ * clean error rather than an opaque crash. The shape is wired up
+ * here so Sub-agent B can land consumer migrations atomically once
+ * D ships.
+ */
+const bulkSchemaLegacy = z.object({
   entityType: z.enum(["lead", "account", "contact", "opportunity", "task"]),
   recordIds: z.array(z.string().uuid()).min(1).max(1000),
+  scope: z.undefined().optional(),
   tagIds: z.array(z.string().uuid()).min(1),
   operation: z.enum(["add", "remove"]),
 });
+
+const bulkScopeSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("ids"),
+    ids: z.array(z.string().uuid()).min(1),
+  }),
+  z.object({
+    kind: z.literal("filtered"),
+    filters: z.unknown(),
+    entity: z.enum(["lead", "account", "contact", "opportunity", "task"]),
+  }),
+]);
+
+const bulkSchemaScope = z.object({
+  entityType: z.enum(["lead", "account", "contact", "opportunity", "task"]),
+  recordIds: z.undefined().optional(),
+  scope: bulkScopeSchema,
+  tagIds: z.array(z.string().uuid()).min(1),
+  operation: z.enum(["add", "remove"]),
+});
+
+const bulkSchema = z.union([bulkSchemaLegacy, bulkSchemaScope]);
+
+export type BulkTagInput = z.infer<typeof bulkSchema>;
 
 export interface BulkTagSummary {
   recordsTouched: number;
@@ -549,7 +592,7 @@ const ENTITY_LIST_PATH: Record<
 };
 
 export async function bulkTagAction(
-  raw: z.infer<typeof bulkSchema>,
+  raw: BulkTagInput,
 ): Promise<ActionResult<BulkTagSummary>> {
   return withErrorBoundary(
     { action: "tag.bulk" },
@@ -557,6 +600,37 @@ export async function bulkTagAction(
       const session = await requireSession();
       await requirePermission(session, "canApplyTags");
       const parsed = bulkSchema.parse(raw);
+
+      // Resolve the concrete `recordIds` from whichever shape was
+      // submitted. The legacy shape is direct; the new `scope`
+      // shape either reuses the embedded id list, or — for the
+      // `filtered` discriminator — requires Sub-agent D's cursor
+      // expansion which is not yet wired through this action.
+      let recordIds: string[];
+      if (parsed.scope) {
+        if (parsed.scope.kind === "ids") {
+          recordIds = parsed.scope.ids;
+          if (recordIds.length > 1000) {
+            throw new ValidationError(
+              "Cap of 1,000 records per bulk-tag invocation. Split the operation.",
+            );
+          }
+        } else {
+          // `filtered` scope. The expansion path (iterating
+          // cursor-paginated pages of the entity to resolve the
+          // full id set) requires the per-entity cursor functions
+          // that Sub-agent D owns. Until those land, fail loudly
+          // with a typed validation error so the UI surfaces a
+          // clear message rather than an opaque crash.
+          throw new ValidationError(
+            "Bulk apply across all matching results is not yet enabled. Select the records explicitly for now.",
+          );
+        }
+      } else {
+        recordIds = parsed.recordIds;
+      }
+
+      const { entityType, tagIds, operation } = parsed;
 
       // Per-record access gate for every entity type. canApplyTags
       // is necessary but not sufficient — the user must also be
@@ -573,17 +647,17 @@ export async function bulkTagAction(
       // db connection errors) propagate so withErrorBoundary
       // surfaces them honestly instead of masking real bugs as
       // permission failures.
-      for (const id of parsed.recordIds) {
+      for (const id of recordIds) {
         try {
-          await requireTagApplicabilityAccess(session, parsed.entityType, id);
+          await requireTagApplicabilityAccess(session, entityType, id);
         } catch (err) {
           if (err instanceof ForbiddenError) {
             throw new ForbiddenError(
-              `You don't have access to one or more of the selected ${parsed.entityType}s.`,
+              `You don't have access to one or more of the selected ${entityType}s.`,
             );
           }
           logger.warn("tag.bulk.access_check_unexpected_error", {
-            entityType: parsed.entityType,
+            entityType,
             recordId: id,
             errorMessage: err instanceof Error ? err.message : String(err),
           });
@@ -592,19 +666,19 @@ export async function bulkTagAction(
       }
 
       const summary = await bulkTagEntities(
-        parsed.entityType,
-        parsed.recordIds,
-        parsed.tagIds,
-        parsed.operation,
+        entityType,
+        recordIds,
+        tagIds,
+        operation,
         session.id,
       );
 
       const perRecordAction =
-        parsed.operation === "add"
-          ? `${parsed.entityType}.tag_bulk_add`
-          : `${parsed.entityType}.tag_bulk_remove`;
+        operation === "add"
+          ? `${entityType}.tag_bulk_add`
+          : `${entityType}.tag_bulk_remove`;
       const batchAction =
-        parsed.operation === "add" ? "tag.bulk_applied" : "tag.bulk_removed";
+        operation === "add" ? "tag.bulk_applied" : "tag.bulk_removed";
 
       // Per-record audit rows so each record's history shows the bulk
       // operation. Wrapped in try/catch matching the previous behaviour:
@@ -616,20 +690,20 @@ export async function bulkTagAction(
           .where(eq(users.id, session.id))
           .limit(1);
         const snapshot = actor?.email ?? null;
-        const auditRows = parsed.recordIds.map((recordId) => ({
+        const auditRows = recordIds.map((recordId) => ({
           actorId: session.id,
           actorEmailSnapshot: snapshot,
           action: perRecordAction,
-          targetType: parsed.entityType,
+          targetType: entityType,
           targetId: recordId,
-          afterJson: { tagIds: parsed.tagIds } as object,
+          afterJson: { tagIds } as object,
         }));
         await db.insert(auditLog).values(auditRows);
       } catch (err) {
         logger.error("audit.bulk_write_failed", {
           action: perRecordAction,
-          entityType: parsed.entityType,
-          recordCount: parsed.recordIds.length,
+          entityType,
+          recordCount: recordIds.length,
           errorMessage: err instanceof Error ? err.message : String(err),
         });
       }
@@ -641,20 +715,26 @@ export async function bulkTagAction(
       await writeAudit({
         actorId: session.id,
         action: batchAction,
-        targetType: parsed.entityType,
-        targetId: parsed.recordIds[0] ?? "",
+        targetType: entityType,
+        targetId: recordIds[0] ?? "",
         after: {
-          entityType: parsed.entityType,
-          recordIds: parsed.recordIds,
-          tagIds: parsed.tagIds,
+          entityType,
+          recordIds,
+          tagIds,
           recordsTouched: summary.recordsTouched,
           tagsAdded: summary.tagsAdded,
           tagsRemoved: summary.tagsRemoved,
         },
       });
 
-      revalidatePath(ENTITY_LIST_PATH[parsed.entityType]);
+      revalidatePath(ENTITY_LIST_PATH[entityType]);
       return summary;
     },
   );
 }
+
+/**
+ * Re-export of the {@link BulkScope} contract used by callers that
+ * import the new `scope`-shaped action input.
+ */
+export type { BulkScope };

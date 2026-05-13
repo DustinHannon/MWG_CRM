@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Tags } from "lucide-react";
 import { toast } from "sonner";
 import { bulkTagAction } from "./actions";
 import { TagChip } from "./tag-chip";
 import { cn } from "@/lib/utils";
+import type { BulkScope } from "@/lib/bulk-actions/scope";
 
 /**
  * Bulk-tag toolbar surface for any tag-aware entity list. Mirrors the
@@ -41,24 +42,51 @@ const ENTITY_NOUN: Record<BulkTagEntityType, { single: string; plural: string }>
   task: { single: "task", plural: "tasks" },
 };
 
-export function BulkTagButton({
-  entityType,
-  recordIds,
-  availableTags,
-  canApply,
-}: {
+/**
+ * Props accept either the legacy `recordIds: string[]` shape (used
+ * by callers that pre-date the four-state selection model) OR the
+ * new `scope: BulkScope` shape. Internally the component normalises
+ * to a single `BulkScope` so the rest of the component has one
+ * code path.
+ *
+ * The legacy `recordIds` shape will be removed in a follow-on
+ * cleanup once consumers have migrated. Both shapes go through the
+ * same server action.
+ */
+type BulkTagButtonLegacyProps = {
   entityType: BulkTagEntityType;
   recordIds: string[];
+  scope?: undefined;
   availableTags: AvailableTag[];
-  /**
-   * Whether the current user has `canApplyTags`. When false the
-   * component renders nothing — the server `bulkTagAction` enforces
-   * the same gate as defence-in-depth, but hiding the button avoids
-   * the failed-UX path of "click → fill picker → permission denied".
-   * Admins always pass; pages pass `user.isAdmin || perms.canApplyTags`.
-   */
   canApply: boolean;
-}) {
+};
+type BulkTagButtonScopeProps = {
+  entityType: BulkTagEntityType;
+  scope: BulkScope;
+  recordIds?: undefined;
+  availableTags: AvailableTag[];
+  canApply: boolean;
+};
+export type BulkTagButtonProps =
+  | BulkTagButtonLegacyProps
+  | BulkTagButtonScopeProps;
+
+export function BulkTagButton(props: BulkTagButtonProps) {
+  const { entityType, availableTags, canApply } = props;
+  // Normalise the two prop shapes to a single internal `scope`.
+  // Memoised so it's referentially stable for the submit path and
+  // any future effect dependencies.
+  const scope = useMemo<BulkScope>(() => {
+    if (props.scope) return props.scope;
+    return { kind: "ids", ids: props.recordIds ?? [] };
+  }, [props.scope, props.recordIds]);
+
+  // Banner / button affordance count. For `ids` scope we use the
+  // array length; for `filtered` scope we don't know the count
+  // client-side, so render an entity-noun-only label and let the
+  // server-side resolution apply.
+  const scopeCount = scope.kind === "ids" ? scope.ids.length : null;
+
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -99,7 +127,12 @@ export function BulkTagButton({
   }, [open]);
 
   if (!canApply) return null;
-  if (recordIds.length === 0 || availableTags.length === 0) return null;
+  // For `ids` scope, hide the button when there are no selected
+  // records. `filtered` scope is always actionable — the server
+  // walks pages to determine the actual set. Either scope still
+  // requires at least one available tag to render the picker.
+  if (scope.kind === "ids" && scope.ids.length === 0) return null;
+  if (availableTags.length === 0) return null;
 
   const noun = ENTITY_NOUN[entityType];
 
@@ -120,7 +153,10 @@ export function BulkTagButton({
     startTransition(async () => {
       const res = await bulkTagAction({
         entityType,
-        recordIds,
+        // Forward the normalised scope. The action accepts either
+        // shape (legacy `recordIds` or new `scope`); we always send
+        // `scope` so the server has a single code path.
+        scope,
         tagIds: Array.from(picked),
         operation: op,
       });
@@ -162,7 +198,7 @@ export function BulkTagButton({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Bulk add or remove tags from visible ${noun.plural}`}
+          aria-label={`Bulk add or remove tags from selected ${noun.plural}`}
           onClick={() => {
             if (!pending) setOpen(false);
           }}
@@ -173,12 +209,14 @@ export function BulkTagButton({
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-semibold">
-              Bulk tag {recordIds.length.toLocaleString()}{" "}
-              {recordIds.length === 1 ? noun.single : noun.plural}
+              {scopeCount !== null
+                ? `Bulk tag ${scopeCount.toLocaleString()} ${scopeCount === 1 ? noun.single : noun.plural}`
+                : `Bulk tag all matching ${noun.plural}`}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Apply the selected tags to every {noun.single} currently
-              visible. Each {noun.single} gets its own audit row.
+              {scopeCount !== null
+                ? `Apply the selected tags to every ${noun.single} in the current selection. Each ${noun.single} gets its own audit row.`
+                : `Apply the selected tags to every ${noun.single} matching the current filters. Each ${noun.single} gets its own audit row.`}
             </p>
 
             <div className="mt-4 flex items-center gap-4 text-sm">
