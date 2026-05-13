@@ -2,8 +2,13 @@ import "server-only";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { contacts } from "@/db/schema/crm-records";
+import { contacts, crmAccounts } from "@/db/schema/crm-records";
+import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import {
+  decodeCursor as decodeStandardCursor,
+  encodeFromValues as encodeStandardCursor,
+} from "@/lib/cursors";
 import { expectAffected } from "@/lib/db/concurrent-update";
 import { nameField } from "@/lib/validation/primitives";
 
@@ -264,4 +269,123 @@ export async function updateContactForApi(
     .returning({ id: contacts.id, version: contacts.version });
   expectAffected(rows, { table: contacts, id, entityLabel: "contact" });
   return rows[0];
+}
+
+/**
+ * Filter shape for the canonical cursor-paginated contact list. Sort
+ * is fixed `(updated_at DESC, id DESC)` so the query stays on the
+ * partial index `contacts_updated_at_id_idx`.
+ */
+export interface ContactCursorFilters {
+  q?: string;
+  accountId?: string;
+  ownerId?: string;
+}
+
+export interface ContactCursorRow {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  jobTitle: string | null;
+  email: string | null;
+  phone: string | null;
+  mobilePhone: string | null;
+  accountId: string | null;
+  accountName: string | null;
+  ownerId: string | null;
+  ownerDisplayName: string | null;
+  updatedAt: Date;
+  createdAt: Date;
+}
+
+/**
+ * Canonical cursor-paginated contact list. Sort fixed
+ * `(updated_at DESC, id DESC)`. Returns `{ data, nextCursor, total }`.
+ *
+ * Permission scoping mirrors `listContactsForApi`: non-admin without
+ * `canViewAllRecords` sees only their own.
+ */
+export async function listContactsCursor(args: {
+  actorId: string;
+  isAdmin: boolean;
+  canViewAll: boolean;
+  filters: ContactCursorFilters;
+  cursor: string | null;
+  pageSize?: number;
+}): Promise<{
+  data: ContactCursorRow[];
+  nextCursor: string | null;
+  total: number;
+}> {
+  const pageSize = args.pageSize ?? 50;
+  const { actorId, isAdmin, canViewAll, filters } = args;
+
+  const wheres = [eq(contacts.isDeleted, false)];
+  if (filters.q) {
+    const pat = `%${filters.q}%`;
+    wheres.push(
+      or(
+        ilike(contacts.firstName, pat),
+        ilike(contacts.lastName, pat),
+        ilike(contacts.email, pat),
+      )!,
+    );
+  }
+  if (filters.accountId) wheres.push(eq(contacts.accountId, filters.accountId));
+  if (filters.ownerId) wheres.push(eq(contacts.ownerId, filters.ownerId));
+  if (!isAdmin && !canViewAll) {
+    wheres.push(eq(contacts.ownerId, actorId));
+  }
+  const baseWhere = and(...wheres);
+
+  // updated_at is NOT NULL on contacts.
+  const parsedCursor = decodeStandardCursor(args.cursor, "desc");
+  const cursorWhere = parsedCursor && parsedCursor.ts
+    ? sql`(
+        ${contacts.updatedAt} < ${parsedCursor.ts.toISOString()}::timestamptz
+        OR (${contacts.updatedAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${contacts.id} < ${parsedCursor.id})
+      )`
+    : undefined;
+
+  const finalWhere = cursorWhere ? and(baseWhere, cursorWhere) : baseWhere;
+
+  const [rowsRaw, totalRow] = await Promise.all([
+    db
+      .select({
+        id: contacts.id,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        jobTitle: contacts.jobTitle,
+        email: contacts.email,
+        phone: contacts.phone,
+        mobilePhone: contacts.mobilePhone,
+        accountId: contacts.accountId,
+        accountName: crmAccounts.name,
+        ownerId: contacts.ownerId,
+        ownerDisplayName: users.displayName,
+        updatedAt: contacts.updatedAt,
+        createdAt: contacts.createdAt,
+      })
+      .from(contacts)
+      .leftJoin(crmAccounts, eq(contacts.accountId, crmAccounts.id))
+      .leftJoin(users, eq(contacts.ownerId, users.id))
+      .where(finalWhere)
+      .orderBy(desc(contacts.updatedAt), desc(contacts.id))
+      .limit(pageSize + 1),
+    db.select({ n: count() }).from(contacts).where(baseWhere),
+  ]);
+
+  let nextCursor: string | null = null;
+  let data = rowsRaw;
+  if (rowsRaw.length > pageSize) {
+    data = rowsRaw.slice(0, pageSize);
+    const last = data[data.length - 1];
+    nextCursor = encodeStandardCursor(last.updatedAt, last.id, "desc");
+  }
+
+  return {
+    data,
+    nextCursor,
+    total: totalRow[0]?.n ?? 0,
+  };
 }

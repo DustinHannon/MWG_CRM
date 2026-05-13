@@ -3,7 +3,12 @@ import { and, asc, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
+import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import {
+  decodeCursor as decodeStandardCursor,
+  encodeFromValues as encodeStandardCursor,
+} from "@/lib/cursors";
 import { expectAffected } from "@/lib/db/concurrent-update";
 import { ConflictError } from "@/lib/errors";
 import { urlField } from "@/lib/validation/primitives";
@@ -327,4 +332,114 @@ export async function updateAccountForApi(
     .returning({ id: crmAccounts.id, version: crmAccounts.version });
   expectAffected(rows, { table: crmAccounts, id, entityLabel: "account" });
   return rows[0];
+}
+
+/**
+ * Filter shape for the canonical cursor-paginated list. Sort is fixed
+ * `(updated_at DESC, id DESC)` so the query stays on the partial index
+ * `crm_accounts_updated_at_id_idx`.
+ */
+export interface AccountCursorFilters {
+  q?: string;
+  ownerId?: string;
+  industry?: string;
+}
+
+export interface AccountCursorRow {
+  id: string;
+  name: string;
+  industry: string | null;
+  website: string | null;
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  state: string | null;
+  ownerId: string | null;
+  ownerDisplayName: string | null;
+  annualRevenue: string | null;
+  updatedAt: Date;
+  createdAt: Date;
+}
+
+/**
+ * Canonical cursor-paginated list. Sort is fixed
+ * `(updated_at DESC, id DESC)`. Returns `{ data, nextCursor, total }`.
+ *
+ * Permission scoping mirrors `listAccountsForApi`: non-admin without
+ * `canViewAllRecords` sees only their own.
+ */
+export async function listAccountsCursor(args: {
+  actorId: string;
+  isAdmin: boolean;
+  canViewAll: boolean;
+  filters: AccountCursorFilters;
+  cursor: string | null;
+  pageSize?: number;
+}): Promise<{
+  data: AccountCursorRow[];
+  nextCursor: string | null;
+  total: number;
+}> {
+  const pageSize = args.pageSize ?? 50;
+  const { actorId, isAdmin, canViewAll, filters } = args;
+
+  const wheres = [eq(crmAccounts.isDeleted, false)];
+  if (filters.q) wheres.push(ilike(crmAccounts.name, `%${filters.q}%`));
+  if (filters.ownerId) wheres.push(eq(crmAccounts.ownerId, filters.ownerId));
+  if (filters.industry) wheres.push(eq(crmAccounts.industry, filters.industry));
+  if (!isAdmin && !canViewAll) {
+    wheres.push(eq(crmAccounts.ownerId, actorId));
+  }
+  const baseWhere = and(...wheres);
+
+  // updated_at is NOT NULL on crm_accounts, so the cursor comparison
+  // skips the NULL-block expansion required by leads.
+  const parsedCursor = decodeStandardCursor(args.cursor, "desc");
+  const cursorWhere = parsedCursor && parsedCursor.ts
+    ? sql`(
+        ${crmAccounts.updatedAt} < ${parsedCursor.ts.toISOString()}::timestamptz
+        OR (${crmAccounts.updatedAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${crmAccounts.id} < ${parsedCursor.id})
+      )`
+    : undefined;
+
+  const finalWhere = cursorWhere ? and(baseWhere, cursorWhere) : baseWhere;
+
+  const [rowsRaw, totalRow] = await Promise.all([
+    db
+      .select({
+        id: crmAccounts.id,
+        name: crmAccounts.name,
+        industry: crmAccounts.industry,
+        website: crmAccounts.website,
+        phone: crmAccounts.phone,
+        email: crmAccounts.email,
+        city: crmAccounts.city,
+        state: crmAccounts.state,
+        ownerId: crmAccounts.ownerId,
+        ownerDisplayName: users.displayName,
+        annualRevenue: crmAccounts.annualRevenue,
+        updatedAt: crmAccounts.updatedAt,
+        createdAt: crmAccounts.createdAt,
+      })
+      .from(crmAccounts)
+      .leftJoin(users, eq(crmAccounts.ownerId, users.id))
+      .where(finalWhere)
+      .orderBy(desc(crmAccounts.updatedAt), desc(crmAccounts.id))
+      .limit(pageSize + 1),
+    db.select({ n: count() }).from(crmAccounts).where(baseWhere),
+  ]);
+
+  let nextCursor: string | null = null;
+  let data = rowsRaw;
+  if (rowsRaw.length > pageSize) {
+    data = rowsRaw.slice(0, pageSize);
+    const last = data[data.length - 1];
+    nextCursor = encodeStandardCursor(last.updatedAt, last.id, "desc");
+  }
+
+  return {
+    data,
+    nextCursor,
+    total: totalRow[0]?.n ?? 0,
+  };
 }

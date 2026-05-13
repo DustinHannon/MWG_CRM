@@ -18,6 +18,10 @@ import { users } from "@/db/schema/users";
 import { expectAffected } from "@/lib/db/concurrent-update";
 import type { SessionUser } from "@/lib/auth-helpers";
 import {
+  decodeCursor as decodeStandardCursor,
+  encodeFromValues as encodeStandardCursor,
+} from "@/lib/cursors";
+import {
   LEAD_RATINGS,
   LEAD_SOURCES,
   LEAD_STATUSES,
@@ -396,6 +400,178 @@ export async function listLeads(
     page: filters.page,
     pageSize: filters.pageSize,
     nextCursor,
+  };
+}
+
+/**
+ * Filter shape for the canonical cursor-paginated list. Mirrors the
+ * subset of `leadFiltersSchema` that the new StandardListPage UI sends
+ * — sort and direction are fixed (`lastActivity DESC`) so the result
+ * matches the partial index `leads_last_activity_id_idx`.
+ */
+export interface LeadCursorFilters {
+  q?: string;
+  status?: (typeof LEAD_STATUSES)[number];
+  rating?: (typeof LEAD_RATINGS)[number];
+  source?: (typeof LEAD_SOURCES)[number];
+  ownerId?: string;
+  tag?: string;
+}
+
+export interface LeadCursorRow {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  companyName: string | null;
+  email: string | null;
+  phone: string | null;
+  status: (typeof LEAD_STATUSES)[number];
+  rating: (typeof LEAD_RATINGS)[number];
+  source: (typeof LEAD_SOURCES)[number];
+  ownerId: string | null;
+  ownerDisplayName: string | null;
+  estimatedValue: string | null;
+  lastActivityAt: Date | null;
+  updatedAt: Date;
+  createdAt: Date;
+  tags: string[] | null;
+}
+
+/**
+ * Canonical cursor-paginated list. Sort is fixed
+ * `(last_activity_at DESC NULLS LAST, id DESC)` so the query stays on
+ * `leads_last_activity_id_idx`.
+ *
+ * Returns `{ data, nextCursor, total }`:
+ * - `data` — up to `pageSize` rows.
+ * - `nextCursor` — opaque token for the next page, or `null` when the
+ *   result set is exhausted.
+ * - `total` — full result-set count for the same filters (used by the
+ *   "Showing N of M" affordance).
+ *
+ * Permission scoping mirrors `listLeads`: non-admin without
+ * `canViewAllRecords` sees only their own.
+ */
+export async function listLeadsCursor(args: {
+  user: SessionUser;
+  filters: LeadCursorFilters;
+  cursor: string | null;
+  pageSize?: number;
+  canViewAll: boolean;
+}): Promise<{ data: LeadCursorRow[]; nextCursor: string | null; total: number }> {
+  const pageSize = args.pageSize ?? 50;
+  const { user, filters, canViewAll } = args;
+
+  const wheres = [];
+  if (filters.q) {
+    const pattern = `%${filters.q}%`;
+    wheres.push(
+      or(
+        ilike(leads.firstName, pattern),
+        ilike(leads.lastName, pattern),
+        ilike(leads.email, pattern),
+        ilike(leads.companyName, pattern),
+        ilike(leads.phone, pattern),
+      ),
+    );
+  }
+  if (filters.status) wheres.push(eq(leads.status, filters.status));
+  if (filters.rating) wheres.push(eq(leads.rating, filters.rating));
+  if (filters.source) wheres.push(eq(leads.source, filters.source));
+  if (filters.ownerId) wheres.push(eq(leads.ownerId, filters.ownerId));
+  if (filters.tag) {
+    wheres.push(
+      sql`EXISTS (
+        SELECT 1 FROM ${leadTags} lt
+        JOIN ${tagsTable} t ON t.id = lt.tag_id
+        WHERE lt.lead_id = ${leads.id} AND lower(t.name) = lower(${filters.tag})
+      )`,
+    );
+  }
+  if (!user.isAdmin && !canViewAll) {
+    wheres.push(eq(leads.ownerId, user.id));
+  }
+  wheres.push(eq(leads.isDeleted, false));
+
+  const baseWhere = wheres.length > 0 ? and(...wheres) : undefined;
+
+  // Cursor expansion. The default sort is
+  // `(last_activity_at DESC NULLS LAST, id DESC)`. PostgreSQL row
+  // comparison treats NULL specially, so we expand the tuple manually:
+  //   - non-null cursor: row's last_activity_at < cursor.ts, OR equal
+  //     and id < cursor.id, OR row's last_activity_at is NULL (already
+  //     past the non-null block).
+  //   - NULL cursor: row's last_activity_at IS NULL and id < cursor.id.
+  const parsedCursor = decodeStandardCursor(args.cursor, "desc");
+  const cursorWhere = (() => {
+    if (!parsedCursor) return undefined;
+    if (parsedCursor.ts === null) {
+      return sql`(${leads.lastActivityAt} IS NULL AND ${leads.id} < ${parsedCursor.id})`;
+    }
+    return sql`(
+      ${leads.lastActivityAt} < ${parsedCursor.ts.toISOString()}::timestamptz
+      OR (${leads.lastActivityAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${leads.id} < ${parsedCursor.id})
+      OR ${leads.lastActivityAt} IS NULL
+    )`;
+  })();
+
+  const finalWhere = cursorWhere
+    ? baseWhere
+      ? and(baseWhere, cursorWhere)
+      : cursorWhere
+    : baseWhere;
+
+  // Fetch pageSize+1 to detect "more available" without a second
+  // count query for the cursor side. `total` is a separate cheap count
+  // against the unfiltered-by-cursor where clause.
+  const [rowsRaw, totalRow] = await Promise.all([
+    db
+      .select({
+        id: leads.id,
+        firstName: leads.firstName,
+        lastName: leads.lastName,
+        companyName: leads.companyName,
+        email: leads.email,
+        phone: leads.phone,
+        status: leads.status,
+        rating: leads.rating,
+        source: leads.source,
+        ownerId: leads.ownerId,
+        ownerDisplayName: users.displayName,
+        estimatedValue: leads.estimatedValue,
+        lastActivityAt: leads.lastActivityAt,
+        updatedAt: leads.updatedAt,
+        createdAt: leads.createdAt,
+        tags: sql<string[] | null>`(
+          SELECT array_agg(t.name ORDER BY t.name)
+          FROM ${leadTags} lt
+          JOIN ${tagsTable} t ON t.id = lt.tag_id
+          WHERE lt.lead_id = ${leads.id}
+        )`,
+      })
+      .from(leads)
+      .leftJoin(users, eq(leads.ownerId, users.id))
+      .where(finalWhere)
+      .orderBy(sql`${leads.lastActivityAt} DESC NULLS LAST`, desc(leads.id))
+      .limit(pageSize + 1),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(baseWhere),
+  ]);
+
+  let nextCursor: string | null = null;
+  let data = rowsRaw;
+  if (rowsRaw.length > pageSize) {
+    data = rowsRaw.slice(0, pageSize);
+    const last = data[data.length - 1];
+    nextCursor = encodeStandardCursor(last.lastActivityAt, last.id, "desc");
+  }
+
+  return {
+    data,
+    nextCursor,
+    total: totalRow[0]?.count ?? 0,
   };
 }
 
