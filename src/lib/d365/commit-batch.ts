@@ -517,7 +517,7 @@ async function commitOneRecord(
       // F-04: capture pre-update version on the audit `before` payload
       // so a concurrent user edit's OCC clobber is reconstructible from
       // the forensic trail. The D365 import is the documented
-      // authoritative writer per Phase 23 brief; the OCC `WHERE version
+      // authoritative writer for D365-sourced records; the OCC `WHERE version
       // = $expected` clause is intentionally absent. Recording the
       // before-version lets reviewers reconstruct any concurrent edit
       // that lost.
@@ -581,8 +581,8 @@ async function commitParentEntity(
 
     // F-04: capture pre-update version (if the table tracks OCC) so the
     // audit `before` payload records the version the D365 import
-    // clobbered. The import is the authoritative writer per Phase 23
-    // brief — concurrent user edits lose silently, which is the
+    // clobbered. The import is the authoritative writer for D365-sourced
+    // records — concurrent user edits lose silently, which is the
     // documented design, but the forensic trail needs to surface what
     // was clobbered.
     const beforeVersion =
