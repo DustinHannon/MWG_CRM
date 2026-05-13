@@ -947,3 +947,74 @@ export async function listTasksCursor(args: {
     total: totalRow[0]?.n ?? 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Archived (soft-deleted) tasks — cursor-paginated list for admin archive
+// page. Sort fixed `(deleted_at DESC, id DESC)`.
+// ---------------------------------------------------------------------------
+
+export interface ArchivedTaskCursorRow {
+  id: string;
+  title: string;
+  deletedAt: Date | null;
+  reason: string | null;
+  deletedById: string | null;
+  deletedByEmail: string | null;
+  deletedByName: string | null;
+}
+
+export async function listArchivedTasksCursor(args: {
+  cursor: string | null;
+  pageSize?: number;
+}): Promise<{
+  data: ArchivedTaskCursorRow[];
+  nextCursor: string | null;
+  total: number;
+}> {
+  const pageSize = args.pageSize ?? 50;
+  const baseWhere = eq(tasks.isDeleted, true);
+  const parsedCursor = decodeStandardCursor(args.cursor, "desc");
+  const cursorWhere = (() => {
+    if (!parsedCursor) return undefined;
+    if (parsedCursor.ts === null) {
+      return sql`(${tasks.deletedAt} IS NULL AND ${tasks.id} < ${parsedCursor.id})`;
+    }
+    return sql`(
+      ${tasks.deletedAt} < ${parsedCursor.ts.toISOString()}::timestamptz
+      OR (${tasks.deletedAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${tasks.id} < ${parsedCursor.id})
+      OR ${tasks.deletedAt} IS NULL
+    )`;
+  })();
+  const finalWhere = cursorWhere ? and(baseWhere, cursorWhere) : baseWhere;
+
+  const [rowsRaw, totalRow] = await Promise.all([
+    db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        deletedAt: tasks.deletedAt,
+        reason: tasks.deleteReason,
+        deletedById: tasks.deletedById,
+        deletedByEmail: users.email,
+        deletedByName: users.displayName,
+      })
+      .from(tasks)
+      .leftJoin(users, eq(users.id, tasks.deletedById))
+      .where(finalWhere)
+      .orderBy(sql`${tasks.deletedAt} DESC NULLS LAST`, desc(tasks.id))
+      .limit(pageSize + 1),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(tasks)
+      .where(baseWhere),
+  ]);
+
+  let data = rowsRaw;
+  let nextCursor: string | null = null;
+  if (rowsRaw.length > pageSize) {
+    data = rowsRaw.slice(0, pageSize);
+    const last = data[data.length - 1];
+    nextCursor = encodeStandardCursor(last.deletedAt, last.id, "desc");
+  }
+  return { data, nextCursor, total: totalRow[0]?.n ?? 0 };
+}

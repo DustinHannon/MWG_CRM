@@ -443,3 +443,74 @@ export async function listAccountsCursor(args: {
     total: totalRow[0]?.n ?? 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Archived (soft-deleted) accounts — cursor-paginated list for the admin
+// archive page. Sort fixed `(deleted_at DESC, id DESC)`. Admin-only at the
+// route layer.
+// ---------------------------------------------------------------------------
+
+export interface ArchivedAccountCursorRow {
+  id: string;
+  name: string;
+  industry: string | null;
+  deletedAt: Date | null;
+  reason: string | null;
+  deletedById: string | null;
+  deletedByEmail: string | null;
+  deletedByName: string | null;
+}
+
+export async function listArchivedAccountsCursor(args: {
+  cursor: string | null;
+  pageSize?: number;
+}): Promise<{
+  data: ArchivedAccountCursorRow[];
+  nextCursor: string | null;
+  total: number;
+}> {
+  const pageSize = args.pageSize ?? 50;
+  const baseWhere = eq(crmAccounts.isDeleted, true);
+  const parsedCursor = decodeStandardCursor(args.cursor, "desc");
+  const cursorWhere = (() => {
+    if (!parsedCursor) return undefined;
+    if (parsedCursor.ts === null) {
+      return sql`(${crmAccounts.deletedAt} IS NULL AND ${crmAccounts.id} < ${parsedCursor.id})`;
+    }
+    return sql`(
+      ${crmAccounts.deletedAt} < ${parsedCursor.ts.toISOString()}::timestamptz
+      OR (${crmAccounts.deletedAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${crmAccounts.id} < ${parsedCursor.id})
+      OR ${crmAccounts.deletedAt} IS NULL
+    )`;
+  })();
+  const finalWhere = cursorWhere ? and(baseWhere, cursorWhere) : baseWhere;
+
+  const [rowsRaw, totalRow] = await Promise.all([
+    db
+      .select({
+        id: crmAccounts.id,
+        name: crmAccounts.name,
+        industry: crmAccounts.industry,
+        deletedAt: crmAccounts.deletedAt,
+        reason: crmAccounts.deleteReason,
+        deletedById: crmAccounts.deletedById,
+        deletedByEmail: users.email,
+        deletedByName: users.displayName,
+      })
+      .from(crmAccounts)
+      .leftJoin(users, eq(users.id, crmAccounts.deletedById))
+      .where(finalWhere)
+      .orderBy(sql`${crmAccounts.deletedAt} DESC NULLS LAST`, desc(crmAccounts.id))
+      .limit(pageSize + 1),
+    db.select({ n: count() }).from(crmAccounts).where(baseWhere),
+  ]);
+
+  let data = rowsRaw;
+  let nextCursor: string | null = null;
+  if (rowsRaw.length > pageSize) {
+    data = rowsRaw.slice(0, pageSize);
+    const last = data[data.length - 1];
+    nextCursor = encodeStandardCursor(last.deletedAt, last.id, "desc");
+  }
+  return { data, nextCursor, total: totalRow[0]?.n ?? 0 };
+}

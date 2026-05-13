@@ -754,3 +754,79 @@ export async function restoreLeadsById(
     })
     .where(inArray(leads.id, ids));
 }
+
+// ---------------------------------------------------------------------------
+// Archived (soft-deleted) leads — cursor-paginated list for the admin
+// archive page. Sort is fixed `(deleted_at DESC, id DESC)`; admin-only
+// scoping is enforced at the route layer.
+// ---------------------------------------------------------------------------
+
+export interface ArchivedLeadCursorRow {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  companyName: string | null;
+  deletedAt: Date | null;
+  reason: string | null;
+  deletedById: string | null;
+  deletedByEmail: string | null;
+  deletedByName: string | null;
+}
+
+export async function listArchivedLeadsCursor(args: {
+  cursor: string | null;
+  pageSize?: number;
+}): Promise<{
+  data: ArchivedLeadCursorRow[];
+  nextCursor: string | null;
+  total: number;
+}> {
+  const pageSize = args.pageSize ?? 50;
+  const baseWhere = eq(leads.isDeleted, true);
+  const parsedCursor = decodeStandardCursor(args.cursor, "desc");
+  const cursorWhere = (() => {
+    if (!parsedCursor) return undefined;
+    if (parsedCursor.ts === null) {
+      return sql`(${leads.deletedAt} IS NULL AND ${leads.id} < ${parsedCursor.id})`;
+    }
+    return sql`(
+      ${leads.deletedAt} < ${parsedCursor.ts.toISOString()}::timestamptz
+      OR (${leads.deletedAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${leads.id} < ${parsedCursor.id})
+      OR ${leads.deletedAt} IS NULL
+    )`;
+  })();
+  const finalWhere = cursorWhere ? and(baseWhere, cursorWhere) : baseWhere;
+
+  const [rowsRaw, totalRow] = await Promise.all([
+    db
+      .select({
+        id: leads.id,
+        firstName: leads.firstName,
+        lastName: leads.lastName,
+        companyName: leads.companyName,
+        deletedAt: leads.deletedAt,
+        reason: leads.deleteReason,
+        deletedById: leads.deletedById,
+        deletedByEmail: users.email,
+        deletedByName: users.displayName,
+      })
+      .from(leads)
+      .leftJoin(users, eq(users.id, leads.deletedById))
+      .where(finalWhere)
+      .orderBy(sql`${leads.deletedAt} DESC NULLS LAST`, desc(leads.id))
+      .limit(pageSize + 1),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(baseWhere),
+  ]);
+
+  let data = rowsRaw;
+  let nextCursor: string | null = null;
+  if (rowsRaw.length > pageSize) {
+    data = rowsRaw.slice(0, pageSize);
+    const last = data[data.length - 1];
+    nextCursor = encodeStandardCursor(last.deletedAt, last.id, "desc");
+  }
+  return { data, nextCursor, total: totalRow[0]?.count ?? 0 };
+}

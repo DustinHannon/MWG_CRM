@@ -1,16 +1,8 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { crmAccounts } from "@/db/schema/crm-records";
-import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
-import { StandardPageHeader } from "@/components/standard";
-import { ArchivedListMobile } from "@/components/archived/archived-list-mobile";
-import { GlassCard } from "@/components/ui/glass-card";
-import { UserTime } from "@/components/ui/user-time";
-import { UserChip } from "@/components/user-display";
+import { ArchivedListClient } from "@/components/archived/archived-list-client";
 import { requireSession } from "@/lib/auth-helpers";
 import {
   hardDeleteAccountAction,
@@ -20,10 +12,12 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * admin-only archived accounts view. Mirrors `/leads/archived`.
- * Shows soft-deleted rows with Restore + permanent-Delete actions; cron
+ * admin-only archived accounts view. Mirrors `/leads/archived`. Shows
+ * soft-deleted rows with Restore + permanent-Delete actions; cron
  * `purge-archived` (lead-only today) does not yet purge accounts, so
  * Hard delete is the only path until that's extended.
+ *
+ * Migrated to infinite-scroll via the shared `ArchivedListClient`.
  */
 export default async function ArchivedAccountsPage() {
   const user = await requireSession();
@@ -41,23 +35,6 @@ export default async function ArchivedAccountsPage() {
     );
   }
 
-  const rows = await db
-    .select({
-      id: crmAccounts.id,
-      name: crmAccounts.name,
-      industry: crmAccounts.industry,
-      deletedAt: crmAccounts.deletedAt,
-      reason: crmAccounts.deleteReason,
-      deletedById: crmAccounts.deletedById,
-      deletedByEmail: users.email,
-      deletedByName: users.displayName,
-    })
-    .from(crmAccounts)
-    .leftJoin(users, eq(users.id, crmAccounts.deletedById))
-    .where(eq(crmAccounts.isDeleted, true))
-    .orderBy(desc(crmAccounts.deletedAt))
-    .limit(200);
-
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter
@@ -68,149 +45,24 @@ export default async function ArchivedAccountsPage() {
       />
       <PageRealtime entities={["accounts"]} />
       <PagePoll entities={["accounts"]} />
-      <StandardPageHeader
-        title="Archived accounts"
-        description="Hidden from the main views."
-        actions={
+      <ArchivedListClient
+        headerTitle="Archived accounts"
+        headerDescription="Hidden from the main views."
+        headerActions={
           <Link
             href="/accounts"
             className="text-xs uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground/90"
           >
-            ← Back to accounts
+            Back to accounts
           </Link>
         }
+        subtitleHeader="Industry"
+        fetchUrl="/api/accounts/archived"
+        queryKey="archived-accounts"
+        restoreAction={restoreAccountAction}
+        hardDeleteAction={hardDeleteAccountAction}
+        emptyMessage="No archived accounts."
       />
-
-      {rows.length === 0 ? (
-        <GlassCard className="px-6 py-10 text-center text-sm text-muted-foreground">
-          No archived accounts.
-        </GlassCard>
-      ) : (
-        <>
-        {/* dense single-line list at <md, mirrors /leads. */}
-        <div className="md:hidden">
-          <ArchivedListMobile
-            rows={rows.map((r) => ({
-              id: r.id,
-              title: r.name,
-              subtitle: r.industry ?? null,
-              deletedAt: r.deletedAt,
-              deletedByName: r.deletedByName,
-              deletedByEmail: r.deletedByEmail,
-              reason: r.reason,
-            }))}
-            renderActions={(row) => (
-              <>
-                <form
-                  action={async (fd) => {
-                    "use server";
-                    await restoreAccountAction(fd);
-                  }}
-                >
-                  <input type="hidden" name="id" value={row.id} />
-                  <button
-                    type="submit"
-                    className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 hover:bg-muted"
-                  >
-                    Restore
-                  </button>
-                </form>
-                <form
-                  action={async (fd) => {
-                    "use server";
-                    await hardDeleteAccountAction(fd);
-                  }}
-                >
-                  <input type="hidden" name="id" value={row.id} />
-                  <button
-                    type="submit"
-                    className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] hover:bg-destructive/30"
-                  >
-                    Delete permanently
-                  </button>
-                </form>
-              </>
-            )}
-          />
-        </div>
-
-        <GlassCard className="hidden overflow-hidden p-0 md:block">
-          <table className="data-table w-full text-sm">
-            <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground/80">
-              <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Industry</th>
-                <th className="px-4 py-3">Archived</th>
-                <th className="px-4 py-3">By</th>
-                <th className="px-4 py-3">Reason</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60">
-              {rows.map((r) => (
-                <tr key={r.id} className="hover:bg-accent/40">
-                  <td data-label="Name" className="px-4 py-3 font-medium text-foreground">
-                    {r.name}
-                  </td>
-                  <td data-label="Industry" className="px-4 py-3 text-foreground/80">{r.industry ?? "—"}</td>
-                  <td data-label="Archived" className="px-4 py-3 text-muted-foreground">
-                    <UserTime value={r.deletedAt} mode="date" />
-                  </td>
-                  <td data-label="By" className="px-4 py-3">
-                    {r.deletedById ? (
-                      <UserChip
-                        user={{
-                          id: r.deletedById,
-                          displayName: r.deletedByName,
-                          photoUrl: null,
-                        }}
-                      />
-                    ) : (
-                      <span className="text-muted-foreground">
-                        {r.deletedByEmail ?? "—"}
-                      </span>
-                    )}
-                  </td>
-                  <td data-label="Reason" className="px-4 py-3 text-muted-foreground">{r.reason ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <form
-                        action={async (fd) => {
-                          "use server";
-                          await restoreAccountAction(fd);
-                        }}
-                      >
-                        <input type="hidden" name="id" value={r.id} />
-                        <button
-                          type="submit"
-                          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 hover:bg-muted"
-                        >
-                          Restore
-                        </button>
-                      </form>
-                      <form
-                        action={async (fd) => {
-                          "use server";
-                          await hardDeleteAccountAction(fd);
-                        }}
-                      >
-                        <input type="hidden" name="id" value={r.id} />
-                        <button
-                          type="submit"
-                          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] hover:bg-destructive/30"
-                        >
-                          Delete permanently
-                        </button>
-                      </form>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </GlassCard>
-        </>
-      )}
     </div>
   );
 }

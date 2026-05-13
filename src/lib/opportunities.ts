@@ -389,3 +389,76 @@ export async function listOpportunitiesCursor(args: {
     total: totalRow[0]?.n ?? 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Archived (soft-deleted) opportunities — cursor-paginated list for admin
+// archive page. Sort fixed `(deleted_at DESC, id DESC)`.
+// ---------------------------------------------------------------------------
+
+export interface ArchivedOpportunityCursorRow {
+  id: string;
+  name: string;
+  stage: (typeof OPPORTUNITY_STAGES)[number];
+  deletedAt: Date | null;
+  reason: string | null;
+  deletedById: string | null;
+  deletedByEmail: string | null;
+  deletedByName: string | null;
+}
+
+export async function listArchivedOpportunitiesCursor(args: {
+  cursor: string | null;
+  pageSize?: number;
+}): Promise<{
+  data: ArchivedOpportunityCursorRow[];
+  nextCursor: string | null;
+  total: number;
+}> {
+  const pageSize = args.pageSize ?? 50;
+  const baseWhere = eq(opportunities.isDeleted, true);
+  const parsedCursor = decodeStandardCursor(args.cursor, "desc");
+  const cursorWhere = (() => {
+    if (!parsedCursor) return undefined;
+    if (parsedCursor.ts === null) {
+      return sql`(${opportunities.deletedAt} IS NULL AND ${opportunities.id} < ${parsedCursor.id})`;
+    }
+    return sql`(
+      ${opportunities.deletedAt} < ${parsedCursor.ts.toISOString()}::timestamptz
+      OR (${opportunities.deletedAt} = ${parsedCursor.ts.toISOString()}::timestamptz AND ${opportunities.id} < ${parsedCursor.id})
+      OR ${opportunities.deletedAt} IS NULL
+    )`;
+  })();
+  const finalWhere = cursorWhere ? and(baseWhere, cursorWhere) : baseWhere;
+
+  const [rowsRaw, totalRow] = await Promise.all([
+    db
+      .select({
+        id: opportunities.id,
+        name: opportunities.name,
+        stage: opportunities.stage,
+        deletedAt: opportunities.deletedAt,
+        reason: opportunities.deleteReason,
+        deletedById: opportunities.deletedById,
+        deletedByEmail: users.email,
+        deletedByName: users.displayName,
+      })
+      .from(opportunities)
+      .leftJoin(users, eq(users.id, opportunities.deletedById))
+      .where(finalWhere)
+      .orderBy(
+        sql`${opportunities.deletedAt} DESC NULLS LAST`,
+        desc(opportunities.id),
+      )
+      .limit(pageSize + 1),
+    db.select({ n: count() }).from(opportunities).where(baseWhere),
+  ]);
+
+  let data = rowsRaw;
+  let nextCursor: string | null = null;
+  if (rowsRaw.length > pageSize) {
+    data = rowsRaw.slice(0, pageSize);
+    const last = data[data.length - 1];
+    nextCursor = encodeStandardCursor(last.deletedAt, last.id, "desc");
+  }
+  return { data, nextCursor, total: totalRow[0]?.n ?? 0 };
+}
