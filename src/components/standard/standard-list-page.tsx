@@ -31,40 +31,14 @@ export interface StandardListPagePage<T> {
 }
 
 /**
- * Dual-slot shape for the `bulkActions` prop. Pages that need a
- * banner only (or a toolbar only) supply the relevant key; pages
- * that pre-date the dual-slot contract pass a plain `ReactNode`
- * which the shell treats as the banner slot for back-compat.
+ * Dual-slot shape for the `bulkActions` prop. The `banner` renders
+ * inside the sticky chrome group between the filter slot and the
+ * result list. The `toolbar` renders as a viewport-fixed overlay
+ * anchored to the bottom of the page.
  */
-export interface BulkActionsSlotObject {
+export interface BulkActionsSlot {
   banner?: ReactNode;
   toolbar?: ReactNode;
-}
-
-export type BulkActionsSlot = BulkActionsSlotObject | ReactNode;
-
-/** Type guard: the object-form vs the ReactNode-form. */
-function isBulkActionsSlotObject(
-  value: BulkActionsSlot,
-): value is BulkActionsSlotObject {
-  if (value === null || value === undefined) return false;
-  if (typeof value !== "object") return false;
-  // Discriminate by presence of the named slots. A bare ReactElement
-  // is also an object but lacks `banner` / `toolbar` props at the
-  // top level, so this check correctly routes it through the
-  // legacy ReactNode branch.
-  if ("banner" in value || "toolbar" in value) {
-    // A bare ReactElement does have a `type` prop, so further
-    // narrow: object-form has NO `type` (or `props`) at the top
-    // level. ReactElement has both. Practically: if either named
-    // slot is present AND `type` / `props` are missing, treat as
-    // object-form.
-    const maybeElement = value as { type?: unknown; props?: unknown };
-    if (maybeElement.type === undefined && maybeElement.props === undefined) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**
@@ -113,18 +87,13 @@ export interface StandardListPageProps<T, F> {
   /** Optional loading renderer for the very first page. Defaults to `<StandardLoadingState variant="table" />`. */
   loadingState?: ReactNode;
   /**
-   * Slot for bulk-selection toolbars / banners. Two-shape accepted:
-   *
-   *   - `{ banner?, toolbar? }` (preferred). The `banner` renders
-   *     between the filter slot and the result list — typically a
-   *     `<BulkSelectionBanner />`. The `toolbar` renders as a
-   *     fixed-position overlay anchored to the viewport bottom —
-   *     typically a `<BulkActionToolbar>`. The toolbar uses
-   *     `position: fixed` so it does not move with the virtualized
-   *     scroll surface.
-   *   - `ReactNode` (legacy / back-compat). Treated as the banner
-   *     slot. Older call sites that pre-date the dual-slot contract
-   *     keep compiling.
+   * Slot for bulk-selection banner + toolbar. The `banner` renders
+   * inside the sticky chrome group between the filter slot and the
+   * result list — typically a `<BulkSelectionBanner />`. The
+   * `toolbar` renders as a viewport-fixed overlay anchored to the
+   * bottom of the page — typically a `<BulkActionToolbar>`. The
+   * toolbar uses `position: fixed` so it does not move with the
+   * scroll surface.
    */
   bulkActions?: BulkActionsSlot;
   /** Page size hint forwarded to `fetchPage` callers via the Load-more label. Default 50. */
@@ -259,13 +228,7 @@ export function StandardListPage<T, F>({
 
         {filtersSlot ? <div id="list-filters">{filtersSlot}</div> : null}
 
-        {(() => {
-          if (!bulkActions) return null;
-          if (isBulkActionsSlotObject(bulkActions)) {
-            return bulkActions.banner ? <div>{bulkActions.banner}</div> : null;
-          }
-          return <div>{bulkActions}</div>;
-        })()}
+        {bulkActions?.banner ? <div>{bulkActions.banner}</div> : null}
 
         {/* Showing N of M affordance — rendered above the list, not
             inside the virtualized scroller. The dedicated live region
@@ -363,9 +326,7 @@ export function StandardListPage<T, F>({
           toolbar component (renders null when selection scope is
           `none`). The toolbar itself uses `position: fixed` so it
           does not need to live inside the scroll container. */}
-      {isBulkActionsSlotObject(bulkActions) && bulkActions.toolbar
-        ? bulkActions.toolbar
-        : null}
+      {bulkActions?.toolbar ?? null}
     </div>
   );
 }

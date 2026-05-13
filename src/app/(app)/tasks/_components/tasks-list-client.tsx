@@ -411,6 +411,12 @@ function TasksListInner({
   const applyDraft = () => {
     setFilters(draft);
     clearSelection();
+    // BulkSelectionProvider's contract: clear the multi-scope selection
+    // on filter change. `clearSelection()` above handles the per-row
+    // legacy toolbar's Set; this clears the provider's scope so an
+    // `all_loaded` / `all_matching` selection doesn't leak across
+    // filter changes.
+    dispatch({ type: "clear" });
   };
   const clearFilters = () => {
     const empty: TaskFilters = {
@@ -426,6 +432,7 @@ function TasksListInner({
     setDraft(empty);
     setFilters(empty);
     clearSelection();
+    dispatch({ type: "clear" });
   };
 
   const filtersAreModified = Boolean(
@@ -608,6 +615,7 @@ function TasksListInner({
           currentColumns={activeColumns}
           viewModified={viewModified}
           modifiedFields={modifiedFields}
+          resetClientState={clearFilters}
         />
       </div>
 
@@ -668,6 +676,7 @@ function TasksListInner({
           setDraft(next);
           setFilters(next);
           clearSelection();
+          dispatch({ type: "clear" });
         }}
         allTags={allTags}
         canViewOthers={canViewOthers}

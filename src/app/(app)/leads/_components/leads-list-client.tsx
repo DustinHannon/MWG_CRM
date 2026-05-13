@@ -214,10 +214,17 @@ function LeadsListInner({
     [],
   );
 
-  const applyDraft = () => setFilters(draft);
+  const applyDraft = () => {
+    setFilters(draft);
+    // BulkSelectionProvider's contract: clear selection on filter
+    // change so an `all_loaded` / `all_matching` scope from the
+    // previous result set doesn't leak into the next.
+    dispatch({ type: "clear" });
+  };
   const clearFilters = () => {
     setDraft(EMPTY_FILTERS);
     setFilters(EMPTY_FILTERS);
+    dispatch({ type: "clear" });
   };
 
   const hasActiveFilters = Boolean(
@@ -272,6 +279,7 @@ function LeadsListInner({
           viewModified={viewModified}
           modifiedFields={modifiedFields}
           subscribedViewIds={subscribedViewIds}
+          resetClientState={clearFilters}
         />
       </div>
 
@@ -283,6 +291,7 @@ function LeadsListInner({
         onMobileImmediate={(next) => {
           setDraft(next);
           setFilters(next);
+          dispatch({ type: "clear" });
         }}
         allTags={allTags}
         hasActiveFilters={hasActiveFilters}

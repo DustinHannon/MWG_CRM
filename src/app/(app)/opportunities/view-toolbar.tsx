@@ -46,13 +46,15 @@ export interface OpportunityViewToolbarProps {
   subscribedViewIds?: string[];
   /** "saved:<uuid>" of the user's default opportunity view, or null. */
   defaultViewId: string | null;
+  /**
+   * Called when the user confirms the MODIFIED → Reset flow. The client
+   * component owns filter state (post-Phase 32.7 TanStack Query migration),
+   * so URL navigation alone can't clear filters — the parent must reset its
+   * useState here.
+   */
+  resetClientState: () => void;
 }
 
-/**
- * Top-of-page toolbar for /opportunities. View selector (built-in +
- * saved) + Modified badge + Save changes / Save as new + Set as
- * default + Subscribe + Delete + Column chooser.
- */
 export function OpportunityViewToolbar({
   views,
   activeViewId,
@@ -65,6 +67,7 @@ export function OpportunityViewToolbar({
   modifiedFields,
   subscribedViewIds,
   defaultViewId,
+  resetClientState,
 }: OpportunityViewToolbarProps) {
   const router = useRouter();
   const search = useSearchParams();
@@ -146,6 +149,10 @@ export function OpportunityViewToolbar({
         savedViewName={activeViewName}
         modifiedFields={modifiedFields}
         onReset={() => {
+          // Reset client-owned filter state first so the parent's
+          // useState<OpportunityFilters> drops back to EMPTY_FILTERS
+          // before the URL navigation re-renders the server shell.
+          resetClientState();
           void resetOpportunityViewAction({
             viewId: activeViewId,
             viewName: activeViewName,

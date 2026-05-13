@@ -273,10 +273,17 @@ function OpportunitiesListInner({
     [],
   );
 
-  const applyDraft = () => setFilters(draft);
+  const applyDraft = () => {
+    setFilters(draft);
+    // BulkSelectionProvider's contract: clear selection on filter
+    // change so an `all_loaded` / `all_matching` scope from the
+    // previous result set doesn't leak into the next.
+    dispatch({ type: "clear" });
+  };
   const clearFilters = () => {
     setDraft(EMPTY_FILTERS);
     setFilters(EMPTY_FILTERS);
+    dispatch({ type: "clear" });
   };
 
   const filtersAreModified = Boolean(
@@ -333,6 +340,7 @@ function OpportunitiesListInner({
           modifiedFields={modifiedFields}
           subscribedViewIds={subscribedViewIds}
           defaultViewId={defaultViewId}
+          resetClientState={clearFilters}
         />
       </div>
 
@@ -351,6 +359,7 @@ function OpportunitiesListInner({
         onMobileImmediate={(next) => {
           setDraft(next);
           setFilters(next);
+          dispatch({ type: "clear" });
         }}
         allTags={allTags}
         ownerOptions={ownerOptions}

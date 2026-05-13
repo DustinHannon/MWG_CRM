@@ -53,18 +53,16 @@ export interface ViewToolbarProps {
   modifiedFields: string[];
   /** saved-view ids the current user is subscribed to. */
   subscribedViewIds?: string[];
+  /**
+   * Called when the user confirms the MODIFIED → Reset flow. The client
+   * component owns filter state (post-Phase 32.7 TanStack Query migration),
+   * so URL navigation alone can't clear filters — the parent must reset its
+   * useState here. Runs before the URL navigation so client state is reset
+   * by the time the new view re-derives base columns.
+   */
+  resetClientState: () => void;
 }
 
-/**
- * Top-of-page toolbar:
- * View selector (built-in + saved)
- * "Modified" badge with Save changes / Save as new
- * Column chooser
- *
- * Filter inputs live in the existing form below the toolbar — those are
- * server-rendered and submit via GET so the URL stays the source of truth
- * for filter state. Columns are passed as &cols=a,b,c.
- */
 export function ViewToolbar({
   views,
   activeViewId,
@@ -76,6 +74,7 @@ export function ViewToolbar({
   viewModified,
   modifiedFields,
   subscribedViewIds,
+  resetClientState,
 }: ViewToolbarProps) {
   const router = useRouter();
   const search = useSearchParams();
@@ -151,6 +150,10 @@ export function ViewToolbar({
         savedViewName={activeViewName}
         modifiedFields={modifiedFields}
         onReset={() => {
+          // Reset client-owned filter state first so the parent's
+          // useState<LeadFilters> drops back to EMPTY_FILTERS before the
+          // URL navigation re-renders the server shell.
+          resetClientState();
           // Fire-and-forget audit — don't block the navigation on the
           // server round-trip; the action is best-effort.
           void resetViewAction({
@@ -158,9 +161,6 @@ export function ViewToolbar({
             viewName: activeViewName,
             modifiedFields,
           });
-          // Reset = navigate to the view with no other URL params. The
-          // page re-derives filters/columns/sort/search from the view's
-          // stored definition.
           const params = new URLSearchParams();
           params.set("view", activeViewId);
           router.push(`/leads?${params.toString()}`);

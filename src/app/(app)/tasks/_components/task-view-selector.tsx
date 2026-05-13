@@ -36,6 +36,7 @@ export function TaskViewSelector({
   currentColumns,
   viewModified,
   modifiedFields,
+  resetClientState,
 }: {
   activeViewId: string;
   /**
@@ -62,6 +63,13 @@ export function TaskViewSelector({
   viewModified?: boolean;
   /** Audit-event payload for the reset action. */
   modifiedFields?: string[];
+  /**
+   * Called when the user confirms the MODIFIED → Reset flow. The client
+   * component owns filter state (post-Phase 32.7 TanStack Query migration),
+   * so URL navigation alone can't clear filters — the parent must reset its
+   * useState here.
+   */
+  resetClientState: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -190,16 +198,15 @@ export function TaskViewSelector({
         savedViewName={activeViewName ?? active?.name ?? ""}
         modifiedFields={modifiedFields}
         onReset={() => {
-          // Fire-and-forget audit — don't block the navigation on the
-          // server round-trip; the action is best-effort.
+          // Reset client-owned filter state first so the parent's
+          // useState<TaskFilters> drops back to the empty shape before
+          // the URL navigation re-renders the server shell.
+          resetClientState();
           void resetTaskViewAction({
             viewId: activeViewId,
             viewName: activeViewName ?? active?.name ?? "",
             modifiedFields: modifiedFields ?? [],
           });
-          // Reset = navigate to the view with no other URL params. The
-          // page re-derives filters/sort from the view's stored
-          // definition.
           router.push(`/tasks?view=${encodeURIComponent(activeViewId)}`);
           toast.success("View reset.");
         }}

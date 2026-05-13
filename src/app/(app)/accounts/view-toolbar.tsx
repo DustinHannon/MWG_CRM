@@ -46,13 +46,15 @@ export interface AccountViewToolbarProps {
   subscribedViewIds?: string[];
   /** "saved:<uuid>" of the user's default account view, or null. */
   defaultViewId: string | null;
+  /**
+   * Called when the user confirms the MODIFIED → Reset flow. The client
+   * component owns filter state (post-Phase 32.7 TanStack Query migration),
+   * so URL navigation alone can't clear filters — the parent must reset its
+   * useState here.
+   */
+  resetClientState: () => void;
 }
 
-/**
- * Top-of-page toolbar for /accounts. View selector (built-in + saved)
- * + Modified badge + Save changes / Save as new + Set as default +
- * Subscribe + Delete + Column chooser.
- */
 export function AccountViewToolbar({
   views,
   activeViewId,
@@ -65,6 +67,7 @@ export function AccountViewToolbar({
   modifiedFields,
   subscribedViewIds,
   defaultViewId,
+  resetClientState,
 }: AccountViewToolbarProps) {
   const router = useRouter();
   const search = useSearchParams();
@@ -143,6 +146,10 @@ export function AccountViewToolbar({
         savedViewName={activeViewName}
         modifiedFields={modifiedFields}
         onReset={() => {
+          // Reset client-owned filter state first so the parent's
+          // useState<AccountFilters> drops back to EMPTY_FILTERS before
+          // the URL navigation re-renders the server shell.
+          resetClientState();
           void resetAccountViewAction({
             viewId: activeViewId,
             viewName: activeViewName,
