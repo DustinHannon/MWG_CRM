@@ -577,6 +577,53 @@ The pattern is enforced via `StandardListPage` (`src/components/standard/standar
 
 Pages NOT migrated to StandardListPage (intentional — these are not paginated lists): /leads/pipeline, /opportunities/pipeline, /dashboard, /notifications, /reports/[id], /admin/server-logs (dashboard), /admin/migrations/clickdimensions (bounded worklist), /admin/scoring (settings page).
 
+### 17.1 Canonical detail page task affordance
+
+Detail pages with child task collections (leads, accounts, contacts, opportunities, and any other parent entity that surfaces a TASKS section) use a single task-creation pattern per page. The pattern depends on which other affordances the page already exposes.
+
+**Lead detail page (`/leads/[id]`)** — the page's chrome carries a tabbed Activity composer with Note / Log call / Add task tabs. The TASKS section displays the task list **read-only** here; quick-add is suppressed via `EntityTasksSection`'s `showQuickAdd={false}` prop because the tabbed Add task tab is the canonical task affordance. Two task-creation surfaces on one page is the F-86 duplicate the Pass 6 leftover triage closed.
+
+**Account / Contact / Opportunity detail pages** — the page has no tabbed activity composer. The TASKS section's quick-add row remains the canonical task affordance (`EntityTasksSection`'s default `showQuickAdd: true`).
+
+**Binding rules:**
+
+- The `tasks` table CHECK constraint `tasks_at_most_one_parent` is the single-parent guard. Whichever affordance creates the task sets exactly one entity FK matching the page's scope.
+- The audit event for task creation from a detail page is `task.created` (single canonical name). No per-page audit forks (`task.created.from_lead_tab` etc.) — the parent FK in `after_json` carries the entity context for post-hoc forensics.
+- The Activity composer's Add task tab on the lead detail page creates an `activities` row with kind=`task` (`activity.task_create` audit). This is a timeline event, NOT a row in the `tasks` table; it does not surface in the TASKS list section. Real-task creation linked to a lead from this page is intentionally absent — the user navigates to `/tasks` for cross-entity task creation. This is the Option B trade locked at Phase 32.7 Pass 5 leftover triage (F-86).
+
+**Deviations** require a `// consistency-exempt: detail-page-task-pattern: <reason>` marker at the top of the page file plus an entry in §12.
+
+### 17.2 Date input click-to-open contract
+
+All `<input type="datetime-local">` and `<input type="date">` instances in the app wire an `onClick` handler that calls `inputRef.current.showPicker()`. The entire input bar opens the native picker, not only the trailing calendar icon. Behavior expectation across modern Chrome, Edge, Safari and Firefox; mobile Safari uses its native sheet picker which `showPicker()` triggers correctly.
+
+**Implementation pattern:**
+
+```tsx
+const inputRef = useRef<HTMLInputElement>(null);
+const openPicker = () => {
+  if (!inputRef.current || !("showPicker" in inputRef.current)) return;
+  try {
+    inputRef.current.showPicker();
+  } catch {
+    // `showPicker()` throws when the input is disabled, not focused-yet,
+    // or the user-activation rules aren't met; the native click then
+    // falls through to the default icon-click behavior.
+  }
+};
+
+<input ref={inputRef} type="datetime-local" onClick={openPicker} {...rest} />
+```
+
+**Binding rules:**
+
+- The `showPicker()` call MUST be wrapped in `try / catch`. The DOM method throws under several user-activation edge cases and the swallow is intentional (the native fallback handles those cases).
+- The capability check `"showPicker" in inputRef.current` guards against pre-2022 browser releases. The fallback there is the default native click behavior the input already has.
+- The handler runs on the input element only — not on a wrapping label or container — so click coordinates are correctly attributed to the input.
+- Long-term, migrating to a shadcn date picker for full cross-browser consistency is preferred. This contract bridges the gap until that work is scoped.
+
+**Deviations** require a `// consistency-exempt: date-input-click-to-open: <reason>` marker plus an entry in §12. The only currently-known acceptable deviation is a date input nested inside a Radix Popover or Dialog where `showPicker()` interacts badly with the floating-UI stacking — the marker documents which floating-UI surface is in play.
+
 ## 18. Sub-agent dispatch rules (parallel execution governance)
 
 Phases that dispatch parallel sub-agents (Phase 32.7 Phase 4B, Pass 5, Playwright) follow these binding rules. The rules were refined after Phase 4B exposed a commit-attribution race where two sub-agents' diffs landed under each other's commit messages.

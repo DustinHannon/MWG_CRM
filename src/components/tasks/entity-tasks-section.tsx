@@ -7,14 +7,15 @@ import { EntityTasksQuickAdd } from "./entity-tasks-quick-add";
  * Tasks section for entity-detail pages.
  *
  * Server component. Renders the list of tasks linked to the parent
- * entity (lead / account / contact / opportunity) plus a client-side
- * quick-add form that auto-sets the entity FK at submit time. The
- * quick-add is the canonical mechanism for creating an entity-linked
- * task from a detail page — no other entry path forks into
- * `task.created.from_*` audit variants.
+ * entity (lead / account / contact / opportunity). On entities whose
+ * detail page lacks a tabbed activity composer (account / contact /
+ * opportunity), the canonical quick-add is rendered inline. The lead
+ * detail page suppresses the quick-add (via `showQuickAdd={false}`)
+ * because its tabbed Add task tab is the canonical task affordance
+ * there — see STANDARDS §17.1.
  *
  * The CHECK constraint `tasks_at_most_one_parent` guarantees a task
- * has at most one parent entity at the DB layer; this section's
+ * has at most one parent entity at the DB layer; when rendered, the
  * quick-add only sets the one FK matching its entity scope.
  */
 export interface EntityTasksSectionProps {
@@ -26,6 +27,13 @@ export interface EntityTasksSectionProps {
   tasks: TaskRow[];
   /** Current viewer — used for the assignee default in quick-add. */
   currentUserId: string;
+  /**
+   * Render the quick-add affordance. Default true. Set false on
+   * detail pages whose chrome already exposes a canonical task
+   * creation path (currently /leads/[id], whose tabbed activity
+   * composer carries the Add task tab). STANDARDS §17.1.
+   */
+  showQuickAdd?: boolean;
 }
 
 export function EntityTasksSection({
@@ -33,6 +41,7 @@ export function EntityTasksSection({
   entityId,
   tasks,
   currentUserId,
+  showQuickAdd = true,
 }: EntityTasksSectionProps) {
   const open = tasks.filter(
     (t) => t.status === "open" || t.status === "in_progress",
@@ -41,15 +50,19 @@ export function EntityTasksSection({
 
   return (
     <div className="space-y-4">
-      <EntityTasksQuickAdd
-        entityType={entityType}
-        entityId={entityId}
-        defaultAssigneeId={currentUserId}
-      />
+      {showQuickAdd ? (
+        <EntityTasksQuickAdd
+          entityType={entityType}
+          entityId={entityId}
+          defaultAssigneeId={currentUserId}
+        />
+      ) : null}
 
       {tasks.length === 0 ? (
         <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-xs text-muted-foreground">
-          No tasks yet. Use the quick-add above to create one.
+          {showQuickAdd
+            ? "No tasks yet. Use the quick-add above to create one."
+            : "No tasks yet."}
         </p>
       ) : (
         <div className="space-y-3">

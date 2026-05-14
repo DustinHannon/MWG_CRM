@@ -260,11 +260,14 @@ export default async function LeadDetailPage({
           <ActivityFeed leadId={lead.id} user={user} />
         </div>
 
-        {/* Tasks tab. Lists tasks where lead_id =
-            currentLead.id with the canonical EntityTasksSection +
-            quick-add (auto-FK to this lead). Same `tasks` table backs
-            this and /tasks; CHECK `tasks_at_most_one_parent` is the
-            single-parent guard. */}
+        {/* Tasks list. Read-only display of tasks where lead_id =
+            currentLead.id. Task creation on the lead detail page is
+            canonical via the tabbed Activity composer's Add task tab
+            (above) per STANDARDS §17.1; the EntityTasksSection
+            quick-add is suppressed here to avoid the duplicate
+            affordance. Same `tasks` table backs this and /tasks;
+            CHECK `tasks_at_most_one_parent` is the single-parent
+            guard. */}
         <div className="lg:col-span-3">
           <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Tasks
@@ -274,6 +277,7 @@ export default async function LeadDetailPage({
             entityId={lead.id}
             tasks={await listTasksForLead(lead.id)}
             currentUserId={user.id}
+            showQuickAdd={false}
           />
         </div>
 
