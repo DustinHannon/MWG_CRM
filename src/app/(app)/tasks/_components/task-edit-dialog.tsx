@@ -4,7 +4,31 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { TagSectionClient } from "@/components/tags/tag-section-client";
 import type { TaskRow } from "@/lib/tasks";
+import {
+  TASK_PRIORITY_OPTS,
+  TASK_STATUS_OPTS,
+  type TaskPriority,
+  type TaskStatus,
+} from "@/lib/task-views";
 import { updateTaskAction } from "../actions";
+
+// Human labels for the canonical task enum values. Kept local to
+// this dialog (vs centralized) because the surrounding list page
+// owns its own labels with the same strings; consolidating into a
+// shared map crosses the Rule-of-3 threshold and is deferred.
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  open: "Open",
+  in_progress: "In progress",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+const PRIORITY_LABELS: Record<TaskPriority, string> = {
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+  urgent: "Urgent",
+};
 
 interface TaskEditDialogProps {
   task: TaskRow;
@@ -42,12 +66,10 @@ export function TaskEditDialog({
 }: TaskEditDialogProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
-  const [status, setStatus] = useState<
-    "open" | "in_progress" | "completed" | "cancelled"
-  >(task.status as "open" | "in_progress" | "completed" | "cancelled");
-  const [priority, setPriority] = useState<
-    "low" | "normal" | "high" | "urgent"
-  >(task.priority as "low" | "normal" | "high" | "urgent");
+  const [status, setStatus] = useState<TaskStatus>(task.status as TaskStatus);
+  const [priority, setPriority] = useState<TaskPriority>(
+    task.priority as TaskPriority,
+  );
   const [dueAt, setDueAt] = useState<string>(
     task.dueAt ? formatDateForInput(task.dueAt) : "",
   );
@@ -164,22 +186,15 @@ export function TaskEditDialog({
               Status
               <select
                 value={status}
-                onChange={(e) =>
-                  setStatus(
-                    e.target.value as
-                      | "open"
-                      | "in_progress"
-                      | "completed"
-                      | "cancelled",
-                  )
-                }
+                onChange={(e) => setStatus(e.target.value as TaskStatus)}
                 disabled={pending}
                 className="mt-1 block w-full rounded-md border border-border bg-input/60 px-3 py-2 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               >
-                <option value="open">Open</option>
-                <option value="in_progress">In progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
+                {TASK_STATUS_OPTS.map((s) => (
+                  <option key={s} value={s}>
+                    {STATUS_LABELS[s]}
+                  </option>
+                ))}
               </select>
             </label>
 
@@ -187,18 +202,15 @@ export function TaskEditDialog({
               Priority
               <select
                 value={priority}
-                onChange={(e) =>
-                  setPriority(
-                    e.target.value as "low" | "normal" | "high" | "urgent",
-                  )
-                }
+                onChange={(e) => setPriority(e.target.value as TaskPriority)}
                 disabled={pending}
                 className="mt-1 block w-full rounded-md border border-border bg-input/60 px-3 py-2 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               >
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
+                {TASK_PRIORITY_OPTS.map((p) => (
+                  <option key={p} value={p}>
+                    {PRIORITY_LABELS[p]}
+                  </option>
+                ))}
               </select>
             </label>
 

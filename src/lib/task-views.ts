@@ -60,6 +60,14 @@ export type TaskSortField = (typeof TASK_SORT_FIELDS)[number];
 // default for that field).
 export const TASK_STATUS_OPTS = ["open", "in_progress", "completed", "cancelled"] as const;
 export const TASK_PRIORITY_OPTS = ["low", "normal", "high", "urgent"] as const;
+
+// Convenience union aliases for consumers that want a TS literal
+// union without re-deriving `(typeof TASK_STATUS_OPTS)[number]`
+// inline. Mirrors `taskStatusEnum` / `taskPriorityEnum` in
+// `src/db/schema/tasks.ts`.
+export type TaskStatus = (typeof TASK_STATUS_OPTS)[number];
+export type TaskPriority = (typeof TASK_PRIORITY_OPTS)[number];
+
 export const TASK_RELATION_OPTS = ["all", "standalone", "linked"] as const;
 export const TASK_RELATED_ENTITY_OPTS = ["lead", "account", "contact", "opportunity"] as const;
 export const TASK_DUE_RANGE_OPTS = [
