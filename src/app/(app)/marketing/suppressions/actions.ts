@@ -14,6 +14,7 @@ import {
   ValidationError,
 } from "@/lib/errors";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
+import { removeSuppressionFromSendGrid } from "@/lib/marketing/sendgrid/suppressions";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 /**
@@ -143,6 +144,29 @@ export async function removeSuppressionAction(
         throw new NotFoundError("suppression");
       }
 
+      // Remove from SendGrid FIRST. If SendGrid refuses (5xx / network
+      // / not-configured) the function throws — propagate as a
+      // ConflictError so the action returns a structured error and the
+      // local row stays put. The next sync cron will reconcile if
+      // SendGrid recovers. This is the inverse of the prior order,
+      // which deleted locally and then let the cron silently restore
+      // the row on the next pass — making the trash-can UI feel broken.
+      let sendgridResult: Awaited<
+        ReturnType<typeof removeSuppressionFromSendGrid>
+      >;
+      try {
+        sendgridResult = await removeSuppressionFromSendGrid(
+          email,
+          existing.suppressionType,
+        );
+      } catch (err) {
+        throw new ConflictError(
+          err instanceof Error
+            ? err.message
+            : "SendGrid refused the suppression delete. The local record was not removed.",
+        );
+      }
+
       await db
         .delete(marketingSuppressions)
         .where(eq(marketingSuppressions.email, email));
@@ -159,6 +183,7 @@ export async function removeSuppressionAction(
         },
         after: {
           reason: parsed.data.reason,
+          sendgridResult: sendgridResult.status,
         },
       });
 

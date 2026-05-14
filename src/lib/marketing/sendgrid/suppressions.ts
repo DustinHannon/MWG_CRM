@@ -1,7 +1,10 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { marketingSuppressions } from "@/db/schema/marketing-events";
+import {
+  marketingSuppressions,
+  type MarketingSuppressionType,
+} from "@/db/schema/marketing-events";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { getSendGrid } from "./client";
@@ -193,4 +196,95 @@ async function upsertBatch(
     inserted += result.length;
   }
   return inserted;
+}
+
+/**
+ * Remove an address from the corresponding SendGrid suppression list.
+ *
+ * Maps the local `suppression_type` value to the correct SendGrid v3
+ * DELETE endpoint and issues the call. Returns `removed` when SendGrid
+ * acknowledges the delete (HTTP 204), `not_in_list` when SendGrid reports
+ * the address isn't on the list (HTTP 404 — treat as success because
+ * the desired end state is "absent"), or `skipped` for the `manual`
+ * type which is local-only by design and never lives at SendGrid.
+ *
+ * Throws on any other status code or network failure so the calling
+ * action can refuse the local delete and surface the failure to the
+ * admin instead of silently desyncing.
+ *
+ * Endpoints (per SendGrid v3 API):
+ *   unsubscribe        -> /v3/asm/suppressions/global/{email}
+ *   group_unsubscribe  -> /v3/asm/groups/{groupId}/suppressions/{email}
+ *   bounce             -> /v3/suppression/bounces/{email}
+ *   block              -> /v3/suppression/blocks/{email}
+ *   spamreport         -> /v3/suppression/spam_reports/{email}
+ *   invalid            -> /v3/suppression/invalid_emails/{email}
+ *   manual             -> (skipped — local-only)
+ */
+export async function removeSuppressionFromSendGrid(
+  email: string,
+  suppressionType: MarketingSuppressionType,
+): Promise<{ status: "removed" | "not_in_list" | "skipped" }> {
+  if (suppressionType === "manual") {
+    return { status: "skipped" };
+  }
+
+  const encoded = encodeURIComponent(email);
+  let url: string;
+  switch (suppressionType) {
+    case "unsubscribe":
+      url = `/v3/asm/suppressions/global/${encoded}`;
+      break;
+    case "group_unsubscribe": {
+      const groupId = env.SENDGRID_UNSUBSCRIBE_GROUP_ID;
+      if (typeof groupId !== "number") {
+        throw new Error(
+          "SENDGRID_UNSUBSCRIBE_GROUP_ID is not configured — cannot " +
+            "remove group_unsubscribe suppression.",
+        );
+      }
+      url = `/v3/asm/groups/${groupId}/suppressions/${encoded}`;
+      break;
+    }
+    case "bounce":
+      url = `/v3/suppression/bounces/${encoded}`;
+      break;
+    case "block":
+      url = `/v3/suppression/blocks/${encoded}`;
+      break;
+    case "spamreport":
+      url = `/v3/suppression/spam_reports/${encoded}`;
+      break;
+    case "invalid":
+      url = `/v3/suppression/invalid_emails/${encoded}`;
+      break;
+  }
+
+  const { sgClient } = getSendGrid();
+  const [response] = await sgClient.request({ method: "DELETE", url });
+  if (response.statusCode === 204 || response.statusCode === 200) {
+    return { status: "removed" };
+  }
+  if (response.statusCode === 404) {
+    logger.warn("sendgrid.suppression.delete_not_found", {
+      email,
+      suppressionType,
+      url,
+    });
+    return { status: "not_in_list" };
+  }
+  // Anything else (5xx, 401, 403, 429, etc.) is a real failure. The
+  // caller should refuse the local delete and surface the error to the
+  // admin so they can retry or escalate. logger.error gives operators
+  // the full context; the thrown error message is what the UI shows.
+  logger.error("sendgrid.suppression.delete_failed", {
+    email,
+    suppressionType,
+    url,
+    statusCode: response.statusCode,
+  });
+  throw new Error(
+    `SendGrid refused the suppression delete (HTTP ${response.statusCode}). ` +
+      `The local record was NOT removed — retry, or contact support if this persists.`,
+  );
 }
