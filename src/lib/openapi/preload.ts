@@ -21,6 +21,7 @@ import "@/lib/api/v1/opportunity-schemas";
 import "@/lib/api/v1/task-schemas";
 import "@/lib/api/v1/activity-schemas";
 import "@/lib/api/v1/meta-schemas";
+import "@/lib/api/v1/marketing-schemas";
 
 // Routes (each module registers its own paths at top level).
 import "@/app/api/v1/leads/route";
@@ -38,5 +39,7 @@ import "@/app/api/v1/activities/[id]/route";
 import "@/app/api/v1/me/route";
 import "@/app/api/v1/users/route";
 import "@/app/api/v1/users/[id]/route";
+import "@/app/api/v1/marketing/campaigns/[id]/route";
+import "@/app/api/v1/marketing/campaigns/[id]/send-now/route";
 
 export {};

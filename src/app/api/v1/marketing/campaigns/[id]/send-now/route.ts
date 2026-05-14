@@ -1,28 +1,81 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { errorResponse } from "@/lib/api/errors";
 import { withApi } from "@/lib/api/handler";
+import { CampaignSendNowResponseSchema } from "@/lib/api/v1/marketing-schemas";
+import { ErrorBodySchema, StandardErrorResponses } from "@/lib/api/v1/schemas";
 import { writeAudit } from "@/lib/audit";
 import { env, sendgridConfigured } from "@/lib/env";
-import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
+import { registry } from "@/lib/openapi/registry";
 import { rateLimit } from "@/lib/security/rate-limit";
-import { sendCampaign } from "@/lib/marketing/sendgrid/send";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+registry.registerPath({
+  method: "post",
+  path: "/marketing/campaigns/{id}/send-now",
+  summary: "Enqueue a campaign for immediate dispatch",
+  description:
+    "Asynchronous send. The route commits a state transition " +
+    "(status -> scheduled, scheduled_for -> now) and returns 202 " +
+    "Accepted with a job descriptor. The marketing-process-scheduled-" +
+    "campaigns cron picks up the row within one cadence (~60s) and " +
+    "runs the SendGrid batch pipeline. Poll the returned statusUrl to " +
+    "observe sending/sent/failed.\n\nOnly draft|scheduled campaigns " +
+    "can be enqueued; sending/sent/failed/cancelled return 409.",
+  tags: ["Marketing"],
+  security: [{ BearerAuth: [] }],
+  request: {
+    params: z.object({
+      id: z.string().uuid().openapi({ description: "Campaign id" }),
+    }),
+  },
+  responses: {
+    202: {
+      description: "Accepted — campaign enqueued for async dispatch",
+      content: {
+        "application/json": { schema: CampaignSendNowResponseSchema },
+      },
+    },
+    401: StandardErrorResponses[401],
+    403: StandardErrorResponses[403],
+    404: StandardErrorResponses[404],
+    409: {
+      description:
+        "Conflict — campaign is not in draft|scheduled state, or a " +
+        "concurrent caller claimed it first.",
+      content: { "application/json": { schema: ErrorBodySchema } },
+    },
+    422: StandardErrorResponses[422],
+    429: StandardErrorResponses[429],
+    503: {
+      description:
+        "Service unavailable — SendGrid is not configured for this environment.",
+      content: { "application/json": { schema: ErrorBodySchema } },
+    },
+  },
+});
+
 /**
  * POST /api/v1/marketing/campaigns/{id}/send-now
  *
- * State transition: draft|scheduled → sending. Kicks off the SendGrid
- * batch via Sub-agent A's `sendCampaign(id)` helper. Rate-limited
- * caller key by the env budget.
+ * Enqueues a draft|scheduled campaign for immediate dispatch. The send
+ * is asynchronous: the route returns 202 Accepted with a job descriptor
+ * after committing the state transition (status -> scheduled,
+ * scheduled_for -> now). The marketing-process-scheduled-campaigns cron
+ * picks up the row within one cadence (~60s) and runs the SendGrid
+ * batch pipeline; subsequent state (sending, sent, failed) is observable
+ * via GET /api/v1/marketing/campaigns/{id}.
+ *
+ * Rate-limited per API key by env.RATE_LIMIT_CAMPAIGN_SEND_PER_USER_PER_HOUR.
  */
 
 const IdParam = z.object({ id: z.string().uuid() });
+const POLL_INTERVAL_SECONDS = 5;
 
 export const POST = withApi<{ id: string }>(
   { scope: "admin", action: "marketing.campaigns.send_now" },
@@ -72,17 +125,16 @@ export const POST = withApi<{ id: string }>(
       );
     }
 
-    // Atomic claim — status guard in the WHERE clause closes the
-    // TOCTOU race between the SELECT above and the UPDATE below. A
-    // duplicate POST (retry / replay) or a race against the cron
-    // scheduled-pickup must NOT be able to force-flip a sent/failed/
-    // sending/cancelled campaign back to 'sending' and trigger a
-    // second batch dispatch. Mirrors the action-layer pattern in
-    // sendCampaignNowAction (campaigns/actions.ts).
+    // Atomic enqueue — status guard in the WHERE clause closes the
+    // TOCTOU race between the SELECT above and the UPDATE below. The
+    // cron picker also runs an atomic claim transitioning scheduled ->
+    // sending, so a duplicate POST hitting after the cron has already
+    // claimed the row will find status=sending and 409 cleanly.
     const transition = await db
       .update(marketingCampaigns)
       .set({
-        status: "sending",
+        status: "scheduled",
+        scheduledFor: sql`now()`,
         updatedAt: new Date(),
         updatedById: key.createdById,
       })
@@ -93,12 +145,14 @@ export const POST = withApi<{ id: string }>(
           inArray(marketingCampaigns.status, ["draft", "scheduled"]),
         ),
       )
-      .returning({ id: marketingCampaigns.id });
+      .returning({
+        id: marketingCampaigns.id,
+        scheduledFor: marketingCampaigns.scheduledFor,
+      });
     if (transition.length === 0) {
       // SELECT showed the campaign was eligible; UPDATE found nothing
       // — eligibility was lost between the two (cron claimed first, or
-      // a concurrent caller flipped the row). 409 distinguishes the
-      // race from a true not-found.
+      // a concurrent caller flipped the row).
       return errorResponse(
         409,
         "CONFLICT",
@@ -108,28 +162,28 @@ export const POST = withApi<{ id: string }>(
 
     await writeAudit({
       actorId: key.createdById,
-      action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_STARTED,
+      action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_ENQUEUED,
       targetType: "marketing_campaign",
       targetId: idParse.data.id,
       before: { status: existing.status },
-      after: { status: "sending", source: "api" },
+      after: {
+        status: "scheduled",
+        scheduledFor: transition[0].scheduledFor,
+        source: "api",
+      },
     });
 
-    try {
-      await sendCampaign(idParse.data.id);
-    } catch (err) {
-      logger.error("campaign.send_failed", {
+    return Response.json(
+      {
+        ok: true,
+        jobId: idParse.data.id,
         campaignId: idParse.data.id,
-        actorId: key.createdById,
-        errorMessage: err instanceof Error ? err.message : String(err),
-      });
-      return errorResponse(
-        500,
-        "INTERNAL_ERROR",
-        "Send pipeline rejected the request.",
-      );
-    }
-
-    return new Response(null, { status: 202 });
+        status: "scheduled",
+        scheduledFor: transition[0].scheduledFor,
+        statusUrl: `/api/v1/marketing/campaigns/${idParse.data.id}`,
+        pollIntervalSeconds: POLL_INTERVAL_SECONDS,
+      },
+      { status: 202 },
+    );
   },
 );

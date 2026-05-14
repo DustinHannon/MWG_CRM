@@ -6,11 +6,44 @@ import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { errorResponse } from "@/lib/api/errors";
 import { withApi } from "@/lib/api/handler";
+import { CampaignSchema } from "@/lib/api/v1/marketing-schemas";
+import { StandardErrorResponses } from "@/lib/api/v1/schemas";
 import { writeAudit } from "@/lib/audit";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
+import { registry } from "@/lib/openapi/registry";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+registry.registerPath({
+  method: "get",
+  path: "/marketing/campaigns/{id}",
+  summary: "Read a campaign",
+  description:
+    "Returns the full campaign row including the current status, " +
+    "scheduling fields, and webhook-fed counters (sent / delivered / " +
+    "opened / clicked / bounced / unsubscribed). Poll this endpoint " +
+    "after enqueuing a send via POST /send-now to observe state " +
+    "progression (scheduled -> sending -> sent | failed).",
+  tags: ["Marketing"],
+  security: [{ BearerAuth: [] }],
+  request: {
+    params: z.object({
+      id: z.string().uuid().openapi({ description: "Campaign id" }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "OK",
+      content: { "application/json": { schema: CampaignSchema } },
+    },
+    401: StandardErrorResponses[401],
+    403: StandardErrorResponses[403],
+    404: StandardErrorResponses[404],
+    422: StandardErrorResponses[422],
+    429: StandardErrorResponses[429],
+  },
+});
 
 /**
  * Single campaign GET / PUT / DELETE.

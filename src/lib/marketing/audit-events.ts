@@ -62,6 +62,7 @@ export const MARKETING_AUDIT_EVENTS = {
   CAMPAIGN_SCHEDULE: "marketing.campaign.schedule",
   CAMPAIGN_CANCEL: "marketing.campaign.cancel",
   CAMPAIGN_DELETE: "marketing.campaign.delete",
+  CAMPAIGN_SEND_ENQUEUED: "marketing.campaign.send_enqueued",
   CAMPAIGN_SEND_STARTED: "marketing.campaign.send_started",
   CAMPAIGN_SEND_COMPLETED: "marketing.campaign.send_completed",
   CAMPAIGN_SEND_FAILED: "marketing.campaign.send_failed",
