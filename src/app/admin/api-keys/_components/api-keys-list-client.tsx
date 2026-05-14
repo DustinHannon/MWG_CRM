@@ -1,3 +1,10 @@
+// consistency-exempt: list-page-pattern: admin-utility-table —
+// fixed-width row cells (w-32 prefix, w-48 scopes, w-20 rate-limit,
+// w-32 dates, w-24 status, w-32 actions) preserved because columns
+// have intrinsically non-uniform widths; no columnHeaderSlot. Per-row
+// Revoke + Delete affordances plus Generate-key modal trio are
+// page-specific carveouts. Admin operational page — no saved views,
+// no MODIFIED badge, no bulk selection.
 "use client";
 
 import Link from "next/link";
@@ -123,7 +130,7 @@ export function ApiKeysListClient() {
         value={draft.q}
         onChange={(e) => setDraft({ ...draft, q: e.target.value })}
         placeholder="Search name, description, or prefix"
-        className="min-w-[220px] flex-1 rounded-md border border-border bg-input px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+        className="h-11 min-w-[220px] flex-1 rounded-md border border-border bg-input px-3 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:h-9 md:py-1.5"
       />
       <select
         value={draft.status}
@@ -187,9 +194,7 @@ export function ApiKeysListClient() {
           />
         }
         header={{
-          kicker: "Admin",
           title: "API keys",
-          fontFamily: "display",
           description:
             "Bearer tokens for external integrations. Tokens act with org-wide visibility regardless of which user generated them.",
           actions: headerActions,
