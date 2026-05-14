@@ -14,14 +14,8 @@ export const runtime = "nodejs";
  * `ArchivedListClient` — title + subtitle + the 5 audit columns.
  */
 export const GET = withInternalListApi(
-  { action: "leads.archived.list", auth: "session" },
-  async (req: NextRequest, { user }) => {
-  if (!user.isAdmin) {
-    return NextResponse.json(
-      { error: "Forbidden" },
-      { status: 403 },
-    );
-  }
+  { action: "leads.archived.list", auth: "admin" },
+  async (req: NextRequest) => {
   const url = new URL(req.url);
   const cursor = url.searchParams.get("cursor");
   const result = await listArchivedLeadsCursor({ cursor });
