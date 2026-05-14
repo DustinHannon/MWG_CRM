@@ -1,3 +1,8 @@
+// consistency-exempt: list-page-pattern: numeric range filter pair
+// (minAmount/maxAmount) inline in the filter row, and Table↔Pipeline
+// toggle via the StandardListPage `controls` slot. Both are documented
+// deviations per STANDARDS §17 "Allowed page-specific deviations".
+
 "use client";
 
 import Link from "next/link";
