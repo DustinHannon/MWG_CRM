@@ -1,3 +1,12 @@
+// consistency-exempt: list-page-pattern: admin-utility-table —
+// fixed-width row cells (flex-1 name, w-20 count, w-40 timestamp,
+// w-60 picker, w-24 apply) preserved because columns have intrinsic-
+// ally non-uniform widths; no columnHeaderSlot. Post-action
+// window.location.reload() is the documented carveout (CLAUDE.md
+// §1.8) until StandardListPage exposes its queryClient for explicit
+// invalidation. Bounded worklist (no pagination — fetchPage returns
+// nextCursor:null). Admin operational page — no saved views, no
+// MODIFIED badge, no bulk selection.
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
@@ -114,9 +123,7 @@ export function RemapListClient({ timePrefs }: RemapListClientProps) {
         />
       }
       header={{
-        kicker: "Admin · Imports",
         title: "Imported-by remap",
-        fontFamily: "display",
         description:
           'Imported activities whose "By:" name didn\'t resolve to a CRM user are listed below, grouped by the snapshot string. Pick the matching user; every activity for that name gets user_id set and imported_by_name cleared.',
       }}
@@ -206,7 +213,7 @@ function PendingMobileCard({
       <select
         value={pick}
         onChange={(e) => onPickChange(e.target.value)}
-        className="h-8 w-full rounded-md border border-border bg-input px-2 text-xs"
+        className="h-11 w-full rounded-md border border-border bg-input px-2 text-sm md:h-8 md:text-xs"
       >
         <option value="">— select —</option>
         {users.map((u) => (

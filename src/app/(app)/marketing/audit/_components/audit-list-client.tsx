@@ -109,80 +109,92 @@ export function MarketingAuditListClient({
         e.preventDefault();
         applyDraft();
       }}
-      className="flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-muted/40 p-4"
+      className="space-y-3"
     >
-      {adminCanFilterUser ? (
-        <div className="flex flex-col gap-1">
+      {/* Mobile chip row: edge-fade mask hints overflow when chips
+          exceed viewport width. Desktop layout (wrap, no overflow)
+          resets the mask via md:[mask-image:none]. Touch targets are
+          h-11 (44px) per WCAG 2.5.5. Datetime inputs and labeled
+          inputs (event prefix, user UUID) retain their labels via
+          aria-label on mobile; visible labels render above on desktop. */}
+      <div
+        className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:items-end md:gap-3 md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]"
+      >
+        {adminCanFilterUser ? (
+          <div className="flex h-11 flex-col justify-end md:h-auto md:gap-1">
+            <label
+              htmlFor="audit-user"
+              className="hidden text-[11px] uppercase tracking-wide text-muted-foreground md:block"
+            >
+              User ID
+            </label>
+            <input
+              id="audit-user"
+              name="user"
+              type="text"
+              value={draft.user}
+              onChange={(e) => setDraft({ ...draft, user: e.target.value })}
+              placeholder="User UUID"
+              aria-label="User ID"
+              className="h-11 w-56 rounded-full border border-border bg-input px-4 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3"
+            />
+          </div>
+        ) : null}
+        <div className="flex h-11 flex-col justify-end md:h-auto md:gap-1">
           <label
-            htmlFor="audit-user"
-            className="text-[11px] uppercase tracking-wide text-muted-foreground"
+            htmlFor="audit-type"
+            className="hidden text-[11px] uppercase tracking-wide text-muted-foreground md:block"
           >
-            User ID
+            Event prefix
           </label>
           <input
-            id="audit-user"
-            name="user"
+            id="audit-type"
+            name="type"
             type="text"
-            value={draft.user}
-            onChange={(e) => setDraft({ ...draft, user: e.target.value })}
-            placeholder="UUID"
-            className="w-56 rounded-md border border-border bg-input px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+            value={draft.type}
+            onChange={(e) => setDraft({ ...draft, type: e.target.value })}
+            placeholder="campaign or template.update"
+            aria-label="Event prefix"
+            className="h-11 w-56 rounded-full border border-border bg-input px-4 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3"
           />
         </div>
-      ) : null}
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="audit-type"
-          className="text-[11px] uppercase tracking-wide text-muted-foreground"
-        >
-          Event prefix
-        </label>
-        <input
-          id="audit-type"
-          name="type"
-          type="text"
-          value={draft.type}
-          onChange={(e) => setDraft({ ...draft, type: e.target.value })}
-          placeholder="campaign or template.update"
-          className="w-56 rounded-md border border-border bg-input px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="audit-from"
-          className="text-[11px] uppercase tracking-wide text-muted-foreground"
-        >
-          From
-        </label>
-        <input
-          id="audit-from"
-          name="from"
-          type="datetime-local"
-          value={draft.from}
-          onChange={(e) => setDraft({ ...draft, from: e.target.value })}
-          className="rounded-md border border-border bg-input px-3 py-1.5 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="audit-to"
-          className="text-[11px] uppercase tracking-wide text-muted-foreground"
-        >
-          To
-        </label>
-        <input
-          id="audit-to"
-          name="to"
-          type="datetime-local"
-          value={draft.to}
-          onChange={(e) => setDraft({ ...draft, to: e.target.value })}
-          className="rounded-md border border-border bg-input px-3 py-1.5 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-        />
-      </div>
-      <div className="flex items-center gap-2">
+        <div className="flex h-11 flex-col justify-end md:h-auto md:gap-1">
+          <label
+            htmlFor="audit-from"
+            className="hidden text-[11px] uppercase tracking-wide text-muted-foreground md:block"
+          >
+            From
+          </label>
+          <input
+            id="audit-from"
+            name="from"
+            type="datetime-local"
+            value={draft.from}
+            onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+            aria-label="From"
+            className="h-11 rounded-full border border-border bg-input px-4 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3"
+          />
+        </div>
+        <div className="flex h-11 flex-col justify-end md:h-auto md:gap-1">
+          <label
+            htmlFor="audit-to"
+            className="hidden text-[11px] uppercase tracking-wide text-muted-foreground md:block"
+          >
+            To
+          </label>
+          <input
+            id="audit-to"
+            name="to"
+            type="datetime-local"
+            value={draft.to}
+            onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+            aria-label="To"
+            className="h-11 rounded-full border border-border bg-input px-4 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3"
+          />
+        </div>
         <button
           type="submit"
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
+          className="hidden h-11 shrink-0 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 md:inline-flex md:items-center"
         >
           Apply
         </button>
@@ -190,13 +202,55 @@ export function MarketingAuditListClient({
           <button
             type="button"
             onClick={clearFilters}
-            className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+            className="h-11 shrink-0 rounded-full px-4 text-sm text-muted-foreground hover:text-foreground/90 md:rounded-md md:border md:border-border md:bg-muted/40"
           >
             Reset
           </button>
         ) : null}
       </div>
     </form>
+  );
+
+  // Desktop column header. 5 cells matching audit desktop row layout.
+  // Page size 100 (canonical default 50) is preserved as a marketing-
+  // audit carveout for high-volume admin reading.
+  const AUDIT_COLS = 5;
+  const columnHeaderSlot = (
+    <div
+      className="flex items-stretch text-xs font-medium uppercase tracking-wide text-muted-foreground"
+      style={{ minWidth: `${AUDIT_COLS * 140 + 40}px` }}
+    >
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
+        Time
+      </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
+        Actor
+      </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
+        Action
+      </div>
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 lg:block"
+        style={{ flexBasis: "140px" }}
+      >
+        Target
+      </div>
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 lg:block"
+        style={{ flexBasis: "140px" }}
+      >
+        Detail
+      </div>
+    </div>
   );
 
   const backLink = (
@@ -218,6 +272,11 @@ export function MarketingAuditListClient({
     </Link>
   );
 
+  // consistency-exempt: list-page-pattern: marketing-audit renders a
+  // backLink above StandardListPage as a deliberate sub-navigation
+  // affordance (the page is a deep admin surface reached from
+  // /marketing). consistency-exempt: list-page-pattern: page size 100
+  // for high-volume admin reading.
   return (
     <div className="flex flex-col gap-4">
       {backLink}
@@ -241,13 +300,13 @@ export function MarketingAuditListClient({
           />
         }
         header={{
-          kicker: "Marketing",
-          title: "Audit log",
+          title: "Marketing audit log",
           description:
             "Forensic record of every marketing template, list, campaign, and suppression action.",
           actions: headerActions,
         }}
         filtersSlot={filtersSlot}
+        columnHeaderSlot={columnHeaderSlot}
       />
     </div>
   );
@@ -260,26 +319,46 @@ function AuditDesktopRow({
   row: MarketingAuditRow;
   timePrefs: TimePrefs;
 }) {
+  // 5 cells matching columnHeaderSlot. flex-basis 140px per cell + row
+  // min-width keep cells from squeezing below 140px when the table is
+  // wider than the viewport.
+  const minRowWidth = 5 * 140 + 40;
   return (
     <div
-      className="flex items-start gap-4 border-b border-border bg-card px-4 py-3 text-sm"
+      className="group flex items-stretch border-b border-border/60 bg-card text-sm"
       data-row-flash="new"
+      style={{ minWidth: `${minRowWidth}px` }}
     >
-      <div className="w-40 shrink-0 text-muted-foreground">
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground"
+        style={{ flexBasis: "140px" }}
+      >
         <UserTimeClient value={row.createdAt} prefs={timePrefs} />
       </div>
-      <div className="w-40 shrink-0 truncate text-foreground">
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3 text-foreground"
+        style={{ flexBasis: "140px" }}
+      >
         {row.actorDisplayName ?? row.actorEmailSnapshot ?? "system"}
       </div>
-      <div className="w-60 shrink-0">
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
         <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground">
           {row.action}
         </code>
       </div>
-      <div className="hidden min-w-0 flex-1 truncate text-muted-foreground lg:block">
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground lg:block"
+        style={{ flexBasis: "140px" }}
+      >
         <TargetCell targetType={row.targetType} targetId={row.targetId} />
       </div>
-      <div className="hidden w-32 shrink-0 lg:block">
+      <div
+        className="hidden min-w-0 flex-1 px-5 py-3 lg:block"
+        style={{ flexBasis: "140px" }}
+      >
         <MetadataCell before={row.beforeJson} after={row.afterJson} />
       </div>
     </div>
