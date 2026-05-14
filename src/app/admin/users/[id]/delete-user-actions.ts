@@ -10,7 +10,10 @@ import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
 import { requireAdmin } from "@/lib/auth-helpers";
-import { cleanupBlobsForUser, gatherBlobsForUser } from "@/lib/blob-cleanup";
+import {
+  deleteBlobsByPathnames,
+  gatherBlobsForUser,
+} from "@/lib/blob-cleanup";
 import {
   ConflictError,
   ForbiddenError,
@@ -251,11 +254,15 @@ export async function deleteUserAction(
     });
 
     // Blob cleanup — outside the transaction. Failures here log but do not
-    // surface as an error to the admin (the DB record is the truth).
+    // surface as an error to the admin (the DB record is the truth). Use
+    // the pre-gathered paths from before the transaction; re-gathering
+    // after delete returns empty (the join through leads.ownerId no
+    // longer matches) and blobs would leak.
     if (blobPaths.length > 0) {
-      void cleanupBlobsForUser(userId).catch((err) =>
+      void deleteBlobsByPathnames(blobPaths).catch((err) =>
         logger.warn("admin.blob_cleanup_after_user_delete_failed", {
           targetUserId: userId,
+          blobCount: blobPaths.length,
           errorMessage: err instanceof Error ? err.message : String(err),
         }),
       );

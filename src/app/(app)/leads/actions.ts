@@ -25,7 +25,10 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { tags as tagsTable } from "@/db/schema/tags";
-import { cleanupBlobsForLeads, gatherBlobsForLeads } from "@/lib/blob-cleanup";
+import {
+  deleteBlobsByPathnames,
+  gatherBlobsForLeads,
+} from "@/lib/blob-cleanup";
 import { logger } from "@/lib/logger";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { canDeleteLead } from "@/lib/access/can-delete";
@@ -415,13 +418,15 @@ export async function hardDeleteLeadAction(
         targetType: "lead",
         targetId: id,
       });
-      // 024 — fire-and-forget blob cleanup. cleanupBlobsForLeads
-      // already swallows internal errors; this catch is belt-and-suspenders
-      // for an unhandled throw that would otherwise unhandle-reject.
+      // 024 — fire-and-forget blob cleanup. Use the pre-gathered
+      // paths directly; re-gathering after the DB delete returns
+      // empty (CASCADE cleared the attachments -> activities -> leads
+      // join) so blobs would leak.
       if (blobPathnames.length > 0) {
-        void cleanupBlobsForLeads([id]).catch((err) => {
+        void deleteBlobsByPathnames(blobPathnames).catch((err) => {
           logger.error("blob_cleanup_failure_hard_delete", {
             leadId: id,
+            blobCount: blobPathnames.length,
             errorMessage: err instanceof Error ? err.message : String(err),
           });
         });

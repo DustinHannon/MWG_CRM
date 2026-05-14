@@ -34,6 +34,27 @@ async function deleteBlobs(pathnames: string[]): Promise<void> {
 }
 
 /**
+ * Delete a pre-gathered list of blob pathnames. Use this when the parent
+ * DB rows have ALREADY been deleted and you have the paths captured from
+ * a prior `gatherBlobsFor*` call.
+ *
+ * `cleanupBlobsForLeads` / `cleanupBlobsForUser` re-gather paths via the
+ * `attachments -> activities -> leads` join, which returns empty after
+ * the parent leads have been deleted (CASCADE cleared the join rows).
+ * Callers that ran the DB delete before invoking cleanup MUST use this
+ * helper with the previously captured paths or the cleanup is a no-op
+ * and blobs leak.
+ *
+ * Failure policy unchanged: deletion failures log and return; the
+ * primary DB delete is the source of truth.
+ */
+export async function deleteBlobsByPathnames(
+  pathnames: string[],
+): Promise<void> {
+  await deleteBlobs(pathnames);
+}
+
+/**
  * gather every blob pathname attached to any of the given
  * leads' activities. Used by hard-delete and the purge-archived cron.
  * Call BEFORE the DB delete (after which the join rows are gone).
@@ -51,19 +72,6 @@ export async function gatherBlobsForLeads(
 }
 
 /**
- * gather + delete blobs for a batch of leads. Failures are
- * logged but don't throw, so callers can fire-and-forget after the DB
- * delete commits without worrying about a network blip rolling anything
- * back.
- */
-export async function cleanupBlobsForLeads(
-  leadIds: string[],
-): Promise<void> {
-  const paths = await gatherBlobsForLeads(leadIds);
-  await deleteBlobs(paths);
-}
-
-/**
  * Gather every blob pathname for every lead owned by the given user. Used
  * by the admin "delete user with cascade-delete leads" flow.
  * Call BEFORE the DELETE FROM leads WHERE owner_id = userId.
@@ -76,10 +84,5 @@ export async function gatherBlobsForUser(userId: string): Promise<string[]> {
     .innerJoin(leads, eq(leads.id, activities.leadId))
     .where(eq(leads.ownerId, userId));
   return rows.map((r) => r.pathname);
-}
-
-export async function cleanupBlobsForUser(userId: string): Promise<void> {
-  const paths = await gatherBlobsForUser(userId);
-  await deleteBlobs(paths);
 }
 

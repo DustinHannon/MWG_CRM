@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
-import { cleanupBlobsForLeads, gatherBlobsForLeads } from "@/lib/blob-cleanup";
+import {
+  deleteBlobsByPathnames,
+  gatherBlobsForLeads,
+} from "@/lib/blob-cleanup";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { writeAudit } from "@/lib/audit";
@@ -78,11 +81,16 @@ export async function GET(req: Request) {
 
     // 024 — fire-and-forget Vercel Blob cleanup. The cron
     // window is generous (maxDuration=300) but we still don't await the
-    // network round-trip per blob — `del()` accepts a batch.
+    // network round-trip per blob — `del()` accepts a batch. Pass the
+    // pre-gathered paths directly; re-gathering after the DB delete
+    // would find empty (the attachments -> activities -> leads join
+    // returns no rows once CASCADE cleared the join chain), causing
+    // blobs to leak.
     if (blobPathnames.length > 0) {
-      void cleanupBlobsForLeads(candidateIds).catch((err) => {
+      void deleteBlobsByPathnames(blobPathnames).catch((err) => {
         logger.error("blob_cleanup_failure_purge_archived", {
           leadCount: candidateIds.length,
+          blobCount: blobPathnames.length,
           errorMessage: err instanceof Error ? err.message : String(err),
         });
       });
