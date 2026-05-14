@@ -8,7 +8,11 @@ import {
 } from "@/lib/blob-cleanup";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
-import { writeAudit } from "@/lib/audit";
+import { writeAuditBatch } from "@/lib/audit";
+import {
+  SYSTEM_SENTINEL_USER_EMAIL,
+  SYSTEM_SENTINEL_USER_ID,
+} from "@/lib/constants/system-users";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,17 +47,51 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: true, processed: 0 });
     }
 
-    // Snapshot to audit log before delete (best-effort; we still delete on
-    // audit failures since the data is by definition >30 days archived).
+    // F-Ω-6: snapshot to audit log before delete. Previously we skipped
+    // leads with no deletedById AND no ownerId (`if (!actor) continue`),
+    // which silently destroyed the forensic record for orphan-owner
+    // leads that aged into the 30-day purge window. Use the system
+    // sentinel as last-resort actor so the row's pre-purge snapshot
+    // always lands.
+    //
+    // F-Ω-7: per-record awaits replaced with a single writeAuditBatch
+    // (one INSERT chunked at 500 rows per src/lib/audit.ts) so a purge
+    // of 1000 leads costs O(1) round-trips instead of O(N). Each row's
+    // forensic snapshot is still independently queryable.
+    //
+    // Group events by actor so each actor's writeAuditBatch resolves
+    // its email_snapshot exactly once. Sentinel actor lands in its
+    // own group with the canonical sentinel email.
+    const eventsByActor = new Map<
+      string,
+      Array<{
+        action: string;
+        targetType: string;
+        targetId: string;
+        before: object;
+      }>
+    >();
     for (const lead of candidates) {
-      const actor = lead.deletedById ?? lead.ownerId;
-      if (!actor) continue;
-      await writeAudit({
-        actorId: actor,
+      const actor =
+        lead.deletedById ?? lead.ownerId ?? SYSTEM_SENTINEL_USER_ID;
+      const bucket = eventsByActor.get(actor) ?? [];
+      bucket.push({
         action: "lead.purge",
         targetType: "lead",
         targetId: lead.id,
         before: lead as unknown as object,
+      });
+      eventsByActor.set(actor, bucket);
+    }
+    for (const [actorId, events] of eventsByActor) {
+      await writeAuditBatch({
+        actorId,
+        // Hand a snapshot for the sentinel directly so the helper
+        // can skip the lookup round-trip for that special-cased id.
+        ...(actorId === SYSTEM_SENTINEL_USER_ID
+          ? { actorEmailSnapshot: SYSTEM_SENTINEL_USER_EMAIL }
+          : {}),
+        events,
       });
     }
 
