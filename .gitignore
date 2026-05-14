@@ -57,15 +57,14 @@ mwg-apihelp-iphone13.png
 .env*.local
 
 # Markdown / documentation — local-only.
-# Only README.md and docs/STANDARDS.md are tracked. Phase plans, audits, reports,
-# design notes, and other architecture docs all stay out of GitHub.
-# docs/STANDARDS.md is the versioned source of truth for binding engineering rules;
-# CLAUDE.md is local-only Claude-Code operational context that cross-references it.
+# Only README.md is tracked. Phase plans, audits, reports, design notes, governance
+# rules, architecture docs, and Claude-Code operational context all stay out of GitHub.
+# STANDARDS.md and CLAUDE.md live locally in the working tree; agents read them at
+# session start. No AI-related MD files are tracked in version control.
 /*.md
 !/README.md
 docs/*
 docs/**/
-!docs/STANDARDS.md
 /*.scratch.md
 /.scratch/
 /screenshottemp/
