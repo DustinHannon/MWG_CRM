@@ -193,29 +193,51 @@ export async function sendCampaign(
 ): Promise<SendCampaignResult> {
   const batchId = `cmp_${campaignId}_${Date.now().toString(36)}`;
 
-  const ctx = await loadCampaignContext(campaignId);
-  if (!ctx) {
-    throw new ValidationError("Campaign not found.");
-  }
-  const { campaign, template } = ctx;
+  // F-Ω-1: the cron transitions status -> 'sending' atomically BEFORE
+  // calling sendCampaign, so once we are inside this function the row
+  // is observably in-flight. Any throw from the pre-batch region below
+  // (loadCampaignContext, status assertion, template assertion,
+  // resolveListRecipients, the SEND_STARTED audit, insertRecipientRows,
+  // the totalAttempted===0 shortcut path) used to leave the campaign
+  // permanently stuck in 'sending' — the cron's catch block only logs,
+  // the next cron tick selects only 'scheduled' rows, and no other code
+  // path resets 'sending'. Wrap the pre-batch region in a try/catch
+  // that flips the row to 'failed' on the way out so a stuck row can
+  // never accumulate. The inner try/catch (around the batch loop)
+  // already handles failures from that point forward; this guard fires
+  // only when a pre-batch step fails and falls through to the rethrow.
+  let resolved: Awaited<ReturnType<typeof resolveListRecipients>>;
+  let campaign: CampaignRow;
+  let template: TemplateRow;
+  try {
+    const ctx = await loadCampaignContext(campaignId);
+    if (!ctx) {
+      throw new ValidationError("Campaign not found.");
+    }
+    campaign = ctx.campaign;
+    template = ctx.template;
 
-  if (campaign.status !== "sending") {
-    throw new ValidationError(
-      `Campaign is in status '${campaign.status}'; expected 'sending'.`,
-    );
-  }
-  if (!template.sendgridTemplateId) {
-    throw new ValidationError(
-      "Template has not been pushed to SendGrid yet. Re-save the template before sending.",
-    );
-  }
+    if (campaign.status !== "sending") {
+      throw new ValidationError(
+        `Campaign is in status '${campaign.status}'; expected 'sending'.`,
+      );
+    }
+    if (!template.sendgridTemplateId) {
+      throw new ValidationError(
+        "Template has not been pushed to SendGrid yet. Re-save the template before sending.",
+      );
+    }
 
-  // unified resolution. `resolveListRecipients` branches
-  // on `marketing_lists.list_type`: dynamic lists join through
-  // `marketing_list_members` + leads; static lists pull directly from
-  // `marketing_static_list_members`. Both paths filter suppressions at
-  // the SQL layer.
-  const resolved = await resolveListRecipients(campaign.listId);
+    // unified resolution. `resolveListRecipients` branches
+    // on `marketing_lists.list_type`: dynamic lists join through
+    // `marketing_list_members` + leads; static lists pull directly from
+    // `marketing_static_list_members`. Both paths filter suppressions at
+    // the SQL layer.
+    resolved = await resolveListRecipients(campaign.listId);
+  } catch (err) {
+    await markStuckSendingFailed(campaignId, batchId, err, "load");
+    throw err;
+  }
   const candidateRows: RecipientCandidate[] = resolved.recipients.map((r) => ({
     leadId: r.leadId,
     email: r.email,
@@ -233,57 +255,67 @@ export async function sendCampaign(
     campaign.totalRecipients - totalAttempted,
   );
 
-  // Audit start before any batch fans out.
-  await writeAudit({
-    actorId: campaign.createdById,
-    action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_STARTED,
-    targetType: "marketing_campaign",
-    targetId: campaign.id,
-    after: {
-      batchId,
-      totalRecipients: campaign.totalRecipients,
-      totalAttempted,
-      totalFiltered,
-      sandbox: env.SENDGRID_SANDBOX,
-    },
-  });
-
-  if (totalAttempted === 0) {
-    // Nothing to send. Mark as sent (no-op) and audit completion. Avoid
-    // calling SendGrid at all so we don't burn a no-op API hit.
-    await db
-      .update(marketingCampaigns)
-      .set({
-        status: "sent",
-        sentAt: sql`now()`,
-        totalSent: 0,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(marketingCampaigns.id, campaign.id));
+  // F-Ω-1 (continued): the SEND_STARTED audit + totalAttempted===0
+  // shortcut + insertRecipientRows are still pre-batch. Same recovery
+  // policy: any throw here flips the row to 'failed' so a stuck row
+  // can't accumulate.
+  let inserted: Awaited<ReturnType<typeof insertRecipientRows>>;
+  try {
+    // Audit start before any batch fans out.
     await writeAudit({
       actorId: campaign.createdById,
-      action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_COMPLETED,
+      action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_STARTED,
       targetType: "marketing_campaign",
       targetId: campaign.id,
       after: {
         batchId,
+        totalRecipients: campaign.totalRecipients,
+        totalAttempted,
+        totalFiltered,
+        sandbox: env.SENDGRID_SANDBOX,
+      },
+    });
+
+    if (totalAttempted === 0) {
+      // Nothing to send. Mark as sent (no-op) and audit completion. Avoid
+      // calling SendGrid at all so we don't burn a no-op API hit.
+      await db
+        .update(marketingCampaigns)
+        .set({
+          status: "sent",
+          sentAt: sql`now()`,
+          totalSent: 0,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(marketingCampaigns.id, campaign.id));
+      await writeAudit({
+        actorId: campaign.createdById,
+        action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_COMPLETED,
+        targetType: "marketing_campaign",
+        targetId: campaign.id,
+        after: {
+          batchId,
+          recipientsAttempted: 0,
+          recipientsAccepted: 0,
+          recipientsFiltered: totalFiltered,
+        },
+      });
+      return {
+        batchId,
         recipientsAttempted: 0,
         recipientsAccepted: 0,
         recipientsFiltered: totalFiltered,
-      },
-    });
-    return {
-      batchId,
-      recipientsAttempted: 0,
-      recipientsAccepted: 0,
-      recipientsFiltered: totalFiltered,
-    };
-  }
+      };
+    }
 
-  // Insert recipient rows up-front with `sendgridMessageId: null`. The
-  // webhook receiver reconciles back to these rows via custom_args
-  // (recipient_id) on each event.
-  const inserted = await insertRecipientRows(campaign.id, candidateRows);
+    // Insert recipient rows up-front with `sendgridMessageId: null`. The
+    // webhook receiver reconciles back to these rows via custom_args
+    // (recipient_id) on each event.
+    inserted = await insertRecipientRows(campaign.id, candidateRows);
+  } catch (err) {
+    await markStuckSendingFailed(campaignId, batchId, err, "prepare");
+    throw err;
+  }
 
   // Build a rowKey → recipientId map so personalizations can carry
   // custom_args.recipient_id for webhook reconciliation.
@@ -685,6 +717,59 @@ function readSendGridErrorDetail(body: unknown): string | null {
   if (typeof first?.message !== "string") return null;
   const field = typeof first.field === "string" ? ` (${first.field})` : "";
   return `${first.message}${field}`;
+}
+
+/**
+ * F-Ω-1: best-effort transition of a 'sending' campaign back to
+ * 'failed' when sendCampaign's pre-batch region throws.
+ *
+ * Without this, a throw from loadCampaignContext / status assertion /
+ * resolveListRecipients / SEND_STARTED audit / insertRecipientRows
+ * leaves the row stuck in 'sending'. The cron's catch only logs; the
+ * next cron tick selects only 'scheduled' rows; no other code path
+ * recovers a stuck 'sending'. The campaign becomes permanently
+ * un-restartable from the UI (also can't go scheduled -> sending
+ * because it's already sending).
+ *
+ * Failure to flip is logged but never blocks the rethrow — the caller's
+ * error is what matters. A future repair sweep or admin tool can
+ * recover orphan-sending rows if the failure_reason update itself fails.
+ *
+ * `phase` is a short label distinguishing which pre-batch step threw
+ * ("load" / "prepare") so operators can correlate the structured log
+ * with the originating block.
+ */
+async function markStuckSendingFailed(
+  campaignId: string,
+  batchId: string,
+  err: unknown,
+  phase: "load" | "prepare",
+): Promise<void> {
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  logger.error("sendgrid.campaign.pre_batch_failed", {
+    campaignId,
+    batchId,
+    phase,
+    errorMessage,
+  });
+  try {
+    await db
+      .update(marketingCampaigns)
+      .set({
+        status: "failed",
+        failureReason: truncateForColumn(errorMessage, 500),
+        updatedAt: sql`now()`,
+      })
+      .where(eq(marketingCampaigns.id, campaignId));
+  } catch (updateErr) {
+    logger.error("sendgrid.campaign.pre_batch_status_reset_failed", {
+      campaignId,
+      batchId,
+      phase,
+      errorMessage:
+        updateErr instanceof Error ? updateErr.message : String(updateErr),
+    });
+  }
 }
 
 async function loadCampaignContext(
