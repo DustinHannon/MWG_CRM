@@ -1,3 +1,14 @@
+// consistency-exempt: theming: raw red/amber/emerald tints in
+// statusChipClass — preserves pre-existing CLAUDE.md §12 exception
+// for severity semantics (HTTP-rejected sends color-coded).
+//
+// consistency-exempt: list-page-pattern: admin-utility-table —
+// fixed-width row cells (w-32 timestamp, w-40 sender, w-48 recipient,
+// w-40 feature, w-32 status, flex-1 error) preserved because columns
+// carry non-uniform semantic widths; no columnHeaderSlot. pageSize=100
+// (high-volume admin reading). Per-row detail dialog + Retry button
+// are documented carveouts. Admin operational page — no saved views,
+// no MODIFIED badge, no bulk selection.
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
@@ -284,11 +295,9 @@ export function EmailFailuresListClient({
           />
         }
         header={{
-          kicker: "Admin",
           title: "Email failures",
           description:
             "System-originated sends that Graph rejected or were blocked by the mailbox-kind preflight.",
-          fontFamily: "display",
         }}
         filtersSlot={filtersSlot}
       />
