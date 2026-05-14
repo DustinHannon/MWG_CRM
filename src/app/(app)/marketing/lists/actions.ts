@@ -459,38 +459,47 @@ export async function bulkAddLeadsToListAction(input: {
 
       let added = 0;
       if (eligible.length > 0) {
-        for (let i = 0; i < eligible.length; i += 1000) {
-          const slice = eligible.slice(i, i + 1000);
-          const inserted = await db
-            .insert(marketingListMembers)
-            .values(
-              slice.map((c) => ({
-                listId: parsed.data.listId,
-                leadId: c.id,
-                email: c.email,
-              })),
-            )
-            .onConflictDoNothing()
-            .returning({ leadId: marketingListMembers.leadId });
-          added += inserted.length;
-        }
+        // Wrap the insert chunks + memberCount recompute in one
+        // transaction so a transient failure mid-stream can't leave
+        // marketing_lists.member_count out of sync with the actual
+        // marketing_list_members count. The cron `marketing-list-
+        // refresh` only reconciles dynamic lists, so without the tx
+        // a partial bulk-add silently leaves a stale snapshot count.
+        await db.transaction(async (tx) => {
+          for (let i = 0; i < eligible.length; i += 1000) {
+            const slice = eligible.slice(i, i + 1000);
+            const inserted = await tx
+              .insert(marketingListMembers)
+              .values(
+                slice.map((c) => ({
+                  listId: parsed.data.listId,
+                  leadId: c.id,
+                  email: c.email,
+                })),
+              )
+              .onConflictDoNothing()
+              .returning({ leadId: marketingListMembers.leadId });
+            added += inserted.length;
+          }
 
-        if (added > 0) {
-          // Refresh the snapshot count so the index page stays accurate.
-          const [{ n }] = await db
-            .select({ n: sql<number>`count(*)::int` })
-            .from(marketingListMembers)
-            .where(
-              eq(marketingListMembers.listId, parsed.data.listId),
-            );
-          await db
-            .update(marketingLists)
-            .set({
-              memberCount: n ?? 0,
-              updatedAt: sql`now()`,
-            })
-            .where(eq(marketingLists.id, parsed.data.listId));
-        }
+          if (added > 0) {
+            // Recompute from the canonical member rows inside the
+            // same tx — the count and the rows it counts cannot drift.
+            const [{ n }] = await tx
+              .select({ n: sql<number>`count(*)::int` })
+              .from(marketingListMembers)
+              .where(
+                eq(marketingListMembers.listId, parsed.data.listId),
+              );
+            await tx
+              .update(marketingLists)
+              .set({
+                memberCount: n ?? 0,
+                updatedAt: sql`now()`,
+              })
+              .where(eq(marketingLists.id, parsed.data.listId));
+          }
+        });
       }
 
       await writeAudit({

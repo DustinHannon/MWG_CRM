@@ -174,28 +174,45 @@ export async function createStaticListMembers(args: {
     );
   }
 
+  // Wrap the insert chunks + count recompute in one transaction so
+  // member rows and `marketing_lists.member_count` cannot drift if a
+  // chunk fails or the count UPDATE fails after the inserts
+  // committed. The static-list import path lacks a reconcile cron
+  // (only dynamic lists run through `marketing-list-refresh`).
   let inserted = 0;
-  for (let i = 0; i < args.members.length; i += 1000) {
-    const slice = args.members.slice(i, i + 1000);
-    const rows = await db
-      .insert(marketingStaticListMembers)
-      .values(
-        slice.map((m) => ({
-          listId: args.listId,
-          email: m.email.trim().toLowerCase(),
-          name: m.name?.trim() || null,
-          createdById: args.actorId,
-          updatedById: args.actorId,
-        })),
-      )
-      .onConflictDoNothing()
-      .returning({ id: marketingStaticListMembers.id });
-    inserted += rows.length;
-  }
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < args.members.length; i += 1000) {
+      const slice = args.members.slice(i, i + 1000);
+      const rows = await tx
+        .insert(marketingStaticListMembers)
+        .values(
+          slice.map((m) => ({
+            listId: args.listId,
+            email: m.email.trim().toLowerCase(),
+            name: m.name?.trim() || null,
+            createdById: args.actorId,
+            updatedById: args.actorId,
+          })),
+        )
+        .onConflictDoNothing()
+        .returning({ id: marketingStaticListMembers.id });
+      inserted += rows.length;
+    }
 
-  if (inserted > 0) {
-    await syncStaticListMemberCount(args.listId);
-  }
+    if (inserted > 0) {
+      const [{ n }] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(marketingStaticListMembers)
+        .where(eq(marketingStaticListMembers.listId, args.listId));
+      await tx
+        .update(marketingLists)
+        .set({
+          memberCount: n ?? 0,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(marketingLists.id, args.listId));
+    }
+  });
 
   return { inserted };
 }
@@ -295,20 +312,38 @@ export async function deleteStaticListMembersById(args: {
   memberIds: string[];
 }): Promise<{ removed: number }> {
   if (args.memberIds.length === 0) return { removed: 0 };
-  const rows = await db
-    .delete(marketingStaticListMembers)
-    .where(
-      and(
-        eq(marketingStaticListMembers.listId, args.listId),
-        inArray(marketingStaticListMembers.id, args.memberIds),
-      ),
-    )
-    .returning({ id: marketingStaticListMembers.id });
+  // Wrap the delete + denormalized-count recompute in a single
+  // transaction so member rows and `marketing_lists.member_count`
+  // cannot drift if the count UPDATE fails after the DELETE
+  // committed. Static lists have no reconcile cron (only dynamic
+  // lists are refreshed via `marketing-list-refresh`), so a drift
+  // here persists until the next manual mutation.
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .delete(marketingStaticListMembers)
+      .where(
+        and(
+          eq(marketingStaticListMembers.listId, args.listId),
+          inArray(marketingStaticListMembers.id, args.memberIds),
+        ),
+      )
+      .returning({ id: marketingStaticListMembers.id });
 
-  if (rows.length > 0) {
-    await syncStaticListMemberCount(args.listId);
-  }
-  return { removed: rows.length };
+    if (rows.length > 0) {
+      const [{ n }] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(marketingStaticListMembers)
+        .where(eq(marketingStaticListMembers.listId, args.listId));
+      await tx
+        .update(marketingLists)
+        .set({
+          memberCount: n ?? 0,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(marketingLists.id, args.listId));
+    }
+    return { removed: rows.length };
+  });
 }
 
 /**

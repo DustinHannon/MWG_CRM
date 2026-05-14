@@ -250,29 +250,40 @@ export async function softDeleteActivity(
     return { parentKind: null, parentId: null };
   }
 
-  await db
-    .update(activities)
-    .set({
-      isDeleted: true,
-      deletedAt: sql`now()`,
-      deletedById: actorUserId,
-      updatedAt: sql`now()`,
-    })
-    .where(eq(activities.id, activityId));
+  // Wrap the activity flip and the lead.last_activity_at recompute in
+  // one transaction so a transient failure on the lead-side UPDATE
+  // cannot leave the activity archived while the parent lead still
+  // shows it as the most recent activity. Without the tx, scoring
+  // recency and the leads list "Last activity" column would drift.
+  await db.transaction(async (tx) => {
+    await tx
+      .update(activities)
+      .set({
+        isDeleted: true,
+        deletedAt: sql`now()`,
+        deletedById: actorUserId,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(activities.id, activityId));
 
-  if (row.leadId) {
-    const [agg] = await db
-      .select({ maxAt: max(activities.occurredAt) })
-      .from(activities)
-      .where(
-        and(eq(activities.leadId, row.leadId), eq(activities.isDeleted, false)),
-      );
-    await db
-      .update(leads)
-      .set({ lastActivityAt: agg?.maxAt ?? null })
-      .where(eq(leads.id, row.leadId));
-    return { parentKind: "lead", parentId: row.leadId };
-  }
+    if (row.leadId) {
+      const [agg] = await tx
+        .select({ maxAt: max(activities.occurredAt) })
+        .from(activities)
+        .where(
+          and(
+            eq(activities.leadId, row.leadId),
+            eq(activities.isDeleted, false),
+          ),
+        );
+      await tx
+        .update(leads)
+        .set({ lastActivityAt: agg?.maxAt ?? null })
+        .where(eq(leads.id, row.leadId));
+    }
+  });
+
+  if (row.leadId) return { parentKind: "lead", parentId: row.leadId };
   if (row.accountId) return { parentKind: "account", parentId: row.accountId };
   if (row.contactId) return { parentKind: "contact", parentId: row.contactId };
   if (row.opportunityId) return { parentKind: "opportunity", parentId: row.opportunityId };
@@ -308,29 +319,39 @@ export async function restoreActivity(
     return { parentKind: null, parentId: null };
   }
 
-  await db
-    .update(activities)
-    .set({
-      isDeleted: false,
-      deletedAt: null,
-      deletedById: null,
-      updatedAt: sql`now()`,
-    })
-    .where(eq(activities.id, activityId));
+  // Same transactional bracket as softDeleteActivity — the activity
+  // restore and the parent's lastActivityAt recompute must commit
+  // together, or the parent's "Last activity" denormalized field
+  // silently lies until the next activity bumps it.
+  await db.transaction(async (tx) => {
+    await tx
+      .update(activities)
+      .set({
+        isDeleted: false,
+        deletedAt: null,
+        deletedById: null,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(activities.id, activityId));
 
-  if (row.leadId) {
-    const [agg] = await db
-      .select({ maxAt: max(activities.occurredAt) })
-      .from(activities)
-      .where(
-        and(eq(activities.leadId, row.leadId), eq(activities.isDeleted, false)),
-      );
-    await db
-      .update(leads)
-      .set({ lastActivityAt: agg?.maxAt ?? null })
-      .where(eq(leads.id, row.leadId));
-    return { parentKind: "lead", parentId: row.leadId };
-  }
+    if (row.leadId) {
+      const [agg] = await tx
+        .select({ maxAt: max(activities.occurredAt) })
+        .from(activities)
+        .where(
+          and(
+            eq(activities.leadId, row.leadId),
+            eq(activities.isDeleted, false),
+          ),
+        );
+      await tx
+        .update(leads)
+        .set({ lastActivityAt: agg?.maxAt ?? null })
+        .where(eq(leads.id, row.leadId));
+    }
+  });
+
+  if (row.leadId) return { parentKind: "lead", parentId: row.leadId };
   if (row.accountId) return { parentKind: "account", parentId: row.accountId };
   if (row.contactId) return { parentKind: "contact", parentId: row.contactId };
   if (row.opportunityId) return { parentKind: "opportunity", parentId: row.opportunityId };

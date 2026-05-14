@@ -171,11 +171,23 @@ function predicateMatches(p: Predicate, fact: LeadFact): boolean {
 export async function evaluateLead(leadId: string): Promise<
   { score: number; band: ReturnType<typeof bandFor> } | null
 > {
-  const [lead] = await db.select().from(leads).where(eq(leads.id, leadId)).limit(1);
+  // Filter archived (soft-deleted) leads — a deleted lead should never
+  // be re-scored. The cron path already filters via `rescoreAllLeads`,
+  // but `evaluateLead` is exported and can be called directly (admin
+  // single-lead recompute, future on-demand scoring). Without the
+  // guard a deleted lead's score keeps drifting from real activity
+  // counts as new (orphaned) activities arrive.
+  const [lead] = await db
+    .select()
+    .from(leads)
+    .where(and(eq(leads.id, leadId), eq(leads.isDeleted, false)))
+    .limit(1);
   if (!lead) return null;
 
   // Counting kinds are explicit so future non-counting kinds (e.g.
   // 'system') don't silently leak into the engagement signal.
+  // Soft-deleted activities are also excluded — a user who archives
+  // a misattributed call should see the score drop next eval.
   const [agg] = await db
     .select({
       n: sql<number>`count(*)::int`,
@@ -185,6 +197,7 @@ export async function evaluateLead(leadId: string): Promise<
     .where(
       and(
         eq(activities.leadId, leadId),
+        eq(activities.isDeleted, false),
         inArray(activities.kind, [
           "note",
           "call",
