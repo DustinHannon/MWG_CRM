@@ -481,6 +481,10 @@ export async function bulkCompleteTasks(
 ): Promise<{ updated: number }> {
   if (ids.length === 0) return { updated: 0 };
   const completedAt = new Date();
+  // Skip already-completed rows in the WHERE so a re-click on a
+  // partially-completed selection doesn't overwrite the original
+  // completedAt timestamps or emit redundant `task.completed`
+  // audits. The returning rows reflect only newly-completed tasks.
   const updated = await db
     .update(tasks)
     .set({
@@ -490,7 +494,13 @@ export async function bulkCompleteTasks(
       updatedAt: completedAt,
       version: sql`${tasks.version} + 1`,
     })
-    .where(and(inArray(tasks.id, ids), eq(tasks.isDeleted, false)))
+    .where(
+      and(
+        inArray(tasks.id, ids),
+        eq(tasks.isDeleted, false),
+        sql`${tasks.status} <> 'completed'`,
+      ),
+    )
     .returning({ id: tasks.id });
   await writeAuditBatch({
     actorId,
