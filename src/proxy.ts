@@ -37,11 +37,15 @@ import { writeSystemAudit } from "@/lib/audit";
 // source country. /api/health for external uptime monitors, /blocked
 // for the destination page itself, CSP report endpoint so a blocked
 // page can still report any CSP violation, plus Next.js static and
-// well-known files.
+// well-known files. Third-party webhooks (SendGrid Event Webhook
+// etc.) under /api/v1/webhooks/ are authenticated by signature, not
+// session — geo-blocking their egress IP is a deny-of-service against
+// our own forensic trail, not a defense.
 const GEO_BYPASS_PATH_PREFIXES = [
   "/api/health",
   "/blocked",
   "/api/v1/security/csp-report",
+  "/api/v1/webhooks/",
   "/_next",
   "/favicon",
   "/robots.txt",
