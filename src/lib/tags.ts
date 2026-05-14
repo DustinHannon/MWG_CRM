@@ -11,6 +11,7 @@ import {
   type TagColor,
 } from "@/db/schema/tags";
 import { writeAudit } from "@/lib/audit";
+import { BULK_SCOPE_EXPANSION_CAP } from "@/lib/bulk-actions/expand-filtered";
 import { ConflictError, ValidationError } from "@/lib/errors";
 
 export type TagRow = typeof tags.$inferSelect;
@@ -517,9 +518,17 @@ export async function bulkTagEntities(
   if (recordIds.length === 0 || tagIds.length === 0) {
     return { recordsTouched: 0, tagsAdded: 0, tagsRemoved: 0 };
   }
-  if (recordIds.length > 1000) {
+  // F-Ω-3: the legacy 1000-record cap here contradicted the action-layer
+  // `kind: "filtered"` scope expansion which caps at BULK_SCOPE_EXPANSION_CAP
+  // (5000). A filtered tag-apply matching 2000+ records would expand to 2000
+  // records at the action layer, pass them here, and throw ValidationError
+  // because 2000 > 1000 — silently failing the operation. Aligning the lib
+  // cap with the action's filtered-scope cap closes the gap. The action
+  // layer's `kind: "ids"` path still enforces a tighter 1000 cap inside the
+  // action itself.
+  if (recordIds.length > BULK_SCOPE_EXPANSION_CAP) {
     throw new ValidationError(
-      "Bulk tag operation capped at 1000 records.",
+      `Bulk tag operation capped at ${BULK_SCOPE_EXPANSION_CAP} records.`,
     );
   }
   const uniqueRecords = Array.from(new Set(recordIds));
