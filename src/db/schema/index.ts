@@ -31,3 +31,5 @@ export * from "./clickdimensions-migrations";
 export * from "./list-import-runs";
 // Domain migration external-service verification tracker
 export * from "./domain-verification";
+// Durable async job queue (F-Ω-8)
+export * from "./jobs";
