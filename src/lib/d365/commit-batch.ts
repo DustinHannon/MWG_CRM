@@ -67,6 +67,8 @@ const PARENT_ENTITY_TABLES = {
   opportunity: opportunities,
 } as const;
 
+type ParentTable = (typeof PARENT_ENTITY_TABLES)[keyof typeof PARENT_ENTITY_TABLES];
+
 const ACTIVITY_KIND: Record<string, "email" | "call" | "meeting" | "note" | "task"> = {
   annotation: "note",
   task: "task",
@@ -514,13 +516,17 @@ async function commitOneRecord(
     return {
       outcome: "committed",
       unresolvedFks,
-      // F-04: capture pre-update version on the audit `before` payload
-      // so a concurrent user edit's OCC clobber is reconstructible from
+      // capture pre-update version on the audit `before` payload so a
+      // concurrent user edit's OCC interaction is reconstructible from
       // the forensic trail. The D365 import is the documented
-      // authoritative writer for D365-sourced records; the OCC `WHERE version
-      // = $expected` clause is intentionally absent. Recording the
-      // before-version lets reviewers reconstruct any concurrent edit
-      // that lost.
+      // authoritative writer for D365-sourced records; the OCC
+      // `WHERE version = $expected` clause is intentionally absent.
+      // For `dedup_overwrite` resolution: a concurrent user write that
+      // landed between the SELECT and the UPDATE is clobbered (by
+      // design — overwrite means overwrite). For `dedup_merge`
+      // resolution: the SET clause uses SQL-level `COALESCE` per
+      // F-72 / STANDARDS §19.8, so concurrent user writes that filled
+      // a previously-empty column are preserved.
       ...(parentResult.beforeVersion !== undefined
         ? { before: { version: parentResult.beforeVersion } }
         : {}),
@@ -577,7 +583,7 @@ async function commitParentEntity(
     const update =
       conflictResolution === "dedup_overwrite"
         ? buildOverwriteUpdate(payload)
-        : buildMergeUpdate(payload, existingRow);
+        : buildMergeUpdate(payload, existingRow, table);
 
     // F-04: capture pre-update version (if the table tracks OCC) so the
     // audit `before` payload records the version the D365 import
@@ -672,12 +678,30 @@ function buildOverwriteUpdate(
  * Build a `set` payload for dedup_merge (Q-03 default) — only fill
  * fields where the existing local value is null/undefined/empty
  * string.
+ *
+ * Concurrent-write safety (F-72): the `existing` snapshot is read at
+ * the top of `commitParentEntity`. Between that SELECT and the UPDATE
+ * fired here, a CRM user can have edited the same row. Emitting a
+ * plain `SET first_name = $new` would clobber that edit silently. The
+ * merge contract specifies the opposite — preserve user data — so we
+ * wrap each value in `COALESCE(<column>, $new)`. The DB engine decides
+ * at UPDATE time whether the column is still empty; concurrent fills
+ * are preserved.
+ *
+ * The JS-side `isEmpty` snapshot check stays — it gates which columns
+ * even enter the SET clause, so the UPDATE's write-set stays minimal.
+ * The COALESCE wrapping handles the race within that already-narrow
+ * set.
+ *
+ * STANDARDS §19.8 governs the sync pipeline idempotency contract.
  */
 function buildMergeUpdate(
   payload: Record<string, unknown>,
   existing: Record<string, unknown>,
+  table: ParentTable,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+  const tableCols = table as unknown as Record<string, unknown>;
   for (const [k, v] of Object.entries(payload)) {
     if (v === undefined || v === null) continue;
     if (k === "id" || k === "version") continue;
@@ -686,7 +710,15 @@ function buildMergeUpdate(
       cur === null ||
       cur === undefined ||
       (typeof cur === "string" && cur.length === 0);
-    if (isEmpty) out[k] = v;
+    if (!isEmpty) continue;
+    const col = tableCols[k];
+    if (col === undefined) continue;
+    // F-72: SQL-level COALESCE so a concurrent user write that landed
+    // between the SELECT and this UPDATE is preserved by the DB engine
+    // at apply-time. Without this, the merge contract is violated
+    // silently when a user edits the same row during the D365 import's
+    // commit window.
+    out[k] = sql`COALESCE(${col as never}, ${v})`;
   }
   return out;
 }
