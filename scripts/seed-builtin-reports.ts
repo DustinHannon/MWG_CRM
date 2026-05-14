@@ -43,9 +43,27 @@
 // otherwise. We deliberately don't import dotenv here so the script
 // stays fast under `pnpm dlx tsx`.
 import { and, eq, notInArray } from "drizzle-orm";
-import { db } from "../src/db";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { savedReports } from "../src/db/schema/saved-reports";
 import { users } from "../src/db/schema/users";
+
+// Local postgres-js client. Mirrors the production tuning in src/db/index.ts
+// (max: 1 for Supavisor, prepare: false, search_path) but without the
+// `import "server-only"` guard at the top of that module — `server-only`
+// throws when imported outside Next.js's webpack pipeline.
+const POSTGRES_URL = process.env.POSTGRES_URL;
+if (!POSTGRES_URL) {
+  console.error("POSTGRES_URL not set; ensure --env-file .env.local is passed");
+  process.exit(1);
+}
+const sqlClient = postgres(POSTGRES_URL, {
+  prepare: false,
+  max: 1,
+  ssl: "require",
+  connection: { search_path: "public, extensions" },
+});
+const db = drizzle(sqlClient);
 
 const SYSTEM_EMAIL = "system@mwg.local";
 const SYSTEM_USERNAME = "system";
@@ -418,10 +436,12 @@ async function main() {
     `\nDone. ${REPORTS.length} built-in reports in catalog` +
       (removedCount > 0 ? `; ${removedCount} stale rows pruned.` : "."),
   );
+  await sqlClient.end({ timeout: 5 });
   process.exit(0);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("Seeder failed:", err);
+  await sqlClient.end({ timeout: 5 }).catch(() => {});
   process.exit(1);
 });
