@@ -6,7 +6,7 @@ import { crmAccounts, contacts, opportunities } from "@/db/schema/crm-records";
 import { leads } from "@/db/schema/leads";
 import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   decodeCursor as decodeStandardCursor,
   encodeFromValues as encodeStandardCursor,
@@ -468,11 +468,12 @@ export async function listTasksForOpportunity(
     .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
 }
 
-// bulk-action helpers for the new /tasks toolbar.
-// Each helper writes a single audit row per affected task using the
-// canonical event names so audit volume scales linearly. Caller
-// must have already access-checked (canEditOthersTasks /
-// canDeleteOthersTasks / canReassignTasks).
+// bulk-action helpers for the /tasks toolbar.
+// Each helper writes per-record audit rows via writeAuditBatch (single
+// INSERT, single email lookup, automatic requestId from
+// AsyncLocalStorage) so audit emission scales without N round-trips
+// per bulk invocation. Caller must have already access-checked
+// (canEditOthersTasks / canDeleteOthersTasks / canReassignTasks).
 
 export async function bulkCompleteTasks(
   ids: string[],
@@ -491,15 +492,15 @@ export async function bulkCompleteTasks(
     })
     .where(and(inArray(tasks.id, ids), eq(tasks.isDeleted, false)))
     .returning({ id: tasks.id });
-  for (const t of updated) {
-    await writeAudit({
-      actorId,
+  await writeAuditBatch({
+    actorId,
+    events: updated.map((t) => ({
       action: "task.completed",
       targetType: "tasks",
       targetId: t.id,
       after: { completedAt: completedAt.toISOString() },
-    });
-  }
+    })),
+  });
   return { updated: updated.length };
 }
 
@@ -519,15 +520,15 @@ export async function bulkReassignTasks(
     })
     .where(and(inArray(tasks.id, ids), eq(tasks.isDeleted, false)))
     .returning({ id: tasks.id });
-  for (const t of updated) {
-    await writeAudit({
-      actorId,
+  await writeAuditBatch({
+    actorId,
+    events: updated.map((t) => ({
       action: "task.reassigned",
       targetType: "tasks",
       targetId: t.id,
       after: { newAssigneeId },
-    });
-  }
+    })),
+  });
   return { updated: updated.length };
 }
 
@@ -549,14 +550,14 @@ export async function bulkDeleteTasks(
     })
     .where(and(inArray(tasks.id, ids), eq(tasks.isDeleted, false)))
     .returning({ id: tasks.id });
-  for (const t of updated) {
-    await writeAudit({
-      actorId,
+  await writeAuditBatch({
+    actorId,
+    events: updated.map((t) => ({
       action: "task.deleted",
       targetType: "tasks",
       targetId: t.id,
-    });
-  }
+    })),
+  });
   return { updated: updated.length };
 }
 
