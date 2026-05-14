@@ -1,3 +1,13 @@
+// consistency-exempt: list-page-pattern: URL `?sort=` round-trip via
+// sortable column headers (other P0 entities have implicit sort via
+// the active view definition); per-row Complete/Delete/Reassign bulk
+// toolbar with its own per-page Set<string> selection state distinct
+// from the canonical BulkSelectionProvider (Complete/Delete/Reassign
+// require explicit enumeration server-side, no bulkScope path wired);
+// status/priority/due-date filter pills as a row above the standard
+// chip-row. All are documented deviations per STANDARDS §17 "Allowed
+// page-specific deviations".
+
 "use client";
 
 import Link from "next/link";
