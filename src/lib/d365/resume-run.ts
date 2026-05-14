@@ -217,6 +217,16 @@ const HALT_REASON_VALUES = new Set<string>(Object.values(D365_HALT_REASONS));
 
 interface HaltNoteEntry {
   reason?: string;
+  /**
+   * F-Ω-2: the resume / halt note shape uses `kind` (see resumeRun
+   * above + pull-batch.ts halt-note writer + map-batch.ts halt-note
+   * writer + the run-detail page's parseHaltFromNotes + the polling
+   * endpoint's extractHaltReason). The legacy `type` key never lands
+   * in production data; kept here as a tolerated alias only because
+   * removing the field would imply a schema change to existing
+   * import_runs.notes rows. Both keys are checked below.
+   */
+  kind?: string;
   type?: string;
 }
 
@@ -228,7 +238,7 @@ interface HaltNoteEntry {
  * Tolerant of:
  * trailing/leading whitespace
  * non-JSON lines (skipped; logged WARN once at parse time)
- * missing/legacy `type` keys (we still trust an entry whose
+ * missing/legacy `kind` keys (we still trust an entry whose
  * `reason` value is in the halt-reason whitelist)
  */
 export function parseLastHaltReason(
@@ -246,11 +256,14 @@ export function parseLastHaltReason(
       continue;
     }
     if (!parsed) continue;
-    // A "resume" entry SUPERSEDES the prior halt — once a run was
-    // resumed, the next pause must record a fresh halt entry. So if
-    // we see a resume before a halt walking bottom-up, there's no
-    // active halt to resolve.
-    if (parsed.type === "resume") return null;
+    // F-Ω-2: a "resume" entry SUPERSEDES the prior halt — once a run
+    // was resumed, the next pause must record a fresh halt entry. So
+    // if we see a resume before a halt walking bottom-up, there's no
+    // active halt to resolve. The canonical note shape uses `kind`
+    // (see comment on HaltNoteEntry above); the legacy `type` is
+    // tolerated as an alias so any pre-canonicalization rows still
+    // parse.
+    if (parsed.kind === "resume" || parsed.type === "resume") return null;
     if (
       typeof parsed.reason === "string" &&
       HALT_REASON_VALUES.has(parsed.reason)
