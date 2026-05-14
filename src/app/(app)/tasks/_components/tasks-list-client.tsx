@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -27,6 +28,7 @@ import { UserChip } from "@/components/user-display/user-chip";
 import { PriorityPill } from "@/components/ui/priority-pill";
 import { StatusPill } from "@/components/ui/status-pill";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import { cn } from "@/lib/utils";
 import type { TaskRow } from "@/lib/tasks";
 import {
@@ -604,25 +606,22 @@ function TasksListInner({
 
   const filtersSlot = (
     <div className="space-y-3">
-      {/* View selector + MODIFIED badge + Save-as-new + Delete.
-          Desktop-only — these are power-user affordances that don't
-          fit the mobile chip toolbar. Lives inside the client
-          component so the MODIFIED badge can react to client filter
-          state. */}
-      <div className="hidden md:block">
-        <TaskViewSelector
-          activeViewId={activeView.id}
-          activeViewName={activeViewName}
-          builtinViews={builtinViews}
-          savedViews={savedViews}
-          currentFilters={currentFiltersForSave}
-          currentSort={sort}
-          currentColumns={activeColumns}
-          viewModified={viewModified}
-          modifiedFields={modifiedFields}
-          resetClientState={clearFilters}
-        />
-      </div>
+      {/* View selector + MODIFIED badge stay visible on every viewport
+          so mobile users can switch views and reset modifications. The
+          Save-as-new and Delete-view affordances are power-user
+          controls hidden below md inside TaskViewSelector itself. */}
+      <TaskViewSelector
+        activeViewId={activeView.id}
+        activeViewName={activeViewName}
+        builtinViews={builtinViews}
+        savedViews={savedViews}
+        currentFilters={currentFiltersForSave}
+        currentSort={sort}
+        currentColumns={activeColumns}
+        viewModified={viewModified}
+        modifiedFields={modifiedFields}
+        resetClientState={clearFilters}
+      />
 
       {/* Per-row bulk-action toolbar (Complete / Delete / Reassign).
           Renders when ≥1 row checked via the per-row checkbox.
@@ -687,45 +686,47 @@ function TasksListInner({
         canViewOthers={canViewOthers}
         hasActiveFilters={filtersAreModified}
       />
-
-      {/* Desktop column headers — sortable via URL nav. Renders as
-          a `<thead>` inside a `<table>` wrapper so the header row
-          aligns with the per-row layout below. Leading checkbox
-          column + trailing edit-button column kept at fixed width. */}
-      <div className="hidden overflow-x-auto rounded-t-lg border border-b-0 border-border bg-muted/40 md:block">
-        <table className="data-table min-w-full divide-y divide-border/60 text-sm">
-          <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-              <th className="w-10 px-2 py-3" aria-label="select" />
-              <th className="w-8 px-2 py-3" aria-label="complete" />
-              {activeColumns.map((key) => {
-                const sortable = TASK_SORTABLE_COLUMNS.has(key);
-                const label =
-                  AVAILABLE_TASK_COLUMNS.find((c) => c.key === key)?.label ??
-                  key;
-                return (
-                  <th
-                    key={key}
-                    className="flex-1 px-5 py-3 font-medium whitespace-nowrap"
-                  >
-                    {sortable ? (
-                      <SortableHeaderLink
-                        field={key}
-                        label={label}
-                        sort={sort}
-                      />
-                    ) : (
-                      <span>{label}</span>
-                    )}
-                  </th>
-                );
-              })}
-              <th className="w-16 px-2 py-3" aria-label="actions" />
-            </tr>
-          </thead>
-        </table>
-      </div>
     </div>
+  );
+
+  // Desktop column headers — sortable via URL nav. The shell renders
+  // this slot as the first child of the row list's horizontal-scroll
+  // wrapper, so headers stay aligned with row cells when the table is
+  // wider than the viewport. min-width matches the row's min-width:
+  // leading select w-10 (40) + complete w-8 (32) + columns (140 each)
+  // + trailing actions w-16 (64) = 136 fixed cells plus 140 per column.
+  const columnHeaderSlot = (
+    <table
+      className="data-table w-full divide-y divide-border/60 text-sm"
+      style={{ minWidth: `${activeColumns.length * 140 + 136}px` }}
+    >
+      <thead>
+        <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+          <th className="w-10 px-2 py-3" aria-label="select" />
+          <th className="w-8 px-2 py-3" aria-label="complete" />
+          {activeColumns.map((key) => {
+            const sortable = TASK_SORTABLE_COLUMNS.has(key);
+            const label =
+              AVAILABLE_TASK_COLUMNS.find((c) => c.key === key)?.label ??
+              key;
+            return (
+              <th
+                key={key}
+                className="px-5 py-3 font-medium whitespace-nowrap"
+                style={{ minWidth: "140px" }}
+              >
+                {sortable ? (
+                  <SortableHeaderLink field={key} label={label} sort={sort} />
+                ) : (
+                  <span>{label}</span>
+                )}
+              </th>
+            );
+          })}
+          <th className="w-16 px-2 py-3" aria-label="actions" />
+        </tr>
+      </thead>
+    </table>
   );
 
   return (
@@ -756,10 +757,10 @@ function TasksListInner({
         }
         header={{
           title: "Tasks",
-          fontFamily: "display",
           actions: headerActions,
         }}
         filtersSlot={filtersSlot}
+        columnHeaderSlot={columnHeaderSlot}
         bulkActions={{
           banner: <BulkSelectionBanner />,
           toolbar: (
@@ -938,6 +939,11 @@ function TaskDesktopRow({
     task.dueAt < new Date() &&
     task.status !== "completed";
   const isCompleted = task.status === "completed";
+  // Match the column-header tier's min-width so the row stays aligned
+  // with header cells when the table is wider than the viewport.
+  // Leading select w-10 (40) + complete w-8 (32) + trailing actions
+  // w-16 (64) = 136 fixed.
+  const minRowWidth = columns.length * 140 + 136;
   return (
     <div
       className={cn(
@@ -949,6 +955,7 @@ function TaskDesktopRow({
             : "bg-card hover:bg-muted/40",
       )}
       data-row-flash="new"
+      style={{ minWidth: `${minRowWidth}px` }}
     >
       <div className="flex w-10 shrink-0 items-center justify-center px-2 py-3">
         <input
@@ -981,6 +988,7 @@ function TaskDesktopRow({
               "min-w-0 flex-1 truncate px-5 py-3",
               c === "title" && isCompleted ? "line-through" : undefined,
             )}
+            style={{ flexBasis: "140px" }}
           >
             {renderTaskCell(task, c, { viewerId, prefs, overdue })}
           </div>
@@ -1353,7 +1361,7 @@ function TaskFiltersBar({
         </label>
       </div>
 
-      <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-3 md:overflow-visible md:px-0 md:pb-0">
+      <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-3 md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]">
         {/* Desktop search input. */}
         <input
           type="search"
@@ -1396,7 +1404,7 @@ function TaskFiltersBar({
             <button
               type="button"
               onClick={onClear}
-              className="shrink-0 rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground/90"
+              className="h-11 shrink-0 rounded-full px-4 text-sm text-muted-foreground hover:text-foreground/90"
             >
               Clear
             </button>
@@ -1511,7 +1519,7 @@ function ControlledMobileSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
-        "h-9 min-w-0 shrink-0 appearance-none rounded-full border px-3 pr-7 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-ring/40",
+        "h-11 min-w-0 shrink-0 appearance-none rounded-full border px-4 pr-8 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-ring/40",
         isSet
           ? "border-primary/30 bg-primary/15 text-foreground"
           : "border-border bg-muted/40 text-muted-foreground",
@@ -1550,6 +1558,8 @@ function ControlledMultiSelect({
   placeholder: string;
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useClickOutside(containerRef, () => setOpen(false), open);
   const selected = useMemo(
     () => value.split(",").map((s) => s.trim()).filter(Boolean),
     [value],
@@ -1570,7 +1580,7 @@ function ControlledMultiSelect({
         : `${placeholder}: ${selected.length}`;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -1582,12 +1592,6 @@ function ControlledMultiSelect({
       </button>
       {open ? (
         <>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Close menu"
-            className="fixed inset-0 z-40 cursor-default"
-          />
           <div
             role="listbox"
             className="absolute right-0 z-50 mt-1 w-44 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-xl"
@@ -1628,6 +1632,8 @@ function ControlledTagFilter({
   onChange: (next: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useClickOutside(containerRef, () => setOpen(false), open);
 
   const selected = useMemo(
     () =>
@@ -1655,7 +1661,7 @@ function ControlledTagFilter({
         : `Tags: ${selected.length}`;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <div
         className={cn(
           "inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm transition hover:bg-muted",
@@ -1687,12 +1693,6 @@ function ControlledTagFilter({
       </div>
       {open ? (
         <>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Close menu"
-            className="fixed inset-0 z-40 cursor-default"
-          />
           <div
             role="listbox"
             className="absolute right-0 z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-xl"

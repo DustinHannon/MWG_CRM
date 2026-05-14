@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ModifiedBadge } from "@/components/saved-views";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import type {
   TaskViewDefinition,
   TaskViewFilters,
@@ -74,6 +75,8 @@ export function TaskViewSelector({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, startSaving] = useTransition();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useClickOutside(containerRef, () => setOpen(false), open);
   const all = [...builtinViews, ...savedViews];
   const active = all.find((v) => v.id === activeViewId) ?? builtinViews[0];
 
@@ -123,7 +126,7 @@ export function TaskViewSelector({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <div className="relative">
+      <div className="relative" ref={containerRef}>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -134,12 +137,6 @@ export function TaskViewSelector({
         </button>
         {open ? (
           <>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              aria-label="Close menu"
-              className="fixed inset-0 z-40 cursor-default"
-            />
             <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border border-border bg-[var(--popover)] text-[var(--popover-foreground)] shadow-2xl">
               <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-muted-foreground/80">
                 Built-in
@@ -216,7 +213,7 @@ export function TaskViewSelector({
         type="button"
         onClick={saveAs}
         disabled={saving}
-        className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs hover:bg-muted"
+        className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs hover:bg-muted md:inline-flex"
       >
         {saving ? "Saving…" : "Save current as view"}
       </button>
@@ -226,7 +223,7 @@ export function TaskViewSelector({
           type="button"
           onClick={deleteActive}
           disabled={saving}
-          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20"
+          className="hidden rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20 md:inline-flex"
         >
           Delete view
         </button>

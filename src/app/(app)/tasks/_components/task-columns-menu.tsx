@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   AVAILABLE_TASK_COLUMNS,
   type TaskColumnKey,
 } from "@/lib/task-view-constants";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import { setTaskAdhocColumnsAction } from "../view-actions";
 
 /**
@@ -31,6 +32,8 @@ export function TaskColumnsMenu({
   const router = useRouter();
   const search = useSearchParams();
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useClickOutside(containerRef, () => setOpen(false), open);
 
   function toggle(key: TaskColumnKey) {
     const next = activeColumns.includes(key)
@@ -66,7 +69,7 @@ export function TaskColumnsMenu({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -76,12 +79,6 @@ export function TaskColumnsMenu({
       </button>
       {open ? (
         <>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Close column chooser"
-            className="fixed inset-0 z-40 cursor-default"
-          />
           <div className="absolute right-0 top-full z-50 mt-1 max-h-96 w-72 overflow-y-auto rounded-md border border-border bg-[var(--popover)] p-2 text-[var(--popover-foreground)] shadow-2xl">
             <div className="flex items-center justify-between px-2 py-1">
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80">
