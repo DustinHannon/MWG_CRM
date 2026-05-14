@@ -12,7 +12,6 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import {
   StandardEmptyState,
@@ -102,6 +101,11 @@ export function EmailFailuresListClient({
   const [filters, setFilters] = useState<EmailFailuresFilters>(initialFilters);
   const [draft, setDraft] = useState<EmailFailuresFilters>(initialFilters);
   const [selected, setSelected] = useState<FailureRow | null>(null);
+  // Bumps after a successful retry. Folded into the TanStack queryKey
+  // so the list refetches and surfaces the new email_send_log row —
+  // router.refresh() alone doesn't invalidate the client-cached query.
+  const [reloadKey, setReloadKey] = useState(0);
+  const bumpReload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const memoizedFilters = useMemo<EmailFailuresFilters>(
     () => filters,
@@ -278,7 +282,7 @@ export function EmailFailuresListClient({
   return (
     <>
       <StandardListPage<FailureRow, EmailFailuresFilters>
-        queryKey={["admin-email-failures"]}
+        queryKey={["admin-email-failures", reloadKey]}
         fetchPage={fetchPage}
         filters={memoizedFilters}
         renderRow={renderRow}
@@ -306,6 +310,7 @@ export function EmailFailuresListClient({
         onOpenChange={(open) => {
           if (!open) setSelected(null);
         }}
+        onRetried={bumpReload}
       />
     </>
   );
@@ -439,9 +444,11 @@ function statusChipClass(status: string): string {
 function DetailDialog({
   row,
   onOpenChange,
+  onRetried,
 }: {
   row: FailureRow | null;
   onOpenChange: (open: boolean) => void;
+  onRetried: () => void;
 }) {
   const open = row !== null;
   return (
@@ -456,7 +463,11 @@ function DetailDialog({
             Email send detail
           </Dialog.Title>
           {row ? (
-            <DetailBody row={row} onClose={() => onOpenChange(false)} />
+            <DetailBody
+              row={row}
+              onClose={() => onOpenChange(false)}
+              onRetried={onRetried}
+            />
           ) : null}
         </Dialog.Content>
       </Dialog.Portal>
@@ -467,9 +478,11 @@ function DetailDialog({
 function DetailBody({
   row,
   onClose,
+  onRetried,
 }: {
   row: FailureRow;
   onClose: () => void;
+  onRetried: () => void;
 }) {
   return (
     <div className="mt-4 space-y-4 text-sm">
@@ -565,7 +578,13 @@ function DetailBody({
 
       <div className="mwg-mobile-sheet-actions mt-6 flex items-center justify-end gap-2 border-t border-border/60 pt-4">
         {row.status === "failed" ? (
-          <DrawerRetryButton row={row} onDone={onClose} />
+          <DrawerRetryButton
+            row={row}
+            onDone={() => {
+              onClose();
+              onRetried();
+            }}
+          />
         ) : (
           <span className="mr-auto text-[11px] text-muted-foreground/80">
             Retry not available — preflight-blocked sends require a config
@@ -592,7 +611,6 @@ function DrawerRetryButton({
   row: FailureRow;
   onDone: () => void;
 }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -617,7 +635,6 @@ function DrawerRetryButton({
           return;
         }
         setOk(`Retry queued — new send status: ${json.status ?? "unknown"}`);
-        router.refresh();
         setTimeout(() => onDone(), 800);
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Retry failed");

@@ -8,7 +8,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import {
   StandardEmptyState,
@@ -74,6 +73,11 @@ export function ApiKeysListClient() {
     prefix: string;
   } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ApiKeyRow | null>(null);
+  // Bumps after every successful generate / revoke / delete. Folded into
+  // the TanStack queryKey so the list refetches — router.refresh() alone
+  // doesn't invalidate the client-cached useInfiniteQuery state.
+  const [reloadKey, setReloadKey] = useState(0);
+  const bumpReload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const memoizedFilters = useMemo<ApiKeysFilters>(() => filters, [filters]);
 
@@ -99,16 +103,24 @@ export function ApiKeysListClient() {
 
   const renderRow = useCallback(
     (row: ApiKeyRow) => (
-      <ApiKeyDesktopRow row={row} onDelete={() => setDeleteTarget(row)} />
+      <ApiKeyDesktopRow
+        row={row}
+        onDelete={() => setDeleteTarget(row)}
+        onRevoked={bumpReload}
+      />
     ),
-    [],
+    [bumpReload],
   );
 
   const renderCard = useCallback(
     (row: ApiKeyRow) => (
-      <ApiKeyMobileCard row={row} onDelete={() => setDeleteTarget(row)} />
+      <ApiKeyMobileCard
+        row={row}
+        onDelete={() => setDeleteTarget(row)}
+        onRevoked={bumpReload}
+      />
     ),
-    [],
+    [bumpReload],
   );
 
   const applyDraft = () => setFilters(draft);
@@ -181,7 +193,7 @@ export function ApiKeysListClient() {
   return (
     <>
       <StandardListPage<ApiKeyRow, ApiKeysFilters>
-        queryKey={["admin-api-keys"]}
+        queryKey={["admin-api-keys", reloadKey]}
         fetchPage={fetchPage}
         filters={memoizedFilters}
         renderRow={renderRow}
@@ -217,12 +229,19 @@ export function ApiKeysListClient() {
         <PlaintextModal
           plaintext={plaintext.plaintext}
           prefix={plaintext.prefix}
-          onClose={() => setPlaintext(null)}
+          onClose={() => {
+            setPlaintext(null);
+            bumpReload();
+          }}
         />
       ) : null}
 
       {deleteTarget ? (
-        <DeleteModal row={deleteTarget} onClose={() => setDeleteTarget(null)} />
+        <DeleteModal
+          row={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={bumpReload}
+        />
       ) : null}
     </>
   );
@@ -231,9 +250,11 @@ export function ApiKeysListClient() {
 function ApiKeyDesktopRow({
   row,
   onDelete,
+  onRevoked,
 }: {
   row: ApiKeyRow;
   onDelete: () => void;
+  onRevoked: () => void;
 }) {
   const status = statusOf(row);
   return (
@@ -288,7 +309,11 @@ function ApiKeyDesktopRow({
       <div className="w-32 shrink-0 text-right">
         <div className="flex justify-end gap-1.5">
           {status === "active" ? (
-            <RevokeButton keyId={row.id} keyName={row.name} />
+            <RevokeButton
+              keyId={row.id}
+              keyName={row.name}
+              onRevoked={onRevoked}
+            />
           ) : null}
           <button
             type="button"
@@ -306,9 +331,11 @@ function ApiKeyDesktopRow({
 function ApiKeyMobileCard({
   row,
   onDelete,
+  onRevoked,
 }: {
   row: ApiKeyRow;
   onDelete: () => void;
+  onRevoked: () => void;
 }) {
   const status = statusOf(row);
   return (
@@ -342,7 +369,11 @@ function ApiKeyMobileCard({
       </div>
       <div className="flex justify-end gap-1.5">
         {status === "active" ? (
-          <RevokeButton keyId={row.id} keyName={row.name} />
+          <RevokeButton
+            keyId={row.id}
+            keyName={row.name}
+            onRevoked={onRevoked}
+          />
         ) : null}
         <button
           type="button"
@@ -374,8 +405,15 @@ function StatusPill({ status }: { status: Status }) {
   );
 }
 
-function RevokeButton({ keyId, keyName }: { keyId: string; keyName: string }) {
-  const router = useRouter();
+function RevokeButton({
+  keyId,
+  keyName,
+  onRevoked,
+}: {
+  keyId: string;
+  keyName: string;
+  onRevoked: () => void;
+}) {
   const [pending, startTransition] = useTransition();
   return (
     <button
@@ -393,7 +431,7 @@ function RevokeButton({ keyId, keyName }: { keyId: string; keyName: string }) {
             alert(res.error);
             return;
           }
-          router.refresh();
+          onRevoked();
         });
       }}
       className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-accent/40 disabled:opacity-50"
@@ -644,17 +682,10 @@ function PlaintextModal({
   prefix: string;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const [copied, setCopied] = useState(false);
 
   return (
-    <ModalShell
-      title="API key generated"
-      onClose={() => {
-        onClose();
-        router.refresh();
-      }}
-    >
+    <ModalShell title="API key generated" onClose={onClose}>
       <div className="grid gap-4">
         <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
           <strong>Copy this key now.</strong> You will not be able to see it
@@ -687,10 +718,7 @@ function PlaintextModal({
         <div className="flex justify-end pt-2">
           <button
             type="button"
-            onClick={() => {
-              onClose();
-              router.refresh();
-            }}
+            onClick={onClose}
             className="rounded-md border border-primary/60 bg-primary px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-primary-foreground hover:bg-primary/90"
           >
             I&apos;ve stored it
@@ -704,11 +732,12 @@ function PlaintextModal({
 function DeleteModal({
   row,
   onClose,
+  onDeleted,
 }: {
   row: ApiKeyRow;
   onClose: () => void;
+  onDeleted: () => void;
 }) {
-  const router = useRouter();
   const [confirm, setConfirm] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -753,7 +782,7 @@ function DeleteModal({
                   return;
                 }
                 onClose();
-                router.refresh();
+                onDeleted();
               });
             }}
             className="rounded-md border border-destructive/60 bg-destructive px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-destructive-foreground hover:bg-destructive/90 disabled:opacity-40"
