@@ -190,7 +190,17 @@ export const GET = withInternalListApi(
 
   // Permission-gated team view; honour the override here too in
   // case a stale URL kept the team-view id after a perm change.
-  if (filters.assignee === "any" && !canViewOthers) {
+  // Also clamp explicit user-id assignee filters — without this a
+  // non-admin lacking canViewOthersTasks could pass
+  // `?assignee=<peer_uuid>` and listTasksForUser would happily filter
+  // by that uuid (no internal gate on user-id assignee), leaking
+  // another user's task queue.
+  if (
+    !canViewOthers &&
+    filters.assignee &&
+    filters.assignee !== "me" &&
+    filters.assignee !== session.id
+  ) {
     filters.assignee = "me";
   }
 
