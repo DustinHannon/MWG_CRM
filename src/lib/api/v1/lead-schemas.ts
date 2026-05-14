@@ -22,6 +22,7 @@ export const LeadSchema = registry.register(
       .string()
       .uuid()
       .openapi({ example: "00000000-0000-0000-0000-000000000001" }),
+    salutation: z.string().nullable().openapi({ example: "Mr." }),
     first_name: z.string().openapi({ example: "Jane" }),
     last_name: z.string().nullable().openapi({ example: "Doe" }),
     company_name: z.string().nullable().openapi({ example: "Acme Corp" }),
@@ -30,6 +31,7 @@ export const LeadSchema = registry.register(
       .nullable()
       .openapi({ example: "contact@example.com" }),
     phone: z.string().nullable().openapi({ example: "+1-555-0100" }),
+    mobile_phone: z.string().nullable().openapi({ example: "+1-555-0101" }),
     job_title: z.string().nullable().openapi({ example: "Director of HR" }),
     industry: z.string().nullable().openapi({ example: "Insurance" }),
     website: z.string().nullable().openapi({ example: "https://acme.example" }),
@@ -116,6 +118,7 @@ export const LeadListQuerySchema = z.object({
 export const LeadCreateSchema = registry.register(
   "LeadCreate",
   z.object({
+    salutation: z.string().max(20).nullable().optional().openapi({ example: "Mr." }),
     first_name: z.string().min(1).openapi({ example: "Jane" }),
     last_name: z.string().nullable().optional().openapi({ example: "Doe" }),
     company_name: z
@@ -134,6 +137,12 @@ export const LeadCreateSchema = registry.register(
       .nullable()
       .optional()
       .openapi({ example: "+1-555-0100" }),
+    mobile_phone: z
+      .string()
+      .max(40)
+      .nullable()
+      .optional()
+      .openapi({ example: "+1-555-0101" }),
     job_title: z.string().max(200).nullable().optional(),
     industry: z.string().max(100).nullable().optional(),
     website: z.string().url().nullable().optional(),

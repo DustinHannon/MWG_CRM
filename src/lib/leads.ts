@@ -202,18 +202,38 @@ export type LeadUpdateInput = z.infer<typeof leadUpdateSchema>;
 export interface LeadListResult {
   rows: Array<{
     id: string;
+    salutation: string | null;
     firstName: string;
     lastName: string | null;
+    jobTitle: string | null;
     companyName: string | null;
+    industry: string | null;
     email: string | null;
     phone: string | null;
+    mobilePhone: string | null;
+    website: string | null;
+    linkedinUrl: string | null;
+    street1: string | null;
+    street2: string | null;
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+    country: string | null;
+    description: string | null;
+    subject: string | null;
     status: (typeof LEAD_STATUSES)[number];
     rating: (typeof LEAD_RATINGS)[number];
     source: (typeof LEAD_SOURCES)[number];
+    doNotContact: boolean;
+    doNotEmail: boolean;
+    doNotCall: boolean;
     ownerId: string | null;
     ownerDisplayName: string | null;
     estimatedValue: string | null;
+    estimatedCloseDate: string | null;
+    convertedAt: Date | null;
     lastActivityAt: Date | null;
+    version: number;
     updatedAt: Date;
     createdAt: Date;
     tags: string[] | null;
@@ -304,18 +324,38 @@ export async function listLeads(
     db
       .select({
         id: leads.id,
+        salutation: leads.salutation,
         firstName: leads.firstName,
         lastName: leads.lastName,
+        jobTitle: leads.jobTitle,
         companyName: leads.companyName,
+        industry: leads.industry,
         email: leads.email,
         phone: leads.phone,
+        mobilePhone: leads.mobilePhone,
+        website: leads.website,
+        linkedinUrl: leads.linkedinUrl,
+        street1: leads.street1,
+        street2: leads.street2,
+        city: leads.city,
+        state: leads.state,
+        postalCode: leads.postalCode,
+        country: leads.country,
+        description: leads.description,
+        subject: leads.subject,
         status: leads.status,
         rating: leads.rating,
         source: leads.source,
+        doNotContact: leads.doNotContact,
+        doNotEmail: leads.doNotEmail,
+        doNotCall: leads.doNotCall,
         ownerId: leads.ownerId,
         ownerDisplayName: users.displayName,
         estimatedValue: leads.estimatedValue,
+        estimatedCloseDate: leads.estimatedCloseDate,
+        convertedAt: leads.convertedAt,
         lastActivityAt: leads.lastActivityAt,
+        version: leads.version,
         updatedAt: leads.updatedAt,
         createdAt: leads.createdAt,
         // hydrate tag names from the relational lead_tags

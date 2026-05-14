@@ -20,11 +20,13 @@ function iso(d: Date | null | undefined): string | null {
 export function serializeLead(row: Record<string, unknown>) {
   return {
     id: row.id as string,
+    salutation: (row.salutation ?? null) as string | null,
     first_name: (row.firstName ?? null) as string | null,
     last_name: (row.lastName ?? null) as string | null,
     company_name: (row.companyName ?? null) as string | null,
     email: (row.email ?? null) as string | null,
     phone: (row.phone ?? null) as string | null,
+    mobile_phone: (row.mobilePhone ?? null) as string | null,
     job_title: (row.jobTitle ?? null) as string | null,
     industry: (row.industry ?? null) as string | null,
     website: (row.website ?? null) as string | null,

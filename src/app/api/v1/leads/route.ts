@@ -182,9 +182,8 @@ export const POST = withApi(
           ? null
           : parsed.data.estimated_value.toFixed(2),
       estimatedCloseDate: parsed.data.estimated_close_date ?? null,
-      // server validation wired in lib; salutation/mobilePhone unused here
-      salutation: null,
-      mobilePhone: null,
+      salutation: parsed.data.salutation ?? null,
+      mobilePhone: parsed.data.mobile_phone ?? null,
     });
 
     const fresh = await getLeadById(user, created.id, true);
