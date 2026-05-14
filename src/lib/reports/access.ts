@@ -313,20 +313,24 @@ function buildFilterClauses(
       out.push(`${colExpr} ILIKE $${params.length}`);
     }
     if ("gte" in op && op.gte !== undefined) {
-      params.push(resolveDateSentinel(op.gte));
-      out.push(`${colExpr} >= $${params.length}`);
+      const resolved = resolveDateSentinel(op.gte);
+      params.push(resolved);
+      out.push(`${exprForValue(field, resolved)} >= $${params.length}`);
     }
     if ("lte" in op && op.lte !== undefined) {
-      params.push(resolveDateSentinel(op.lte));
-      out.push(`${colExpr} <= $${params.length}`);
+      const resolved = resolveDateSentinel(op.lte);
+      params.push(resolved);
+      out.push(`${exprForValue(field, resolved)} <= $${params.length}`);
     }
     if ("gt" in op && op.gt !== undefined) {
-      params.push(resolveDateSentinel(op.gt));
-      out.push(`${colExpr} > $${params.length}`);
+      const resolved = resolveDateSentinel(op.gt);
+      params.push(resolved);
+      out.push(`${exprForValue(field, resolved)} > $${params.length}`);
     }
     if ("lt" in op && op.lt !== undefined) {
-      params.push(resolveDateSentinel(op.lt));
-      out.push(`${colExpr} < $${params.length}`);
+      const resolved = resolveDateSentinel(op.lt);
+      params.push(resolved);
+      out.push(`${exprForValue(field, resolved)} < $${params.length}`);
     }
     if ("in" in op && Array.isArray(op.in) && op.in.length > 0) {
       const stringValues = op.in.map((v) => String(v));
@@ -351,6 +355,20 @@ function resolveDateSentinel(value: unknown): unknown {
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   }
   return value;
+}
+
+/**
+ * Return the LHS SQL expression for a filter comparison. Most columns
+ * get cast to `::text` so enum/JSON-encoded filter values compare
+ * cleanly. Date/number values bypass the text cast — comparing
+ * `due_at::text < <Date>` errors with "operator does not exist:
+ * text < timestamptz" because PG won't auto-coerce the cast result.
+ */
+function exprForValue(field: string, value: unknown): string {
+  if (value instanceof Date || typeof value === "number") {
+    return quote(field);
+  }
+  return `${quote(field)}::text`;
 }
 
 /**
