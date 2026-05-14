@@ -174,10 +174,10 @@ export function ListForm({ mode, initial }: Props) {
               Accounts (not yet available)
             </option>
             <option value="opportunities" disabled>
-              Opportunities (available in a future phase)
+              Opportunities (coming soon)
             </option>
             <option value="mixed" disabled>
-              Mixed (available in a future phase)
+              Mixed (coming soon)
             </option>
           </select>
           <p className="text-xs text-muted-foreground">
