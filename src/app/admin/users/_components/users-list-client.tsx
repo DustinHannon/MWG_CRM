@@ -1,3 +1,10 @@
+// consistency-exempt: list-page-pattern: admin-utility-table
+// Admin /users uses fixed-width row cells (w-56, w-32, etc.) rather
+// than the canonical 140px flex-basis pattern because the displayed
+// columns (avatar+name, email, role pills, status pill, source label,
+// lead count, last login) have intrinsically non-uniform widths and
+// no associated columnHeaderSlot to align against. No saved views,
+// no MODIFIED badge, no bulk selection — admin operational page.
 "use client";
 
 import Link from "next/link";
@@ -114,7 +121,7 @@ export function UsersListClient({
           }
         }}
         placeholder="Search by name, email, or username"
-        className="min-w-[220px] flex-1 rounded-md border border-border bg-input px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+        className="h-11 min-w-[220px] flex-1 rounded-md border border-border bg-input px-3 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:h-9 md:py-1.5"
       />
       <div className="flex gap-1.5">
         <FilterChip
@@ -183,9 +190,7 @@ export function UsersListClient({
         />
       }
       header={{
-        kicker: "Admin",
         title: "Users",
-        fontFamily: "display",
         actions: headerActions,
       }}
       filtersSlot={filtersSlot}
@@ -205,11 +210,14 @@ function FilterChip({
   const palette = active
     ? "border-foreground/30 bg-foreground text-background"
     : "border-border bg-muted/40 text-muted-foreground hover:bg-muted";
+  // h-11 on mobile satisfies the 44px touch-target floor required by
+  // the canonical list-page pattern. Desktop reverts to a compact h-9
+  // since the row is a wrap-flex of utility filters.
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs transition ${palette}`}
+      className={`inline-flex h-11 items-center rounded-full border px-3 text-sm transition md:h-9 md:text-xs ${palette}`}
     >
       {children}
     </button>
