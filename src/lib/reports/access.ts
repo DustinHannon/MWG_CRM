@@ -313,19 +313,19 @@ function buildFilterClauses(
       out.push(`${colExpr} ILIKE $${params.length}`);
     }
     if ("gte" in op && op.gte !== undefined) {
-      params.push(op.gte);
+      params.push(resolveDateSentinel(op.gte));
       out.push(`${colExpr} >= $${params.length}`);
     }
     if ("lte" in op && op.lte !== undefined) {
-      params.push(op.lte);
+      params.push(resolveDateSentinel(op.lte));
       out.push(`${colExpr} <= $${params.length}`);
     }
     if ("gt" in op && op.gt !== undefined) {
-      params.push(op.gt);
+      params.push(resolveDateSentinel(op.gt));
       out.push(`${colExpr} > $${params.length}`);
     }
     if ("lt" in op && op.lt !== undefined) {
-      params.push(op.lt);
+      params.push(resolveDateSentinel(op.lt));
       out.push(`${colExpr} < $${params.length}`);
     }
     if ("in" in op && Array.isArray(op.in) && op.in.length > 0) {
@@ -335,6 +335,22 @@ function buildFilterClauses(
     }
   }
   return out;
+}
+
+/**
+ * Resolve dynamic-date sentinels in filter values. Built-in reports
+ * persist their filter spec as JSON; the static catalog can't carry a
+ * live "now" — so the sentinel strings `$now` / `$today` evaluate at
+ * query time. `$now` returns the current timestamp; `$today` returns
+ * the start-of-day in UTC. Non-sentinel values pass through unchanged.
+ */
+function resolveDateSentinel(value: unknown): unknown {
+  if (value === "$now") return new Date();
+  if (value === "$today") {
+    const d = new Date();
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  }
+  return value;
 }
 
 /**

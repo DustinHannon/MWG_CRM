@@ -42,7 +42,7 @@
 // POSTGRES_URL / AUTH_SECRET — the imported env validator will throw
 // otherwise. We deliberately don't import dotenv here so the script
 // stays fast under `pnpm dlx tsx`.
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import { db } from "../src/db";
 import { savedReports } from "../src/db/schema/saved-reports";
 import { users } from "../src/db/schema/users";
@@ -175,11 +175,12 @@ const REPORTS: BuiltinReport[] = [
   {
     name: "Overdue Tasks",
     description:
-      "Open and in-progress tasks grouped by assignee.",
+      "Open and in-progress tasks whose due date has passed, grouped by assignee. Identifies workload concentration on the people carrying the most overdue work.",
     entityType: "task",
     fields: [],
     filters: {
       status: { in: ["open", "in_progress"] },
+      due_at: { lt: "$now" },
     },
     groupBy: ["assigned_to_id"],
     metrics: [{ fn: "count", alias: "overdue" }],
@@ -244,17 +245,6 @@ const REPORTS: BuiltinReport[] = [
     },
     groupBy: ["event_type"],
     metrics: [{ fn: "count", alias: "events" }],
-    visualization: "bar",
-  },
-  {
-    name: "Transactional Email Volume",
-    description:
-      "Transactional email log (lead-activity sends, digests, welcome emails, password rotations). Grouped by feature + status.",
-    entityType: "email_send_log",
-    fields: [],
-    filters: {},
-    groupBy: ["feature", "status"],
-    metrics: [{ fn: "count", alias: "count" }],
     visualization: "bar",
   },
   // ----- Second wave of marketing/email built-ins -----
@@ -388,6 +378,30 @@ async function upsertReport(ownerId: string, def: BuiltinReport) {
   return { action: "inserted", id: row.id, name: def.name };
 }
 
+async function pruneRemoved(catalogNames: readonly string[]) {
+  // Hard-delete any is_builtin=true rows whose name is no longer in the
+  // catalog. Built-ins are owned by the system service user; users
+  // can't mark their own reports as built-in, so the catalog is the
+  // single source of truth for what should exist. Without this sweep,
+  // removing an entry from REPORTS leaves an orphaned DB row that the
+  // /reports page still surfaces with stale metadata.
+  const removed = await db
+    .delete(savedReports)
+    .where(
+      and(
+        eq(savedReports.isBuiltin, true),
+        notInArray(savedReports.name, [...catalogNames]),
+      ),
+    )
+    .returning({ id: savedReports.id, name: savedReports.name });
+  if (removed.length > 0) {
+    for (const r of removed) {
+      console.log(`[removed] ${r.name} (${r.id})`);
+    }
+  }
+  return removed.length;
+}
+
 async function main() {
   console.log("=== Built-in reports seeder ===");
   const ownerId = await ensureSystemUser();
@@ -398,7 +412,12 @@ async function main() {
     console.log(`[${res.action}] ${res.name} (${res.id})`);
   }
 
-  console.log(`\nDone. ${REPORTS.length} built-in reports.`);
+  const removedCount = await pruneRemoved(REPORTS.map((r) => r.name));
+
+  console.log(
+    `\nDone. ${REPORTS.length} built-in reports in catalog` +
+      (removedCount > 0 ? `; ${removedCount} stale rows pruned.` : "."),
+  );
   process.exit(0);
 }
 
