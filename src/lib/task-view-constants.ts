@@ -43,3 +43,16 @@ export const TASK_SORTABLE_COLUMNS: ReadonlySet<TaskColumnKey> = new Set([
   "createdAt",
   "updatedAt",
 ]);
+
+// Canonical task enum value lists. Mirror `taskStatusEnum` /
+// `taskPriorityEnum` in `src/db/schema/tasks.ts` and the runtime
+// allowlists `TASK_STATUS_OPTS` / `TASK_PRIORITY_OPTS` in
+// `src/lib/task-views.ts` (server-only). Re-declared here as the
+// client-safe surface so client components can import the runtime
+// arrays and the convenience union types without dragging the
+// server-only views module into the browser bundle.
+export const TASK_STATUS_VALUES = ["open", "in_progress", "completed", "cancelled"] as const;
+export const TASK_PRIORITY_VALUES = ["low", "normal", "high", "urgent"] as const;
+
+export type TaskStatus = (typeof TASK_STATUS_VALUES)[number];
+export type TaskPriority = (typeof TASK_PRIORITY_VALUES)[number];

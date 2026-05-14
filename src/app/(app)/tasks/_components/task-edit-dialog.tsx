@@ -5,11 +5,11 @@ import { toast } from "sonner";
 import { TagSectionClient } from "@/components/tags/tag-section-client";
 import type { TaskRow } from "@/lib/tasks";
 import {
-  TASK_PRIORITY_OPTS,
-  TASK_STATUS_OPTS,
+  TASK_PRIORITY_VALUES,
+  TASK_STATUS_VALUES,
   type TaskPriority,
   type TaskStatus,
-} from "@/lib/task-views";
+} from "@/lib/task-view-constants";
 import { updateTaskAction } from "../actions";
 
 // Human labels for the canonical task enum values. Kept local to
@@ -190,7 +190,7 @@ export function TaskEditDialog({
                 disabled={pending}
                 className="mt-1 block w-full rounded-md border border-border bg-input/60 px-3 py-2 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               >
-                {TASK_STATUS_OPTS.map((s) => (
+                {TASK_STATUS_VALUES.map((s) => (
                   <option key={s} value={s}>
                     {STATUS_LABELS[s]}
                   </option>
@@ -206,7 +206,7 @@ export function TaskEditDialog({
                 disabled={pending}
                 className="mt-1 block w-full rounded-md border border-border bg-input/60 px-3 py-2 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               >
-                {TASK_PRIORITY_OPTS.map((p) => (
+                {TASK_PRIORITY_VALUES.map((p) => (
                   <option key={p} value={p}>
                     {PRIORITY_LABELS[p]}
                   </option>
