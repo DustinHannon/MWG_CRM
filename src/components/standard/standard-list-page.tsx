@@ -319,7 +319,7 @@ export function StandardListPage<T, F>({
                 group above remains sticky and provides the persistent
                 page-context affordance during deep scroll. */}
             <div className="hidden md:block">
-              <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border bg-card">
+              <div className="overflow-x-auto rounded-lg border border-border bg-card">
                 <div className="min-w-max">
                   {columnHeaderSlot ? (
                     <div className="border-b border-border bg-muted/40">
