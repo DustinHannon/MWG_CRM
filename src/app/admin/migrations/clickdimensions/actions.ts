@@ -8,7 +8,7 @@ import { clickdimensionsMigrations } from "@/db/schema/clickdimensions-migration
 import { permissions } from "@/db/schema/users";
 import { requireSession } from "@/lib/auth-helpers";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import {
   ForbiddenError,
@@ -145,15 +145,15 @@ export async function bulkFlagForReextractionAction(
           updatedAt: new Date(),
         })
         .where(inArray(clickdimensionsMigrations.id, parsed.data.ids));
-      for (const id of parsed.data.ids) {
-        await writeAudit({
-          actorId: userId,
+      await writeAuditBatch({
+        actorId: userId,
+        events: parsed.data.ids.map((id) => ({
           action: MARKETING_AUDIT_EVENTS.MIGRATION_TEMPLATE_FALLBACK_MANUAL,
           targetType: "clickdimensions_migration",
           targetId: id,
           after: { reason: "bulk_flag_for_reextract" },
-        });
-      }
+        })),
+      });
       revalidatePath("/admin/migrations/clickdimensions");
     },
   );
@@ -179,15 +179,15 @@ export async function bulkSkipAction(
           updatedAt: new Date(),
         })
         .where(inArray(clickdimensionsMigrations.id, parsed.data.ids));
-      for (const id of parsed.data.ids) {
-        await writeAudit({
-          actorId: userId,
+      await writeAuditBatch({
+        actorId: userId,
+        events: parsed.data.ids.map((id) => ({
           action: MARKETING_AUDIT_EVENTS.MIGRATION_TEMPLATE_FALLBACK_MANUAL,
           targetType: "clickdimensions_migration",
           targetId: id,
           after: { reason: "bulk_manual_skip" },
-        });
-      }
+        })),
+      });
       revalidatePath("/admin/migrations/clickdimensions");
     },
   );

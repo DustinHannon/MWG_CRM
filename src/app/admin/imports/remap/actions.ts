@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { users } from "@/db/schema/users";
-import { writeAudit } from "@/lib/audit";
+import { writeAuditBatch } from "@/lib/audit";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
@@ -73,10 +73,12 @@ export async function remapImportedByNameAction(
         .returning({ id: activities.id });
 
       // Audit per affected row. audit-events doc lists this
-      // canonical event name.
-      for (const a of updated) {
-        await writeAudit({
-          actorId: session.id,
+      // canonical event name. Single-INSERT batch helper
+      // (writeAuditBatch) so remaps that hit hundreds of rows
+      // collapse to one round-trip.
+      await writeAuditBatch({
+        actorId: session.id,
+        events: updated.map((a) => ({
           action: "activities.imported_by.remapped",
           targetType: "activity",
           targetId: a.id,
@@ -84,8 +86,8 @@ export async function remapImportedByNameAction(
             importedByName: parsed.data.importedByName,
             newUserId: parsed.data.newUserId,
           },
-        });
-      }
+        })),
+      });
 
       revalidatePath("/admin/imports/remap");
       return { updated: updated.length };
