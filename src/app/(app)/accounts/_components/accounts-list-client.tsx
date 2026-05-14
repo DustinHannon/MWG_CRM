@@ -3,7 +3,6 @@
 import Link from "next/link";
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -25,6 +24,7 @@ import { TagChip } from "@/components/tags/tag-chip";
 import { TagsCell } from "@/components/tags/tags-cell";
 import { UserChip } from "@/components/user-display/user-chip";
 import { UserTimeClient } from "@/components/ui/user-time-client";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import { cn } from "@/lib/utils";
 import { type TimePrefs } from "@/lib/format-time";
 import {
@@ -291,27 +291,25 @@ function AccountsListInner({
 
   const filtersSlot = (
     <div className="space-y-3">
-      {/* View selector + MODIFIED badge + Save-as-new + Columns
-          chooser. Desktop-only — these are power-user affordances
-          that don't fit the mobile chip toolbar. Lives inside the
-          client component so the MODIFIED badge can react to client
-          filter state. */}
-      <div className="hidden md:block">
-        <AccountViewToolbar
-          views={views}
-          activeViewId={activeViewParam}
-          activeViewName={activeViewName}
-          activeColumns={activeColumns}
-          baseColumns={baseColumns}
-          savedDirtyId={savedDirtyId}
-          columnsModified={columnsModified}
-          viewModified={viewModified}
-          modifiedFields={modifiedFields}
-          subscribedViewIds={subscribedViewIds}
-          defaultViewId={defaultViewId}
-          resetClientState={clearFilters}
-        />
-      </div>
+      {/* View selector + MODIFIED badge stay visible on every viewport
+          so mobile users can switch views and reset modifications. The
+          Columns chooser, Save-changes, Save-as-new, Subscribe, and
+          Delete-view affordances are power-user controls hidden below
+          md inside AccountViewToolbar itself. */}
+      <AccountViewToolbar
+        views={views}
+        activeViewId={activeViewParam}
+        activeViewName={activeViewName}
+        activeColumns={activeColumns}
+        baseColumns={baseColumns}
+        savedDirtyId={savedDirtyId}
+        columnsModified={columnsModified}
+        viewModified={viewModified}
+        modifiedFields={modifiedFields}
+        subscribedViewIds={subscribedViewIds}
+        defaultViewId={defaultViewId}
+        resetClientState={clearFilters}
+      />
 
       {/* Selection bar (renders when ≥1 row checked). Desktop only —
           BulkArchive uses per-row RowCheckbox which is desktop-table
@@ -335,21 +333,25 @@ function AccountsListInner({
         industryOptions={industryOptions}
         hasActiveFilters={hasActiveFilters}
       />
-
-      {/* Desktop column headers — DnD-enabled. Renders as a `<thead>`
-          inside a `<table>` wrapper so the existing component (which
-          expects to live in a table) keeps the same DOM contract.
-          Includes a leading selection-checkbox column to align with
-          the RowCheckbox cell in each row. */}
-      <div className="hidden overflow-x-auto rounded-t-lg border border-b-0 border-border bg-muted/40 md:block">
-        <table className="data-table min-w-full divide-y divide-border/60 text-sm">
-          <SortableAccountsHeaders
-            initialColumns={activeColumns}
-            activeViewId={activeViewParam}
-          />
-        </table>
-      </div>
     </div>
+  );
+
+  // Desktop column headers — DnD-enabled. The shell renders this slot
+  // as the first child of the row list's horizontal-scroll wrapper, so
+  // headers stay aligned with row cells when the table is wider than
+  // the viewport. min-width matches the row's min-width: leading
+  // RowCheckbox (40) + columns (140 each) + trailing actions (40) = 80
+  // fixed cells plus 140 per column.
+  const columnHeaderSlot = (
+    <table
+      className="data-table w-full divide-y divide-border/60 text-sm"
+      style={{ minWidth: `${activeColumns.length * 140 + 80}px` }}
+    >
+      <SortableAccountsHeaders
+        initialColumns={activeColumns}
+        activeViewId={activeViewParam}
+      />
+    </table>
   );
 
   const headerActions = (
@@ -391,12 +393,11 @@ function AccountsListInner({
         />
       }
       header={{
-        kicker: "Accounts",
         title: "Accounts",
-        fontFamily: "display",
         actions: headerActions,
       }}
       filtersSlot={filtersSlot}
+      columnHeaderSlot={columnHeaderSlot}
       bulkActions={{
         banner: <BulkSelectionBanner />,
         toolbar: (
@@ -480,10 +481,15 @@ function AccountDesktopRow({
   timePrefs: TimePrefs;
   canDelete: boolean;
 }) {
+  // Match the column-header tier's min-width so the row stays aligned
+  // with header cells when the table is wider than the viewport.
+  // Leading RowCheckbox (w-10) + trailing actions (w-10) = 80 fixed.
+  const minRowWidth = columns.length * 140 + 80;
   return (
     <div
       className="group flex items-stretch border-b border-border/60 bg-card text-sm transition hover:bg-muted/40"
       data-row-flash="new"
+      style={{ minWidth: `${minRowWidth}px` }}
     >
       <div className="w-10 shrink-0 px-2 py-3">
         <RowCheckbox id={account.id} />
@@ -496,6 +502,7 @@ function AccountDesktopRow({
             key={c}
             data-label={colLabel}
             className="min-w-0 flex-1 truncate px-5 py-3"
+            style={{ flexBasis: "140px" }}
           >
             {renderCell(account, c, timePrefs)}
           </div>
@@ -575,7 +582,7 @@ function AccountFiltersBar({
         </label>
       </div>
 
-      <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-3 md:overflow-visible md:px-0 md:pb-0">
+      <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-3 md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]">
         {/* Desktop search input. */}
         <input
           type="search"
@@ -625,7 +632,7 @@ function AccountFiltersBar({
             <button
               type="button"
               onClick={onClear}
-              className="shrink-0 rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground/90"
+              className="h-11 shrink-0 rounded-full px-4 text-sm text-muted-foreground hover:text-foreground/90"
             >
               Clear
             </button>
@@ -726,7 +733,7 @@ function ControlledMobileSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
-        "h-9 min-w-0 shrink-0 appearance-none rounded-full border px-3 pr-7 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-ring/40",
+        "h-11 min-w-0 shrink-0 appearance-none rounded-full border px-4 pr-8 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-ring/40",
         isSet
           ? "border-primary/30 bg-primary/15 text-foreground"
           : "border-border bg-muted/40 text-muted-foreground",
@@ -767,6 +774,7 @@ function ControlledTagFilter({
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  useClickOutside(containerRef, () => setOpen(false), open);
 
   const selected = useMemo(
     () =>
@@ -776,16 +784,6 @@ function ControlledTagFilter({
         .filter((s) => s.length > 0),
     [value],
   );
-
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
 
   const toggle = (name: string) => {
     const next = selected.includes(name)

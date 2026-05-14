@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   AVAILABLE_ACCOUNT_COLUMNS,
   type AccountColumnKey,
 } from "@/lib/account-view-constants";
 import { ModifiedBadge } from "@/components/saved-views";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import {
   subscribeToViewAction,
   unsubscribeFromViewAction,
@@ -74,6 +75,12 @@ export function AccountViewToolbar({
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const columnsContainerRef = useRef<HTMLDivElement | null>(null);
+  useClickOutside(
+    columnsContainerRef,
+    () => setColumnsOpen(false),
+    columnsOpen,
+  );
 
   const grouped = useMemo(() => {
     return {
@@ -184,7 +191,7 @@ export function AccountViewToolbar({
               router.refresh();
             });
           }}
-          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted"
+          className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted md:inline-flex"
         >
           Save changes
         </button>
@@ -194,13 +201,13 @@ export function AccountViewToolbar({
         <button
           type="button"
           onClick={() => setSaveOpen(true)}
-          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted"
+          className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted md:inline-flex"
         >
           Save as new view
         </button>
       ) : null}
 
-      <div className="relative ml-auto">
+      <div className="relative ml-auto hidden md:inline-flex" ref={columnsContainerRef}>
         <button
           type="button"
           onClick={() => setColumnsOpen((o) => !o)}
@@ -212,23 +219,24 @@ export function AccountViewToolbar({
           <ColumnChooser
             active={activeColumns}
             onToggle={onToggleColumn}
-            onClose={() => setColumnsOpen(false)}
             onReset={onResetColumns}
           />
         ) : null}
       </div>
 
       {activeViewId.startsWith("saved:") ? (
-        <SubscribeButton
-          savedViewId={activeViewId.slice("saved:".length)}
-          isSubscribed={
-            subscribedViewIds?.includes(
-              activeViewId.slice("saved:".length),
-            ) ?? false
-          }
-          disabled={pending}
-          onChange={() => router.refresh()}
-        />
+        <span className="hidden md:inline-flex">
+          <SubscribeButton
+            savedViewId={activeViewId.slice("saved:".length)}
+            isSubscribed={
+              subscribedViewIds?.includes(
+                activeViewId.slice("saved:".length),
+              ) ?? false
+            }
+            disabled={pending}
+            onChange={() => router.refresh()}
+          />
+        </span>
       ) : null}
 
       {activeViewId.startsWith("saved:") ? (
@@ -253,8 +261,8 @@ export function AccountViewToolbar({
           }}
           className={
             isDefaultActive
-              ? "rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/20"
-              : "rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground transition hover:bg-muted"
+              ? "hidden rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/20 md:inline-flex"
+              : "hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground transition hover:bg-muted md:inline-flex"
           }
         >
           {isDefaultActive ? "Default" : "Set as default"}
@@ -274,7 +282,7 @@ export function AccountViewToolbar({
               router.push("/accounts?view=builtin:my-open");
             });
           }}
-          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] transition hover:bg-destructive/20"
+          className="hidden rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] transition hover:bg-destructive/20 md:inline-flex"
         >
           Delete view
         </button>
@@ -311,11 +319,13 @@ function ViewSelectMenu({
   onPick: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useClickOutside(containerRef, () => setOpen(false), open);
   const active = [...grouped.builtin, ...grouped.saved].find(
     (v) => v.id === activeViewId,
   );
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -326,12 +336,6 @@ function ViewSelectMenu({
       </button>
       {open ? (
         <>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Close menu"
-            className="fixed inset-0 z-40 cursor-default"
-          />
           <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border border-border bg-[var(--popover)] text-[var(--popover-foreground)] shadow-2xl">
             <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-muted-foreground/80">
               Built-in
@@ -399,22 +403,14 @@ function ViewMenuItem({
 function ColumnChooser({
   active,
   onToggle,
-  onClose,
   onReset,
 }: {
   active: AccountColumnKey[];
   onToggle: (key: AccountColumnKey) => void;
-  onClose: () => void;
   onReset: () => void;
 }) {
   return (
     <>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close column chooser"
-        className="fixed inset-0 z-40 cursor-default"
-      />
       <div className="absolute right-0 top-full z-50 mt-1 max-h-96 w-72 overflow-y-auto rounded-md border border-border bg-[var(--popover)] text-[var(--popover-foreground)] p-2 shadow-2xl">
         <div className="flex items-center justify-between px-2 py-1">
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80">
