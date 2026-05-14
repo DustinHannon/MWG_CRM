@@ -65,7 +65,10 @@ const sqlClient = postgres(POSTGRES_URL, {
 });
 const db = drizzle(sqlClient);
 
-const SYSTEM_EMAIL = "system@mwg.local";
+// Sentinel service user. Email was renamed from system@mwg.local to
+// system@morganwhite.com in migration 0012; username is the stable
+// lookup key (unique constraint).
+const SYSTEM_EMAIL = "system@morganwhite.com";
 const SYSTEM_USERNAME = "system";
 
 interface BuiltinReport {
@@ -324,10 +327,13 @@ const REPORTS: BuiltinReport[] = [
 ];
 
 async function ensureSystemUser(): Promise<string> {
+  // Lookup by username (unique constraint, stable across the
+  // Phase 32.7 email rename) rather than email so a future rename
+  // doesn't break the seeder.
   const existing = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.email, SYSTEM_EMAIL))
+    .where(eq(users.username, SYSTEM_USERNAME))
     .limit(1);
   if (existing[0]) return existing[0].id;
 
