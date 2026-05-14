@@ -31,7 +31,7 @@ import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 // Sub-agent A is delivering these. Importing as named so a missing
 // module surfaces as a build-time error in this file rather than a
 // silent runtime miss.
-import { sendCampaign, sendTestEmail } from "@/lib/marketing/sendgrid/send";
+import { sendTestEmail } from "@/lib/marketing/sendgrid/send";
 import { resolveListRecipients } from "@/lib/marketing/lists/resolution";
 
 /**
@@ -44,11 +44,12 @@ import { resolveListRecipients } from "@/lib/marketing/lists/resolution";
  *
  * State machine:
  * draft → scheduled (scheduleCampaignAction)
- * draft → sending (sendCampaignNowAction)
+ * draft → scheduled (sendCampaignNowAction; scheduled_for=now())
  * draft → cancelled (cancelCampaignAction) // optional convenience
  * draft → deleted (deleteCampaignAction)
- * scheduled → sending (sendCampaignNowAction; kicks off early)
+ * scheduled → scheduled (sendCampaignNowAction; resets scheduled_for=now())
  * scheduled → cancelled (cancelCampaignAction)
+ * scheduled → sending (handled by marketing-process-scheduled-campaigns cron)
  * sending → sent (handled by sendCampaign; not via action)
  * sending → failed (handled by sendCampaign; not via action)
  * cancelled → deleted (deleteCampaignAction)
@@ -547,7 +548,7 @@ export async function sendCampaignNowAction(
 ): Promise<ActionResult<never>> {
   return withErrorBoundary(
     {
-      action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_STARTED,
+      action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_ENQUEUED,
       entityType: "marketing_campaign",
       entityId: id,
     },
@@ -597,19 +598,27 @@ export async function sendCampaignNowAction(
         });
       }
 
-      // Atomic claim — the WHERE clause guards BOTH:
-      // (a) double-click from the same user (the in-flight first
-      // UPDATE has already flipped status to 'sending'),
-      // (b) race with /api/cron/marketing-process-scheduled-campaigns,
-      // which uses the same conditional-UPDATE pattern on
-      // status='scheduled'. If the cron grabs the row first, our
-      // status moves from 'scheduled' to 'sending' and this
-      // WHERE clause won't match — we throw ConflictError instead
-      // of double-sending.
+      // Atomic enqueue — status guard in the WHERE clause closes the
+      // TOCTOU race between the loadCampaign() snapshot above and the
+      // UPDATE below. The cron picker
+      // (/api/cron/marketing-process-scheduled-campaigns) uses the
+      // same conditional-UPDATE pattern transitioning scheduled ->
+      // sending, so a duplicate click that arrives after the cron has
+      // already claimed the row finds status=sending and throws
+      // ConflictError cleanly.
+      //
+      // This action is the UI's "Send Now" path. It mirrors the
+      // public API route POST /api/v1/marketing/campaigns/{id}/send-now
+      // (shipped in 013c286) — both enqueue rather than sync-send so
+      // the request returns immediately and the user can navigate
+      // away. The cron picks up within ~60s and runs the SendGrid
+      // batch; the campaign card's realtime subscription flips the
+      // status as state advances.
       const result = await db
         .update(marketingCampaigns)
         .set({
-          status: "sending",
+          status: "scheduled",
+          scheduledFor: sql`now()`,
           totalRecipients: stampedTotalRecipients,
           updatedAt: new Date(),
           updatedById: user.id,
@@ -621,7 +630,10 @@ export async function sendCampaignNowAction(
             inArray(marketingCampaigns.status, ["draft", "scheduled"]),
           ),
         )
-        .returning({ id: marketingCampaigns.id });
+        .returning({
+          id: marketingCampaigns.id,
+          scheduledFor: marketingCampaigns.scheduledFor,
+        });
 
       if (result.length === 0) {
         // Either the campaign was deleted/aborted between the load
@@ -636,29 +648,16 @@ export async function sendCampaignNowAction(
 
       await writeAudit({
         actorId: user.id,
-        action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_STARTED,
+        action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_ENQUEUED,
         targetType: "marketing_campaign",
         targetId: parsedId,
         before: { status: campaign.status },
-        after: { status: "sending" },
+        after: {
+          status: "scheduled",
+          scheduledFor: result[0].scheduledFor,
+          source: "ui",
+        },
       });
-
-      // Kick off the send. sendCampaign returns when SendGrid has
-      // accepted the batch (the webhook flips status to 'sent' /
-      // 'failed' as deliveries complete). We don't await further —
-      // bound by the sub-agent A contract.
-      try {
-        await sendCampaign(parsedId);
-      } catch (err) {
-        logger.error("campaign.send_failed", {
-          campaignId: parsedId,
-          actorId: user.id,
-          errorMessage: err instanceof Error ? err.message : String(err),
-        });
-        // sendCampaign owns the failed-state audit + DB transition.
-        // Re-throw so the action result reflects the failure.
-        throw err;
-      }
 
       revalidatePath("/marketing/campaigns");
       revalidatePath(`/marketing/campaigns/${parsedId}`);
