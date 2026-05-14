@@ -154,55 +154,120 @@ export function SuppressionsListClient({
         e.preventDefault();
         applyDraft();
       }}
-      className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card p-3"
+      className="space-y-3"
     >
-      <input
-        type="search"
-        value={draft.q}
-        onChange={(e) => setDraft({ ...draft, q: e.target.value })}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            applyDraft();
+      {/* Mobile chip row: edge-fade mask hints overflow when chips
+          exceed viewport width. Desktop layout (wrap, no overflow)
+          resets the mask via md:[mask-image:none]. Touch targets are
+          h-11 (44px) per WCAG 2.5.5. */}
+      <div
+        className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-3 md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]"
+      >
+        <input
+          type="search"
+          value={draft.q}
+          onChange={(e) => setDraft({ ...draft, q: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              applyDraft();
+            }
+          }}
+          placeholder="Search email"
+          className="h-11 min-w-[220px] flex-1 rounded-full border border-border bg-input px-4 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3"
+        />
+        {/* Source select auto-applies on change (preserved from prior
+            behavior — the page treats source as a primary scope, not a
+            staged filter). */}
+        <select
+          value={draft.source}
+          onChange={(e) => {
+            const next = {
+              ...draft,
+              source: e.target.value as SuppressionsFilters["source"],
+            };
+            setDraft(next);
+            setFilters(next);
+          }}
+          className={
+            draft.source !== "all"
+              ? "h-11 min-w-0 shrink-0 appearance-none rounded-full border border-primary/30 bg-primary/15 px-4 pr-8 text-sm font-medium text-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3 md:pr-7"
+              : "h-11 min-w-0 shrink-0 appearance-none rounded-full border border-border bg-muted/40 px-4 pr-8 text-sm font-medium text-muted-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3 md:pr-7"
           }
-        }}
-        placeholder="Search email"
-        className="min-w-[220px] flex-1 rounded-md border border-border bg-input px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-      />
-      <select
-        value={draft.source}
-        onChange={(e) => {
-          const next = {
-            ...draft,
-            source: e.target.value as SuppressionsFilters["source"],
-          };
-          setDraft(next);
-          setFilters(next);
-        }}
-        className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-      >
-        {SOURCE_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <button
-        type="submit"
-        className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-      >
-        Apply
-      </button>
-      {filtersAreModified ? (
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground transition hover:text-foreground"
         >
-          Clear
+          {SOURCE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="hidden h-11 shrink-0 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 md:inline-flex md:items-center"
+        >
+          Apply
         </button>
-      ) : null}
+        {filtersAreModified ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="h-11 shrink-0 rounded-full px-4 text-sm text-muted-foreground hover:text-foreground/90 md:rounded-md md:border md:border-border md:bg-muted/40"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
     </form>
+  );
+
+  // Desktop column header. 6 cells when canRemove (5 otherwise). The
+  // Remove action cell stays as the trailing actions column when
+  // present; matches desktop row layout exactly.
+  const SUPPRESSION_COLS = canRemove ? 6 : 5;
+  const columnHeaderSlot = (
+    <div
+      className="flex items-stretch text-xs font-medium uppercase tracking-wide text-muted-foreground"
+      style={{ minWidth: `${SUPPRESSION_COLS * 140 + 40}px` }}
+    >
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
+        Email
+      </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
+        Source
+      </div>
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 lg:block"
+        style={{ flexBasis: "140px" }}
+      >
+        Reason
+      </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
+        Suppressed
+      </div>
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 lg:block"
+        style={{ flexBasis: "140px" }}
+      >
+        Added by
+      </div>
+      {canRemove ? (
+        <div
+          className="min-w-0 flex-1 truncate px-5 py-3 text-right"
+          style={{ flexBasis: "140px" }}
+        >
+          Action
+        </div>
+      ) : null}
+    </div>
   );
 
   return (
@@ -231,6 +296,7 @@ export function SuppressionsListClient({
         actions: canAdd ? <AddSuppressionDialog /> : undefined,
       }}
       filtersSlot={filtersSlot}
+      columnHeaderSlot={columnHeaderSlot}
     />
   );
 }
@@ -244,33 +310,53 @@ function SuppressionsDesktopRow({
   timePrefs: TimePrefs;
   canRemove: boolean;
 }) {
+  // Cell count matches column header (6 when canRemove, else 5).
+  const cols = canRemove ? 6 : 5;
+  const minRowWidth = cols * 140 + 40;
   return (
     <div
-      className="flex items-start gap-4 border-b border-border bg-card px-4 py-3 text-sm transition hover:bg-accent/20"
+      className="group flex items-stretch border-b border-border/60 bg-card text-sm transition hover:bg-muted/40"
       data-row-flash="new"
+      style={{ minWidth: `${minRowWidth}px` }}
     >
-      <div className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3 font-mono text-xs text-foreground"
+        style={{ flexBasis: "140px" }}
+      >
         {row.email}
       </div>
-      <div className="w-32 shrink-0 text-muted-foreground">
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground"
+        style={{ flexBasis: "140px" }}
+      >
         {row.suppressionType}
       </div>
       <div
-        className="hidden min-w-0 max-w-[28ch] flex-1 truncate text-muted-foreground lg:block"
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground lg:block"
+        style={{ flexBasis: "140px" }}
         title={row.reason ?? undefined}
       >
         {row.reason ?? "—"}
       </div>
-      <div className="w-32 shrink-0 text-muted-foreground">
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground"
+        style={{ flexBasis: "140px" }}
+      >
         <UserTimeClient value={row.suppressedAt} prefs={timePrefs} />
       </div>
-      <div className="hidden w-32 shrink-0 truncate text-muted-foreground lg:block">
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground lg:block"
+        style={{ flexBasis: "140px" }}
+      >
         {row.addedByName ?? (
           <span className="italic text-muted-foreground/70">system</span>
         )}
       </div>
       {canRemove ? (
-        <div className="w-24 shrink-0 text-right">
+        <div
+          className="min-w-0 flex-1 px-5 py-3 text-right"
+          style={{ flexBasis: "140px" }}
+        >
           <RemoveSuppressionButton
             email={row.email}
             source={row.suppressionType}
