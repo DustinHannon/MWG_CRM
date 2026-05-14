@@ -1,6 +1,11 @@
 import "server-only";
 import { z } from "zod";
 import {
+  LEAD_RATINGS,
+  LEAD_SOURCES,
+  LEAD_STATUSES,
+} from "@/lib/lead-constants";
+import {
   findBuiltinView,
   getSavedView,
   runView,
@@ -297,11 +302,27 @@ export async function expandLeadFilteredScope(args: {
   const view = await resolveLeadView(args.user.id, parsed.view, args.canViewAll);
   if (!view) return { ids: [], capped: false };
 
+  // Mirror the cursor route's defensive enum filtering — without
+  // this, a stale bulk-tag URL re-applies an unknown enum value via
+  // `inArray(leads.status, …)` and Postgres rejects on the enum
+  // type, surfacing as a 500 in the tag bulk action.
+  const enumOne = <T extends readonly string[]>(
+    raw: string | undefined,
+    allowed: T,
+  ): T[number] | undefined =>
+    raw && (allowed as readonly string[]).includes(raw)
+      ? (raw as T[number])
+      : undefined;
+
+  const statusValid = enumOne(parsed.status, LEAD_STATUSES);
+  const ratingValid = enumOne(parsed.rating, LEAD_RATINGS);
+  const sourceValid = enumOne(parsed.source, LEAD_SOURCES);
+
   const extraFilters: ViewFilters = {
     search: parsed.q || undefined,
-    status: parsed.status ? [parsed.status] : undefined,
-    rating: parsed.rating ? [parsed.rating] : undefined,
-    source: parsed.source ? [parsed.source] : undefined,
+    status: statusValid ? [statusValid] : undefined,
+    rating: ratingValid ? [ratingValid] : undefined,
+    source: sourceValid ? [sourceValid] : undefined,
     tags: splitCsv(parsed.tag),
   };
 

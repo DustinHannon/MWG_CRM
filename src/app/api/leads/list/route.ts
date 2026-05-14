@@ -2,6 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getPermissions } from "@/lib/auth-helpers";
 import { withInternalListApi } from "@/lib/api/internal-list";
 import {
+  LEAD_RATINGS,
+  LEAD_SOURCES,
+  LEAD_STATUSES,
+} from "@/lib/lead-constants";
+import {
   COLUMN_KEYS,
   type ColumnKey,
 } from "@/lib/view-constants";
@@ -60,11 +65,31 @@ export const GET = withInternalListApi(
     );
   }
 
+  // Runtime allowlist validators — unknown URL inputs are dropped
+  // silently rather than 400-ing so stale URLs after enum renames
+  // fall back to the view's default filter (matching the tasks
+  // route precedent and the `runOpportunityView` defensive filter).
+  // Without this guard, a bogus enum value reaches Postgres's
+  // `inArray(leads.status, …)` parameter and the lead_status enum
+  // rejects with `22P02 invalid input value for enum lead_status`,
+  // surfacing as a 500 to the user.
+  const enumOne = <T extends readonly string[]>(
+    raw: string | null,
+    allowed: T,
+  ): T[number] | undefined =>
+    raw && (allowed as readonly string[]).includes(raw)
+      ? (raw as T[number])
+      : undefined;
+
+  const statusValid = enumOne(sp.get("status"), LEAD_STATUSES);
+  const ratingValid = enumOne(sp.get("rating"), LEAD_RATINGS);
+  const sourceValid = enumOne(sp.get("source"), LEAD_SOURCES);
+
   const extraFilters = {
     search: sp.get("q") || undefined,
-    status: sp.get("status") ? [sp.get("status") as string] : undefined,
-    rating: sp.get("rating") ? [sp.get("rating") as string] : undefined,
-    source: sp.get("source") ? [sp.get("source") as string] : undefined,
+    status: statusValid ? [statusValid] : undefined,
+    rating: ratingValid ? [ratingValid] : undefined,
+    source: sourceValid ? [sourceValid] : undefined,
     tags: sp.get("tag")
       ? sp
           .get("tag")!
