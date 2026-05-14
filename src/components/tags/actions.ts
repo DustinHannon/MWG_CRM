@@ -39,6 +39,16 @@ import { tagName } from "@/lib/validation/primitives";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { isHexColor, isPaletteColor, nextDefaultPaletteColor } from "./helpers";
 import type { BulkScope } from "@/lib/bulk-actions/scope";
+import {
+  BULK_SCOPE_EXPANSION_CAP,
+  expandAccountFilteredScope,
+  expandContactFilteredScope,
+  expandLeadFilteredScope,
+  expandOpportunityFilteredScope,
+  expandTaskFilteredScope,
+  type BulkScopeExpansion,
+} from "@/lib/bulk-actions/expand-filtered";
+import { getPermissions } from "@/lib/auth-helpers";
 
 /**
  * Server actions for tag operations. Two layers:
@@ -531,15 +541,14 @@ export async function deleteTagAction(
  *   - The new scope shape: `scope: BulkScope` which is either an id
  *     list (no cap — the action walks in 200-id batches) or a
  *     `filtered` discriminator with the page-level filters that the
- *     action expands server-side via the entity's cursor function.
- *
- * The `filtered` scope path is currently NOT enabled: each entity's
- * cursor-page loader is owned by Sub-agent D and not yet present in
- * `src/lib/<entity>.ts`. Until those land, the action returns a
- * typed ValidationError on the `filtered` path so call sites get a
- * clean error rather than an opaque crash. The shape is wired up
- * here so Sub-agent B can land consumer migrations atomically once
- * D ships.
+ *     action expands server-side via {@link expandLeadFilteredScope}
+ *     / {@link expandAccountFilteredScope} /
+ *     {@link expandContactFilteredScope} /
+ *     {@link expandOpportunityFilteredScope} /
+ *     {@link expandTaskFilteredScope}. The expansion is capped at
+ *     {@link BULK_SCOPE_EXPANSION_CAP} (5,000) records; a cap-hit
+ *     surfaces in the batch-level audit row's `expansionCapped`
+ *     field for retrospective triage.
  */
 const bulkSchemaLegacy = z.object({
   entityType: z.enum(["lead", "account", "contact", "opportunity", "task"]),
@@ -603,9 +612,10 @@ export async function bulkTagAction(
       // Resolve the concrete `recordIds` from whichever shape was
       // submitted. The legacy shape is direct; the new `scope`
       // shape either reuses the embedded id list, or — for the
-      // `filtered` discriminator — requires Sub-agent D's cursor
-      // expansion which is not yet wired through this action.
+      // `filtered` discriminator — walks the entity's view-paginated
+      // results via the expand-filtered helper.
       let recordIds: string[];
+      let expansion: BulkScopeExpansion | null = null;
       if (parsed.scope) {
         if (parsed.scope.kind === "ids") {
           recordIds = parsed.scope.ids;
@@ -615,15 +625,59 @@ export async function bulkTagAction(
             );
           }
         } else {
-          // `filtered` scope. The expansion path (iterating
-          // cursor-paginated pages of the entity to resolve the
-          // full id set) requires the per-entity cursor functions
-          // that Sub-agent D owns. Until those land, fail loudly
-          // with a typed validation error so the UI surfaces a
-          // clear message rather than an opaque crash.
-          throw new ValidationError(
-            "Bulk apply across all matching results is not yet enabled. Select the records explicitly for now.",
-          );
+          // `filtered` scope. The expansion walks the same
+          // runXxxView / listTasksForUser path the UI sees, capped at
+          // BULK_SCOPE_EXPANSION_CAP so a pathological filter set
+          // can't exhaust memory or DB. The action's per-record
+          // access gate below still applies, so a user who somehow
+          // expanded into records they don't own is short-circuited
+          // before any mutation runs.
+          const perms = await getPermissions(session.id);
+          const canViewAll = session.isAdmin || perms.canViewAllRecords;
+          const canViewOthers = session.isAdmin || perms.canViewOthersTasks;
+          switch (parsed.scope.entity) {
+            case "lead":
+              expansion = await expandLeadFilteredScope({
+                user: session,
+                canViewAll,
+                filters: parsed.scope.filters,
+              });
+              break;
+            case "account":
+              expansion = await expandAccountFilteredScope({
+                user: session,
+                canViewAll,
+                filters: parsed.scope.filters,
+              });
+              break;
+            case "contact":
+              expansion = await expandContactFilteredScope({
+                user: session,
+                canViewAll,
+                filters: parsed.scope.filters,
+              });
+              break;
+            case "opportunity":
+              expansion = await expandOpportunityFilteredScope({
+                user: session,
+                canViewAll,
+                filters: parsed.scope.filters,
+              });
+              break;
+            case "task":
+              expansion = await expandTaskFilteredScope({
+                user: session,
+                canViewOthers,
+                filters: parsed.scope.filters,
+              });
+              break;
+          }
+          recordIds = expansion.ids;
+          if (recordIds.length === 0) {
+            throw new ValidationError(
+              "No records match the active filters.",
+            );
+          }
         }
       } else {
         recordIds = parsed.recordIds;
@@ -710,6 +764,15 @@ export async function bulkTagAction(
           recordsTouched: summary.recordsTouched,
           tagsAdded: summary.tagsAdded,
           tagsRemoved: summary.tagsRemoved,
+          // Surface the expansion cap when the operation clipped
+          // its reach — retroactive forensics can spot operations
+          // that hit the cap and would have spread wider.
+          ...(expansion?.capped
+            ? {
+                expansionCapped: true,
+                expansionCap: BULK_SCOPE_EXPANSION_CAP,
+              }
+            : {}),
         },
       });
 
