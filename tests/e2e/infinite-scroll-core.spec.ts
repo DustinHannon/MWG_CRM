@@ -94,6 +94,27 @@ test.describe("Infinite scroll — load-more & virtualization", () => {
       return;
     }
 
+    // If the first page already covered the dataset there's no
+    // next page to fetch, so the sentinel will never fire. The page
+    // surfaces this via the "End of results" footer + absence of the
+    // Load-more button. Skip when we detect either signal — we're
+    // exercising the sentinel contract, not asserting that more data
+    // exists in production at any given moment.
+    const endOfResultsVisible = await page
+      .getByText(/end of results/i)
+      .isVisible({ timeout: 1_000 })
+      .catch(() => false);
+    const loadMoreCount = await page
+      .getByRole("button", { name: /^Load \d/ })
+      .count();
+    if (endOfResultsVisible || loadMoreCount === 0) {
+      test.info().annotations.push({
+        type: "skip-reason",
+        description: `Full dataset already loaded (${initialMaxIndex + 1} rows shown); no next page to fetch.`,
+      });
+      return;
+    }
+
     // Scroll to the bottom — the sentinel sits inside the
     // virtualizer's tail; reaching it must dispatch fetchNextPage.
     await page.evaluate(() =>
