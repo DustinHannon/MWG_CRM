@@ -1,3 +1,9 @@
+// consistency-exempt: list-page-pattern: Table↔Pipeline toggle via the
+// StandardListPage `controls` slot, and AddVisibleToListButton in the
+// page header `actions` cluster for marketing-list staging. Leads is
+// the canonical reference page; per STANDARDS §17 every documented
+// deviation declares its own marker, including the canonical entries.
+
 "use client";
 
 import Link from "next/link";
