@@ -10,7 +10,7 @@ import {
   requireSession,
 } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   createLead,
   archiveLeadsById,
@@ -110,13 +110,15 @@ export async function createLeadAction(
         // creating a lead with 5 tags would write only the lead.create
         // audit row while inline-applying 5 tags writes 5 tag.applied
         // rows. Inconsistent forensics confuse downstream audit queries.
+        // writeAuditBatch consolidates the N per-tag rows into a
+        // single INSERT.
         const tagRows = await db
           .select({ id: tagsTable.id, name: tagsTable.name })
           .from(tagsTable)
           .where(inArray(tagsTable.id, tagIds));
-        for (const t of tagRows) {
-          await writeAudit({
-            actorId: user.id,
+        await writeAuditBatch({
+          actorId: user.id,
+          events: tagRows.map((t) => ({
             action: "tag.applied",
             targetType: "lead",
             targetId: id,
@@ -127,8 +129,8 @@ export async function createLeadAction(
               tagName: t.name,
               source: "lead.create",
             },
-          });
-        }
+          })),
+        });
       }
       await writeAudit({
         actorId: user.id,
