@@ -6,12 +6,16 @@ import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { addSuppressionAction } from "../actions";
 
+interface AddSuppressionDialogProps {
+  onAdded?: () => void;
+}
+
 /**
  * Operator-initiated add-suppression dialog. Visibility is gated by
  * the caller (parent page only renders this when canMarketingSuppressionsAdd
  * is true or the user is admin).
  */
-export function AddSuppressionDialog() {
+export function AddSuppressionDialog({ onAdded }: AddSuppressionDialogProps = {}) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [reason, setReason] = useState("");
@@ -49,6 +53,7 @@ export function AddSuppressionDialog() {
         toast.success("Suppression added.");
         reset();
         setOpen(false);
+        onAdded?.();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Add failed.");
       }

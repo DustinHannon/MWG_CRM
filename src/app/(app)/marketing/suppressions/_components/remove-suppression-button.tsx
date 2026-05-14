@@ -10,6 +10,7 @@ interface RemoveSuppressionButtonProps {
   email: string;
   source: string;
   suppressedAt: string;
+  onRemoved?: () => void;
 }
 
 /**
@@ -22,6 +23,7 @@ export function RemoveSuppressionButton({
   email,
   source,
   suppressedAt,
+  onRemoved,
 }: RemoveSuppressionButtonProps) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -54,6 +56,7 @@ export function RemoveSuppressionButton({
         toast.success("Suppression removed.");
         setOpen(false);
         setReason("");
+        onRemoved?.();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Remove failed.");
       }

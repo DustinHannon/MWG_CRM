@@ -70,6 +70,12 @@ export function SuppressionsListClient({
   }, []);
   const [filters, setFilters] = useState<SuppressionsFilters>(initialFilters);
   const [draft, setDraft] = useState<SuppressionsFilters>(initialFilters);
+  // Bumps after every successful add/remove. Folded into the TanStack
+  // queryKey so the infinite-scroll list refetches from cursor=null
+  // when the underlying data changes — server `revalidatePath` doesn't
+  // reach this client-fetched list.
+  const [reloadKey, setReloadKey] = useState(0);
+  const bumpReload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const memoizedFilters = useMemo<SuppressionsFilters>(
     () => filters,
@@ -123,9 +129,10 @@ export function SuppressionsListClient({
         row={row}
         timePrefs={timePrefs}
         canRemove={canRemove}
+        onRemoved={bumpReload}
       />
     ),
-    [timePrefs, canRemove],
+    [timePrefs, canRemove, bumpReload],
   );
 
   const renderCard = useCallback(
@@ -134,9 +141,10 @@ export function SuppressionsListClient({
         row={row}
         timePrefs={timePrefs}
         canRemove={canRemove}
+        onRemoved={bumpReload}
       />
     ),
-    [timePrefs, canRemove],
+    [timePrefs, canRemove, bumpReload],
   );
 
   const applyDraft = () => setFilters(draft);
@@ -272,7 +280,7 @@ export function SuppressionsListClient({
 
   return (
     <StandardListPage<MarketingSuppressionRow, SuppressionsFilters>
-      queryKey={["marketing-suppressions"]}
+      queryKey={["marketing-suppressions", reloadKey]}
       fetchPage={fetchPage}
       filters={memoizedFilters}
       renderRow={renderRow}
@@ -293,7 +301,7 @@ export function SuppressionsListClient({
         title: "Suppressions",
         description:
           "Mirror of SendGrid's suppression list, reconciled hourly. Admins can manually suppress or re-subscribe an address from here.",
-        actions: canAdd ? <AddSuppressionDialog /> : undefined,
+        actions: canAdd ? <AddSuppressionDialog onAdded={bumpReload} /> : undefined,
       }}
       filtersSlot={filtersSlot}
       columnHeaderSlot={columnHeaderSlot}
@@ -305,10 +313,12 @@ function SuppressionsDesktopRow({
   row,
   timePrefs,
   canRemove,
+  onRemoved,
 }: {
   row: MarketingSuppressionRow;
   timePrefs: TimePrefs;
   canRemove: boolean;
+  onRemoved?: () => void;
 }) {
   // Cell count matches column header (6 when canRemove, else 5).
   const cols = canRemove ? 6 : 5;
@@ -361,6 +371,7 @@ function SuppressionsDesktopRow({
             email={row.email}
             source={row.suppressionType}
             suppressedAt={row.suppressedAt.toISOString()}
+            onRemoved={onRemoved}
           />
         </div>
       ) : null}
@@ -372,10 +383,12 @@ function SuppressionsMobileCard({
   row,
   timePrefs,
   canRemove,
+  onRemoved,
 }: {
   row: MarketingSuppressionRow;
   timePrefs: TimePrefs;
   canRemove: boolean;
+  onRemoved?: () => void;
 }) {
   return (
     <div
@@ -407,6 +420,7 @@ function SuppressionsMobileCard({
             email={row.email}
             source={row.suppressionType}
             suppressedAt={row.suppressedAt.toISOString()}
+            onRemoved={onRemoved}
           />
         </div>
       ) : null}
