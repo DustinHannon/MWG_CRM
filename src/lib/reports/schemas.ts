@@ -92,7 +92,9 @@ const TASK_STATUS_VALUES = [
   "cancelled",
 ] as const;
 const TASK_PRIORITY_VALUES = ["low", "normal", "high", "urgent"] as const;
-const ACTIVITY_KIND_VALUES = ["note", "call", "email", "meeting", "log"] as const;
+// Matches `activityKindEnum` in `src/db/schema/enums.ts`. Order kept
+// stable so saved-report filter URLs aren't invalidated.
+const ACTIVITY_KIND_VALUES = ["email", "call", "meeting", "note", "task"] as const;
 const CAMPAIGN_STATUS_VALUES = [
   "draft",
   "scheduled",
