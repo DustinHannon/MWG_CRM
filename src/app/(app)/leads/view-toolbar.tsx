@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { AVAILABLE_COLUMNS, type ColumnKey } from "@/lib/view-constants";
 import { ModifiedBadge } from "@/components/saved-views";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import {
   subscribeToViewAction,
   unsubscribeFromViewAction,
@@ -81,6 +82,12 @@ export function ViewToolbar({
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const columnsContainerRef = useRef<HTMLDivElement | null>(null);
+  useClickOutside(
+    columnsContainerRef,
+    () => setColumnsOpen(false),
+    columnsOpen,
+  );
 
   const grouped = useMemo(() => {
     return {
@@ -193,7 +200,7 @@ export function ViewToolbar({
               router.refresh();
             });
           }}
-          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted"
+          className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted md:inline-flex"
         >
           Save changes
         </button>
@@ -203,14 +210,15 @@ export function ViewToolbar({
         <button
           type="button"
           onClick={() => setSaveOpen(true)}
-          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted"
+          className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/90 transition hover:bg-muted md:inline-flex"
         >
           Save as new view
         </button>
       ) : null}
 
-      {/* Column chooser */}
-      <div className="relative ml-auto">
+      {/* Column chooser — desktop only (mobile uses cards which don't
+          show columns; the chooser is also a power-user affordance). */}
+      <div className="relative ml-auto hidden md:inline-flex" ref={columnsContainerRef}>
         <button
           type="button"
           onClick={() => setColumnsOpen((o) => !o)}
@@ -222,7 +230,6 @@ export function ViewToolbar({
           <ColumnChooser
             active={activeColumns}
             onToggle={onToggleColumn}
-            onClose={() => setColumnsOpen(false)}
             onReset={onResetColumns}
           />
         ) : null}
@@ -247,25 +254,27 @@ export function ViewToolbar({
         />
       ) : null}
 
-      {/* Subscribe / Unsubscribe affordance for the
-          active saved view. The same `saved_search_subscriptions`
-          table backs this button and the per-row list on
-          /settings → Notifications. Digests are sent from the
-          user's own Microsoft 365 mailbox via Graph (NOT SendGrid). */}
+      {/* Subscribe / Unsubscribe affordance for the active saved view —
+          desktop only. The same `saved_search_subscriptions` table
+          backs this button and the per-row list on /settings →
+          Notifications. Digests are sent from the user's own Microsoft
+          365 mailbox via Graph (NOT SendGrid). */}
       {activeViewId.startsWith("saved:") ? (
-        <SubscribeButton
-          savedViewId={activeViewId.slice("saved:".length)}
-          isSubscribed={
-            subscribedViewIds?.includes(
-              activeViewId.slice("saved:".length),
-            ) ?? false
-          }
-          disabled={pending}
-          onChange={() => router.refresh()}
-        />
+        <span className="hidden md:inline-flex">
+          <SubscribeButton
+            savedViewId={activeViewId.slice("saved:".length)}
+            isSubscribed={
+              subscribedViewIds?.includes(
+                activeViewId.slice("saved:".length),
+              ) ?? false
+            }
+            disabled={pending}
+            onChange={() => router.refresh()}
+          />
+        </span>
       ) : null}
 
-      {/* Saved-view delete affordance */}
+      {/* Saved-view delete affordance — desktop only. */}
       {activeViewId.startsWith("saved:") ? (
         <button
           type="button"
@@ -279,7 +288,7 @@ export function ViewToolbar({
               router.push("/leads?view=builtin:my-open");
             });
           }}
-          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] transition hover:bg-destructive/20"
+          className="hidden rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] transition hover:bg-destructive/20 md:inline-flex"
         >
           Delete view
         </button>
@@ -298,11 +307,13 @@ function ViewSelectMenu({
   onPick: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useClickOutside(containerRef, () => setOpen(false), open);
   const active = [...grouped.builtin, ...grouped.saved].find(
     (v) => v.id === activeViewId,
   );
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -313,12 +324,6 @@ function ViewSelectMenu({
       </button>
       {open ? (
         <>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Close menu"
-            className="fixed inset-0 z-40 cursor-default"
-          />
           <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border border-border bg-[var(--popover)] text-[var(--popover-foreground)] shadow-2xl">
             <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-muted-foreground/80">
               Built-in
@@ -386,22 +391,14 @@ function ViewMenuItem({
 function ColumnChooser({
   active,
   onToggle,
-  onClose,
   onReset,
 }: {
   active: ColumnKey[];
   onToggle: (key: ColumnKey) => void;
-  onClose: () => void;
   onReset: () => void;
 }) {
   return (
     <>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close column chooser"
-        className="fixed inset-0 z-40 cursor-default"
-      />
       <div className="absolute right-0 top-full z-50 mt-1 max-h-96 w-72 overflow-y-auto rounded-md border border-border bg-[var(--popover)] text-[var(--popover-foreground)] p-2 shadow-2xl">
         <div className="flex items-center justify-between px-2 py-1">
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80">

@@ -268,26 +268,26 @@ function LeadsListInner({
 
   const filtersSlot = (
     <div className="space-y-3">
-      {/* View selector + MODIFIED badge + Save-as-new + Columns
-          chooser. Desktop-only — these are power-user affordances
-          that don't fit the mobile chip toolbar. Lives inside the
-          client component so the MODIFIED badge can react to client
-          filter state (search / status / rating / source / tag). */}
-      <div className="hidden md:block">
-        <ViewToolbar
-          views={views}
-          activeViewId={activeViewParam}
-          activeViewName={activeViewName}
-          activeColumns={activeColumns}
-          baseColumns={baseColumns}
-          savedDirtyId={savedDirtyId}
-          columnsModified={columnsModified}
-          viewModified={viewModified}
-          modifiedFields={modifiedFields}
-          subscribedViewIds={subscribedViewIds}
-          resetClientState={clearFilters}
-        />
-      </div>
+      {/* View selector + MODIFIED badge stay visible on every viewport
+          so mobile users can switch views and reset modifications. The
+          Columns chooser, Save-changes, Save-as-new, Subscribe, and
+          Delete-view affordances are power-user controls hidden below
+          md inside ViewToolbar itself. Lives inside the client
+          component so the MODIFIED badge can react to client filter
+          state (search / status / rating / source / tag). */}
+      <ViewToolbar
+        views={views}
+        activeViewId={activeViewParam}
+        activeViewName={activeViewName}
+        activeColumns={activeColumns}
+        baseColumns={baseColumns}
+        savedDirtyId={savedDirtyId}
+        columnsModified={columnsModified}
+        viewModified={viewModified}
+        modifiedFields={modifiedFields}
+        subscribedViewIds={subscribedViewIds}
+        resetClientState={clearFilters}
+      />
 
       <LeadFiltersBar
         draft={draft}
@@ -302,21 +302,23 @@ function LeadsListInner({
         allTags={allTags}
         hasActiveFilters={hasActiveFilters}
       />
-
-      {/* Desktop column headers — DnD-enabled. Renders as a `<thead>`
-          inside a `<table>` wrapper so the existing component (which
-          expects to live in a table) keeps the same DOM contract.
-          The desktop row container uses a matching column layout via
-          shared column keys. */}
-      <div className="hidden overflow-x-auto rounded-t-lg border border-b-0 border-border bg-muted/40 md:block">
-        <table className="data-table min-w-full divide-y divide-border/60 text-sm">
-          <SortableLeadsHeaders
-            initialColumns={activeColumns}
-            activeViewId={activeViewParam}
-          />
-        </table>
-      </div>
     </div>
+  );
+
+  // Desktop column headers — DnD-enabled. The shell renders this in its
+  // own sticky tier (z-15) inside the horizontal-scroll wrapper that
+  // surrounds the rows, so column headers stay aligned with row cells
+  // when the table is wider than the viewport.
+  const columnHeaderSlot = (
+    <table
+      className="data-table w-full divide-y divide-border/60 text-sm"
+      style={{ minWidth: `${activeColumns.length * 140 + 40}px` }}
+    >
+      <SortableLeadsHeaders
+        initialColumns={activeColumns}
+        activeViewId={activeViewParam}
+      />
+    </table>
   );
 
   const headerActions = (
@@ -393,6 +395,7 @@ function LeadsListInner({
         actions: headerActions,
       }}
       filtersSlot={filtersSlot}
+      columnHeaderSlot={columnHeaderSlot}
       bulkActions={{
         banner: <BulkSelectionBanner />,
         toolbar: (
@@ -476,10 +479,15 @@ function LeadDesktopRow({
   timePrefs: TimePrefs;
   canDelete: boolean;
 }) {
+  // Match the column-header tier's min-width so the row stays aligned
+  // with header cells when the table is wider than the viewport (the
+  // outer wrapper provides horizontal scroll under that condition).
+  const minRowWidth = columns.length * 140 + 40;
   return (
     <div
       className="group flex items-stretch border-b border-border/60 bg-card text-sm transition hover:bg-muted/40"
       data-row-flash="new"
+      style={{ minWidth: `${minRowWidth}px` }}
     >
       {columns.map((c) => {
         const colLabel =
@@ -489,6 +497,7 @@ function LeadDesktopRow({
             key={c}
             data-label={colLabel}
             className="min-w-0 flex-1 truncate px-5 py-3"
+            style={{ flexBasis: "140px" }}
           >
             {renderCell(lead, c, timePrefs)}
           </div>
@@ -564,7 +573,12 @@ function LeadFiltersBar({
         </label>
       </div>
 
-      <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-3 md:overflow-visible md:px-0 md:pb-0">
+      {/* Mobile chip row: edge-fade mask hints that more chips exist to
+          the right when the row overflows the viewport. Desktop layout
+          (wrap, no overflow) overrides the mask via md:[mask-image:none]. */}
+      <div
+        className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-3 md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]"
+      >
         {/* Desktop search input. */}
         <input
           type="search"
@@ -610,7 +624,7 @@ function LeadFiltersBar({
             <button
               type="button"
               onClick={onClear}
-              className="shrink-0 rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground/90"
+              className="h-11 shrink-0 rounded-full px-4 text-sm text-muted-foreground hover:text-foreground/90"
             >
               Clear
             </button>
@@ -707,7 +721,7 @@ function ControlledMobileSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
-        "h-9 min-w-0 shrink-0 appearance-none rounded-full border px-3 pr-7 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-ring/40",
+        "h-11 min-w-0 shrink-0 appearance-none rounded-full border px-4 pr-8 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-ring/40",
         isSet
           ? "border-primary/30 bg-primary/15 text-foreground"
           : "border-border bg-muted/40 text-muted-foreground",
