@@ -9,7 +9,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
 import { StandardEmptyState } from "./standard-empty-state";
@@ -222,44 +221,9 @@ export function StandardListPage<T, F>({
   // window virtualization.
   useScrollRestoration();
 
-  // Measure the sticky chrome group's rendered height so the column-header
-  // tier can offset itself below it (`top: calc(3.5rem + var(--chrome-h))`).
-  // The chrome height varies — filters wrap on narrow viewports, the bulk
-  // banner appears/disappears, MODIFIED badge toggles — so a CSS variable
-  // driven by ResizeObserver is the only way to keep the offset accurate
-  // without a server round-trip.
-  const chromeRef = useRef<HTMLDivElement | null>(null);
-  const [chromeHeight, setChromeHeight] = useState(0);
-  useLayoutEffect(() => {
-    const node = chromeRef.current;
-    if (!node) return;
-    const measure = () => {
-      const here = chromeRef.current;
-      if (!here) return;
-      const next = here.getBoundingClientRect().height;
-      setChromeHeight((prev) =>
-        Math.abs(prev - next) >= 1 ? next : prev,
-      );
-    };
-    measure();
-    const ro =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => measure())
-        : null;
-    ro?.observe(node);
-    window.addEventListener("resize", measure);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, []);
-
   return (
     <div
       className={["space-y-3", className ?? ""].filter(Boolean).join(" ")}
-      style={
-        { "--chrome-sticky-height": `${chromeHeight}px` } as CSSProperties
-      }
     >
       {/* Skip-links: visible on focus only, follow Tab order. The
           "Skip to filters" link only renders when a filtersSlot was
@@ -292,13 +256,13 @@ export function StandardListPage<T, F>({
           multiple sticky siblings with different top offsets. The group
           sits at `top-14` so it docks immediately below the TopBar
           (z-30); group itself is z-20 so it composes correctly with the
-          bulk-action toolbar (z-20, bottom). The column-header tier
-          (z-15) renders below this group inside the result list so it
-          stays aligned with the rows during horizontal scroll. */}
-      <div
-        ref={chromeRef}
-        className="sticky top-14 z-20 -mx-4 space-y-3 border-b border-border/40 bg-background/85 px-4 pb-3 pt-3 backdrop-blur-md sm:-mx-6 sm:px-6 xl:-mx-10 xl:px-10"
-      >
+          bulk-action toolbar (z-20, bottom). The column-header row
+          renders inside the result list's horizontal-scroll wrapper so
+          it stays aligned with rows during horizontal scroll; it is not
+          vertically sticky because `overflow-x: auto` creates a
+          scrolling-mechanism context that would pin descendants
+          relative to the wrapper instead of the viewport. */}
+      <div className="sticky top-14 z-20 -mx-4 space-y-3 border-b border-border/40 bg-background/85 px-4 pb-3 pt-3 backdrop-blur-md sm:-mx-6 sm:px-6 xl:-mx-10 xl:px-10">
         <div id="list-actions">
           <StandardPageHeader {...header} />
         </div>
@@ -345,19 +309,20 @@ export function StandardListPage<T, F>({
         ) : (
           <>
             {/* Desktop region: horizontal-scroll wrapper hosts the
-                column-header sticky tier (z-15) AND the row list, so
-                headers stay aligned with rows when the table is wider
-                than the viewport. */}
+                column-header row AND the row list, so headers stay
+                aligned with rows when the table is wider than the
+                viewport. Column header is NOT vertically sticky —
+                using `overflow-x: auto` on the wrapper creates a
+                scrolling-mechanism context that breaks viewport-scoped
+                sticky for descendants (sticky elements would pin
+                relative to the wrapper, not the viewport). The chrome
+                group above remains sticky and provides the persistent
+                page-context affordance during deep scroll. */}
             <div className="hidden md:block">
               <div className="overflow-x-auto rounded-lg border border-border bg-card">
                 <div className="min-w-max">
                   {columnHeaderSlot ? (
-                    <div
-                      className="sticky z-[15] border-b border-border bg-muted/40 backdrop-blur-md"
-                      style={{
-                        top: `calc(3.5rem + var(--chrome-sticky-height, 0px))`,
-                      }}
-                    >
+                    <div className="border-b border-border bg-muted/40">
                       {columnHeaderSlot}
                     </div>
                   ) : null}
