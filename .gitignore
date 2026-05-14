@@ -85,3 +85,7 @@ test-results/
 # Phase 23 — local-only D365 import recency fixture script.
 # Runs against production with D365_CLIENT_SECRET; output drops to .tmp/.
 src/scripts/phase23/
+
+# Local-only tooling artifacts
+.semgrep/
+tools/clickdimensions-migration/

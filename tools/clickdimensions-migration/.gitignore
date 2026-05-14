@@ -1,7 +1,0 @@
-# Phase 29 §7 — keep local-only artefacts out of the repo.
-.env
-storage.json
-extraction-state.json
-node_modules/
-dist/
-*.log
