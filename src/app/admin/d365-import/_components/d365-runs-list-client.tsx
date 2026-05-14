@@ -1,3 +1,11 @@
+// consistency-exempt: list-page-pattern: admin-utility-table —
+// fixed-width row cells (w-40 timestamp, w-32 actor, w-32 entity,
+// w-40 status, w-40 batches, flex-1 records) preserved because columns
+// have intrinsically non-uniform widths; no columnHeaderSlot. The
+// server shell embeds the runs list alongside a separate "start run"
+// chrome section above the list, so this client renders only the runs
+// catalog. Admin operational page — no saved views, no MODIFIED badge,
+// no bulk selection.
 "use client";
 
 import Link from "next/link";
