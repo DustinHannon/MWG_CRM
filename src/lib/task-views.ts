@@ -54,6 +54,24 @@ export const TASK_SORT_FIELDS = [
 
 export type TaskSortField = (typeof TASK_SORT_FIELDS)[number];
 
+// Allowlists used at the API boundary so URL-supplied enum params get
+// runtime validation instead of an `as TaskViewFilters[...]` cast.
+// Unknown values are dropped (the route falls back to the view's
+// default for that field).
+export const TASK_STATUS_OPTS = ["open", "in_progress", "completed", "cancelled"] as const;
+export const TASK_PRIORITY_OPTS = ["low", "normal", "high", "urgent"] as const;
+export const TASK_RELATION_OPTS = ["all", "standalone", "linked"] as const;
+export const TASK_RELATED_ENTITY_OPTS = ["lead", "account", "contact", "opportunity"] as const;
+export const TASK_DUE_RANGE_OPTS = [
+  "overdue",
+  "today",
+  "this_week",
+  "later",
+  "none",
+  "all",
+] as const;
+export const TASK_ASSIGNEE_PRESETS = ["me", "any"] as const;
+
 export interface TaskViewSort {
   field: TaskSortField;
   direction: "asc" | "desc";

@@ -17,11 +17,10 @@ import {
   type TagEntityType,
   type TagRow,
 } from "@/lib/tags";
-import { auditLog } from "@/db/schema/audit";
 import { TAG_COLORS, tags as tagsTable } from "@/db/schema/tags";
-import { permissions, users } from "@/db/schema/users";
+import { permissions } from "@/db/schema/users";
 import { eq, sql } from "drizzle-orm";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   requireLeadAccess,
   requireOwnedEntityAccess,
@@ -680,33 +679,20 @@ export async function bulkTagAction(
       const batchAction =
         operation === "add" ? "tag.bulk_applied" : "tag.bulk_removed";
 
-      // Per-record audit rows so each record's history shows the bulk
-      // operation. Wrapped in try/catch matching the previous behaviour:
-      // an audit-log outage cannot block the primary mutation.
-      try {
-        const [actor] = await db
-          .select({ email: users.email })
-          .from(users)
-          .where(eq(users.id, session.id))
-          .limit(1);
-        const snapshot = actor?.email ?? null;
-        const auditRows = recordIds.map((recordId) => ({
-          actorId: session.id,
-          actorEmailSnapshot: snapshot,
+      // Per-record audit rows so each record's history surfaces the
+      // bulk operation. Uses the canonical writeAuditBatch helper so
+      // requestId / email snapshot / failure logging follow the same
+      // shape as every other audit write (single email lookup, single
+      // INSERT, best-effort try/catch internally).
+      await writeAuditBatch({
+        actorId: session.id,
+        events: recordIds.map((recordId) => ({
           action: perRecordAction,
           targetType: entityType,
           targetId: recordId,
-          afterJson: { tagIds } as object,
-        }));
-        await db.insert(auditLog).values(auditRows);
-      } catch (err) {
-        logger.error("audit.bulk_write_failed", {
-          action: perRecordAction,
-          entityType,
-          recordCount: recordIds.length,
-          errorMessage: err instanceof Error ? err.message : String(err),
-        });
-      }
+          after: { tagIds },
+        })),
+      });
 
       // Single batch-level audit row — one row per invocation
       // that captures the full payload (entity type, record ids,

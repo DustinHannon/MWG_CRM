@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import { listAuditLogCursor } from "@/lib/audit-cursor";
 
 export const dynamic = "force-dynamic";
@@ -19,9 +19,9 @@ export const runtime = "nodejs";
  *
  * Returns `{ data, nextCursor, total }`.
  */
-export async function GET(req: NextRequest) {
-  await requireAdmin();
-
+export const GET = withInternalListApi(
+  { action: "admin.audit.list", auth: "admin" },
+  async (req: NextRequest) => {
   const sp = req.nextUrl.searchParams;
   const cursor = sp.get("cursor");
 
@@ -58,4 +58,5 @@ export async function GET(req: NextRequest) {
     nextCursor: result.nextCursor,
     total: result.total,
   });
-}
+  },
+);

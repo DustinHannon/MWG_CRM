@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import {
   listApiUsageCursor,
   STATUS_BUCKETS,
@@ -26,9 +26,9 @@ const METHODS = ["GET", "POST", "PATCH", "PUT", "DELETE"];
  *
  * Returns `{ data, nextCursor, total }`.
  */
-export async function GET(req: NextRequest) {
-  await requireAdmin();
-
+export const GET = withInternalListApi(
+  { action: "admin.api_usage.list", auth: "admin" },
+  async (req: NextRequest) => {
   const sp = req.nextUrl.searchParams;
   const cursor = sp.get("cursor");
 
@@ -75,7 +75,8 @@ export async function GET(req: NextRequest) {
     nextCursor: result.nextCursor,
     total: result.total,
   });
-}
+  },
+);
 
 function parseList(raw: string[]): string[] {
   return raw.flatMap((v) =>

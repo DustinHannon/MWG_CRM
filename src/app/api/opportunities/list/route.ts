@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { getPermissions } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import {
   OPPORTUNITY_COLUMN_KEYS,
   OPPORTUNITY_SORT_FIELDS,
@@ -42,8 +43,9 @@ export const runtime = "nodejs";
  * Returns `{ data, nextCursor, total }` matching the
  * `StandardListPagePage<OpportunityRow>` contract.
  */
-export async function GET(req: NextRequest) {
-  const user = await requireSession();
+export const GET = withInternalListApi(
+  { action: "opportunities.list", auth: "session" },
+  async (req: NextRequest, { user }) => {
   const perms = await getPermissions(user.id);
   const canViewAll = user.isAdmin || perms.canViewAllRecords;
 
@@ -160,4 +162,5 @@ export async function GET(req: NextRequest) {
     nextCursor: result.nextCursor,
     total: result.total,
   });
-}
+  },
+);

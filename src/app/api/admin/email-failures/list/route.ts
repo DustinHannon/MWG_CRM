@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import {
   FAILURE_STATUSES,
   listEmailFailuresCursor,
@@ -37,9 +37,9 @@ const RANGE_MS: Record<RangeValue, number> = {
  *
  * Returns `{ data, nextCursor, total }`.
  */
-export async function GET(req: NextRequest) {
-  await requireAdmin();
-
+export const GET = withInternalListApi(
+  { action: "admin.email_failures.list", auth: "admin" },
+  async (req: NextRequest) => {
   const sp = req.nextUrl.searchParams;
   const cursor = sp.get("cursor");
 
@@ -88,4 +88,5 @@ export async function GET(req: NextRequest) {
     nextCursor: result.nextCursor,
     total: result.total,
   });
-}
+  },
+);

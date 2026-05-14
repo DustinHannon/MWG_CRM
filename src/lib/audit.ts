@@ -101,3 +101,66 @@ export async function writeAudit(args: {
     });
   }
 }
+
+/**
+ * Append a batch of audit events written by the same actor in one
+ * logical operation (bulk tag apply, bulk archive, bulk reassign,
+ * etc.) as a single INSERT. Same best-effort contract as
+ * {@link writeAudit}: a write failure does NOT block the primary
+ * mutation, it logs and returns.
+ *
+ * Resolves `actorEmailSnapshot` once (one extra round trip rather than
+ * N) when omitted; picks up the active request id from
+ * AsyncLocalStorage. Each event carries its own action / targetType /
+ * targetId / before / after — the batch is a perf optimization, not
+ * an aggregation: each row remains independently queryable.
+ *
+ * Empty `events` is a no-op.
+ */
+export async function writeAuditBatch(args: {
+  actorId: string;
+  actorEmailSnapshot?: string | null;
+  events: Array<{
+    action: string;
+    targetType?: string;
+    targetId?: string;
+    before?: unknown;
+    after?: unknown;
+  }>;
+  requestId?: string;
+  ipAddress?: string;
+}): Promise<void> {
+  if (args.events.length === 0) return;
+  try {
+    let snapshot = args.actorEmailSnapshot ?? null;
+    if (snapshot === null && args.actorId) {
+      const [u] = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, args.actorId))
+        .limit(1);
+      snapshot = u?.email ?? null;
+    }
+    const requestId = args.requestId ?? getRequestId() ?? null;
+    const ipAddress = args.ipAddress ?? null;
+    const rows = args.events.map((e) => ({
+      actorId: args.actorId,
+      actorEmailSnapshot: snapshot,
+      action: e.action,
+      targetType: e.targetType ?? null,
+      targetId: e.targetId ?? null,
+      beforeJson: e.before === undefined ? null : (e.before as object),
+      afterJson: e.after === undefined ? null : (e.after as object),
+      requestId,
+      ipAddress,
+    }));
+    await db.insert(auditLog).values(rows);
+  } catch (err) {
+    logger.error("audit.batch_write_failed", {
+      actorId: args.actorId,
+      sampleAction: args.events[0]?.action ?? null,
+      eventCount: args.events.length,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
+}

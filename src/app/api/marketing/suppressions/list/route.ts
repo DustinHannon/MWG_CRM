@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { getPermissions } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import {
   listSuppressionsCursor,
   SUPPRESSION_TYPES,
@@ -21,8 +22,9 @@ export const runtime = "nodejs";
  *
  * Returns `{ data, nextCursor, total }`.
  */
-export async function GET(req: NextRequest) {
-  const user = await requireSession();
+export const GET = withInternalListApi(
+  { action: "marketing.suppressions.list", auth: "session" },
+  async (req: NextRequest, { user }) => {
   const perms = await getPermissions(user.id);
   if (!user.isAdmin && !perms.canMarketingSuppressionsView) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -55,4 +57,5 @@ export async function GET(req: NextRequest) {
     nextCursor: result.nextCursor,
     total: result.total,
   });
-}
+  },
+);

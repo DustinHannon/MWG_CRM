@@ -3,7 +3,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { users } from "@/db/schema/users";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,9 +23,9 @@ export const runtime = "nodejs";
  * pagination — but wraps in the same shape as other list endpoints
  * for symmetry with `StandardListPagePage`.
  */
-export async function GET(_req: NextRequest) {
-  await requireAdmin();
-
+export const GET = withInternalListApi(
+  { action: "admin.imports_remap.list", auth: "admin" },
+  async (_req: NextRequest) => {
   const [pending, allUsers] = await Promise.all([
     db
       .select({
@@ -63,4 +63,5 @@ export async function GET(_req: NextRequest) {
     total: pending.length,
     users: allUsers,
   });
-}
+  },
+);

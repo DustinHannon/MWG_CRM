@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import { listImportRunsCursor } from "@/lib/d365/import-runs-cursor";
 
 export const dynamic = "force-dynamic";
@@ -16,9 +16,9 @@ export const runtime = "nodejs";
  *
  * Returns `{ data, nextCursor, total }`.
  */
-export async function GET(req: NextRequest) {
-  await requireAdmin();
-
+export const GET = withInternalListApi(
+  { action: "admin.d365_import.list", auth: "admin" },
+  async (req: NextRequest) => {
   const sp = req.nextUrl.searchParams;
 
   const result = await listImportRunsCursor({
@@ -37,4 +37,5 @@ export async function GET(req: NextRequest) {
     nextCursor: result.nextCursor,
     total: result.total,
   });
-}
+  },
+);

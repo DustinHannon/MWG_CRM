@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireSession } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import { listReportsCursor } from "@/lib/reports/cursor";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +17,9 @@ export const runtime = "nodejs";
  *
  * Returns `{ data, nextCursor, total }`.
  */
-export async function GET(req: NextRequest) {
-  const user = await requireSession();
+export const GET = withInternalListApi(
+  { action: "reports.list", auth: "session" },
+  async (req: NextRequest, { user }) => {
   const sp = req.nextUrl.searchParams;
 
   const scopeRaw = sp.get("scope");
@@ -42,4 +43,5 @@ export async function GET(req: NextRequest) {
     nextCursor: result.nextCursor,
     total: result.total,
   });
-}
+  },
+);

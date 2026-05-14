@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { getPermissions } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import {
   TASK_COLUMN_KEYS,
   type TaskColumnKey,
@@ -7,7 +8,13 @@ import {
 import {
   findBuiltinTaskView,
   getSavedTaskView,
+  TASK_ASSIGNEE_PRESETS,
+  TASK_DUE_RANGE_OPTS,
+  TASK_PRIORITY_OPTS,
+  TASK_RELATED_ENTITY_OPTS,
+  TASK_RELATION_OPTS,
   TASK_SORT_FIELDS,
+  TASK_STATUS_OPTS,
   type TaskSortField,
   type TaskViewDefinition,
   type TaskViewFilters,
@@ -59,8 +66,9 @@ export const runtime = "nodejs";
  *     use cursor for any sort because their lib helpers maintain
  *     per-sort cursor encodings).
  */
-export async function GET(req: NextRequest) {
-  const session = await requireSession();
+export const GET = withInternalListApi(
+  { action: "tasks.list", auth: "session" },
+  async (req: NextRequest, { user: session }) => {
   const perms = await getPermissions(session.id);
   const canViewOthers = session.isAdmin || perms.canViewOthersTasks;
 
@@ -102,28 +110,48 @@ export async function GET(req: NextRequest) {
           .filter((x) => x.length > 0)
       : undefined;
 
+  // Runtime allowlist validators — unknown URL inputs are dropped
+  // (the view default for that field then wins via the spread below)
+  // so a malicious or stale URL can't push raw strings into
+  // TaskViewFilters via a type-erase cast.
+  const filterEnum = <T extends readonly string[]>(
+    raw: string | null,
+    allowed: T,
+  ): T[number] | undefined =>
+    raw && (allowed as readonly string[]).includes(raw)
+      ? (raw as T[number])
+      : undefined;
+  const filterEnumList = <T extends readonly string[]>(
+    raw: string | null,
+    allowed: T,
+  ): T[number][] | undefined => {
+    const parts = splitCsv(raw);
+    if (!parts) return undefined;
+    const filtered = parts.filter((v): v is T[number] =>
+      (allowed as readonly string[]).includes(v),
+    );
+    return filtered.length > 0 ? filtered : undefined;
+  };
+  const assignee =
+    assigneeRaw &&
+    ((TASK_ASSIGNEE_PRESETS as readonly string[]).includes(assigneeRaw) ||
+      /^[a-zA-Z0-9-]+$/.test(assigneeRaw))
+      ? (assigneeRaw as TaskViewFilters["assignee"])
+      : undefined;
+  const statusList = filterEnumList(statusRaw, TASK_STATUS_OPTS);
+  const priorityList = filterEnumList(priorityRaw, TASK_PRIORITY_OPTS);
+  const relation = filterEnum(relationRaw, TASK_RELATION_OPTS);
+  const relatedEntity = filterEnum(relatedRaw, TASK_RELATED_ENTITY_OPTS);
+  const dueRange = filterEnum(dueRaw, TASK_DUE_RANGE_OPTS);
+
   const overlay: Partial<TaskViewFilters> = {
     ...(qRaw ? { q: qRaw } : {}),
-    ...(assigneeRaw
-      ? { assignee: assigneeRaw as TaskViewFilters["assignee"] }
-      : {}),
-    ...(statusRaw
-      ? {
-          status: splitCsv(statusRaw) as TaskViewFilters["status"],
-        }
-      : {}),
-    ...(priorityRaw
-      ? {
-          priority: splitCsv(priorityRaw) as TaskViewFilters["priority"],
-        }
-      : {}),
-    ...(relationRaw
-      ? { relation: relationRaw as TaskViewFilters["relation"] }
-      : {}),
-    ...(relatedRaw
-      ? { relatedEntity: relatedRaw as TaskViewFilters["relatedEntity"] }
-      : {}),
-    ...(dueRaw ? { dueRange: dueRaw as TaskViewFilters["dueRange"] } : {}),
+    ...(assignee ? { assignee } : {}),
+    ...(statusList ? { status: statusList } : {}),
+    ...(priorityList ? { priority: priorityList } : {}),
+    ...(relation ? { relation } : {}),
+    ...(relatedEntity ? { relatedEntity } : {}),
+    ...(dueRange ? { dueRange } : {}),
     ...(tagRaw ? { tags: splitCsv(tagRaw) } : {}),
   };
 
@@ -191,4 +219,5 @@ export async function GET(req: NextRequest) {
     nextCursor,
     total: total ?? rows.length,
   });
-}
+  },
+);

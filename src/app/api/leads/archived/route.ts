@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth-helpers";
+import { NextResponse, type NextRequest } from "next/server";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import { listArchivedLeadsCursor } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
@@ -13,8 +13,9 @@ export const runtime = "nodejs";
  * Emits the normalised `ArchivedRow` envelope consumed by
  * `ArchivedListClient` — title + subtitle + the 5 audit columns.
  */
-export async function GET(req: Request) {
-  const user = await requireSession();
+export const GET = withInternalListApi(
+  { action: "leads.archived.list", auth: "session" },
+  async (req: NextRequest, { user }) => {
   if (!user.isAdmin) {
     return NextResponse.json(
       { error: "Forbidden" },
@@ -41,4 +42,5 @@ export async function GET(req: Request) {
     nextCursor: result.nextCursor,
     total: result.total,
   });
-}
+  },
+);

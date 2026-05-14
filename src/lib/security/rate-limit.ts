@@ -46,7 +46,13 @@ export type RateLimitKey =
   // audit_log volume when a non-allowlisted source retries in a tight
   // loop.
   | { kind: "geo_block"; principal: string }
-  | { kind: "legacy_domain_redirect"; principal: string };
+  | { kind: "legacy_domain_redirect"; principal: string }
+  // Internal session-authenticated cursor list endpoints. Principal is
+  // the user id. Bounds aggressive scrolling / scraping abuse on
+  // /api/{entity}/list, /api/{entity}/archived, /api/admin/*/list,
+  // /api/marketing/*/list. Public REST surface has its own per-API-key
+  // limit; this covers the session-auth siblings.
+  | { kind: "internal_list"; principal: string };
 
 export interface RateLimitResult {
   allowed: boolean;

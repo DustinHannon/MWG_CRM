@@ -3,7 +3,7 @@ import { and, asc, desc, eq, gt, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withInternalListApi } from "@/lib/api/internal-list";
 import { decodeCursor, encodeFromValues } from "@/lib/cursors";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +26,9 @@ const PAGE_SIZE = 50;
  *
  * Returns `{ data, nextCursor, total }`.
  */
-export async function GET(req: NextRequest) {
-  await requireAdmin();
-
+export const GET = withInternalListApi(
+  { action: "admin.users.list", auth: "admin" },
+  async (req: NextRequest) => {
   const sp = req.nextUrl.searchParams;
   const isRecentFilter = sp.get("recent") === RECENT_JIT_FILTER;
   const q = sp.get("q")?.trim() ?? "";
@@ -136,4 +136,5 @@ export async function GET(req: NextRequest) {
     nextCursor,
     total: totalRow[0]?.count ?? 0,
   });
-}
+  },
+);
