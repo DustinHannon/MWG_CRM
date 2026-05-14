@@ -1,3 +1,14 @@
+// consistency-exempt: theming: raw red/amber/emerald/sky tints in
+// methodChipClass + statusChipClass — preserves pre-existing
+// CLAUDE.md §12 exception for HTTP status-code and HTTP method
+// semantics (color-coded for at-a-glance operational reading).
+//
+// consistency-exempt: list-page-pattern: admin-utility-table —
+// fixed-width row cells (w-32 timestamp, w-32 key, flex-1 method+path,
+// w-36 status, w-20 duration, w-32 ip, w-24 detail) preserved because
+// columns have intrinsically non-uniform widths; no columnHeaderSlot.
+// pageSize=100 (high-volume admin reading). Admin operational page —
+// no saved views, no MODIFIED badge, no bulk selection.
 "use client";
 
 import Link from "next/link";
@@ -179,7 +190,7 @@ export function ApiUsageListClient({
           value={draft.q}
           onChange={(e) => setDraft({ ...draft, q: e.target.value })}
           placeholder="action / error / key name"
-          className="min-w-[220px] rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          className="h-11 min-w-[220px] rounded-md border border-border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:h-9 md:py-1.5"
         />
       </label>
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -251,7 +262,7 @@ export function ApiUsageListClient({
                 type="button"
                 onClick={() => toggleStatusBucket(b.value)}
                 className={cn(
-                  "inline-flex cursor-pointer items-center rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                  "inline-flex h-11 cursor-pointer items-center rounded-full border px-3 text-sm font-medium transition md:h-8 md:py-1.5 md:text-xs",
                   active
                     ? statusBucketActiveClass(b.value)
                     : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60",
@@ -281,7 +292,7 @@ export function ApiUsageListClient({
         ) : null}
         <Link
           href={exportHref}
-          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted"
+          className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
           title="Download up to 50,000 matching rows as CSV"
         >
           Export CSV
@@ -309,10 +320,8 @@ export function ApiUsageListClient({
         />
       }
       header={{
-        kicker: "Admin",
         title: "API usage",
         description: "Bearer-token-authenticated requests against the public API.",
-        fontFamily: "display",
       }}
       filtersSlot={filtersSlot}
     />
