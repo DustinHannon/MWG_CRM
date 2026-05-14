@@ -70,10 +70,18 @@ docs/**/
 /screenshottemp/
 /.phase8-evidence/
 
-# Tests — local-only.
+# Tests — Playwright e2e suites are versioned; other tests/ scratch stays local.
 # Playwright suite runs against production from a developer's machine
-# with PLAYWRIGHT_LOGIN_* env vars; not part of the GitHub repo.
-tests/
+# with PLAYWRIGHT_LOGIN_* env vars; credentials are env-only, never in code.
+# Test runtime artifacts (reports, results, cache) remain local-only.
+tests/*
+!tests/e2e/
+tests/e2e/.auth/
+tests/e2e/**/*.json
+tests/e2e/**/*.png
+tests/e2e/**/*.webm
+tests/e2e/**/*.zip
+tests/e2e/**/*.md
 playwright-report/
 playwright/.cache/
 .env.test
