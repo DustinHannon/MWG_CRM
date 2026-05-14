@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
@@ -72,6 +72,13 @@ export const POST = withApi<{ id: string }>(
       );
     }
 
+    // Atomic claim — status guard in the WHERE clause closes the
+    // TOCTOU race between the SELECT above and the UPDATE below. A
+    // duplicate POST (retry / replay) or a race against the cron
+    // scheduled-pickup must NOT be able to force-flip a sent/failed/
+    // sending/cancelled campaign back to 'sending' and trigger a
+    // second batch dispatch. Mirrors the action-layer pattern in
+    // sendCampaignNowAction (campaigns/actions.ts).
     const transition = await db
       .update(marketingCampaigns)
       .set({
@@ -83,11 +90,20 @@ export const POST = withApi<{ id: string }>(
         and(
           eq(marketingCampaigns.id, idParse.data.id),
           eq(marketingCampaigns.isDeleted, false),
+          inArray(marketingCampaigns.status, ["draft", "scheduled"]),
         ),
       )
       .returning({ id: marketingCampaigns.id });
     if (transition.length === 0) {
-      return errorResponse(404, "NOT_FOUND", "Campaign not found");
+      // SELECT showed the campaign was eligible; UPDATE found nothing
+      // — eligibility was lost between the two (cron claimed first, or
+      // a concurrent caller flipped the row). 409 distinguishes the
+      // race from a true not-found.
+      return errorResponse(
+        409,
+        "CONFLICT",
+        "Campaign is already being sent or is no longer eligible.",
+      );
     }
 
     await writeAudit({

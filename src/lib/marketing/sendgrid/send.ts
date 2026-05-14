@@ -540,6 +540,20 @@ async function sendRawTest(
 ): Promise<{ messageId: string }> {
   const { sgMail } = getSendGrid();
   const fromEmail = `noreply@${env.SENDGRID_FROM_DOMAIN}`;
+  // Stamp the test-send personalization with enough custom_args
+  // for webhook events to be correlated back to (operator, template,
+  // entity) tuples. Test sends do NOT insert a `campaignRecipients`
+  // row, so the webhook receiver's recipient_id lookup will fail —
+  // the forensic row in `marketing_email_events` still gets these
+  // custom_args via `rawPayload`, giving operators a way to answer
+  // "did my test send deliver / open / click?" by querying the
+  // events table directly.
+  const testCustomArgs: Record<string, string> = {
+    source: "marketing_test_send",
+  };
+  if (input.actorUserId) testCustomArgs.actor_user_id = input.actorUserId;
+  if (input.featureRecordId)
+    testCustomArgs.template_id = input.featureRecordId;
   const payload = {
     from: { email: fromEmail, name: input.fromName },
     personalizations: [
@@ -549,7 +563,7 @@ async function sendRawTest(
             ? { email: input.recipientEmail, name: input.recipientName }
             : { email: input.recipientEmail },
         ],
-        custom_args: { source: "marketing_test_send" },
+        custom_args: testCustomArgs,
       },
     ],
     subject: input.subject,
@@ -609,7 +623,20 @@ async function sendRawTest(
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw asSendGridError(response.statusCode, response.body);
       }
-      return readMessageIdHeader(response.headers) ?? "";
+      const headerMessageId = readMessageIdHeader(response.headers);
+      if (headerMessageId === null) {
+        // SendGrid /v3/mail/send always returns x-message-id on 2xx;
+        // a null here means a CDN stripped the header, a proxy
+        // rewrote the response, or SendGrid's contract changed. Audit
+        // a synthetic placeholder so the anomaly is visible rather
+        // than silently logging an empty messageId.
+        logger.warn("sendgrid.send.missing_message_id_header", {
+          statusCode: response.statusCode,
+          recipient: input.recipientEmail,
+        });
+        return "missing-message-id";
+      }
+      return headerMessageId;
     });
   } catch (err) {
     // Terminal failure (4xx ValidationError or retries-exhausted 5xx).

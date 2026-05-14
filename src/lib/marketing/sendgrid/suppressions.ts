@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { marketingSuppressions } from "@/db/schema/marketing-events";
+import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { getSendGrid } from "./client";
 
@@ -22,6 +23,7 @@ import { getSendGrid } from "./client";
 
 interface SyncResult {
   unsubscribes: number;
+  groupUnsubscribes: number;
   bounces: number;
   blocks: number;
   spamReports: number;
@@ -38,8 +40,14 @@ interface SendGridSuppressionEntry {
 
 const ENDPOINTS: Array<{
   url: string;
-  type: "unsubscribe" | "bounce" | "block" | "spamreport" | "invalid";
-  resultKey: keyof SyncResult;
+  type:
+    | "unsubscribe"
+    | "group_unsubscribe"
+    | "bounce"
+    | "block"
+    | "spamreport"
+    | "invalid";
+  resultKey: keyof Omit<SyncResult, "total">;
 }> = [
   { url: "/v3/suppression/unsubscribes", type: "unsubscribe", resultKey: "unsubscribes" },
   { url: "/v3/suppression/bounces", type: "bounce", resultKey: "bounces" },
@@ -52,6 +60,7 @@ export async function syncSuppressions(): Promise<SyncResult> {
   const { sgClient } = getSendGrid();
   const result: SyncResult = {
     unsubscribes: 0,
+    groupUnsubscribes: 0,
     bounces: 0,
     blocks: 0,
     spamReports: 0,
@@ -62,10 +71,15 @@ export async function syncSuppressions(): Promise<SyncResult> {
   for (const ep of ENDPOINTS) {
     try {
       const entries = await fetchAllPages(sgClient, ep.url);
-      const count = await upsertBatch(entries, ep.type);
+      // Account-level endpoints return objects; defensively guard
+      // against the rare malformed string entry just in case.
+      const normalized = entries.map((e) =>
+        typeof e === "string" ? { email: e } : e,
+      );
+      const count = await upsertBatch(normalized, ep.type);
       // We count rows synced (UPSERTs) not API entries returned, so the
       // result mirrors the actual db churn.
-      result[ep.resultKey] = count as never; // keyof narrowing
+      result[ep.resultKey] = count;
       result.total += count;
     } catch (err) {
       logger.error("sendgrid.suppression_sync.endpoint_failed", {
@@ -76,14 +90,50 @@ export async function syncSuppressions(): Promise<SyncResult> {
     }
   }
 
+  // Per-group ASM suppressions. The marketing pipeline uses
+  // ASM with a single `group_id`; the unsubscribe link in every
+  // marketing email puts the recipient on this group's per-list, not
+  // the account-wide list above. Without this sync, a webhook drop of
+  // a `group_unsubscribe` event leaves the recipient marketable until
+  // the next event re-fires. SendGrid does not retry webhooks past
+  // 24h; this hourly sync is the safety net.
+  const groupId = env.SENDGRID_UNSUBSCRIBE_GROUP_ID;
+  if (groupId !== undefined) {
+    try {
+      const entries = await fetchAllPages(
+        sgClient,
+        `/v3/asm/groups/${groupId}/suppressions`,
+      );
+      // The /v3/asm/groups/{id}/suppressions endpoint returns a bare
+      // array of email strings, not the `{email, reason, ...}` shape
+      // of the account-level endpoints. Normalize so `upsertBatch`
+      // can consume the same input shape.
+      const normalized = entries.map((e) =>
+        typeof e === "string" ? { email: e } : e,
+      );
+      const count = await upsertBatch(normalized, "group_unsubscribe");
+      result.groupUnsubscribes = count;
+      result.total += count;
+    } catch (err) {
+      logger.error("sendgrid.suppression_sync.endpoint_failed", {
+        endpoint: `/v3/asm/groups/${groupId}/suppressions`,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return result;
 }
 
 async function fetchAllPages(
   sgClient: ReturnType<typeof getSendGrid>["sgClient"],
   baseUrl: string,
-): Promise<SendGridSuppressionEntry[]> {
-  const all: SendGridSuppressionEntry[] = [];
+): Promise<Array<SendGridSuppressionEntry | string>> {
+  // Returned shape varies by endpoint: account-level suppression
+  // endpoints return `[{ email, created, reason, status }]`; the
+  // /v3/asm/groups/{id}/suppressions endpoint returns a bare `string[]`.
+  // The caller normalizes both shapes downstream.
+  const all: Array<SendGridSuppressionEntry | string> = [];
   let offset = 0;
   const limit = 500;
   // Cap iterations to avoid infinite loops on a misbehaving API.
@@ -95,7 +145,7 @@ async function fetchAllPages(
     if (response.statusCode === 404 || !Array.isArray(body)) {
       break;
     }
-    const page = body as SendGridSuppressionEntry[];
+    const page = body as Array<SendGridSuppressionEntry | string>;
     all.push(...page);
     if (page.length < limit) break;
     offset += limit;
@@ -105,7 +155,13 @@ async function fetchAllPages(
 
 async function upsertBatch(
   entries: SendGridSuppressionEntry[],
-  type: "unsubscribe" | "bounce" | "block" | "spamreport" | "invalid",
+  type:
+    | "unsubscribe"
+    | "group_unsubscribe"
+    | "bounce"
+    | "block"
+    | "spamreport"
+    | "invalid",
 ): Promise<number> {
   if (entries.length === 0) return 0;
   // Chunk to keep parameter counts well under postgres-js's limits.

@@ -83,12 +83,32 @@ export function verifySendGridSignature(
     let ec: ReturnType<typeof ew.convertPublicKeyToECDSA>;
     try {
       ec = ew.convertPublicKeyToECDSA(publicKey);
-    } catch {
+    } catch (rawErr) {
+      // SendGrid's Signed Event Webhook settings UI returns the public
+      // key as bare base64 without PEM markers; the library's fromPem
+      // requires the markers. Wrap and retry. The outer catch turns
+      // any failure here into a 401, which is correct policy — but
+      // logging the inner exception is essential for debugging a
+      // genuinely malformed SENDGRID_WEBHOOK_PUBLIC_KEY env var,
+      // because the eventual `verify_failed` message gives no clue
+      // whether the problem is signature mismatch or key parse.
       const wrapped = `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`;
-      ec = ew.convertPublicKeyToECDSA(wrapped);
+      try {
+        ec = ew.convertPublicKeyToECDSA(wrapped);
+      } catch (wrappedErr) {
+        logger.warn("sendgrid.webhook.public_key_parse_failed", {
+          rawErr: rawErr instanceof Error ? rawErr.message : String(rawErr),
+          wrappedErr:
+            wrappedErr instanceof Error
+              ? wrappedErr.message
+              : String(wrappedErr),
+        });
+        throw new WebhookSignatureError("verify_failed");
+      }
     }
     valid = ew.verifySignature(ec, rawBody, signatureHeader, timestampHeader);
-  } catch {
+  } catch (err) {
+    if (err instanceof WebhookSignatureError) throw err;
     throw new WebhookSignatureError("verify_failed");
   }
   if (!valid) throw new WebhookSignatureError("verify_failed");
@@ -182,15 +202,28 @@ export function parseEvents(rawBody: string): SendGridEvent[] {
     // handler maps this to HTTP 400 via the typed-error contract.
     throw new ValidationError("SendGrid event payload must be an array");
   }
-  return parsed.map((p) => {
+  const out: SendGridEvent[] = [];
+  for (const p of parsed) {
     const r = SendGridEventSchema.safeParse(p);
-    if (r.success) return r.data;
-    // Log + keep — every event still goes into the events table.
-    logger.warn("sendgrid.event.partial_parse", {
-      issues: r.error.issues.map((i) => i.path.join(".")),
+    if (r.success) {
+      out.push(r.data);
+      continue;
+    }
+    // Drop the unparseable event instead of force-casting an
+    // attacker-controlled object as SendGridEvent and passing it to
+    // downstream code that reads `.email` / `.timestamp` / `.event`.
+    // The body's signature has already been verified (the route
+    // runs verifySendGridSignature first), so an unparseable event
+    // implies SendGrid emitted a shape we don't recognize — log the
+    // diagnostic and skip rather than risk a route-handler crash.
+    logger.warn("sendgrid.event.parse_failed", {
+      issues: r.error.issues.map((i) => ({
+        path: i.path.join("."),
+        code: i.code,
+      })),
     });
-    return p as SendGridEvent;
-  });
+  }
+  return out;
 }
 
 /**
@@ -265,18 +298,38 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
   );
 
   // 4. Suppressions for terminal events.
-  if (eventType === "unsubscribe" || eventType === "group_unsubscribe") {
+  if (eventType === "unsubscribe") {
+    // Account-level unsubscribe. The user opted out at the SendGrid
+    // account level (rare via the marketing footer — the footer's
+    // ASM link produces `group_unsubscribe` instead). Mapped to
+    // `unsubscribe` so the operator audit-trail distinguishes the
+    // two flavors.
     await upsertSuppression(event.email, "unsubscribe", event.reason ?? null);
+  } else if (eventType === "group_unsubscribe") {
+    // Per-group unsubscribe. The CRM's marketing pipeline uses ASM
+    // with a single `group_id`, so the unsubscribe link in every
+    // marketing email produces this event type, NOT `unsubscribe`.
+    // Mapped to a distinct `group_unsubscribe` suppression_type so:
+    // (a) the events table and admin UI can distinguish the two,
+    // (b) the hourly cron sync of /v3/asm/groups/{id}/suppressions
+    //     can reconcile this type without collision.
+    await upsertSuppression(
+      event.email,
+      "group_unsubscribe",
+      event.reason ?? null,
+    );
   } else if (eventType === "bounce") {
-    // SendGrid's `bounce` event has type='hard'|'soft'|'block' in `type`.
-    const sgType = event.type;
-    if (sgType === "blocked") {
-      await upsertSuppression(event.email, "block", event.reason ?? null);
-    } else if (sgType === "bounce") {
-      await upsertSuppression(event.email, "bounce", event.reason ?? null);
-    } else {
-      await upsertSuppression(event.email, "bounce", event.reason ?? null);
-    }
+    // SendGrid's `bounce` event has type='hard'|'soft' in `type`;
+    // a blocked-by-ISP event uses event='dropped' or `type='blocked'`.
+    // Hard and soft bounces both reach the suppression list as
+    // `bounce`; only the explicit `blocked` subtype is mapped to
+    // `block` so the operator audit-trail can distinguish them.
+    const isBlocked = event.type === "blocked";
+    await upsertSuppression(
+      event.email,
+      isBlocked ? "block" : "bounce",
+      event.reason ?? null,
+    );
   } else if (eventType === "spamreport") {
     await upsertSuppression(event.email, "spamreport", null);
   } else if (eventType === "dropped") {
@@ -390,7 +443,13 @@ async function reconcileRecipientAndCampaign(
 
 async function upsertSuppression(
   email: string,
-  type: "unsubscribe" | "bounce" | "block" | "spamreport" | "invalid",
+  type:
+    | "unsubscribe"
+    | "group_unsubscribe"
+    | "bounce"
+    | "block"
+    | "spamreport"
+    | "invalid",
   reason: string | null,
 ): Promise<void> {
   await db
