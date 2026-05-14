@@ -16,6 +16,11 @@ export const TEMPLATE_HEADERS: Array<{
   required?: boolean;
   notes?: string;
 }> = [
+  {
+    header: "Salutation",
+    field: "salutation",
+    notes: "Mr., Mrs., Dr., etc. - max 20 chars",
+  },
   { header: "First Name", field: "firstName", required: true },
   { header: "Last Name", field: "lastName", notes: "Now nullable" },
   { header: "Email", field: "email" },

@@ -79,6 +79,32 @@ export const LeadSchema = registry.register(
       .array(z.string())
       .nullable()
       .openapi({ example: ["enterprise", "renewal"] }),
+    external_id: z
+      .string()
+      .nullable()
+      .openapi({
+        description: "Stable identifier from the source-of-record (e.g. D365 record GUID). Read-only; supplied at import time.",
+        example: "MWG-LEAD-0001",
+      }),
+    score: z
+      .number()
+      .int()
+      .openapi({
+        description: "Lead-scoring engine output (0-100). Read-only.",
+        example: 73,
+      }),
+    score_band: z
+      .string()
+      .openapi({
+        description: "Bucketed score label (e.g. cold/warm/hot). Read-only.",
+        example: "warm",
+      }),
+    created_via: z
+      .string()
+      .openapi({
+        description: "Provenance: manual, imported, api, d365_sync, etc. Read-only.",
+        example: "manual",
+      }),
   }),
 );
 

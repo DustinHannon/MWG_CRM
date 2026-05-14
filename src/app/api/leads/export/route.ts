@@ -19,21 +19,29 @@ export async function GET(req: NextRequest) {
   );
 
   const rows = result.rows.map((l) => ({
+    Salutation: l.salutation ?? "",
     "First Name": l.firstName,
     "Last Name": l.lastName,
     Email: l.email ?? "",
     Phone: l.phone ?? "",
+    "Mobile Phone": l.mobilePhone ?? "",
+    "Job Title": l.jobTitle ?? "",
     Company: l.companyName ?? "",
+    City: l.city ?? "",
+    State: l.state ?? "",
     Status: l.status,
     Rating: l.rating,
     Source: l.source,
     Owner: l.ownerDisplayName ?? "",
     "Estimated Value": l.estimatedValue ?? "",
+    "Estimated Close Date": l.estimatedCloseDate ?? "",
     Tags: l.tags ? l.tags.join(", ") : "",
+    "Created Via": l.createdVia ?? "",
     "Last Activity": l.lastActivityAt
       ? new Date(l.lastActivityAt).toISOString()
       : "",
     "Created At": new Date(l.createdAt).toISOString(),
+    "Updated At": new Date(l.updatedAt).toISOString(),
   }));
 
   const buf = await buildLeadsExport(rows);

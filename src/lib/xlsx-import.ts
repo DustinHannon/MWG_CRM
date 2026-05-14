@@ -38,6 +38,7 @@ export interface ImportResult {
 }
 
 const HEADER_MAP: Record<string, string> = {
+  Salutation: "salutation",
   "First Name*": "firstName",
   "First Name": "firstName",
   "Last Name*": "lastName",
@@ -77,6 +78,7 @@ function parseBool(s: string | undefined): boolean {
 }
 
 const importRowSchema = z.object({
+  salutation: z.string().trim().max(20).optional(),
   firstName: nameField,
   lastName: nameField,
   email: z.string().trim().email().or(z.literal("")).optional(),
@@ -220,6 +222,7 @@ export async function importLeadsFromBuffer(
   // is well within reach.
   for (const r of raw) {
     const parsed = importRowSchema.safeParse({
+      salutation: r.data.salutation,
       firstName: r.data.firstName,
       lastName: r.data.lastName,
       email: r.data.email,
@@ -294,6 +297,7 @@ export async function importLeadsFromBuffer(
         await db
           .update(leads)
           .set({
+            salutation: d.salutation || null,
             firstName: d.firstName,
             lastName: d.lastName,
             email: d.email || null,
@@ -355,6 +359,7 @@ export async function importLeadsFromBuffer(
         status: d.status as LeadStatus,
         rating: d.rating as LeadRating,
         source: d.source as LeadSource,
+        salutation: d.salutation || null,
         firstName: d.firstName,
         lastName: d.lastName,
         email: d.email || null,

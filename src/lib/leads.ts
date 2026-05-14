@@ -233,6 +233,10 @@ export interface LeadListResult {
     estimatedCloseDate: string | null;
     convertedAt: Date | null;
     lastActivityAt: Date | null;
+    externalId: string | null;
+    score: number;
+    scoreBand: string;
+    createdVia: string;
     version: number;
     updatedAt: Date;
     createdAt: Date;
@@ -355,6 +359,10 @@ export async function listLeads(
         estimatedCloseDate: leads.estimatedCloseDate,
         convertedAt: leads.convertedAt,
         lastActivityAt: leads.lastActivityAt,
+        externalId: leads.externalId,
+        score: leads.score,
+        scoreBand: leads.scoreBand,
+        createdVia: leads.createdVia,
         version: leads.version,
         updatedAt: leads.updatedAt,
         createdAt: leads.createdAt,

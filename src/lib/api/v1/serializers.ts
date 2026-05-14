@@ -54,6 +54,10 @@ export function serializeLead(row: Record<string, unknown>) {
     updated_at: iso(row.updatedAt as Date) ?? new Date(0).toISOString(),
     created_at: iso(row.createdAt as Date) ?? new Date(0).toISOString(),
     tags: (row.tags ?? null) as string[] | null,
+    external_id: (row.externalId ?? null) as string | null,
+    score: (row.score ?? 0) as number,
+    score_band: (row.scoreBand ?? "cold") as string,
+    created_via: (row.createdVia ?? "manual") as string,
   };
 }
 
