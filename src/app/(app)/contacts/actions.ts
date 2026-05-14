@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { contacts } from "@/db/schema/crm-records";
 import { requireSession } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
   archiveContactsById,
@@ -311,22 +311,23 @@ export async function bulkArchiveContactsAction(
       user.id,
       reason,
     );
-    await Promise.all(
-      allowed.map((row) =>
-        writeAudit({
-          actorId: user.id,
-          action: "contact.archive",
-          targetType: "contact",
-          targetId: row.id,
-          before: {
-            firstName: row.firstName,
-            lastName: row.lastName,
-            ownerId: row.ownerId,
-          },
-          after: { reason: reason ?? null, bulk: true },
-        }),
-      ),
-    );
+    // Per-record audit rows via single-INSERT batch helper (see
+    // src/lib/audit.ts writeAuditBatch). Same emitted event name
+    // (contact.archive) per row.
+    await writeAuditBatch({
+      actorId: user.id,
+      events: allowed.map((row) => ({
+        action: "contact.archive",
+        targetType: "contact",
+        targetId: row.id,
+        before: {
+          firstName: row.firstName,
+          lastName: row.lastName,
+          ownerId: row.ownerId,
+        },
+        after: { reason: reason ?? null, bulk: true },
+      })),
+    });
     revalidatePath("/contacts");
     return { archived: allowed.length, denied: denied.length };
   });

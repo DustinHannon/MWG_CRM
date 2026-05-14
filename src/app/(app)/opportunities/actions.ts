@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { opportunities } from "@/db/schema/crm-records";
 import { requireSession } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
   archiveOpportunitiesById,
@@ -289,18 +289,19 @@ export async function bulkArchiveOpportunitiesAction(
         user.id,
         reason,
       );
-      await Promise.all(
-        allowed.map((row) =>
-          writeAudit({
-            actorId: user.id,
-            action: "opportunity.archive",
-            targetType: "opportunity",
-            targetId: row.id,
-            before: { name: row.name, ownerId: row.ownerId },
-            after: { reason: reason ?? null, bulk: true },
-          }),
-        ),
-      );
+      // Per-record audit rows via single-INSERT batch helper (see
+      // src/lib/audit.ts writeAuditBatch). Same emitted event name
+      // (opportunity.archive) per row.
+      await writeAuditBatch({
+        actorId: user.id,
+        events: allowed.map((row) => ({
+          action: "opportunity.archive",
+          targetType: "opportunity",
+          targetId: row.id,
+          before: { name: row.name, ownerId: row.ownerId },
+          after: { reason: reason ?? null, bulk: true },
+        })),
+      });
       revalidatePath("/opportunities");
       revalidatePath("/opportunities/pipeline");
       return { archived: allowed.length, denied: denied.length };
