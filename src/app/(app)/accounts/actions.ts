@@ -17,10 +17,8 @@ import {
 } from "@/lib/accounts";
 import { canDeleteAccount, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
-import {
-  deleteBlobsByPathnames,
-  gatherBlobsForActivityParent,
-} from "@/lib/blob-cleanup";
+import { gatherBlobsForActivityParent } from "@/lib/blob-cleanup";
+import { enqueueJob } from "@/lib/jobs/queue";
 import { logger } from "@/lib/logger";
 
 /**
@@ -165,18 +163,33 @@ export async function hardDeleteAccountAction(
       targetId: id,
       before: (snapshot ?? null) as object | null,
     });
-    // Fire-and-forget blob cleanup. Use the pre-gathered paths; the
-    // attachments rows are gone by now (CASCADE), so re-gathering would
-    // return empty and blobs would leak.
+    // Durable async cleanup via the job queue (F-Ω-8). See the lead
+    // hard-delete action for the rationale — STANDARDS §19.11.3.
     if (blobPathnames.length > 0) {
-      void deleteBlobsByPathnames(blobPathnames).catch((err) => {
-        logger.error("blob_cleanup_failure_hard_delete", {
+      try {
+        await enqueueJob(
+          "blob-cleanup",
+          {
+            pathnames: blobPathnames,
+            origin: { entityType: "account", entityId: id },
+          },
+          {
+            actorId: user.id,
+            metadata: {
+              originAction: "account.hard_delete",
+              entityId: id,
+              blobCount: blobPathnames.length,
+            },
+          },
+        );
+      } catch (err) {
+        logger.error("blob_cleanup_enqueue_failure_hard_delete", {
           entity: "account",
           entityId: id,
           blobCount: blobPathnames.length,
           errorMessage: err instanceof Error ? err.message : String(err),
         });
-      });
+      }
     }
     revalidatePath("/accounts/archived");
   });

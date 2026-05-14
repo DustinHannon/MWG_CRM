@@ -25,10 +25,8 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { tags as tagsTable } from "@/db/schema/tags";
-import {
-  deleteBlobsByPathnames,
-  gatherBlobsForLeads,
-} from "@/lib/blob-cleanup";
+import { gatherBlobsForLeads } from "@/lib/blob-cleanup";
+import { enqueueJob } from "@/lib/jobs/queue";
 import { logger } from "@/lib/logger";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { canDeleteLead } from "@/lib/access/can-delete";
@@ -418,18 +416,42 @@ export async function hardDeleteLeadAction(
         targetType: "lead",
         targetId: id,
       });
-      // 024 — fire-and-forget blob cleanup. Use the pre-gathered
-      // paths directly; re-gathering after the DB delete returns
-      // empty (CASCADE cleared the attachments -> activities -> leads
-      // join) so blobs would leak.
+      // Durable async cleanup via the job queue (F-Ω-8). The previous
+      // `void deleteBlobsByPathnames(...).catch(...)` pattern was not
+      // durable — STANDARDS §19.11.3 flagged lambda termination as a
+      // loss vector. The enqueue commits a row in `job_queue`; the
+      // worker cron claims it, calls `del()`, and persists success or
+      // retries with backoff. Skip the enqueue when the path list is
+      // empty (no point storing a no-op job).
       if (blobPathnames.length > 0) {
-        void deleteBlobsByPathnames(blobPathnames).catch((err) => {
-          logger.error("blob_cleanup_failure_hard_delete", {
+        try {
+          await enqueueJob(
+            "blob-cleanup",
+            {
+              pathnames: blobPathnames,
+              origin: { entityType: "lead", entityId: id },
+            },
+            {
+              actorId: user.id,
+              metadata: {
+                originAction: "lead.hard_delete",
+                leadId: id,
+                blobCount: blobPathnames.length,
+              },
+            },
+          );
+        } catch (err) {
+          // Enqueue failure is logged but does not roll back the DB
+          // hard-delete. The blobs become orphans in this rare path
+          // (DB write success + queue write failure) — same risk
+          // profile as a queue-side outage during retry. The DB record
+          // remains the source of truth.
+          logger.error("blob_cleanup_enqueue_failure_hard_delete", {
             leadId: id,
             blobCount: blobPathnames.length,
             errorMessage: err instanceof Error ? err.message : String(err),
           });
-        });
+        }
       }
       revalidatePath("/leads/archived");
     },

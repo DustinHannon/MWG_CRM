@@ -1,7 +1,5 @@
 import "server-only";
-import { logger } from "@/lib/logger";
 import { eq, inArray } from "drizzle-orm";
-import { del } from "@vercel/blob";
 import { db } from "@/db";
 import { activities, attachments } from "@/db/schema/activities";
 import { leads } from "@/db/schema/leads";
@@ -13,46 +11,27 @@ import { leads } from "@/db/schema/leads";
  * explicitly.
  *
  * These helpers gather the blob pathnames BEFORE the DB delete (after the
- * delete the rows are gone) and call `del()` on them.
+ * delete the rows are gone). The actual `del()` work now lives in the
+ * durable async job queue (F-Ω-8) — callers enqueue a `blob-cleanup` job
+ * via `enqueueJob('blob-cleanup', { pathnames }, ...)` from
+ * `@/lib/jobs/queue`; the handler at `src/lib/jobs/handlers/blob-cleanup.ts`
+ * owns the actual deletion with retry budget + dead-letter on failure.
  *
  * Failure policy: a Blob delete failure must NOT roll back the DB delete.
  * The DB record is the source of truth for "does this lead exist"; orphan
- * blobs are wasted bytes but not a correctness issue. We log and move on.
- */
-
-async function deleteBlobs(pathnames: string[]): Promise<void> {
-  if (pathnames.length === 0) return;
-  try {
-    // @vercel/blob `del` accepts a single url/pathname or an array.
-    await del(pathnames);
-  } catch (err) {
-    logger.error("blob_cleanup.del_failed", {
-      blobCount: pathnames.length,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
-
-/**
- * Delete a pre-gathered list of blob pathnames. Use this when the parent
- * DB rows have ALREADY been deleted and you have the paths captured from
- * a prior `gatherBlobsFor*` call.
+ * blobs are wasted bytes but not a correctness issue. The queue handles
+ * that policy now (failures retry; permanently broken jobs land in
+ * dead-letter for admin review).
  *
- * `cleanupBlobsForLeads` / `cleanupBlobsForUser` re-gather paths via the
- * `attachments -> activities -> leads` join, which returns empty after
- * the parent leads have been deleted (CASCADE cleared the join rows).
- * Callers that ran the DB delete before invoking cleanup MUST use this
- * helper with the previously captured paths or the cleanup is a no-op
- * and blobs leak.
- *
- * Failure policy unchanged: deletion failures log and return; the
- * primary DB delete is the source of truth.
+ * Pre-F-Ω-8 this module exported `deleteBlobsByPathnames` for callers to
+ * invoke directly via `void deleteBlobsByPathnames(...).catch(...)`. That
+ * pattern was not durable — STANDARDS §19.11.3 documents the lambda
+ * termination loss vector. The export is removed (rather than left with
+ * an `@deprecated` marker) following the same hygiene precedent as
+ * commit 63e4b63 (`Remove the broken cleanupBlobsForLeads /
+ * cleanupBlobsForUser exports so future call sites can't repeat the
+ * mistake`).
  */
-export async function deleteBlobsByPathnames(
-  pathnames: string[],
-): Promise<void> {
-  await deleteBlobs(pathnames);
-}
 
 /**
  * gather every blob pathname attached to any of the given

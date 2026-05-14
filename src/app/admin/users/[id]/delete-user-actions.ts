@@ -10,10 +10,8 @@ import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
 import { requireAdmin } from "@/lib/auth-helpers";
-import {
-  deleteBlobsByPathnames,
-  gatherBlobsForUser,
-} from "@/lib/blob-cleanup";
+import { gatherBlobsForUser } from "@/lib/blob-cleanup";
+import { enqueueJob } from "@/lib/jobs/queue";
 import {
   ConflictError,
   ForbiddenError,
@@ -253,19 +251,34 @@ export async function deleteUserAction(
       await tx.delete(users).where(eq(users.id, userId));
     });
 
-    // Blob cleanup — outside the transaction. Failures here log but do not
-    // surface as an error to the admin (the DB record is the truth). Use
-    // the pre-gathered paths from before the transaction; re-gathering
-    // after delete returns empty (the join through leads.ownerId no
-    // longer matches) and blobs would leak.
+    // Durable async cleanup via the job queue (F-Ω-8). Enqueued outside
+    // the transaction so a queue write hiccup cannot roll back the user
+    // delete. Failures here log but do not surface as an error to the
+    // admin (the DB record is the truth). No `origin` field — the user
+    // delete cascade fans out across many leads; origin metadata lives
+    // in `metadata.targetUserId` for forensic correlation.
     if (blobPaths.length > 0) {
-      void deleteBlobsByPathnames(blobPaths).catch((err) =>
-        logger.warn("admin.blob_cleanup_after_user_delete_failed", {
+      try {
+        await enqueueJob(
+          "blob-cleanup",
+          { pathnames: blobPaths },
+          {
+            actorId: admin.id,
+            metadata: {
+              originAction: "user.delete",
+              targetUserId: userId,
+              disposition,
+              blobCount: blobPaths.length,
+            },
+          },
+        );
+      } catch (err) {
+        logger.warn("admin.blob_cleanup_enqueue_after_user_delete_failed", {
           targetUserId: userId,
           blobCount: blobPaths.length,
           errorMessage: err instanceof Error ? err.message : String(err),
-        }),
-      );
+        });
+      }
     }
 
     await writeAudit({

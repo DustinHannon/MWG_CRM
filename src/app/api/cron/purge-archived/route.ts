@@ -2,10 +2,8 @@ import { NextResponse } from "next/server";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
-import {
-  deleteBlobsByPathnames,
-  gatherBlobsForLeads,
-} from "@/lib/blob-cleanup";
+import { gatherBlobsForLeads } from "@/lib/blob-cleanup";
+import { enqueueJob } from "@/lib/jobs/queue";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { writeAuditBatch } from "@/lib/audit";
@@ -117,21 +115,36 @@ export async function GET(req: Request) {
       ),
     );
 
-    // 024 — fire-and-forget Vercel Blob cleanup. The cron
-    // window is generous (maxDuration=300) but we still don't await the
-    // network round-trip per blob — `del()` accepts a batch. Pass the
-    // pre-gathered paths directly; re-gathering after the DB delete
-    // would find empty (the attachments -> activities -> leads join
-    // returns no rows once CASCADE cleared the join chain), causing
-    // blobs to leak.
+    // Durable async cleanup via the job queue (F-Ω-8). Replaces the
+    // prior `void deleteBlobsByPathnames(...).catch(...)` — STANDARDS
+    // §19.11.3 documents the durability gap that pattern carried. The
+    // cron has a generous maxDuration but the actual `del()` work is
+    // off-cron now: the enqueue is fast; the worker cron sweeps the
+    // queue every minute and processes batches with retry budget.
+    //
+    // No `origin` set: the purge runs across N leads, not one entity.
+    // candidateIds (sample) goes into metadata for correlation.
     if (blobPathnames.length > 0) {
-      void deleteBlobsByPathnames(blobPathnames).catch((err) => {
-        logger.error("blob_cleanup_failure_purge_archived", {
+      try {
+        await enqueueJob(
+          "blob-cleanup",
+          { pathnames: blobPathnames },
+          {
+            metadata: {
+              originAction: "cron.purge_archived",
+              leadCount: candidateIds.length,
+              sampleLeadIds: candidateIds.slice(0, 10),
+              blobCount: blobPathnames.length,
+            },
+          },
+        );
+      } catch (err) {
+        logger.error("blob_cleanup_enqueue_failure_purge_archived", {
           leadCount: candidateIds.length,
           blobCount: blobPathnames.length,
           errorMessage: err instanceof Error ? err.message : String(err),
         });
-      });
+      }
     }
 
     logger.info("cron.purge_archived_completed", {
