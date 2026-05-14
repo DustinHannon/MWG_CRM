@@ -613,3 +613,201 @@ Code review sub-agents have a minimum-finding floor calibrated by review scope (
 | Tight scoped review (one file / one PR) | 5 |
 
 If a review reports fewer findings than its floor, the review was shallow — re-run with stricter adversarial framing. The floor is not a target; padding with low-severity nits is worse than missing the floor honestly. Bare "no findings" is never acceptable below the floor.
+
+
+## §19 Data integrity contracts
+
+This section codifies the data integrity contracts that emerged from the Phase 32.7 Pass 6 data-integrity audit. Read before any change that touches multi-step DB writes, audit emission, FK cascades, soft-delete consumers, bulk action atomicity, cursor pagination, sync pipelines, or async send queues.
+
+### §19.1 Transactional integrity
+
+**§19.1.1 Multi-step DB writes MUST be in `db.transaction(...)`.** Any operation that performs two or more DB writes whose intermediate state must not be observable externally is a transaction boundary. Examples that require a transaction:
+
+- Soft-delete or restore of an entity that maintains a denormalized snapshot on its parent (e.g., `softDeleteActivity` + recompute parent `last_activity_at` + parent UPDATE — F-55).
+- Bulk member-row INSERT/DELETE + `member_count` snapshot recompute + parent UPDATE (e.g., `createStaticListMembers`, `deleteStaticListMembersById`, `bulkAddLeadsToListAction` — F-56).
+- D365 commit-batch dedup_merge that reads existing values and writes conditional patches (use `SELECT ... FOR UPDATE` inside the transaction OR SQL-level `COALESCE(col, $newValue)` so user-write races don't slip in — F-72 deferred).
+
+**§19.1.2 Data writes + audit emission MUST live OUTSIDE a transaction.** `writeAudit` and `writeAuditBatch` are best-effort by design (CLAUDE.md "Auditing"). They MUST NOT run inside a `db.transaction(...)` block — an audit emission failure cannot be allowed to roll back the primary data write. Pattern: open transaction → mutate → close transaction → emit audit afterward.
+
+Verified violation-free at Pass 6 sign-off: 7 `db.transaction` sites (`src/lib/breakglass.ts`, `src/lib/conversion.ts`, `src/lib/d365/commit-batch.ts`, `src/lib/d365/pull-batch.ts`, `src/lib/entra-provisioning.ts`, `src/lib/tags.ts`, `src/app/admin/users/[id]/delete-user-actions.ts`) all emit audits after `tx` returns.
+
+**§19.1.3 If audit emission CANNOT be transactional, document the gap.** Currently no such gap exists. If a future write path needs audit-in-tx semantics (e.g., to roll back a write when audit fails), surface for explicit decision — the default is best-effort fire-after.
+
+### §19.2 Foreign key cascade rules
+
+**§19.2.1 Every FK declaration MUST have explicit `.onDelete()` and `.onUpdate()` policy.** Default-implicit is forbidden. Choices:
+
+- `CASCADE` — parent gone → children gone. Use when child rows have no meaning without parent (e.g., `lead_tags.lead_id`, `marketing_list_members.list_id`).
+- `RESTRICT` — block parent delete. Use when child rows are evidence the parent existed (e.g., `email_send_log.from_user_id`, `audit_log.actor_id`, `api_keys.created_by_id`).
+- `SET NULL` — orphan but track. Use when the child has meaning post-parent-delete but the link is no longer authoritative (rare; document case-by-case).
+
+Verified Pass 6: 111 of 111 FK declarations across `src/db/schema/*.ts` have explicit policies. New schema files MUST maintain this.
+
+**§19.2.2 RESTRICT FKs that block hard-delete on user-facing flows MUST surface a preflight UI warning.** Users editing an admin "delete user" surface should see "cannot delete — created N templates / sent K emails" before the confirm-text screen, not a raw Postgres FK violation. Pre-Phase-32.7 admin user-delete flow violates this (F-59 documented); future admin UX phase fix.
+
+### §19.3 Soft-delete consumers
+
+**§19.3.1 Every read path on a soft-deletable entity MUST filter `is_deleted = false` (or `deleted_at IS NULL`).** Entities currently soft-deletable: leads, accounts, contacts, opportunities, tasks, activities, marketing_lists, marketing_templates, marketing_campaigns, saved_views, saved_reports, lead_scoring_rules.
+
+**§19.3.2 Documented exceptions** (verified by Pass 6 walk):
+
+- `audit_log` retains references to soft-deleted entities by design (forensic).
+- Historical reports may opt out of soft-delete filtering via per-report `includeArchived` flag.
+- Cron jobs that purge archived rows (e.g., `purge-archived`) SELECT soft-deleted rows explicitly — they ARE the consumer.
+
+All other consumers must filter. Pass 6 closed three known gaps: scoring `evaluateLead` (F-54), `evaluateLead` activity-aggregate, `updateListAction` UPDATE WHERE (F-68).
+
+**§19.3.3 Soft-deleted parents preserve child rows for restore.** When a parent is soft-deleted (UPDATE `is_deleted = true`), child rows referenced by CASCADE FKs are NOT purged. Restore is reversible (flip `is_deleted = false`). This contract relies on §19.3.1 — child consumers must filter the parent.
+
+### §19.4 Hard-delete blob cleanup
+
+**§19.4.1 Vercel Blob objects MUST be pre-gathered BEFORE the parent DB delete cascades.** The blob-attachment join chain is `attachments → activities → entity`. CASCADE clears the join before any post-delete cleanup query can find the paths. Pattern:
+
+```typescript
+// 1. Gather BEFORE delete.
+const blobPathnames = await gatherBlobsForLeads(ids);
+
+// 2. Delete (CASCADE clears attachments).
+await db.delete(leads).where(inArray(leads.id, ids));
+
+// 3. Pass pre-gathered paths to blob deleter.
+if (blobPathnames.length > 0) {
+  await deleteBlobsByPathnames(blobPathnames);
+}
+```
+
+**Anti-pattern**: calling a `cleanupBlobsForX(ids)` helper after delete that re-runs the join query. The join returns empty (CASCADE cleared it), `del()` is a no-op, blobs leak forever. Pre-Phase-32.7 lead hard-delete + user-delete flows shipped this anti-pattern across 3 call sites (F-83, closed in `63e4b63`).
+
+**§19.4.2 Account / contact / opportunity / task hard-delete paths currently leak blob attachments.** Activities can attach to leads, accounts, contacts, opportunities. Only the lead hard-delete path is wired to gather + delete blobs. F-58 scope-questioned for next phase; recommended abstraction `gatherBlobsForActivityParent(kind, ids)` + `deleteBlobsForActivityParent(kind, ids)` satisfies Rule of 3.
+
+### §19.5 Optimistic concurrency control (OCC)
+
+**§19.5.1 Mutable entities edited by multiple users MUST use `version`-column OCC on the primary UPDATE path.** Pattern:
+
+```typescript
+const result = await db
+  .update(entity)
+  .set({ ...patch, version: sql`${entity.version} + 1` })
+  .where(and(eq(entity.id, id), eq(entity.version, expectedVersion)))
+  .returning({ id: entity.id });
+
+expectAffected(result.length, 1, "Entity was modified by another user");
+```
+
+Entities currently OCC-enforced: leads, accounts, contacts, opportunities, tasks, saved_views, marketing_lists, marketing_campaigns, saved_reports, lead_scoring_rules, api_keys (version on metadata only — revoke uses §19.5.2).
+
+**§19.5.2 Status-transition mutations MUST use atomic conditional UPDATE.** When the operation is "transition row from state A to state B", the UPDATE WHERE clause MUST encode the expected `from` state:
+
+```typescript
+const result = await db
+  .update(entity)
+  .set({ status: "B", ...patch })
+  .where(and(eq(entity.id, id), inArray(entity.status, ["A"])))
+  .returning({ id: entity.id });
+
+if (result.length === 0) {
+  throw new ConflictError("Entity no longer in expected state for this transition");
+}
+```
+
+This pattern closes TOCTOU windows where two clients race between SELECT and UPDATE. Pass 6 closed: api_key revoke (F-61), campaign cancel (F-64), campaign delete (F-65), bulkCompleteTasks (F-71). Marketing template archive (F-67), list delete (F-69), template update OCC (F-66) currently use lock-based OR snapshot-based contracts; future marketing-concurrency phase migrates them to §19.5.2.
+
+**§19.5.3 Last-write-wins entities MUST document the contract.** Some entities intentionally use last-write-wins semantics (`lead_scoring_settings` single-row admin tuning page, F-63). Document via comment at the UPDATE site explaining why OCC is not appropriate.
+
+### §19.6 Bulk action concurrency contract
+
+**§19.6.1 `bulk-actions/expand-filtered.ts` snapshot semantics:**
+
+- Records added to the filter set AFTER expansion: NOT included (intentional — the snapshot is fixed at walk time).
+- Records removed from the filter set AFTER expansion: STILL included based on snapshot (intentional).
+- Records modified DURING walk (sort-key bumped): may be skipped if the cursor predicate eats the new value (cursor stability is best-effort eventual consistency, NOT snapshot consistency).
+- Records hard-deleted mid-iteration: per-record action errors logged + skipped; no transaction abort.
+
+Pass 6 documented this contract inline as a 28-line block comment at the top of `src/lib/bulk-actions/expand-filtered.ts` (F-70, `da58061`).
+
+**§19.6.2 `BULK_SCOPE_EXPANSION_CAP = 5000` is the canonical cap.** All bulk-action paths flowing through `expand-filtered.ts` honor this cap. Library-layer caps (e.g., `bulkTagEntities`) MUST match — Pass 6 fixed `bulkTagEntities` 1000-cap to 5000 (F-76, `678e4e3`). Future bulk-action additions MUST use this constant.
+
+**§19.6.3 Aggregated audit on bulk paths.** When a bulk operation modifies N rows, audit emission uses `writeAuditBatch({ events: [...] })` — one INSERT per chunk of 500 (§19.8.2). The per-row write+audit serial pattern is wrong; it amplifies tail latency and explodes round-trip count under Supavisor. Pass 5 ε refactored the existing surfaces; Pass 6 Ω extended `purge-archived` (F-80).
+
+**§19.6.4 Bulk operations skip-already-in-target-state.** Bulk operations that flip a state column (e.g., bulkCompleteTasks → `status='completed'`) MUST include `<col> != '<targetState>'` in the UPDATE WHERE. Without it, the bulk overwrites timestamps + bumps versions + emits audit rows for non-transitions (F-71 closed).
+
+### §19.7 Audit emission contract
+
+**§19.7.1 `writeAudit` and `writeAuditBatch` are best-effort.** Both helpers internally try/catch all errors and `logger.error`. Audit failure NEVER blocks the primary mutation. This is the contract; callers MUST NOT wrap them in their own try/catch.
+
+**§19.7.2 `writeAuditBatch` is chunked at 500 rows per INSERT.** Pre-Pass-6 implementation was a single INSERT for all N rows — one bad row poisoned all N (F-78). Now chunked via `AUDIT_BATCH_CHUNK_SIZE = 500` with per-chunk try/catch. Worst-case loss: 500 rows per bad row (down from N).
+
+**§19.7.3 Sentinel-user fallback for null-actor audit.** When real-user resolution fails mid-write (e.g., cron purging an orphan-owner lead, F-79), fall back to `SYSTEM_SENTINEL_USER_ID` from `src/lib/sentinel-user.ts` with a structured WARN log line so admins can correlate forensically. The 2-year retention contract (Phase 25) is universal; "skip the audit because actor is null" is forbidden.
+
+**§19.7.4 Audit emission for high-frequency events.** Per CLAUDE.md "Audit emission for high-frequency events" — bulk events MAY aggregate into per-minute audit rows. Governance events (rename, delete, permission change, schema modification) ALWAYS emit per-event regardless of volume. The split:
+
+- **Per-event**: forensic-reconstruction surfaces. `lead.create`, `tag.renamed`, `tag.deleted`, `user.permission_change`, every CRUD on auditable entities.
+- **Aggregated**: workflow surfaces where count + timing matter more than per-event detail. `tag.applied.aggregate` with `{ count, sampleIds, firstAt, lastAt }`.
+
+Apply aggregation AFTER a real noise problem is observed, not preemptively. F-41, F-42 (Pass 5 leftover triage) await this decision per-event-shape.
+
+### §19.8 Sync pipeline idempotency
+
+**§19.8.1 Every cron sync run MUST be idempotent.** Failed runs do NOT skip records on retry — the next run reprocesses. The canonical pattern is atomic state-claim:
+
+```typescript
+// Claim only rows in the "needs sync" state — atomic.
+const claimed = await db
+  .update(syncTable)
+  .set({ status: "in_progress", claimed_at: sql`now()` })
+  .where(eq(syncTable.status, "pending"))
+  .returning({ id: syncTable.id });
+```
+
+This is Supavisor-safe (CLAUDE.md "Postgres locking under Supavisor"). Do NOT use `pg_try_advisory_lock` outside an explicit transaction — Supavisor's transaction-pool rotates backends and orphans session-scoped locks.
+
+**§19.8.2 Sync pipelines with batch state MUST handle partial failure.** D365 `pull-batch` + `map-batch` + `commit-batch` use `pg_advisory_xact_lock` (transaction-scoped, Supavisor-safe) + atomic batch claim with `RETURNING`. If `commit-batch` partially fails, the next cron tick re-claims the batch and retries.
+
+**§19.8.3 Concurrent UI+cron refresh races MUST be serialized.** `refreshList` currently has a race window where UI-triggered and cron-triggered refreshes can interleave their SELECT-then-write phases (F-73 deferred). Fix shape: wrap in `db.transaction` with `SELECT ... FOR UPDATE` on the parent `marketing_lists` row at the top. Future marketing-concurrency phase.
+
+### §19.9 Cursor pagination stability
+
+**§19.9.1 Cursors are stable under inserts** — new records appear at end of natural sort, never disrupting the in-flight walk.
+
+**§19.9.2 Sort-key mutations during iteration: may skip OR duplicate.** Acceptable for soft-state queries (list-page infinite scroll). NOT acceptable for hard-state queries (bulk-action expansion). Hard-state callers MUST document their consistency contract; see §19.6.1.
+
+**§19.9.3 Hard-delete during iteration: gap in results, not error.** Consumers handle empty rows / null IDs without aborting the iteration.
+
+### §19.10 Async send queue durability
+
+**§19.10.1 Atomic claim before async dispatch.** Pattern for `marketing-process-scheduled-campaigns` and equivalent cron-driven dispatchers:
+
+```typescript
+const claimed = await db
+  .update(marketingCampaigns)
+  .set({ status: "sending", sendStartedAt: sql`now()` })
+  .where(and(eq(marketingCampaigns.status, "scheduled"), /* eligibility */))
+  .returning({ id: marketingCampaigns.id });
+```
+
+The claim is the dispatch trigger. Race-safe under Supavisor.
+
+**§19.10.2 Pre-batch failure paths MUST flip status to a terminal state.** Pre-Pass-6 `sendCampaign` had a race window where pre-batch failures (`loadCampaignContext`, status assertion, `resolveListRecipients`, `insertRecipientRows`, audit emission) escaped the inner try/catch and left the row stuck in `sending` forever. Pass 6 fix (F-74, `367d4b2`) wraps the pre-batch region in a dedicated try/catch + `markStuckSendingFailed` helper. Future async dispatchers MUST follow this pattern.
+
+**§19.10.3 SendGrid 5xx + transient errors retry via `withRetry`.** 3 attempts, exponential backoff (2s/4s/8s), full jitter, Retry-After header respect (capped 30s), per-attempt structured WARN log. After exhaustion the error propagates and the campaign is marked `failed`. Do NOT add retry on top of `withRetry`; the layered retries amplify and break the budget.
+
+**§19.10.4 Webhook idempotency via dedup-claim.** Inbound SendGrid webhook events claim via `webhook_event_dedupe` table. Duplicate events return 2xx without reprocessing. Dedup INSERT failure falls back to at-least-once delivery (bypass mode, structured log line + flag) — intentional design: "rather double-process than drop." The hourly `marketing-sync-suppressions` cron is the resync safety net.
+
+### §19.11 File / attachment cleanup contract
+
+**§19.11.1 Soft-delete preserves attachments.** Parent soft-delete (`is_deleted = true`) leaves all `attachments` rows + Blob objects intact. Restore is reversible.
+
+**§19.11.2 Hard-delete MUST pre-gather + cleanup blobs.** Per §19.4.1.
+
+**§19.11.3 Fire-and-forget cleanup risk.** `void cleanupBlobs(...).catch(...)` doesn't await; lambda termination can kill the in-flight `del()`. Mitigated by Vercel's 300s `maxDuration` headroom but not durable. Future durability phase moves cleanup to its own cron sweeping pre-gathered orphan paths (F-81 deferred).
+
+### §19.12 Enforcement
+
+- New schema files: per §19.2, every FK MUST have explicit `.onDelete()` / `.onUpdate()`.
+- New status-transition mutations: per §19.5.2, MUST use atomic conditional UPDATE.
+- New bulk paths: per §19.6, MUST use `BULK_SCOPE_EXPANSION_CAP` + `writeAuditBatch` + skip-in-target-state predicate.
+- New async dispatchers: per §19.10, MUST use atomic claim + pre-batch failure flip-to-terminal.
+- New cron sync pipelines: per §19.8, MUST be idempotent + Supavisor-safe (no session-scoped locks).
+
+Code review sub-agents reviewing data-integrity-touching changes MUST cite the §19 subsection(s) involved in the chain-verification block (per §15.3).
+
