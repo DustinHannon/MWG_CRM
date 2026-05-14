@@ -10,6 +10,10 @@ import { marketingLists } from "@/db/schema/marketing-lists";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import {
+  SYSTEM_SENTINEL_USER_EMAIL,
+  SYSTEM_SENTINEL_USER_ID,
+} from "@/lib/constants/system-users";
 import { env } from "@/lib/env";
 import { ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -44,9 +48,10 @@ async function logMarketingSendFailure(args: {
     let fromUserEmailSnapshot = args.fromEmail;
     // email_send_log.fromUserId is NOT NULL with FK to users(id). If we
     // don't have a real user id (e.g. webhook-only test send through an
-    // API key), fall back to looking up an admin tied to the from-email
-    // domain. As a last resort, drop the log write — the structured
-    // logger.error below preserves the failure trail.
+    // API key), prefer an admin tied to the from-email domain for the
+    // best attribution; otherwise fall back to the seeded sentinel
+    // service-account user so the failure row always lands and stays
+    // visible on /admin/email-failures.
     //
     // Email comparison normalizes case: every DB email row is stored
     // lowercase (entra-provisioning and breakglass both lowercase at
@@ -65,12 +70,13 @@ async function logMarketingSendFailure(args: {
       }
     }
     if (!fromUserId) {
-      logger.error("marketing.email_send_log.skipped_no_user", {
+      fromUserId = SYSTEM_SENTINEL_USER_ID;
+      fromUserEmailSnapshot = SYSTEM_SENTINEL_USER_EMAIL;
+      logger.warn("marketing.email_send_log.attributed_to_sentinel", {
         feature: args.feature,
         fromEmail: args.fromEmail,
         toEmail: args.toEmail,
       });
-      return;
     }
     await db.insert(emailSendLog).values({
       fromUserId,
