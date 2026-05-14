@@ -7,7 +7,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   getPermissions,
   requireAdmin,
@@ -496,9 +496,10 @@ export async function archiveTemplateAction(
           ),
         );
       // Audit one row per cleared FK — granular forensic trail.
-      for (const c of unlinkedCampaigns) {
-        await writeAudit({
-          actorId: user.id,
+      // Single-INSERT batch so the N rows land in one round-trip.
+      await writeAuditBatch({
+        actorId: user.id,
+        events: unlinkedCampaigns.map((c) => ({
           action: MARKETING_AUDIT_EVENTS.CAMPAIGN_TEMPLATE_UNLINKED,
           targetType: "marketing_campaign",
           targetId: c.id,
@@ -507,8 +508,8 @@ export async function archiveTemplateAction(
             templateName: existing.name,
             reason: "template_archived",
           },
-        });
-      }
+        })),
+      });
     }
 
     await db

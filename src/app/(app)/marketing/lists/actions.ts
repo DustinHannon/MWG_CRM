@@ -12,7 +12,7 @@ import {
   marketingStaticListMembers,
   type MarketingListSourceEntity,
 } from "@/db/schema/marketing-lists";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   ConflictError,
   ForbiddenError,
@@ -786,10 +786,11 @@ export async function removeStaticListMembersAction(input: {
       });
 
       // Audit per row so bulk removes still produce forensic-grade
-      // entries. Best-effort: writeAudit swallows failures.
-      for (const row of existingRows) {
-        await writeAudit({
-          actorId: user.id,
+      // entries. Single-INSERT batch helper (writeAuditBatch) so the
+      // N per-row rows land as one round-trip.
+      await writeAuditBatch({
+        actorId: user.id,
+        events: existingRows.map((row) => ({
           action: MARKETING_AUDIT_EVENTS.LIST_MEMBER_REMOVED,
           targetType: "marketing_static_list_member",
           targetId: row.id,
@@ -798,8 +799,8 @@ export async function removeStaticListMembersAction(input: {
             email: row.email,
             name: row.name,
           },
-        });
-      }
+        })),
+      });
 
       revalidatePath(`/marketing/lists/${list.id}`);
       revalidatePath("/marketing/lists");
