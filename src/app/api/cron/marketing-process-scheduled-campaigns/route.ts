@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { and, asc, eq, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLog } from "@/db/schema/audit";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
+import { writeSystemAudit } from "@/lib/audit";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { sendCampaign } from "@/lib/marketing/sendgrid/send";
@@ -107,32 +107,17 @@ export async function GET(req: Request): Promise<Response> {
     durationMs: Date.now() - startedAt,
   });
 
-  // Self-audit (best-effort) so the activity log shows the cron's work.
-  try {
-    await db.insert(auditLog).values({
-      actorId: null,
-      actorEmailSnapshot: "system@cron",
-      action: "system.marketing_process_scheduled",
-      targetType: "system",
-      targetId: null,
-      beforeJson: null,
-      afterJson: {
-        picked,
-        completed,
-        failed,
-        duration_ms: Date.now() - startedAt,
-      },
-      requestId: null,
-      ipAddress: null,
-    });
-  } catch (err) {
-    logger.error(
-      "cron.marketing_process_scheduled.self_audit_failed",
-      {
-        errorMessage: err instanceof Error ? err.message : String(err),
-      },
-    );
-  }
+  await writeSystemAudit({
+    actorEmailSnapshot: "system@cron",
+    action: "system.marketing_process_scheduled",
+    targetType: "system",
+    after: {
+      picked,
+      completed,
+      failed,
+      duration_ms: Date.now() - startedAt,
+    },
+  });
 
   return NextResponse.json({
     ok: true,

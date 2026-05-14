@@ -5,6 +5,7 @@ import { auditLog } from "@/db/schema/audit";
 import { apiUsageLog } from "@/db/schema/api-keys";
 import { emailSendLog } from "@/db/schema/email-send-log";
 import { rateLimitBuckets, webhookEventDedupe } from "@/db/schema/security";
+import { writeSystemAudit } from "@/lib/audit";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 
@@ -106,35 +107,23 @@ export async function GET(req: Request) {
       webhookDedupeDeleted: webhookDedupeN,
     });
 
-    // Self-audit so the activity log shows the cron's own work.
-    try {
-      await db.insert(auditLog).values({
-        actorId: null,
-        actorEmailSnapshot: "system@cron",
-        action: "system.retention_prune",
-        targetType: "system",
-        targetId: null,
-        beforeJson: null,
-        afterJson: {
-          audit_deleted: auditN,
-          api_usage_deleted: apiUsageN,
-          email_send_deleted: emailSendN,
-          rate_limit_deleted: rateLimitN,
-          webhook_dedupe_deleted: webhookDedupeN,
-          audit_retention_days: AUDIT_RETENTION_DAYS,
-          api_usage_retention_days: API_USAGE_RETENTION_DAYS,
-          email_send_retention_days: EMAIL_SEND_RETENTION_DAYS,
-          rate_limit_retention_days: RATE_LIMIT_RETENTION_DAYS,
-          webhook_dedupe_retention_days: WEBHOOK_DEDUPE_RETENTION_DAYS,
-        },
-        requestId: null,
-        ipAddress: null,
-      });
-    } catch (err) {
-      logger.error("cron.retention_prune.self_audit_failed", {
-        errorMessage: err instanceof Error ? err.message : String(err),
-      });
-    }
+    await writeSystemAudit({
+      actorEmailSnapshot: "system@cron",
+      action: "system.retention_prune",
+      targetType: "system",
+      after: {
+        audit_deleted: auditN,
+        api_usage_deleted: apiUsageN,
+        email_send_deleted: emailSendN,
+        rate_limit_deleted: rateLimitN,
+        webhook_dedupe_deleted: webhookDedupeN,
+        audit_retention_days: AUDIT_RETENTION_DAYS,
+        api_usage_retention_days: API_USAGE_RETENTION_DAYS,
+        email_send_retention_days: EMAIL_SEND_RETENTION_DAYS,
+        rate_limit_retention_days: RATE_LIMIT_RETENTION_DAYS,
+        webhook_dedupe_retention_days: WEBHOOK_DEDUPE_RETENTION_DAYS,
+      },
+    });
 
     return NextResponse.json({
       ok: true,

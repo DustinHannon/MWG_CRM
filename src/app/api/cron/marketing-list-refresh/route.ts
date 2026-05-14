@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLog } from "@/db/schema/audit";
 import { marketingLists } from "@/db/schema/marketing-lists";
+import { writeSystemAudit } from "@/lib/audit";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { refreshList } from "@/lib/marketing/lists/refresh";
@@ -82,32 +82,20 @@ export async function GET(req: Request) {
   });
 
   // Self-audit so the activity log records the cron run.
-  try {
-    await db.insert(auditLog).values({
-      actorId: null,
-      actorEmailSnapshot: "system@cron",
-      action: "marketing.list.refresh_cron",
-      targetType: "system",
-      targetId: null,
-      beforeJson: null,
-      afterJson: {
-        lists_considered: lists.length,
-        succeeded,
-        failed,
-        total_added: totalAdded,
-        total_removed: totalRemoved,
-        duration_ms: durationMs,
-        failures: failures.slice(0, 20),
-      },
-      requestId: null,
-      ipAddress: null,
-    });
-  } catch (auditErr) {
-    logger.error("cron.marketing_list_refresh.self_audit_failed", {
-      errorMessage:
-        auditErr instanceof Error ? auditErr.message : String(auditErr),
-    });
-  }
+  await writeSystemAudit({
+    actorEmailSnapshot: "system@cron",
+    action: "marketing.list.refresh_cron",
+    targetType: "system",
+    after: {
+      lists_considered: lists.length,
+      succeeded,
+      failed,
+      total_added: totalAdded,
+      total_removed: totalRemoved,
+      duration_ms: durationMs,
+      failures: failures.slice(0, 20),
+    },
+  });
 
   return NextResponse.json({
     ok: true,

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { auditLog } from "@/db/schema/audit";
+import { writeSystemAudit } from "@/lib/audit";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { sendgridConfigured } from "@/lib/env";
@@ -38,24 +37,12 @@ export async function GET(req: Request) {
 
     // System-initiated; actor_id null (FK is SET NULL safe). Mirrors the
     // retention-prune cron's self-audit pattern.
-    try {
-      await db.insert(auditLog).values({
-        actorId: null,
-        actorEmailSnapshot: "system@cron",
-        action: "marketing.suppression.sync",
-        targetType: "marketing_suppression",
-        targetId: null,
-        beforeJson: null,
-        afterJson: { ...result, durationMs },
-        requestId: null,
-        ipAddress: null,
-      });
-    } catch (auditErr) {
-      logger.error("cron.marketing_sync_suppressions.self_audit_failed", {
-        errorMessage:
-          auditErr instanceof Error ? auditErr.message : String(auditErr),
-      });
-    }
+    await writeSystemAudit({
+      actorEmailSnapshot: "system@cron",
+      action: "marketing.suppression.sync",
+      targetType: "marketing_suppression",
+      after: { ...result, durationMs },
+    });
 
     return NextResponse.json({ ok: true, ...result, durationMs });
   } catch (err) {
