@@ -1,3 +1,11 @@
+// consistency-exempt: list-page-pattern: admin-utility-table
+// Admin /audit uses fixed-width row cells (w-40 timestamp, w-40 actor,
+// w-56 action mnemonic, w-32 request id, w-24 diff) rather than the
+// canonical 140px flex-basis pattern because the columns have
+// intrinsically non-uniform widths (audit action codes are long, diff
+// cell is narrow). No columnHeaderSlot to align against. pageSize=100
+// because audit volume is high. Admin operational page — no saved
+// views, no MODIFIED badge, no bulk selection.
 "use client";
 
 import Link from "next/link";
@@ -134,7 +142,7 @@ export function AuditListClient({
           value={draft.q}
           onChange={(e) => setDraft({ ...draft, q: e.target.value })}
           placeholder="action / target / actor"
-          className="min-w-[220px] rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          className="h-11 min-w-[220px] rounded-md border border-border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:h-9 md:py-1.5"
         />
       </label>
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -208,7 +216,7 @@ export function AuditListClient({
         ) : null}
         <Link
           href={exportHref}
-          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted"
+          className="hidden rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted md:inline-flex"
           title="Download up to 50,000 matching rows as CSV"
         >
           Export CSV
@@ -236,10 +244,8 @@ export function AuditListClient({
         />
       }
       header={{
-        kicker: "Admin",
         title: "Audit log",
         description: "Append-only forensic record of every meaningful mutation.",
-        fontFamily: "display",
       }}
       filtersSlot={filtersSlot}
     />

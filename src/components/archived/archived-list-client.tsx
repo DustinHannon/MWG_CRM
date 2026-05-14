@@ -1,5 +1,15 @@
 "use client";
 
+// consistency-exempt: list-page-pattern: archived-page semantics — admin-only
+// soft-deleted views surface a Restore + Delete-permanently action pair per
+// row instead of an edit affordance; bulk selection is omitted (cron
+// purge-archived auto-removes leads at 30 days, page is admin-only and capped
+// at ~50 rows per fetch); the header surfaces a single "Back to <entity>"
+// navigation link visible on every viewport instead of per-control desktop-
+// only affordances; trailing actions cell is widened to ~220 px to fit the
+// Restore + Delete-permanently button pair (canonical row-actions cell is
+// w-10 for a 3-dot menu).
+
 import { useCallback, type ReactNode } from "react";
 import {
   StandardEmptyState,
@@ -9,6 +19,19 @@ import {
 import { DEFAULT_TIME_PREFS, formatUserTime } from "@/lib/format-time";
 import { UserChip } from "@/components/user-display/user-chip";
 import { ArchivedListMobile } from "./archived-list-mobile";
+
+// Canonical row-width math from the Leads list reference:
+// each desktop content cell has min-width 140 px; the trailing actions
+// cell is fixed. Archived rows have 4 content cells (title/subtitle,
+// archived date, by-user, reason) plus the wider actions cell. The row
+// container AND the column-header tier share this min-width so both
+// horizontally scroll together inside StandardListPage's overflow-x-auto
+// wrapper.
+const ARCHIVED_CONTENT_COLS = 4;
+const ARCHIVED_CELL_BASIS_PX = 140;
+const ARCHIVED_ACTIONS_WIDTH_PX = 220;
+const ARCHIVED_ROW_MIN_WIDTH_PX =
+  ARCHIVED_CONTENT_COLS * ARCHIVED_CELL_BASIS_PX + ARCHIVED_ACTIONS_WIDTH_PX;
 
 /**
  * Generic shape every archived row honours. Each entity surfaces the
@@ -133,6 +156,48 @@ export function ArchivedListClient({
     [restoreAction, hardDeleteAction],
   );
 
+  // Desktop column-header tier. The shell renders this inside its
+  // horizontal-scroll wrapper so it stays aligned with row cells when
+  // the table is wider than the viewport. Non-sticky — the shell's
+  // chrome group above stays sticky for deep-scroll context.
+  const columnHeaderSlot = (
+    <div
+      className="flex items-stretch text-[10px] uppercase tracking-wide text-muted-foreground/70"
+      style={{ minWidth: `${ARCHIVED_ROW_MIN_WIDTH_PX}px` }}
+    >
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-2"
+        style={{ flexBasis: `${ARCHIVED_CELL_BASIS_PX}px` }}
+      >
+        {subtitleHeader}
+      </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-2"
+        style={{ flexBasis: `${ARCHIVED_CELL_BASIS_PX}px` }}
+      >
+        Archived
+      </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-2"
+        style={{ flexBasis: `${ARCHIVED_CELL_BASIS_PX}px` }}
+      >
+        By
+      </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-2"
+        style={{ flexBasis: `${ARCHIVED_CELL_BASIS_PX}px` }}
+      >
+        Reason
+      </div>
+      <div
+        className="shrink-0 px-2 py-2"
+        style={{ width: `${ARCHIVED_ACTIONS_WIDTH_PX}px` }}
+      >
+        <span className="sr-only">Actions</span>
+      </div>
+    </div>
+  );
+
   return (
     <StandardListPage<ArchivedRow, Record<string, never>>
       queryKey={[queryKey]}
@@ -148,6 +213,7 @@ export function ArchivedListClient({
         description: headerDescription,
         actions: headerActions,
       }}
+      columnHeaderSlot={columnHeaderSlot}
     />
   );
 }
@@ -163,9 +229,19 @@ function ArchivedDesktopRow({
   restoreAction: ArchivedAction;
   hardDeleteAction: ArchivedAction;
 }) {
+  // Match the column-header tier's min-width so cells stay aligned with
+  // header cells when the table is wider than the viewport. Each
+  // content cell uses `flex-basis: 140 px` so cells don't squeeze below
+  // 140 px each — canonical row sizing from the Leads reference.
   return (
-    <div className="flex items-center gap-4 border-b border-border bg-card px-4 py-3 text-sm hover:bg-muted/40">
-      <div className="min-w-0 flex-1">
+    <div
+      className="group flex items-stretch border-b border-border/60 bg-card text-sm transition hover:bg-muted/40"
+      style={{ minWidth: `${ARCHIVED_ROW_MIN_WIDTH_PX}px` }}
+    >
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: `${ARCHIVED_CELL_BASIS_PX}px` }}
+      >
         <div className="truncate font-medium text-foreground">
           {row.title}
         </div>
@@ -175,16 +251,16 @@ function ArchivedDesktopRow({
           </div>
         ) : null}
       </div>
-      <div className="hidden w-32 text-xs text-muted-foreground md:block">
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-          Archived
-        </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3 text-xs text-muted-foreground"
+        style={{ flexBasis: `${ARCHIVED_CELL_BASIS_PX}px` }}
+      >
         <span>{formatUserTime(row.deletedAt, DEFAULT_TIME_PREFS, "date")}</span>
       </div>
-      <div className="hidden w-40 text-xs md:block">
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-          By
-        </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3 text-xs"
+        style={{ flexBasis: `${ARCHIVED_CELL_BASIS_PX}px` }}
+      >
         {row.deletedById ? (
           <UserChip
             user={{
@@ -199,13 +275,16 @@ function ArchivedDesktopRow({
           </span>
         )}
       </div>
-      <div className="hidden flex-1 truncate text-xs text-muted-foreground md:block">
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-          Reason
-        </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3 text-xs text-muted-foreground"
+        style={{ flexBasis: `${ARCHIVED_CELL_BASIS_PX}px` }}
+      >
         <span className="truncate">{row.reason ?? "—"}</span>
       </div>
-      <div className="flex shrink-0 gap-2">
+      <div
+        className="flex shrink-0 items-center gap-2 px-2 py-3"
+        style={{ width: `${ARCHIVED_ACTIONS_WIDTH_PX}px` }}
+      >
         <ArchivedRowActions
           id={row.id}
           restoreAction={restoreAction}
