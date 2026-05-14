@@ -1,6 +1,7 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES } from "@/lib/lead-constants";
+import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 import { TEMPLATE_HEADERS } from "@/lib/import/headers";
 
 /**
@@ -200,7 +201,7 @@ export async function buildLeadImportTemplate(): Promise<Buffer> {
   enums.addRow(["Source", LEAD_SOURCES.join(", ")]);
   enums.addRow([
     "Linked Opportunity Stage",
-    "prospecting, qualification, proposal, negotiation, closed_won, closed_lost",
+    OPPORTUNITY_STAGES.join(", "),
   ]);
   enums.columns = [{ width: 28 }, { width: 80 }];
 
