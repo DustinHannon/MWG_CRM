@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 
 /**
  * Generic retry wrapper for SendGrid HTTP calls.
@@ -74,7 +75,23 @@ export async function withRetry<T>(
         throw err;
       }
       const delayMs = computeDelayMs(err, attempt);
-      options.onRetry?.(attempt, err);
+      // Default-on retry telemetry. Without this, SendGrid retry
+      // storms (429 / 5xx waves) produce zero log lines until the
+      // final throw — operators cannot tell "first try succeeded"
+      // from "third try succeeded after two retries". Callers may
+      // still override `onRetry` to suppress or augment.
+      if (options.onRetry) {
+        options.onRetry(attempt, err);
+      } else {
+        const sgErr = err as { code?: number | string };
+        logger.warn("sendgrid.withRetry.retrying", {
+          attempt,
+          delayMs,
+          maxRetries,
+          errorCode: sgErr.code ?? null,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+      }
       await sleep(delayMs);
     }
   }

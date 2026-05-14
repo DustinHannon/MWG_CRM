@@ -32,6 +32,7 @@ import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 // module surfaces as a build-time error in this file rather than a
 // silent runtime miss.
 import { sendCampaign, sendTestEmail } from "@/lib/marketing/sendgrid/send";
+import { resolveListRecipients } from "@/lib/marketing/lists/resolution";
 
 /**
  * Campaign composer + lifecycle actions.
@@ -413,11 +414,36 @@ export async function scheduleCampaignAction(input: {
         );
       }
 
+      // Pre-compute the recipient count so the campaign list / detail
+      // pages and the post-send `totalFiltered` audit math have real
+      // numbers to display. Resolution runs the suppression-filter
+      // join so the stamped value matches what would actually be sent
+      // at this moment. The cron pickup re-resolves at send time —
+      // late-arriving suppressions reduce the actual send count
+      // without rewriting this stamp (the schedule snapshot is a
+      // forecast, not a guarantee).
+      let stampedTotalRecipients = 0;
+      try {
+        const resolved = await resolveListRecipients(campaign.listId);
+        stampedTotalRecipients = resolved.recipients.length;
+      } catch (err) {
+        logger.warn("marketing.campaign.schedule_resolve_failed", {
+          campaignId: parsed.data.id,
+          listId: campaign.listId,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+        // Resolution failure here is non-fatal — the schedule UPDATE
+        // can still proceed with totalRecipients=0 (the default).
+        // sendCampaign's resolve call will surface the real error
+        // at send time.
+      }
+
       const updated = await db
         .update(marketingCampaigns)
         .set({
           status: "scheduled",
           scheduledFor: parsed.data.scheduledFor,
+          totalRecipients: stampedTotalRecipients,
           updatedAt: new Date(),
           updatedById: user.id,
           version: sql`${marketingCampaigns.version} + 1`,
@@ -555,6 +581,22 @@ export async function sendCampaignNowAction(
         );
       }
 
+      // Pre-compute totalRecipients before the status flip so the
+      // detail page and audit math reflect reality. Mirrors the
+      // schedule-action behavior; see scheduleCampaignAction's
+      // comment for the forecast-vs-guarantee semantics.
+      let stampedTotalRecipients = campaign.totalRecipients;
+      try {
+        const resolved = await resolveListRecipients(campaign.listId);
+        stampedTotalRecipients = resolved.recipients.length;
+      } catch (err) {
+        logger.warn("marketing.campaign.send_now_resolve_failed", {
+          campaignId: parsedId,
+          listId: campaign.listId,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+      }
+
       // Atomic claim — the WHERE clause guards BOTH:
       // (a) double-click from the same user (the in-flight first
       // UPDATE has already flipped status to 'sending'),
@@ -568,6 +610,7 @@ export async function sendCampaignNowAction(
         .update(marketingCampaigns)
         .set({
           status: "sending",
+          totalRecipients: stampedTotalRecipients,
           updatedAt: new Date(),
           updatedById: user.id,
         })

@@ -8,7 +8,15 @@ import { z } from "zod";
 const envSchema = z.object({
   // Auth.js v5
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 chars"),
-  AUTH_TRUST_HOST: z.coerce.boolean().default(true),
+  // Same z.coerce.boolean() footgun fixed for SENDGRID_SANDBOX in
+  // fc36e45: any non-empty string ("false", "0", "no") coerces to true.
+  // Default is true so the practical impact is limited, but a future
+  // operator typing AUTH_TRUST_HOST="false" expecting to disable it
+  // would silently no-op. Parse explicit truthy strings only.
+  AUTH_TRUST_HOST: z
+    .string()
+    .optional()
+    .transform((v) => v === undefined || v === "true" || v === "1"),
 
   // Entra OIDC — optional /2 (filled once App Registration exists).
   AUTH_MICROSOFT_ENTRA_ID_ID: z.string().optional(),
