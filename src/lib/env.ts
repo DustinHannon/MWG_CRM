@@ -69,7 +69,13 @@ const envSchema = z.object({
   SENDGRID_WEBHOOK_PUBLIC_KEY: z.string().optional(),
   SENDGRID_FROM_DOMAIN: z.string().default("morganwhite.com"),
   SENDGRID_FROM_NAME_DEFAULT: z.string().default("Morgan White Group"),
-  SENDGRID_SANDBOX: z.coerce.boolean().default(false),
+  // z.coerce.boolean() is a footgun: ANY non-empty string ("false", "0", "no")
+  // coerces to true. Parse explicit truthy strings only so an accidentally-set
+  // SENDGRID_SANDBOX="false" doesn't silently no-op every production send.
+  SENDGRID_SANDBOX: z
+    .string()
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
   // ASM unsubscribe group used as asm.group_id for every marketing send.
   // Created via /v3/asm/groups; id is per-account.
   SENDGRID_UNSUBSCRIBE_GROUP_ID: z.coerce.number().int().optional(),
