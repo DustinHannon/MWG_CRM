@@ -70,29 +70,48 @@ export default async function globalSetup(_config: FullConfig) {
 
   await page.goto("https://crm.morganwhite.com/auth/signin");
 
-  // The signin page exposes a Microsoft / Entra button. Try a few
-  // accessible-name variants because the label may evolve.
-  await page
-    .getByRole("button", {
-      name: /sign in with microsoft|continue with sso|microsoft|entra/i,
-    })
-    .first()
-    .click();
+  // Two auth paths: Entra SSO for real users, or breakglass local creds
+  // for the singleton fallback account. The breakglass row's email is
+  // `breakglass@local.mwg-crm` (see src/lib/breakglass.ts BREAKGLASS_EMAIL),
+  // so PLAYWRIGHT_LOGIN_EMAIL ending in @local.mwg-crm signals the
+  // breakglass form path instead of the Microsoft SSO redirect.
+  const isBreakglass = email.toLowerCase().endsWith("@local.mwg-crm");
 
-  // Microsoft account picker. Skip if already-known user is shown.
-  const emailInput = page.getByLabel(/email|sign in|account/i).first();
-  await emailInput.fill(email);
-  await page.getByRole("button", { name: /next/i }).click();
+  if (isBreakglass) {
+    // Reveal the local-credentials form, then submit username + password.
+    await page.getByRole("button", { name: /use breakglass account/i }).click();
+    const username = email.split("@")[0] ?? "breakglass";
+    await page.getByLabel(/username/i).fill(username);
+    await page.getByLabel(/password/i).fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+  } else {
+    // Entra SSO — try a few accessible-name variants because the label
+    // may evolve.
+    await page
+      .getByRole("button", {
+        name: /sign in with microsoft|continue with sso|microsoft|entra/i,
+      })
+      .first()
+      .click();
 
-  // Password page.
-  await page.getByLabel(/password/i).fill(password);
-  await page.getByRole("button", { name: /sign in/i }).click();
+    // Microsoft account picker. Skip if already-known user is shown.
+    const emailInput = page.getByLabel(/email|sign in|account/i).first();
+    await emailInput.fill(email);
+    await page.getByRole("button", { name: /next/i }).click();
 
-  // "Stay signed in?" prompt is sometimes shown.
-  try {
-    await page.getByRole("button", { name: /^yes$/i }).click({ timeout: 5000 });
-  } catch {
-    /* prompt not shown — fine */
+    // Password page.
+    await page.getByLabel(/password/i).fill(password);
+    await page.getByRole("button", { name: /sign in/i }).click();
+  }
+
+  // "Stay signed in?" prompt is sometimes shown on the Microsoft side.
+  // Skip for breakglass — local-creds form goes straight to the app.
+  if (!isBreakglass) {
+    try {
+      await page.getByRole("button", { name: /^yes$/i }).click({ timeout: 5000 });
+    } catch {
+      /* prompt not shown — fine */
+    }
   }
 
   // Defensive: surface MFA loudly so we know the test account hardened.
@@ -111,9 +130,12 @@ export default async function globalSetup(_config: FullConfig) {
     );
   }
 
-  await page.waitForURL(/mwg-crm\.vercel\.app\/(leads|home|dashboard|$)/, {
-    timeout: 30_000,
-  });
+  // After auth, app redirects to dashboard / leads / home — on the
+  // canonical domain (crm.morganwhite.com) or the vercel.app preview.
+  await page.waitForURL(
+    /(crm\.morganwhite\.com|mwg-crm\.vercel\.app)\/(leads|home|dashboard|$)/,
+    { timeout: 30_000 },
+  );
 
   fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
   await context.storageState({ path: STATE_PATH });
