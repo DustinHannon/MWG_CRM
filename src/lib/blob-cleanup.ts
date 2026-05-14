@@ -86,3 +86,46 @@ export async function gatherBlobsForUser(userId: string): Promise<string[]> {
   return rows.map((r) => r.pathname);
 }
 
+/**
+ * Multi-entity dispatcher for gathering blob pathnames before a hard-delete
+ * of any activity-parent entity (lead / account / contact / opportunity).
+ *
+ * The `activities` table carries four nullable parent FKs (lead_id /
+ * account_id / contact_id / opportunity_id), each with ON DELETE CASCADE
+ * back to its parent. A hard-delete of a parent cascade-purges activities
+ * AND attachments rows, but the Vercel Blob objects remain orphaned —
+ * the same problem `gatherBlobsForLeads` solves for leads. This helper
+ * extends that contract to the other three activity-parent entities.
+ *
+ * Tasks are excluded — the `tasks` table is not an activity-parent
+ * (attachments cascade off `activities` only, not `tasks`).
+ *
+ * STANDARDS §19.4 governs the hard-delete blob cleanup contract.
+ */
+export type ActivityParentKind = "lead" | "account" | "contact" | "opportunity";
+
+export async function gatherBlobsForActivityParent(
+  kind: ActivityParentKind,
+  ids: string[],
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+  // The Drizzle column reference is selected dynamically by `kind`.
+  // `inArray` against any one of the four parent FKs gives the same
+  // attachments -> activities pre-cascade row set the per-entity
+  // helpers would produce.
+  const parentCol =
+    kind === "lead"
+      ? activities.leadId
+      : kind === "account"
+        ? activities.accountId
+        : kind === "contact"
+          ? activities.contactId
+          : activities.opportunityId;
+  const rows = await db
+    .select({ pathname: attachments.blobPathname })
+    .from(attachments)
+    .innerJoin(activities, eq(activities.id, attachments.activityId))
+    .where(inArray(parentCol, ids));
+  return rows.map((r) => r.pathname);
+}
+

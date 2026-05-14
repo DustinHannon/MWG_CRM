@@ -17,6 +17,11 @@ import {
 } from "@/lib/accounts";
 import { canDeleteAccount, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
+import {
+  deleteBlobsByPathnames,
+  gatherBlobsForActivityParent,
+} from "@/lib/blob-cleanup";
+import { logger } from "@/lib/logger";
 
 /**
  * soft-delete an account. Owner OR admin.
@@ -139,6 +144,19 @@ export async function hardDeleteAccountAction(
       .from(crmAccounts)
       .where(eq(crmAccounts.id, id))
       .limit(1);
+    // Collect attachment blob pathnames BEFORE the DB delete; after
+    // CASCADE the activities -> attachments join rows are gone and the
+    // blobs are unrecoverable. Failure to gather is non-fatal.
+    let blobPathnames: string[] = [];
+    try {
+      blobPathnames = await gatherBlobsForActivityParent("account", [id]);
+    } catch (err) {
+      logger.error("blob_cleanup_gather_failure_hard_delete", {
+        entity: "account",
+        entityId: id,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
     await deleteAccountsById([id]);
     await writeAudit({
       actorId: user.id,
@@ -147,6 +165,19 @@ export async function hardDeleteAccountAction(
       targetId: id,
       before: (snapshot ?? null) as object | null,
     });
+    // Fire-and-forget blob cleanup. Use the pre-gathered paths; the
+    // attachments rows are gone by now (CASCADE), so re-gathering would
+    // return empty and blobs would leak.
+    if (blobPathnames.length > 0) {
+      void deleteBlobsByPathnames(blobPathnames).catch((err) => {
+        logger.error("blob_cleanup_failure_hard_delete", {
+          entity: "account",
+          entityId: id,
+          blobCount: blobPathnames.length,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
     revalidatePath("/accounts/archived");
   });
 }
