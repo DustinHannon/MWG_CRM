@@ -18,6 +18,7 @@ import {
   StandardListPage,
   type StandardListPagePage,
 } from "@/components/standard";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import { type TimePrefs } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,8 @@ export function ApiUsageListClient({
 }: ApiUsageListClientProps) {
   const [filters, setFilters] = useState<ApiUsageFilters>(initialFilters);
   const [draft, setDraft] = useState<ApiUsageFilters>(initialFilters);
+  const fromPicker = useShowPicker();
+  const toPicker = useShowPicker();
 
   const memoizedFilters = useMemo<ApiUsageFilters>(() => filters, [filters]);
 
@@ -239,6 +242,7 @@ export function ApiUsageListClient({
           type="date"
           value={draft.from}
           onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+          onClick={fromPicker}
           className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
         />
       </label>
@@ -248,6 +252,7 @@ export function ApiUsageListClient({
           type="date"
           value={draft.to}
           onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+          onClick={toPicker}
           className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
         />
       </label>

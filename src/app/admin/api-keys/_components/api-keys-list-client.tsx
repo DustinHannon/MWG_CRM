@@ -15,6 +15,7 @@ import {
   StandardListPage,
   type StandardListPagePage,
 } from "@/components/standard";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import { ALL_SCOPES, ENTITIES, SCOPE_PRESETS } from "@/lib/api/scopes";
 import {
   deleteApiKeyAction,
@@ -425,6 +426,7 @@ function GenerateModal({ onClose, onGenerated }: GenerateModalProps) {
   const [customExpires, setCustomExpires] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const customExpiresPicker = useShowPicker();
 
   function applyPreset(key: keyof typeof SCOPE_PRESETS) {
     setScopes([...SCOPE_PRESETS[key]] as string[]);
@@ -599,6 +601,7 @@ function GenerateModal({ onClose, onGenerated }: GenerateModalProps) {
               type="datetime-local"
               value={customExpires}
               onChange={(e) => setCustomExpires(e.target.value)}
+              onClick={customExpiresPicker}
               className="mt-1 rounded-md border border-border bg-input px-3 py-2 text-sm"
             />
           ) : null}

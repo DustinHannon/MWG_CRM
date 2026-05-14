@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { createTaskAction } from "@/app/(app)/tasks/actions";
+import { useShowPicker } from "@/hooks/use-show-picker";
 
 /**
  * entity-detail Tasks tab quick-add. Auto-sets the
@@ -29,6 +30,7 @@ export function EntityTasksQuickAdd({
     "low" | "normal" | "high" | "urgent"
   >("normal");
   const [pending, startTransition] = useTransition();
+  const datePicker = useShowPicker();
 
   function submit() {
     const trimmed = title.trim();
@@ -87,6 +89,7 @@ export function EntityTasksQuickAdd({
         type="date"
         value={dueDate}
         onChange={(e) => setDueDate(e.target.value)}
+        onClick={datePicker}
         disabled={pending}
         aria-label="Due date"
         className="rounded-md border border-border bg-input/60 px-3 py-2 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"

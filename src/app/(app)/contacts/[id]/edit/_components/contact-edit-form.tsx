@@ -5,6 +5,7 @@ import { useActionState, useEffect } from "react";
 import { toast } from "sonner";
 import { updateContactAction } from "../../../actions";
 import type { ActionResult } from "@/lib/server-action";
+import { useShowPicker } from "@/hooks/use-show-picker";
 
 export function ContactEditForm({
   contact,
@@ -37,6 +38,7 @@ export function ContactEditForm({
     ActionResult<never>,
     FormData
   >(async (_prev, fd) => updateContactAction(fd), initial);
+  const birthdatePicker = useShowPicker();
 
   useEffect(() => {
     if (state === initial) return;
@@ -88,6 +90,7 @@ export function ContactEditForm({
               type="date"
               name="birthdate"
               defaultValue={contact.birthdate ?? ""}
+              onClick={birthdatePicker}
               className={inputClass}
             />
           </Field>

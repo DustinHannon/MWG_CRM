@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { X } from "lucide-react";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import {
   ALLOWED_LEAD_FILTER_FIELDS,
   type AllowedLeadFilterField,
@@ -161,6 +162,7 @@ function ValueInput({
   value,
   onChange,
 }: ValueInputProps) {
+  const datePicker = useShowPicker();
   if (isArray) {
     return <TagInput value={value} onChange={onChange} />;
   }
@@ -204,6 +206,7 @@ function ValueInput({
         <input
           type="date"
           value={v}
+          onClick={datePicker}
           onChange={(e) => {
             const raw = e.target.value;
             if (!raw) {

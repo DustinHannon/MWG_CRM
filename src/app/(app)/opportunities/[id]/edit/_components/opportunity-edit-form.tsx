@@ -5,6 +5,7 @@ import { useActionState, useEffect } from "react";
 import { toast } from "sonner";
 import { updateOpportunityAction } from "../../../actions";
 import type { ActionResult } from "@/lib/server-action";
+import { useShowPicker } from "@/hooks/use-show-picker";
 
 /** Opportunity edit form. */
 export function OpportunityEditForm({
@@ -26,6 +27,7 @@ export function OpportunityEditForm({
     ActionResult<never>,
     FormData
   >(async (_prev, fd) => updateOpportunityAction(fd), initial);
+  const closeDatePicker = useShowPicker();
 
   useEffect(() => {
     if (state === initial) return;
@@ -85,6 +87,7 @@ export function OpportunityEditForm({
           name="expectedCloseDate"
           type="date"
           defaultValue={opportunity.expectedCloseDate ?? ""}
+          onClick={closeDatePicker}
           className="h-9 rounded-md border border-border bg-input/60 px-3 text-sm"
         />
       </Field>

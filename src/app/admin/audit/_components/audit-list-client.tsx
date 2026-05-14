@@ -18,6 +18,7 @@ import {
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import { UserChip } from "@/components/user-display/user-chip";
 import { type TimePrefs } from "@/lib/format-time";
+import { useShowPicker } from "@/hooks/use-show-picker";
 
 export interface AuditRow {
   id: string;
@@ -63,6 +64,8 @@ export function AuditListClient({
 }: AuditListClientProps) {
   const [filters, setFilters] = useState<AuditFilters>(initialFilters);
   const [draft, setDraft] = useState<AuditFilters>(initialFilters);
+  const fromPicker = useShowPicker();
+  const toPicker = useShowPicker();
 
   const memoizedFilters = useMemo<AuditFilters>(() => filters, [filters]);
 
@@ -186,6 +189,7 @@ export function AuditListClient({
           type="date"
           value={draft.from}
           onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+          onClick={fromPicker}
           className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
         />
       </label>
@@ -195,6 +199,7 @@ export function AuditListClient({
           type="date"
           value={draft.to}
           onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+          onClick={toPicker}
           className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
         />
       </label>

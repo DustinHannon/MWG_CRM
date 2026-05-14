@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { TagSectionClient } from "@/components/tags/tag-section-client";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import type { TaskRow } from "@/lib/tasks";
 import {
   TASK_PRIORITY_VALUES,
@@ -77,6 +78,7 @@ export function TaskEditDialog({
     task.assignedToId ?? "",
   );
   const [pending, startTransition] = useTransition();
+  const datePicker = useShowPicker();
 
   // Escape closes the dialog — WCAG 2.1.2. Pending writes block
   // dismissal so the user doesn't think they cancelled when the
@@ -220,6 +222,7 @@ export function TaskEditDialog({
                 type="date"
                 value={dueAt}
                 onChange={(e) => setDueAt(e.target.value)}
+                onClick={datePicker}
                 disabled={pending}
                 className="mt-1 block w-full rounded-md border border-border bg-input/60 px-3 py-2 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               />

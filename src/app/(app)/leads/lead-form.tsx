@@ -6,6 +6,7 @@ import type { ActionResult } from "@/lib/server-action";
 import { DuplicateWarning } from "@/components/leads/duplicate-warning";
 import { TagInput } from "@/components/tags/tag-input";
 import { TagSectionClient } from "@/components/tags/tag-section-client";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import {
   LEAD_RATINGS,
   LEAD_SOURCES,
@@ -271,6 +272,8 @@ function Input({
   step?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
+  const datePicker = useShowPicker();
+  const isDateLike = type === "date" || type === "datetime-local";
   return (
     <label className="block text-xs uppercase tracking-wide text-muted-foreground">
       {label}
@@ -278,6 +281,7 @@ function Input({
         name={name}
         type={type}
         onChange={onChange}
+        onClick={isDateLike ? datePicker : undefined}
         step={step}
         defaultValue={defaultValue}
         required={required}

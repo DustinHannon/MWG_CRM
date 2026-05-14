@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import type { TimePrefs } from "@/lib/format-time";
+import { useShowPicker } from "@/hooks/use-show-picker";
 
 /**
  * Marketing email performance report (client component).
@@ -48,6 +49,8 @@ export function MarketingEmailReport({
 }: Props) {
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
+  const fromPicker = useShowPicker();
+  const toPicker = useShowPicker();
 
   // Apply the date filter on the client to avoid a server round-trip
   // when only the range changes; the URL form below reloads with the
@@ -84,6 +87,7 @@ export function MarketingEmailReport({
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
+            onClick={fromPicker}
             className="rounded-md border border-border bg-input px-3 py-1.5 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
         </div>
@@ -100,6 +104,7 @@ export function MarketingEmailReport({
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
+            onClick={toPicker}
             className="rounded-md border border-border bg-input px-3 py-1.5 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
         </div>

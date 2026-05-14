@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { createOpportunityAction } from "../actions";
 import type { ActionResult } from "@/lib/server-action";
 import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
+import { useShowPicker } from "@/hooks/use-show-picker";
 
 interface AccountOption {
   id: string;
@@ -173,6 +174,8 @@ function Input({
   step?: string;
   required?: boolean;
 }) {
+  const datePicker = useShowPicker();
+  const isDateLike = type === "date" || type === "datetime-local";
   return (
     <label className="block text-xs uppercase tracking-wide text-muted-foreground">
       {label}
@@ -181,6 +184,7 @@ function Input({
         type={type}
         step={step}
         required={required}
+        onClick={isDateLike ? datePicker : undefined}
         className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
       />
     </label>

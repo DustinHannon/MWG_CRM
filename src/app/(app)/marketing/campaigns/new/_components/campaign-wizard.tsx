@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import {
   ArrowLeft,
   ArrowRight,
@@ -625,6 +626,7 @@ function StepSchedule({
   scheduledFor: string;
   onScheduledFor: (v: string) => void;
 }) {
+  const schedulePicker = useShowPicker();
   return (
     <section className="flex flex-col gap-4">
       <h2 className="text-base font-semibold text-foreground">
@@ -698,6 +700,7 @@ function StepSchedule({
                 type="datetime-local"
                 value={scheduledFor}
                 onChange={(e) => onScheduledFor(e.target.value)}
+                onClick={schedulePicker}
                 className="rounded-md border border-border bg-input px-3 py-1.5 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               />
               <span className="text-xs text-muted-foreground">

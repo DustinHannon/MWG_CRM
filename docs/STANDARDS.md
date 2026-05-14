@@ -597,29 +597,30 @@ Detail pages with child task collections (leads, accounts, contacts, opportuniti
 
 All `<input type="datetime-local">` and `<input type="date">` instances in the app wire an `onClick` handler that calls `inputRef.current.showPicker()`. The entire input bar opens the native picker, not only the trailing calendar icon. Behavior expectation across modern Chrome, Edge, Safari and Firefox; mobile Safari uses its native sheet picker which `showPicker()` triggers correctly.
 
-**Implementation pattern:**
+**Implementation pattern (via the canonical `useShowPicker` hook):**
 
 ```tsx
-const inputRef = useRef<HTMLInputElement>(null);
-const openPicker = () => {
-  if (!inputRef.current || !("showPicker" in inputRef.current)) return;
-  try {
-    inputRef.current.showPicker();
-  } catch {
-    // `showPicker()` throws when the input is disabled, not focused-yet,
-    // or the user-activation rules aren't met; the native click then
-    // falls through to the default icon-click behavior.
-  }
-};
+import { useShowPicker } from "@/hooks/use-show-picker";
 
-<input ref={inputRef} type="datetime-local" onClick={openPicker} {...rest} />
+const openDatePicker = useShowPicker();
+
+<input
+  type="datetime-local"
+  onClick={openDatePicker}
+  value={value}
+  onChange={(e) => setValue(e.target.value)}
+  {...rest}
+/>
 ```
+
+The hook returns a memoized click handler. The handler reads the input element from `event.currentTarget` so no `ref` is required at the call site. This deliberate "no ref" shape avoids the `react-hooks/refs` lint rule that flags ref-object property access during render.
 
 **Binding rules:**
 
-- The `showPicker()` call MUST be wrapped in `try / catch`. The DOM method throws under several user-activation edge cases and the swallow is intentional (the native fallback handles those cases).
-- The capability check `"showPicker" in inputRef.current` guards against pre-2022 browser releases. The fallback there is the default native click behavior the input already has.
-- The handler runs on the input element only — not on a wrapping label or container — so click coordinates are correctly attributed to the input.
+- The `showPicker()` call inside the hook is wrapped in `try / catch`. The DOM method throws under several user-activation edge cases and the swallow is intentional (the native fallback handles those cases).
+- The capability check `"showPicker" in event.currentTarget` inside the hook guards against pre-2022 browser releases. The fallback is the default native click behavior the input already has.
+- The handler runs on the input element only — not on a wrapping label or container — so `event.currentTarget` is correctly the `<input>` DOM node.
+- For local `Field` / `Input` / `FieldInput` wrappers in a page that dispatch to multiple input `type`s, gate the `onClick` wiring with `const isDateLike = type === "date" || type === "datetime-local";` so non-date inputs don't carry the picker handler: `onClick={isDateLike ? openDatePicker : undefined}`.
 - Long-term, migrating to a shadcn date picker for full cross-browser consistency is preferred. This contract bridges the gap until that work is scoped.
 
 **Deviations** require a `// consistency-exempt: date-input-click-to-open: <reason>` marker plus an entry in §12. The only currently-known acceptable deviation is a date input nested inside a Radix Popover or Dialog where `showPicker()` interacts badly with the floating-UI stacking — the marker documents which floating-UI surface is in play.

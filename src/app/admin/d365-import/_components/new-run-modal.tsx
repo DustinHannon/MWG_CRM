@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import * as Dialog from "@radix-ui/react-alert-dialog";
 import { Plus } from "lucide-react";
 import { D365_ENTITY_TYPES, type D365EntityType } from "@/lib/d365/types";
@@ -37,6 +38,7 @@ export function NewRunModal() {
   const [includeChildren, setIncludeChildren] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const modifiedSincePicker = useShowPicker();
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -115,6 +117,7 @@ export function NewRunModal() {
                 type="date"
                 value={modifiedSince}
                 onChange={(ev) => setModifiedSince(ev.target.value)}
+                onClick={modifiedSincePicker}
                 className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               />
             </label>

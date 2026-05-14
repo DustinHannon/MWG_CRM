@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import {
   AlertCircle,
   Check,
@@ -603,6 +604,7 @@ function FieldInput({
   readOnly: boolean;
   onChange: (v: unknown) => void;
 }) {
+  const datePicker = useShowPicker();
   const baseInput =
     "rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-70";
 
@@ -633,6 +635,7 @@ function FieldInput({
         disabled={readOnly}
         value={dateValue}
         onChange={(e) => onChange(e.target.value || null)}
+        onClick={datePicker}
         className={baseInput}
       />
     );

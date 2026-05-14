@@ -17,6 +17,7 @@ import {
 } from "@/components/standard";
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import { type TimePrefs } from "@/lib/format-time";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import type { MarketingAuditRow } from "@/lib/marketing/audit-cursor";
 
 interface AuditListClientProps {
@@ -46,6 +47,8 @@ export function MarketingAuditListClient({
 }: AuditListClientProps) {
   const [filters, setFilters] = useState<AuditFilters>(EMPTY_FILTERS);
   const [draft, setDraft] = useState<AuditFilters>(EMPTY_FILTERS);
+  const fromPicker = useShowPicker();
+  const toPicker = useShowPicker();
 
   const memoizedFilters = useMemo<AuditFilters>(() => filters, [filters]);
 
@@ -178,6 +181,7 @@ export function MarketingAuditListClient({
             type="datetime-local"
             value={draft.from}
             onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+            onClick={fromPicker}
             aria-label="From"
             className="h-11 rounded-full border border-border bg-input px-4 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3"
           />
@@ -195,6 +199,7 @@ export function MarketingAuditListClient({
             type="datetime-local"
             value={draft.to}
             onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+            onClick={toPicker}
             aria-label="To"
             className="h-11 rounded-full border border-border bg-input px-4 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3"
           />
