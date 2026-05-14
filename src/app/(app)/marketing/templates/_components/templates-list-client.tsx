@@ -126,69 +126,110 @@ export function TemplatesListClient({
         e.preventDefault();
         applyDraft();
       }}
-      className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card p-3"
+      className="space-y-3"
     >
-      <input
-        type="search"
-        value={draft.q}
-        onChange={(e) => setDraft({ ...draft, q: e.target.value })}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            applyDraft();
+      {/* Mobile chip row: edge-fade mask hints overflow when chips
+          exceed viewport width. Desktop layout (wrap, no overflow)
+          resets the mask via md:[mask-image:none]. Touch targets are
+          h-11 (44px) per WCAG 2.5.5. */}
+      <div
+        className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-3 md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]"
+      >
+        <input
+          type="search"
+          value={draft.q}
+          onChange={(e) => setDraft({ ...draft, q: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              applyDraft();
+            }
+          }}
+          placeholder="Search name or subject"
+          className="h-11 min-w-[200px] flex-1 rounded-full border border-border bg-input px-4 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3"
+        />
+        <ControlledTemplateSelect
+          value={draft.status}
+          onChange={(v) =>
+            setDraft({ ...draft, status: v as TemplateFilters["status"] })
           }
-        }}
-        placeholder="Search name or subject"
-        className="min-w-[200px] flex-1 rounded-md border border-border bg-input px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-      />
-      <select
-        value={draft.status}
-        onChange={(e) =>
-          setDraft({
-            ...draft,
-            status: e.target.value as TemplateFilters["status"],
-          })
-        }
-        className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-      >
-        {STATUS_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <select
-        value={draft.scope}
-        onChange={(e) =>
-          setDraft({
-            ...draft,
-            scope: e.target.value as TemplateFilters["scope"],
-          })
-        }
-        className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-      >
-        {SCOPE_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <button
-        type="submit"
-        className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-      >
-        Apply
-      </button>
-      {filtersAreModified ? (
+          options={STATUS_OPTIONS}
+          isSet={draft.status !== "all"}
+        />
+        <ControlledTemplateSelect
+          value={draft.scope}
+          onChange={(v) =>
+            setDraft({ ...draft, scope: v as TemplateFilters["scope"] })
+          }
+          options={SCOPE_OPTIONS}
+          isSet={draft.scope !== "all"}
+        />
         <button
-          type="button"
-          onClick={clearFilters}
-          className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+          type="submit"
+          className="hidden h-11 shrink-0 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 md:inline-flex md:items-center"
         >
-          Clear
+          Apply
         </button>
-      ) : null}
+        {filtersAreModified ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="h-11 shrink-0 rounded-full px-4 text-sm text-muted-foreground hover:text-foreground/90 md:rounded-md md:border md:border-border md:bg-muted/40"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
     </form>
+  );
+
+  // Desktop column header. Renders inside the horizontal-scroll wrapper
+  // so it stays aligned with row cells when the table is wider than the
+  // viewport. Non-sticky (the `overflow-x: auto` parent creates a
+  // scrolling-mechanism context that breaks viewport-scoped sticky).
+  const TEMPLATE_COLS = 6;
+  const columnHeaderSlot = (
+    <div
+      className="flex items-stretch text-xs font-medium uppercase tracking-wide text-muted-foreground"
+      style={{ minWidth: `${TEMPLATE_COLS * 140 + 40}px` }}
+    >
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
+        Name
+      </div>
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 md:block"
+        style={{ flexBasis: "140px" }}
+      >
+        Subject
+      </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
+        Status
+      </div>
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 lg:block"
+        style={{ flexBasis: "140px" }}
+      >
+        Visibility
+      </div>
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 lg:block"
+        style={{ flexBasis: "140px" }}
+      >
+        Created by
+      </div>
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
+        Updated
+      </div>
+    </div>
   );
 
   const headerActions = canCreate ? (
@@ -230,7 +271,38 @@ export function TemplatesListClient({
         actions: headerActions,
       }}
       filtersSlot={filtersSlot}
+      columnHeaderSlot={columnHeaderSlot}
     />
+  );
+}
+
+function ControlledTemplateSelect({
+  value,
+  onChange,
+  options,
+  isSet,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: ReadonlyArray<{ value: string; label: string }>;
+  isSet: boolean;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={
+        isSet
+          ? "h-11 min-w-0 shrink-0 appearance-none rounded-full border border-primary/30 bg-primary/15 px-4 pr-8 text-sm font-medium text-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3 md:pr-7"
+          : "h-11 min-w-0 shrink-0 appearance-none rounded-full border border-border bg-muted/40 px-4 pr-8 text-sm font-medium text-muted-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3 md:pr-7"
+      }
+    >
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -241,12 +313,20 @@ function TemplateDesktopRow({
   template: MarketingTemplateRow;
   timePrefs: TimePrefs;
 }) {
+  // 6 cells matching columnHeaderSlot. flex-basis 140px per cell + row
+  // min-width keep cells from squeezing below 140px when the table is
+  // wider than the viewport (horizontal-scroll wrapper provides scroll).
+  const minRowWidth = 6 * 140 + 40;
   return (
     <div
-      className="flex items-center gap-4 border-b border-border bg-card px-4 py-3 text-sm transition hover:bg-accent/20"
+      className="group flex items-stretch border-b border-border/60 bg-card text-sm transition hover:bg-muted/40"
       data-row-flash="new"
+      style={{ minWidth: `${minRowWidth}px` }}
     >
-      <div className="min-w-0 flex-1">
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
         <Link
           href={`/marketing/templates/${template.id}`}
           className="font-medium text-foreground hover:underline"
@@ -254,19 +334,34 @@ function TemplateDesktopRow({
           {template.name}
         </Link>
       </div>
-      <div className="hidden min-w-0 flex-1 truncate text-muted-foreground md:block">
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground md:block"
+        style={{ flexBasis: "140px" }}
+      >
         {template.subject}
       </div>
-      <div className="w-24 shrink-0">
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3"
+        style={{ flexBasis: "140px" }}
+      >
         <StatusBadge status={template.status} />
       </div>
-      <div className="hidden w-28 shrink-0 lg:block">
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 lg:block"
+        style={{ flexBasis: "140px" }}
+      >
         <ScopeBadge scope={template.scope} />
       </div>
-      <div className="hidden w-40 shrink-0 truncate text-muted-foreground lg:block">
+      <div
+        className="hidden min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground lg:block"
+        style={{ flexBasis: "140px" }}
+      >
         {template.createdByName ?? "—"}
       </div>
-      <div className="w-32 shrink-0 text-muted-foreground">
+      <div
+        className="min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground"
+        style={{ flexBasis: "140px" }}
+      >
         <UserTimeClient value={template.updatedAt} prefs={timePrefs} />
       </div>
     </div>
