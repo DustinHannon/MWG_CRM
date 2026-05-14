@@ -510,7 +510,14 @@ export async function cancelCampaignAction(
         );
       }
 
-      await db
+      // Atomic transition: status guard in the WHERE closes the
+      // TOCTOU window between `loadCampaign` above and this UPDATE.
+      // Without it, a cancel click that races with the cron picker
+      // (transitioning scheduled -> sending) or another writer can
+      // silently flip a `sending`/`sent`/`failed` campaign to
+      // `cancelled` mid-flight — corrupting both the lifecycle state
+      // and any in-flight SendGrid batch.
+      const cancelled = await db
         .update(marketingCampaigns)
         .set({
           status: "cancelled",
@@ -521,8 +528,16 @@ export async function cancelCampaignAction(
           and(
             eq(marketingCampaigns.id, parsedId),
             eq(marketingCampaigns.isDeleted, false),
+            inArray(marketingCampaigns.status, ["draft", "scheduled"]),
           ),
+        )
+        .returning({ id: marketingCampaigns.id });
+
+      if (cancelled.length === 0) {
+        throw new ConflictError(
+          "This campaign is no longer eligible for cancellation (it may have already started sending).",
         );
+      }
 
       await writeAudit({
         actorId: user.id,
@@ -690,7 +705,12 @@ export async function deleteCampaignAction(
         );
       }
 
-      await db
+      // Atomic soft-delete: status guard in the WHERE closes the
+      // TOCTOU window between `loadCampaign` above and this UPDATE.
+      // Without it, a delete click that races with send-now /
+      // schedule (transitioning draft -> scheduled -> sending) can
+      // silently mark an in-flight campaign as deleted.
+      const deleted = await db
         .update(marketingCampaigns)
         .set({
           isDeleted: true,
@@ -699,7 +719,20 @@ export async function deleteCampaignAction(
           updatedAt: new Date(),
           updatedById: user.id,
         })
-        .where(eq(marketingCampaigns.id, parsedId));
+        .where(
+          and(
+            eq(marketingCampaigns.id, parsedId),
+            eq(marketingCampaigns.isDeleted, false),
+            inArray(marketingCampaigns.status, ["draft", "cancelled"]),
+          ),
+        )
+        .returning({ id: marketingCampaigns.id });
+
+      if (deleted.length === 0) {
+        throw new ConflictError(
+          "This campaign is no longer eligible for deletion.",
+        );
+      }
 
       await writeAudit({
         actorId: user.id,

@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { apiKeys } from "@/db/schema/api-keys";
 import { writeAudit } from "@/lib/audit";
@@ -149,14 +149,24 @@ export async function revokeApiKeyAction(
     if (row.revokedAt) {
       throw new ConflictError("Key is already revoked");
     }
-    await db
+    // Atomic claim: only revoke a row that's still unrevoked. The
+    // `revoked_at IS NULL` guard in the WHERE closes the TOCTOU
+    // window between the SELECT above and this UPDATE so two
+    // concurrent revoke clicks resolve to exactly one winner; the
+    // loser sees ConflictError instead of silently overwriting
+    // revoked_by_id (and producing a duplicate api_key.revoke audit).
+    const updated = await db
       .update(apiKeys)
       .set({
         revokedAt: sql`now()`,
         revokedById: session.id,
         updatedAt: sql`now()`,
       })
-      .where(eq(apiKeys.id, id));
+      .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt)))
+      .returning({ id: apiKeys.id });
+    if (updated.length === 0) {
+      throw new ConflictError("Key is already revoked");
+    }
     await writeAudit({
       actorId: session.id,
       action: "api_key.revoke",

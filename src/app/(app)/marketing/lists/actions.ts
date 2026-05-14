@@ -243,7 +243,13 @@ export async function updateListAction(input: {
     // OCC: when caller passes `expectedVersion`, the
     // UPDATE atomically requires `version = expectedVersion` AND bumps
     // it. 0 rows affected ⇒ another writer beat us → ConflictError.
-    const whereClauses = [eq(marketingLists.id, parsed.data.id)];
+    // `isDeleted=false` clause prevents a stale edit form from silently
+    // overwriting a row that was archived between load and submit
+    // (matches the leads.ts pattern at lines 498-502).
+    const whereClauses = [
+      eq(marketingLists.id, parsed.data.id),
+      eq(marketingLists.isDeleted, false),
+    ];
     if (parsed.data.expectedVersion !== undefined) {
       whereClauses.push(
         eq(marketingLists.version, parsed.data.expectedVersion),

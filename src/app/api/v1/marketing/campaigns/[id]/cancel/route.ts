@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
@@ -46,14 +46,34 @@ export const POST = withApi<{ id: string }>(
       );
     }
 
-    await db
+    // Atomic transition: status guard in the WHERE closes the
+    // TOCTOU window between the SELECT above and this UPDATE.
+    // Without it, a cancel that races with the cron picker
+    // (transitioning scheduled -> sending) can silently flip a
+    // `sending`/`sent`/`failed` campaign to `cancelled` mid-flight.
+    const cancelled = await db
       .update(marketingCampaigns)
       .set({
         status: "cancelled",
         updatedAt: new Date(),
         updatedById: key.createdById,
       })
-      .where(eq(marketingCampaigns.id, idParse.data.id));
+      .where(
+        and(
+          eq(marketingCampaigns.id, idParse.data.id),
+          eq(marketingCampaigns.isDeleted, false),
+          inArray(marketingCampaigns.status, ["draft", "scheduled"]),
+        ),
+      )
+      .returning({ id: marketingCampaigns.id });
+
+    if (cancelled.length === 0) {
+      return errorResponse(
+        409,
+        "CONFLICT",
+        "This campaign is no longer eligible for cancellation (it may have already started sending).",
+      );
+    }
 
     await writeAudit({
       actorId: key.createdById,
