@@ -58,6 +58,39 @@ import type { SessionUser } from "@/lib/auth-helpers";
  */
 export const BULK_SCOPE_EXPANSION_CAP = 5_000;
 
+/**
+ * Cursor stability contract for bulk-filtered expansion:
+ *
+ * The page walker uses `lastActivityAt DESC, id DESC` (and the
+ * per-entity equivalents) for cursor pagination. The walk is NOT
+ * a transactional snapshot — records can be created, updated, or
+ * soft-deleted concurrently with the walk. Specifically:
+ *
+ * - A new record matching the filter created mid-walk that sorts
+ *   before the current cursor is silently skipped (it sat outside
+ *   the cursor's pagination window when the page was fetched).
+ * - A record whose sort key (lastActivityAt) is bumped to a value
+ *   newer than the current cursor mid-walk is also skipped — the
+ *   cursor WHERE predicate excludes it.
+ * - A record whose sort key is moved earlier mid-walk may appear
+ *   twice; `walkView` does not dedup, but the downstream bulk
+ *   action (bulkTagEntities, etc.) calls `Array.from(new Set(...))`
+ *   so duplicates collapse to a single mutation.
+ * - A record hard-deleted mid-walk is omitted from subsequent pages
+ *   (no row exists to fetch); already-collected ids that get
+ *   hard-deleted before the bulk mutation produce a FK error that
+ *   rolls back the whole transaction (per `bulkTagEntities`).
+ * - A record soft-deleted mid-walk follows the same omit-from-page
+ *   rule (the view's `is_deleted=false` filter excludes it).
+ *
+ * The contract: best-effort eventual consistency over the matching
+ * set at walk time. Bulk operations are inherently best-effort
+ * against concurrent edits; the consistency guarantee is "every id
+ * in the expansion was a match at SOME point during the walk." If
+ * stricter consistency is required, the caller should use the
+ * explicit `ids` scope shape instead of `filtered`.
+ */
+
 const PAGE_SIZE = 200;
 
 /**
