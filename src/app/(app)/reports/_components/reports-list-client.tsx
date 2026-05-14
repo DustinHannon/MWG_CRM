@@ -1,3 +1,12 @@
+// consistency-exempt: list-page-pattern: card-grid-list — reports
+// renders as a card grid (GlassCard per row), not a flex-row table
+// layout, because reports are visual catalog entries (icon + title +
+// description + metadata) rather than tabular records. renderRow and
+// renderCard both produce <ReportCard /> with no width math; no
+// columnHeaderSlot (no columns). The page also surfaces "Mine only" /
+// "Shared only" filter scopes in place of the canonical owner-based
+// ownership filter (CLAUDE.md §1.8 documented carveout). Built-in
+// reports stay outside this client in a separate collapsible section.
 "use client";
 
 import Link from "next/link";
@@ -109,7 +118,7 @@ export function ReportsListClient() {
         value={draft.q}
         onChange={(e) => setDraft({ ...draft, q: e.target.value })}
         placeholder="Search by name or description"
-        className="min-w-[220px] flex-1 rounded-md border border-border bg-input px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+        className="h-11 min-w-[220px] flex-1 rounded-md border border-border bg-input px-3 text-sm placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:h-9 md:py-1.5"
       />
       <select
         value={draft.scope}
