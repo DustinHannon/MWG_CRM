@@ -103,17 +103,34 @@ export async function writeAudit(args: {
 }
 
 /**
+ * F-Ω-5: chunk size for {@link writeAuditBatch}. Beyond this, the
+ * batch is broken into independent INSERTs so a single bad row (jsonb
+ * size violation, target_id length, etc.) only poisons its chunk's
+ * audit rows instead of the entire batch.
+ *
+ * Sized to keep us well under Postgres's 65,535 bind-parameter limit
+ * (9 columns × 500 rows = 4,500 params per chunk) and to keep network
+ * round-trips bounded for bulk operations that hit the 5,000-record
+ * BULK_SCOPE_EXPANSION_CAP (10 chunks per max bulk operation).
+ */
+const AUDIT_BATCH_CHUNK_SIZE = 500;
+
+/**
  * Append a batch of audit events written by the same actor in one
  * logical operation (bulk tag apply, bulk archive, bulk reassign,
- * etc.) as a single INSERT. Same best-effort contract as
- * {@link writeAudit}: a write failure does NOT block the primary
- * mutation, it logs and returns.
+ * etc.). Chunked into single-INSERT statements of
+ * {@link AUDIT_BATCH_CHUNK_SIZE} rows. Same best-effort contract as
+ * {@link writeAudit}: a chunk-INSERT failure does NOT block the
+ * primary mutation; it logs the chunk's failure and continues with
+ * the remaining chunks so a single bad row (constraint violation,
+ * jsonb size, etc.) only loses its chunk's forensic trail instead of
+ * the entire batch.
  *
- * Resolves `actorEmailSnapshot` once (one extra round trip rather than
- * N) when omitted; picks up the active request id from
- * AsyncLocalStorage. Each event carries its own action / targetType /
- * targetId / before / after — the batch is a perf optimization, not
- * an aggregation: each row remains independently queryable.
+ * Resolves `actorEmailSnapshot` once (one extra round trip rather
+ * than N) when omitted; picks up the active request id from
+ * AsyncLocalStorage. Each event carries its own action / targetType
+ * / targetId / before / after — the batch is a perf optimization,
+ * not an aggregation: each row remains independently queryable.
  *
  * Empty `events` is a no-op.
  */
@@ -131,19 +148,30 @@ export async function writeAuditBatch(args: {
   ipAddress?: string;
 }): Promise<void> {
   if (args.events.length === 0) return;
-  try {
-    let snapshot = args.actorEmailSnapshot ?? null;
-    if (snapshot === null && args.actorId) {
+  let snapshot = args.actorEmailSnapshot ?? null;
+  if (snapshot === null && args.actorId) {
+    try {
       const [u] = await db
         .select({ email: users.email })
         .from(users)
         .where(eq(users.id, args.actorId))
         .limit(1);
       snapshot = u?.email ?? null;
+    } catch (err) {
+      // Snapshot lookup failure is non-fatal — we'll insert with null
+      // snapshot so the forensic trail still lands.
+      logger.warn("audit.batch_actor_lookup_failed", {
+        actorId: args.actorId,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
     }
-    const requestId = args.requestId ?? getRequestId() ?? null;
-    const ipAddress = args.ipAddress ?? null;
-    const rows = args.events.map((e) => ({
+  }
+  const requestId = args.requestId ?? getRequestId() ?? null;
+  const ipAddress = args.ipAddress ?? null;
+
+  for (let i = 0; i < args.events.length; i += AUDIT_BATCH_CHUNK_SIZE) {
+    const chunk = args.events.slice(i, i + AUDIT_BATCH_CHUNK_SIZE);
+    const rows = chunk.map((e) => ({
       actorId: args.actorId,
       actorEmailSnapshot: snapshot,
       action: e.action,
@@ -154,13 +182,20 @@ export async function writeAuditBatch(args: {
       requestId,
       ipAddress,
     }));
-    await db.insert(auditLog).values(rows);
-  } catch (err) {
-    logger.error("audit.batch_write_failed", {
-      actorId: args.actorId,
-      sampleAction: args.events[0]?.action ?? null,
-      eventCount: args.events.length,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
+    try {
+      await db.insert(auditLog).values(rows);
+    } catch (err) {
+      // Per-chunk best-effort: log this chunk's failure and continue
+      // with the next. The primary mutation already committed before
+      // this helper was invoked; we never block on audit emission.
+      logger.error("audit.batch_write_failed", {
+        actorId: args.actorId,
+        sampleAction: chunk[0]?.action ?? null,
+        chunkIndex: i / AUDIT_BATCH_CHUNK_SIZE,
+        chunkSize: chunk.length,
+        totalEvents: args.events.length,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
