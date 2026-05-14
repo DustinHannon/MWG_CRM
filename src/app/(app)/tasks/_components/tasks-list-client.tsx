@@ -152,33 +152,27 @@ const DUE_OPTIONS = [
 ] as const;
 
 /**
- * Build the initial client filter state from the active view + any
- * overlay URL params. The /tasks server shell pre-resolves the view
- * but not the URL overlays — the client owns those after mount.
+ * Empty client filter state — the canonical "no overlay applied"
+ * baseline. The /api/tasks/list route applies the active view's
+ * stored filters server-side when the request carries no overlay
+ * params, so empty client state renders exactly the saved view.
  *
- * The previous /tasks page URL-form-submit pattern is deprecated;
- * existing URLs with these params are honored on first mount so
- * deep-linked filter URLs continue to work, but subsequent edits
- * round-trip through client state only.
+ * Mirrors the leads pattern (EMPTY_FILTERS in leads-list-client.tsx):
+ * client filter state represents user-applied overlays on top of the
+ * view's baseline, not the view's baseline itself. Initializing from
+ * the view's filters caused the MODIFIED badge to light up on every
+ * fresh load because any non-empty filter value flagged as modified.
  */
-function deriveInitialFilters(
-  activeView: TaskViewDefinition,
-  sp: URLSearchParams,
-): TaskFilters {
-  const vf = activeView.filters;
-  const csv = (s: string | null, fallback: string[] | undefined) =>
-    s ? s : fallback?.join(",") ?? "";
-  return {
-    q: sp.get("q") ?? vf.q ?? "",
-    assignee: sp.get("assignee") ?? vf.assignee ?? "",
-    status: csv(sp.get("status"), vf.status),
-    priority: csv(sp.get("priority"), vf.priority),
-    relation: sp.get("relation") ?? vf.relation ?? "",
-    related: sp.get("related") ?? vf.relatedEntity ?? "",
-    due: sp.get("due") ?? vf.dueRange ?? "",
-    tag: sp.get("tag") ?? vf.tags?.join(",") ?? "",
-  };
-}
+const EMPTY_TASK_FILTERS: TaskFilters = {
+  q: "",
+  assignee: "",
+  status: "",
+  priority: "",
+  relation: "",
+  related: "",
+  due: "",
+  tag: "",
+};
 
 /**
  * Tasks list — infinite-scroll client.
@@ -251,10 +245,13 @@ function TasksListInner({
     return activeView.sort;
   }, [sortField, sortDir, activeView.sort]);
 
-  const [filters, setFilters] = useState<TaskFilters>(() =>
-    deriveInitialFilters(activeView, searchParams),
-  );
-  const [draft, setDraft] = useState<TaskFilters>(filters);
+  // Initialize filters to fully empty (mirrors leads). The API
+  // resolves the active view's stored filters server-side when the
+  // request carries no overlay, so empty client state renders the
+  // saved view exactly. Any non-empty value here represents a true
+  // user overlay that warrants the MODIFIED badge.
+  const [filters, setFilters] = useState<TaskFilters>(EMPTY_TASK_FILTERS);
+  const [draft, setDraft] = useState<TaskFilters>(EMPTY_TASK_FILTERS);
   const [loadedIds, setLoadedIds] = useState<string[]>([]);
   const { dispatch } = useBulkSelection();
 
@@ -436,18 +433,8 @@ function TasksListInner({
     dispatch({ type: "clear" });
   };
   const clearFilters = () => {
-    const empty: TaskFilters = {
-      q: "",
-      assignee: "",
-      status: "",
-      priority: "",
-      relation: "",
-      related: "",
-      due: "",
-      tag: "",
-    };
-    setDraft(empty);
-    setFilters(empty);
+    setDraft(EMPTY_TASK_FILTERS);
+    setFilters(EMPTY_TASK_FILTERS);
     clearSelection();
     dispatch({ type: "clear" });
   };
@@ -468,7 +455,15 @@ function TasksListInner({
   const columnsModified =
     activeColumns.length !== baseColumns.length ||
     activeColumns.some((c, i) => baseColumns[i] !== c);
-  const sortModified = Boolean(sortField) || Boolean(sortDir);
+  // Sort drift compares the URL's sort/dir against the active view's
+  // default sort — a URL that round-trips the view's default
+  // (e.g. ?sort=dueAt&dir=asc on builtin:my-open) is NOT modified.
+  // The prior `Boolean(sortField) || Boolean(sortDir)` over-reported
+  // because the sortable column headers emit those params on every
+  // click, including reclick of the default-sorted column.
+  const sortModified =
+    (sortField !== null && sortField !== activeView.sort.field) ||
+    (sortDir !== null && sortDir !== activeView.sort.direction);
   const viewModified = columnsModified || filtersAreModified || sortModified;
   const modifiedFields: string[] = [];
   if (columnsModified) modifiedFields.push("columns");

@@ -46,9 +46,14 @@ export const dynamic = "force-dynamic";
  *     headers (kept URL-state to preserve existing UX).
  *
  * Everything else — q / status / priority / assignee / relation /
- * related / due / tag — lives in client state. Old URLs with those
- * params still work on first mount (deriveInitialFilters honors
- * them); subsequent edits round-trip through client state only.
+ * related / due / tag — lives in client state, initialized empty
+ * (mirrors the leads pattern). The /api/tasks/list route applies the
+ * active view's stored filters server-side when the request carries
+ * no overlay, so empty client state renders the saved view exactly.
+ * Legacy deep-link URLs with these params are no longer honored on
+ * first mount (the TaskViewSelector's pick(id) also drops them on
+ * view switch); this matches leads / accounts / contacts /
+ * opportunities and keeps the MODIFIED badge honest.
  */
 export default async function TasksPage({
   searchParams,
