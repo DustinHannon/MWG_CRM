@@ -35,6 +35,14 @@ const envSchema = z.object({
   // Database (Supabase Postgres)
   POSTGRES_URL: z.string().url("POSTGRES_URL must be a postgres connection URL"),
   POSTGRES_URL_NON_POOLING: z.string().url().optional(),
+  // Dedicated connection for the durable job-queue worker ONLY
+  // (src/lib/jobs/*). Isolates the every-N-min cron from the app's
+  // pooled client so claim transactions can't starve request traffic.
+  // Falls back to POSTGRES_URL_NON_POOLING (Supavisor session pooler —
+  // postgres-js-safe, IPv4) then POSTGRES_URL. Point at the true
+  // direct connection (db.<ref>.supabase.co:5432, needs Supabase IPv4
+  // add-on) for full Supavisor-pool isolation — no code change needed.
+  JOBS_DATABASE_URL: z.string().url().optional(),
 
   // Vercel Blob
   BLOB_READ_WRITE_TOKEN: z.string().min(10).optional(),

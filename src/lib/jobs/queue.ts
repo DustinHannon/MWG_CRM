@@ -1,6 +1,6 @@
 import "server-only";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { jobsDb as db } from "./db";
 import { jobQueue, jobQueueDeadLetter } from "@/db/schema/jobs";
 import { writeAudit } from "@/lib/audit";
 import { SYSTEM_SENTINEL_USER_ID } from "@/lib/constants/system-users";
