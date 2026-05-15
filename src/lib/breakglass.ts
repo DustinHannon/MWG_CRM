@@ -87,10 +87,11 @@ export async function ensureBreakglass(): Promise<void> {
       canViewReports: true,
     });
 
-    // every user (incl. breakglass) gets a preferences row.
+    // every user (incl. breakglass) gets a preferences row. New
+    // accounts default to dark theme.
     await tx
       .insert(userPreferences)
-      .values({ userId: id })
+      .values({ userId: id, theme: "dark" })
       .onConflictDoNothing({ target: userPreferences.userId });
 
     insertedId = id;

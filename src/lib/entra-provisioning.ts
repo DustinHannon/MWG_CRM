@@ -242,9 +242,11 @@ export async function provisionEntraUser(
 
     // every user gets a preferences row on provisioning. Idempotent
     // ON CONFLICT so a backfilled row from migration time stays put.
+    // New users default to dark theme; ON CONFLICT DO NOTHING means an
+    // existing user re-authing keeps whatever theme they chose.
     await tx
       .insert(userPreferences)
-      .values({ userId: row.id })
+      .values({ userId: row.id, theme: "dark" })
       .onConflictDoNothing({ target: userPreferences.userId });
 
     return row;
