@@ -165,9 +165,11 @@ export async function GET(req: Request): Promise<Response> {
       errorStack: err instanceof Error ? err.stack : undefined,
     });
     summary.durationMs = Date.now() - startedAt;
-    await emitRunAudit(summary, /* ok */ false);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const errorStack = err instanceof Error ? err.stack : undefined;
+    await emitRunAudit(summary, /* ok */ false, errorMessage, errorStack);
     return NextResponse.json(
-      { ok: false, error: "Worker failed", workerId },
+      { ok: false, error: "Worker failed", workerId, errorMessage },
       { status: 500 },
     );
   }
@@ -288,7 +290,12 @@ function truncate(s: string, max: number): string {
  * rather than one row per job. Forensic detail per job lives in the
  * `job_queue` / `job_queue_dead_letter` rows themselves.
  */
-async function emitRunAudit(summary: RunSummary, ok: boolean): Promise<void> {
+async function emitRunAudit(
+  summary: RunSummary,
+  ok: boolean,
+  errorMessage?: string,
+  errorStack?: string,
+): Promise<void> {
   await writeSystemAudit({
     actorEmailSnapshot: "system@cron",
     action: ok ? "jobs.processed" : "jobs.processed.failed",
@@ -302,6 +309,8 @@ async function emitRunAudit(summary: RunSummary, ok: boolean): Promise<void> {
       dead_lettered: summary.deadLettered,
       duration_ms: summary.durationMs,
       budget_exhausted: summary.budgetExhausted,
+      ...(errorMessage ? { error_message: errorMessage } : {}),
+      ...(errorStack ? { error_stack: errorStack.split("\n").slice(0, 8).join("\n") } : {}),
     },
   });
 }
