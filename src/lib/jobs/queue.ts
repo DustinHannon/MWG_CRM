@@ -328,11 +328,19 @@ export async function claimNextJobs(
     // Stage 1: SELECT FOR UPDATE SKIP LOCKED.
     // The `claim_idx` partial index on (kind, next_attempt_at) WHERE
     // status='pending' covers this scan exactly.
+    // Drizzle's `sql` template flattens array parameters into individual
+    // scalars, so `kind = ANY(${kinds})` becomes `ANY($1)` with $1 bound
+    // to a single string — Postgres rejects it as type mismatch. Use IN
+    // with an explicit join of per-element placeholders instead.
+    const kindList = sql.join(
+      kinds.map((k) => sql`${k}`),
+      sql`, `,
+    );
     const eligible = await tx.execute<{ id: string }>(sql`
       SELECT id
       FROM job_queue
       WHERE status = 'pending'
-        AND kind = ANY(${kinds})
+        AND kind IN (${kindList})
         AND next_attempt_at <= now()
       ORDER BY next_attempt_at ASC, enqueued_at ASC
       LIMIT ${clampedLimit}
