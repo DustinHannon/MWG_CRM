@@ -339,7 +339,7 @@ export async function listTasksForUser(args: {
         SELECT 1 FROM task_tags tt
         JOIN tags t ON t.id = tt.tag_id
         WHERE tt.task_id = ${tasks.id} AND lower(t.name) = ANY(
-          SELECT lower(x) FROM unnest(${args.tags}::text[]) AS x
+          SELECT lower(x) FROM unnest(ARRAY[${sql.join(args.tags.map((t) => sql`${t}`), sql`, `)}]::text[]) AS x
         )
       )`,
     );

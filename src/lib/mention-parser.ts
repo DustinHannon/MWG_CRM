@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { userPreferences } from "@/db/schema/views";
@@ -44,9 +44,10 @@ export async function filterMentionsByPref(
     .select({ userId: userPreferences.userId })
     .from(userPreferences)
     .where(
-      sql`${userPreferences.userId} = ANY(${userIds}::uuid[]) AND ${userPreferences.notifyMentions} = true`,
+      and(
+        inArray(userPreferences.userId, userIds),
+        eq(userPreferences.notifyMentions, true),
+      ),
     );
   return rows.map((r) => r.userId);
 }
-
-void eq;

@@ -559,7 +559,7 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
         SELECT 1 FROM lead_tags lt
         JOIN tags t ON t.id = lt.tag_id
         WHERE lt.lead_id = ${leads.id} AND lower(t.name) = ANY(
-          SELECT lower(x) FROM unnest(${merged.tags}::text[]) AS x
+          SELECT lower(x) FROM unnest(ARRAY[${sql.join(merged.tags.map((t) => sql`${t}`), sql`, `)}]::text[]) AS x
         )
       )`,
     );

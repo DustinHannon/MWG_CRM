@@ -527,7 +527,7 @@ export async function runAccountView(
         SELECT 1 FROM account_tags at
         JOIN tags t ON t.id = at.tag_id
         WHERE at.account_id = ${crmAccounts.id} AND lower(t.name) = ANY(
-          SELECT lower(x) FROM unnest(${merged.tags}::text[]) AS x
+          SELECT lower(x) FROM unnest(ARRAY[${sql.join(merged.tags.map((t) => sql`${t}`), sql`, `)}]::text[]) AS x
         )
       )`,
     );

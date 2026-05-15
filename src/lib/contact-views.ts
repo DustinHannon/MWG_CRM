@@ -534,7 +534,7 @@ export async function runContactView(
         SELECT 1 FROM contact_tags ct
         JOIN tags t ON t.id = ct.tag_id
         WHERE ct.contact_id = ${contacts.id} AND lower(t.name) = ANY(
-          SELECT lower(x) FROM unnest(${merged.tags}::text[]) AS x
+          SELECT lower(x) FROM unnest(ARRAY[${sql.join(merged.tags.map((t) => sql`${t}`), sql`, `)}]::text[]) AS x
         )
       )`,
     );

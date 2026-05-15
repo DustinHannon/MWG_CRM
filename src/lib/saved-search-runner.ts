@@ -98,17 +98,17 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
       if (filters.status && filters.status.length > 0) {
         // status enum, raw cast
         wheres.push(
-          sql`${leads.status}::text = ANY(${filters.status}::text[])`,
+          sql`${leads.status}::text = ANY(ARRAY[${sql.join(filters.status.map((v) => sql`${v}`), sql`, `)}]::text[])`,
         );
       }
       if (filters.rating && filters.rating.length > 0) {
         wheres.push(
-          sql`${leads.rating}::text = ANY(${filters.rating}::text[])`,
+          sql`${leads.rating}::text = ANY(ARRAY[${sql.join(filters.rating.map((v) => sql`${v}`), sql`, `)}]::text[])`,
         );
       }
       if (filters.source && filters.source.length > 0) {
         wheres.push(
-          sql`${leads.source}::text = ANY(${filters.source}::text[])`,
+          sql`${leads.source}::text = ANY(ARRAY[${sql.join(filters.source.map((v) => sql`${v}`), sql`, `)}]::text[])`,
         );
       }
       if (sub.scope === "mine" && !sub.isAdmin && !sub.canViewAllRecords) {

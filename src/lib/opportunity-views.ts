@@ -577,7 +577,7 @@ export async function runOpportunityView(
         SELECT 1 FROM opportunity_tags ot
         JOIN tags t ON t.id = ot.tag_id
         WHERE ot.opportunity_id = ${opportunities.id} AND lower(t.name) = ANY(
-          SELECT lower(x) FROM unnest(${merged.tags}::text[]) AS x
+          SELECT lower(x) FROM unnest(ARRAY[${sql.join(merged.tags.map((t) => sql`${t}`), sql`, `)}]::text[]) AS x
         )
       )`,
     );
