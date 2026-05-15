@@ -33,3 +33,5 @@ export * from "./list-import-runs";
 export * from "./domain-verification";
 // Durable async job queue (F-Ω-8)
 export * from "./jobs";
+// Supabase Prometheus metrics scrape (admin dashboard)
+export * from "./supabase-metrics";

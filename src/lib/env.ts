@@ -193,6 +193,14 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(60),
+
+  // Supabase Prometheus metrics scrape (admin Supabase Metrics dashboard).
+  // Both optional so a missing secret only disables the scrape; the rest
+  // of the app boots regardless. The scrape handler logs `env_missing`
+  // and returns 200 ok:false when either is unset — no cron retries, no
+  // page break.
+  SUPABASE_METRICS_PROJECT_REF: z.string().optional(),
+  SUPABASE_METRICS_SECRET: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
