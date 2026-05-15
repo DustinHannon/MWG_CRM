@@ -277,7 +277,10 @@ async function buildHistorySnapshot(
     FROM supabase_metrics
     WHERE time >= ${since.toISOString()}::timestamptz
       AND time <= ${now.toISOString()}::timestamptz
-      AND metric_name = ANY(${allowedNames}::text[])
+      AND metric_name IN (${sql.join(
+        allowedNames.map((n) => sql`${n}`),
+        sql`, `,
+      )})
     GROUP BY 1, 2, 3
     ORDER BY 2, 3, 1
   `);
