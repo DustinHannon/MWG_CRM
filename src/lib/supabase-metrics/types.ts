@@ -26,6 +26,17 @@ export interface CurrentSnapshot {
   swapTotalBytes: number;
   rootFsTotalBytes: number;
   dataFsTotalBytes: number;
+  // Connection-pool snapshot (Supavisor + Postgres). Surfaces "how
+  // many of each, out of the max" — directly motivated by the
+  // transaction-pool incident. Any field may be 0 if the Supabase
+  // metrics endpoint doesn't emit that series (beta endpoint).
+  poolSize: number;
+  supavisorClientsActive: number;
+  supavisorClientsWaiting: number;
+  supavisorServersActive: number;
+  supavisorServersIdle: number;
+  pgBackends: number;
+  pgMaxConnections: number;
 }
 
 export interface CpuPoint {
@@ -91,11 +102,30 @@ export interface ReplicationLagPoint {
   bytes: number | null;
 }
 
+export interface PoolPoint {
+  t: string;
+  /** Supavisor: client connections currently executing a transaction. */
+  clientsActive: number;
+  /** Supavisor: clients parked waiting for a backend (saturation signal). */
+  clientsWaiting: number;
+  /** Supavisor: backend connections currently checked out to a client. */
+  serversActive: number;
+  /** Supavisor: backend connections idle in the pool, reusable. */
+  serversIdle: number;
+  /** Supavisor configured pool_size ceiling for this user+db+mode. */
+  poolSize: number;
+  /** Postgres pg_stat_database.numbackends — total live backends. */
+  pgBackends: number;
+  /** Postgres max_connections setting (instance-wide ceiling). */
+  pgMaxConnections: number;
+}
+
 export interface HistorySnapshot {
   cpu: CpuPoint[];
   memory: MemoryPoint[];
   network: NetworkPoint[];
   disk: DiskPoint[];
+  pool: PoolPoint[];
   postgres: {
     connections: ConnectionsPoint[];
     transactions: TransactionsPoint[];
