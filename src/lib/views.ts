@@ -625,7 +625,24 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
         return leads.lastActivityAt;
     }
   })();
-  const order = sort.direction === "asc" ? asc(sortColumn) : desc(sortColumn);
+  // `leads.lastActivityAt` is the only nullable sort column. Postgres's
+  // default for `DESC` is `NULLS FIRST`, which clashes with both the
+  // expected user behavior (no-activity rows belong at the BOTTOM of a
+  // "most-recent activity" view) and the composite index
+  // `leads_last_activity_id_idx (last_activity_at DESC NULLS LAST, id DESC)`.
+  // Without the explicit override, page 1 fills entirely with NULL rows
+  // (89 of 113) and the cursor predicate at NULL never reaches the 24
+  // non-null rows — producing the 89/112 discrepancy that surfaced
+  // alongside F-89. Non-nullable sort columns (createdAt, updatedAt,
+  // status, etc.) fall through to plain asc/desc.
+  const order =
+    sort.field === "lastActivityAt"
+      ? sort.direction === "asc"
+        ? sql`${leads.lastActivityAt} ASC NULLS LAST`
+        : sql`${leads.lastActivityAt} DESC NULLS LAST`
+      : sort.direction === "asc"
+        ? asc(sortColumn)
+        : desc(sortColumn);
 
   // cursor pagination on the default sort
   // (lastActivityAt DESC). Custom sorts fall back to OFFSET because
