@@ -49,7 +49,7 @@ export interface AccountViewToolbarProps {
   defaultViewId: string | null;
   /**
    * Called when the user confirms the MODIFIED → Reset flow. The client
-   * component owns filter state (post-Phase 32.7 TanStack Query migration),
+   * component owns filter state (TanStack Query migration),
    * so URL navigation alone can't clear filters — the parent must reset its
    * useState here.
    */

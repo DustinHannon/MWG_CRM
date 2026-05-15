@@ -328,7 +328,7 @@ const REPORTS: BuiltinReport[] = [
 
 async function ensureSystemUser(): Promise<string> {
   // Lookup by username (unique constraint, stable across the
-  // Phase 32.7 email rename) rather than email so a future rename
+  // system-user email rename) rather than email so a future rename
   // doesn't break the seeder.
   const existing = await db
     .select({ id: users.id })

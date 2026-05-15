@@ -56,7 +56,7 @@ export interface ViewToolbarProps {
   subscribedViewIds?: string[];
   /**
    * Called when the user confirms the MODIFIED → Reset flow. The client
-   * component owns filter state (post-Phase 32.7 TanStack Query migration),
+   * component owns filter state (TanStack Query migration),
    * so URL navigation alone can't clear filters — the parent must reset its
    * useState here. Runs before the URL navigation so client state is reset
    * by the time the new view re-derives base columns.

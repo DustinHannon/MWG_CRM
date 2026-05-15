@@ -11,7 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:studio": "drizzle-kit studio",
-    "security:semgrep": "python -m semgrep --config=p/default --config=p/typescript --config=p/owasp-top-ten --config=p/nextjs --config=.semgrep/mwg.yml --severity=ERROR --severity=WARNING --exclude=node_modules --exclude=.next --exclude=.tmp --exclude=tests/e2e/.auth ."
+    "security:semgrep": "semgrep --config=p/default --config=p/typescript --config=p/owasp-top-ten --config=p/nextjs --config=.semgrep/mwg.yml --severity=ERROR --severity=WARNING --metrics=off --exclude=node_modules --exclude=.next --exclude=.tmp --exclude=tests/e2e/.auth ."
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.4",
