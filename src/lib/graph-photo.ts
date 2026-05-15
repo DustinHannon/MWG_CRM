@@ -55,6 +55,13 @@ export async function refreshUserPhotoIfStale(userId: string): Promise<void> {
     const blob = await put(`users/${userId}/photo.jpg`, Buffer.from(buf), {
       access: "private",
       addRandomSuffix: false,
+      // The pathname is deterministic per user and refreshed every
+      // PHOTO_TTL_HOURS, so every refresh after the first overwrites
+      // the same blob. @vercel/blob v2 defaults allowOverwrite:false
+      // and throws "This blob already exists" — which silently broke
+      // all photo refreshes after the first write. Overwrite is the
+      // intended behaviour here.
+      allowOverwrite: true,
       contentType: res.headers.get("content-type") ?? "image/jpeg",
     });
 
