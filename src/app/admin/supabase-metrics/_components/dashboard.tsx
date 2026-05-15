@@ -11,8 +11,8 @@ import { DiskChart } from "./disk-chart";
 import { HeaderBar } from "./header-bar";
 import { MemoryChart } from "./memory-chart";
 import { NetworkChart } from "./network-chart";
-import { PostgresSection } from "./postgres-section";
 import { QuickRow } from "./quick-row";
+import { ReplicationChart } from "./replication-chart";
 
 /**
  * Client dashboard. Owns range state + the polling query. The server
@@ -115,12 +115,15 @@ export function SupabaseMetricsDashboard({
         </StandardErrorBoundary>
       </div>
 
-      <PostgresSection
-        history={history}
-        current={current}
-        isLoading={isLoading}
-        error={queryError}
-      />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <StandardErrorBoundary context="Replication lag chart">
+          <ReplicationChart
+            data={history?.replicationLagBytes ?? []}
+            isLoading={isLoading}
+            error={queryError}
+          />
+        </StandardErrorBoundary>
+      </div>
     </div>
   );
 }

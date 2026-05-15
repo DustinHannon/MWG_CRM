@@ -67,7 +67,9 @@ export function CpuChart({
     );
   }
   if (isLoading && data.length === 0) {
-    return <div className="h-[260px] animate-pulse rounded-lg bg-muted" />;
+    return (
+      <div className="min-h-[260px] animate-pulse rounded-lg bg-muted" />
+    );
   }
   if (data.length === 0) {
     return (
@@ -91,8 +93,8 @@ export function CpuChart({
   }));
 
   return (
-    <div className="h-[260px] rounded-lg border border-border bg-card p-4">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="rounded-lg border border-border bg-card p-4">
+      <ResponsiveContainer width="100%" height={228}>
         <AreaChart data={safe} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
           <XAxis

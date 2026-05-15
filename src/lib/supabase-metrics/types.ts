@@ -21,22 +21,10 @@ export interface CurrentSnapshot {
   swapUsedPct: number;
   rootFsUsedPct: number;
   cpuCount: number;
-  uptimeSeconds: number;
   ramTotalBytes: number;
   swapTotalBytes: number;
   rootFsTotalBytes: number;
   dataFsTotalBytes: number;
-  // Connection-pool snapshot (Supavisor + Postgres). Surfaces "how
-  // many of each, out of the max" — directly motivated by the
-  // transaction-pool incident. Any field may be 0 if the Supabase
-  // metrics endpoint doesn't emit that series (beta endpoint).
-  poolSize: number;
-  supavisorClientsActive: number;
-  supavisorClientsWaiting: number;
-  supavisorServersActive: number;
-  supavisorServersIdle: number;
-  pgBackends: number;
-  pgMaxConnections: number;
 }
 
 export interface CpuPoint {
@@ -74,50 +62,9 @@ export interface DiskPoint {
   ioBalancePct: number | null;
 }
 
-export interface ConnectionsPoint {
-  t: string;
-  active: number;
-  idle: number;
-  max: number;
-}
-
-export interface TransactionsPoint {
-  t: string;
-  commitsPerSec: number;
-  rollbacksPerSec: number;
-}
-
-export interface CacheHitPoint {
-  t: string;
-  ratio: number;
-}
-
-export interface DeadlocksPoint {
-  t: string;
-  perSec: number;
-}
-
 export interface ReplicationLagPoint {
   t: string;
   bytes: number | null;
-}
-
-export interface PoolPoint {
-  t: string;
-  /** Supavisor: client connections currently executing a transaction. */
-  clientsActive: number;
-  /** Supavisor: clients parked waiting for a backend (saturation signal). */
-  clientsWaiting: number;
-  /** Supavisor: backend connections currently checked out to a client. */
-  serversActive: number;
-  /** Supavisor: backend connections idle in the pool, reusable. */
-  serversIdle: number;
-  /** Supavisor configured pool_size ceiling for this user+db+mode. */
-  poolSize: number;
-  /** Postgres pg_stat_database.numbackends — total live backends. */
-  pgBackends: number;
-  /** Postgres max_connections setting (instance-wide ceiling). */
-  pgMaxConnections: number;
 }
 
 export interface HistorySnapshot {
@@ -125,14 +72,7 @@ export interface HistorySnapshot {
   memory: MemoryPoint[];
   network: NetworkPoint[];
   disk: DiskPoint[];
-  pool: PoolPoint[];
-  postgres: {
-    connections: ConnectionsPoint[];
-    transactions: TransactionsPoint[];
-    cacheHitRatio: CacheHitPoint[];
-    deadlocks: DeadlocksPoint[];
-    replicationLagBytes: ReplicationLagPoint[];
-  };
+  replicationLagBytes: ReplicationLagPoint[];
 }
 
 export interface SnapshotMeta {

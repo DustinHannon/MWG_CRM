@@ -28,20 +28,12 @@ function formatBytes(n: number): string {
   return `${rounded} ${units[unitIndex]}`;
 }
 
-function formatUptime(s: number): string {
-  const total = Number.isFinite(s) && s >= 0 ? Math.floor(s) : 0;
-  const days = Math.floor(total / 86400);
-  const hours = Math.floor((total % 86400) / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  return `${days}d ${hours}h ${minutes}m`;
-}
-
 export function QuickRow({ current, isLoading }: QuickRowProps) {
   if (!current) {
     if (isLoading) {
       return (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
             <div
               key={i}
               className="h-[120px] animate-pulse rounded-lg bg-muted"
@@ -59,14 +51,11 @@ export function QuickRow({ current, isLoading }: QuickRowProps) {
   }
 
   const cpuCount = num(current.cpuCount);
-  const poolSize = num(current.poolSize);
-  const serversActive = num(current.supavisorServersActive);
-  const poolUtilPct = poolSize > 0 ? (serversActive / poolSize) * 100 : 0;
   const load5Max = cpuCount > 0 ? cpuCount * 2 : 2;
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <Gauge
           label="CPU busy"
           value={num(current.cpuBusyPct)}
@@ -89,29 +78,16 @@ export function QuickRow({ current, isLoading }: QuickRowProps) {
           unit="%"
         />
         <Gauge label="Load 5m" value={num(current.load5)} max={load5Max} />
-        <Gauge label="Pool used" value={poolUtilPct} unit="%" />
       </div>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard
-          label="Uptime"
-          value={formatUptime(current.uptimeSeconds)}
-        />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <StatCard label="CPU" value={`${cpuCount} vCPU`} />
         <StatCard
           label="RAM total"
           value={formatBytes(current.ramTotalBytes)}
         />
         <StatCard
-          label="PG backends"
-          value={`${num(current.pgBackends)} / ${num(
-            current.pgMaxConnections,
-          )}`}
-        />
-        <StatCard
-          label="Supavisor clients"
-          value={`active ${num(current.supavisorClientsActive)} · waiting ${num(
-            current.supavisorClientsWaiting,
-          )}`}
+          label="Root FS total"
+          value={formatBytes(current.rootFsTotalBytes)}
         />
       </div>
     </div>

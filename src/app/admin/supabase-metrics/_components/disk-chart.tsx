@@ -64,7 +64,9 @@ export function DiskChart({
     );
   }
   if (isLoading && data.length === 0) {
-    return <div className="h-[260px] animate-pulse rounded-lg bg-muted" />;
+    return (
+      <div className="min-h-[260px] animate-pulse rounded-lg bg-muted" />
+    );
   }
   if (data.length === 0) {
     return (
@@ -75,8 +77,8 @@ export function DiskChart({
   }
 
   return (
-    <div className="h-[260px] rounded-lg border border-border bg-card p-4">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="rounded-lg border border-border bg-card p-4">
+      <ResponsiveContainer width="100%" height={228}>
         <LineChart
           data={data}
           margin={{ top: 8, right: 12, bottom: 0, left: 0 }}

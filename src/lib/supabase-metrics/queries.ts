@@ -6,20 +6,15 @@ import { db } from "@/db";
 import { logger } from "@/lib/logger";
 
 import {
-  type CacheHitPoint,
-  type ConnectionsPoint,
   type CpuPoint,
   type CurrentSnapshot,
-  type DeadlocksPoint,
   type DiskPoint,
   type HistorySnapshot,
   type MemoryPoint,
   type NetworkPoint,
-  type PoolPoint,
   type Range,
   type ReplicationLagPoint,
   type Snapshot,
-  type TransactionsPoint,
   rangeToBucketSeconds,
   rangeToMs,
 } from "./types";
@@ -82,11 +77,7 @@ export async function fetchSnapshot(input: {
       history.memory.length +
       history.network.length +
       history.disk.length +
-      history.postgres.connections.length +
-      history.postgres.transactions.length +
-      history.postgres.cacheHitRatio.length +
-      history.postgres.deadlocks.length +
-      history.postgres.replicationLagBytes.length;
+      history.replicationLagBytes.length;
 
     const scrapeGaps = await countScrapeGaps(tx, since, now);
 
@@ -121,27 +112,47 @@ async function countScrapeGaps(
   since: Date,
   now: Date,
 ): Promise<number> {
-  // Count minute boundaries within the window that have NO sample.
-  // Cap the candidate count to keep the query bounded for large ranges.
+  // Count minute boundaries within the window that have NO sample, but
+  // never count minutes that predate the first-ever scrape — otherwise
+  // a brand-new table reports the whole window as "gaps". The expected
+  // series starts at greatest(since, first-scrape-minute); the MIN read
+  // is a cheap indexed scan. Below ~10 minutes of accumulated data the
+  // gap count is statistically meaningless, so report 0.
   const minutes = Math.floor((now.getTime() - since.getTime()) / 60_000);
   if (minutes <= 0) return 0;
-  const rows = await tx.execute<{ missing: string }>(sql`
-    WITH expected AS (
-      SELECT generate_series(
-        date_trunc('minute', ${since.toISOString()}::timestamptz),
-        date_trunc('minute', ${now.toISOString()}::timestamptz),
-        interval '1 minute'
-      ) AS t
+  const rows = await tx.execute<{ missing: string; observed: string }>(sql`
+    WITH bounds AS (
+      SELECT
+        greatest(
+          date_trunc('minute', ${since.toISOString()}::timestamptz),
+          date_trunc('minute', (SELECT MIN(time) FROM supabase_metrics))
+        ) AS lo,
+        date_trunc('minute', ${now.toISOString()}::timestamptz) AS hi
+    ),
+    expected AS (
+      SELECT generate_series(b.lo, b.hi, interval '1 minute') AS t
+      FROM bounds b
+      WHERE b.lo IS NOT NULL AND b.lo <= b.hi
     ),
     seen AS (
       SELECT DISTINCT date_trunc('minute', time) AS t FROM supabase_metrics
-      WHERE time >= ${since.toISOString()}::timestamptz AND time <= ${now.toISOString()}::timestamptz
+      WHERE time >= ${since.toISOString()}::timestamptz
+        AND time <= ${now.toISOString()}::timestamptz
     )
-    SELECT COUNT(*)::text AS missing FROM expected
+    SELECT
+      COUNT(*) FILTER (WHERE seen.t IS NULL)::text AS missing,
+      COUNT(*)::text AS observed
+    FROM expected
     LEFT JOIN seen USING (t)
-    WHERE seen.t IS NULL
   `);
-  const first = (rows as unknown as Array<{ missing: string | null }>)[0];
+  const first = (rows as unknown as Array<{
+    missing: string | null;
+    observed: string | null;
+  }>)[0];
+  const observed = first?.observed
+    ? Number.parseInt(first.observed, 10)
+    : 0;
+  if (observed < 10) return 0;
   return first?.missing ? Number.parseInt(first.missing, 10) : 0;
 }
 
@@ -210,10 +221,6 @@ async function buildCurrentSnapshot(
     cpuModes.map((s) => s.labels.cpu).filter(Boolean),
   ).size;
 
-  const nowSec = firstValue(byName.get("node_time_seconds"));
-  const bootSec = firstValue(byName.get("node_boot_time_seconds"));
-  const uptimeSeconds = nowSec > 0 && bootSec > 0 ? Math.max(0, nowSec - bootSec) : 0;
-
   const load5 = firstValue(byName.get("node_load5"));
   const load15 = firstValue(byName.get("node_load15"));
 
@@ -226,28 +233,10 @@ async function buildCurrentSnapshot(
     swapUsedPct,
     rootFsUsedPct,
     cpuCount,
-    uptimeSeconds,
     ramTotalBytes: memTotal,
     swapTotalBytes: swapTotal,
     rootFsTotalBytes: rootFsTotal,
     dataFsTotalBytes,
-    // Pooler snapshot — sum across label combos (single user+db+mode
-    // pool, one app datname). 0 when the beta endpoint omits a series.
-    poolSize: sumValues(byName.get("supavisor_db_pool_size") ?? []),
-    supavisorClientsActive: sumValues(
-      byName.get("supavisor_db_clients_active") ?? [],
-    ),
-    supavisorClientsWaiting: sumValues(
-      byName.get("supavisor_db_clients_waiting") ?? [],
-    ),
-    supavisorServersActive: sumValues(
-      byName.get("supavisor_db_servers_active") ?? [],
-    ),
-    supavisorServersIdle: sumValues(
-      byName.get("supavisor_db_servers_idle") ?? [],
-    ),
-    pgBackends: sumValues(byName.get("pg_stat_database_numbackends") ?? []),
-    pgMaxConnections: firstValue(byName.get("pg_settings_max_connections")),
   };
 }
 
@@ -263,6 +252,16 @@ async function buildHistorySnapshot(
   // multiple round trips, cleaner failure semantics (one statement
   // timeout covers everything).
   const allowedNames = METRICS_FOR_HISTORY;
+  // F-01 keystone: bin against the UNIX epoch, NOT `since`. The JS
+  // `enumerateBuckets` floors timestamps to the epoch grid
+  // (Math.*(t/step)*step); date_bin's third arg is the bin origin, so
+  // anchoring it to '1970-01-01T00:00:00Z' makes every SQL bucket land
+  // on the exact same boundary the JS side computes. With a 60/300/900
+  // second interval the epoch-aligned bins always carry :00 seconds, so
+  // the to_char label is byte-identical to the ISO string
+  // enumerateBuckets emits (`YYYY-MM-DDTHH:MM:00Z`). Origin = `since`
+  // (sub-minute seconds) produced a disjoint grid and zero-overlap join
+  // → every chart rendered empty.
   const rows = await tx.execute<{
     bucket: string;
     metric_name: string;
@@ -270,7 +269,7 @@ async function buildHistorySnapshot(
     value: number;
   }>(sql`
     SELECT
-      to_char(date_bin(${`${bucketSec} seconds`}::interval, time, ${since.toISOString()}::timestamptz), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS bucket,
+      to_char(date_bin(${`${bucketSec} seconds`}::interval, time, '1970-01-01T00:00:00Z'::timestamptz), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS bucket,
       metric_name,
       labels,
       AVG(value) AS value
@@ -313,21 +312,17 @@ async function buildHistorySnapshot(
   return {
     cpu: buildCpuSeries(grouped, buckets),
     memory: buildMemorySeries(grouped, buckets),
-    network: buildNetworkSeries(grouped, buckets, bucketSec),
-    disk: buildDiskSeries(grouped, buckets, bucketSec),
-    pool: buildPoolSeries(grouped, buckets),
-    postgres: {
-      connections: buildConnectionsSeries(grouped, buckets),
-      transactions: buildTransactionsSeries(grouped, buckets, bucketSec),
-      cacheHitRatio: buildCacheHitSeries(grouped, buckets, bucketSec),
-      deadlocks: buildDeadlocksSeries(grouped, buckets, bucketSec),
-      replicationLagBytes: buildReplicationLagSeries(grouped, buckets),
-    },
+    network: buildNetworkSeries(grouped, buckets),
+    disk: buildDiskSeries(grouped, buckets),
+    replicationLagBytes: buildReplicationLagSeries(grouped, buckets),
   };
 }
 
 /* ----------------------------- helpers ----------------------------- */
 
+// Only the emitted-28 names that a surviving history builder actually
+// reads. Anything else would be filtered to an empty group and waste
+// the IN-list / row scan.
 const METRICS_FOR_HISTORY: string[] = [
   "node_cpu_seconds_total",
   "node_memory_MemTotal_bytes",
@@ -343,24 +338,18 @@ const METRICS_FOR_HISTORY: string[] = [
   "node_network_transmit_bytes_total",
   "node_disk_reads_completed_total",
   "node_disk_writes_completed_total",
-  "pg_stat_database_numbackends",
-  "pg_settings_max_connections",
-  "pg_stat_database_xact_commit",
-  "pg_stat_database_xact_rollback",
-  "pg_stat_database_blks_read",
-  "pg_stat_database_blks_hit",
-  "pg_stat_database_deadlocks",
   "replication_realtime_lag_bytes",
-  "supavisor_db_pool_size",
-  "supavisor_db_clients_active",
-  "supavisor_db_clients_waiting",
-  "supavisor_db_servers_active",
-  "supavisor_db_servers_idle",
 ];
 
 function enumerateBuckets(since: Date, now: Date, bucketSec: number): string[] {
   const step = bucketSec * 1000;
-  const start = Math.floor(since.getTime() / step) * step;
+  // Epoch-aligned grid, identical to the SQL date_bin origin. The first
+  // emitted bucket is CEIL'd, not FLOOR'd: SQL filters `time >= since`,
+  // so a floored first bucket would predate every row it could contain
+  // and render as a guaranteed empty leading point. Ceiling guarantees
+  // the first JS bucket is one SQL can populate. `end` stays floored —
+  // it's the last fully-started bucket.
+  const start = Math.ceil(since.getTime() / step) * step;
   const end = Math.floor(now.getTime() / step) * step;
   const out: string[] = [];
   for (let t = start; t <= end; t += step) {
@@ -406,7 +395,6 @@ function clampPct(n: number): number {
  */
 function counterRate(
   series: RawSample[] | undefined,
-  bucketSec: number,
 ): Map<string, number | null> {
   const out = new Map<string, number | null>();
   if (!series || series.length === 0) return out;
@@ -451,7 +439,7 @@ function buildCpuSeries(
     const cpuId = sample?.labels.cpu;
     if (cpuId) cpuCount = Math.max(cpuCount, Number.parseInt(cpuId, 10) + 1);
     void labelKey;
-    const rates = counterRate(series, 0);
+    const rates = counterRate(series);
     const bucketSum = modeBuckets.get(mode) ?? new Map();
     for (const [bucket, r] of rates) {
       if (r == null) continue;
@@ -524,10 +512,9 @@ function buildMemorySeries(
 function buildNetworkSeries(
   grouped: Map<string, Map<string, RawSample[]>>,
   buckets: string[],
-  bucketSec: number,
 ): NetworkPoint[] {
-  const recv = aggregateRateAcrossLabels(grouped, "node_network_receive_bytes_total", bucketSec);
-  const trans = aggregateRateAcrossLabels(grouped, "node_network_transmit_bytes_total", bucketSec);
+  const recv = aggregateRateAcrossLabels(grouped, "node_network_receive_bytes_total");
+  const trans = aggregateRateAcrossLabels(grouped, "node_network_transmit_bytes_total");
   return buckets.map((t) => ({
     t,
     recvBytesPerSec: recv.get(t) ?? 0,
@@ -538,13 +525,12 @@ function buildNetworkSeries(
 function aggregateRateAcrossLabels(
   grouped: Map<string, Map<string, RawSample[]>>,
   name: string,
-  bucketSec: number,
 ): Map<string, number> {
   const out = new Map<string, number>();
   const map = grouped.get(name);
   if (!map) return out;
   for (const series of map.values()) {
-    const rates = counterRate(series, bucketSec);
+    const rates = counterRate(series);
     for (const [bucket, r] of rates) {
       if (r == null) continue;
       out.set(bucket, (out.get(bucket) ?? 0) + r);
@@ -556,7 +542,6 @@ function aggregateRateAcrossLabels(
 function buildDiskSeries(
   grouped: Map<string, Map<string, RawSample[]>>,
   buckets: string[],
-  bucketSec: number,
 ): DiskPoint[] {
   const sizeRoot = gaugeMapByBucket(
     grouped,
@@ -581,8 +566,8 @@ function buildDiskSeries(
 
   // I/O balance: rate of reads vs writes — emit a percentage that's
   // 50 when balanced; null when neither is happening.
-  const reads = aggregateRateAcrossLabels(grouped, "node_disk_reads_completed_total", bucketSec);
-  const writes = aggregateRateAcrossLabels(grouped, "node_disk_writes_completed_total", bucketSec);
+  const reads = aggregateRateAcrossLabels(grouped, "node_disk_reads_completed_total");
+  const writes = aggregateRateAcrossLabels(grouped, "node_disk_writes_completed_total");
 
   return buckets.map((t) => {
     const sr = sizeRoot.get(t) ?? 0;
@@ -601,92 +586,12 @@ function buildDiskSeries(
   });
 }
 
-function buildConnectionsSeries(
-  grouped: Map<string, Map<string, RawSample[]>>,
-  buckets: string[],
-): ConnectionsPoint[] {
-  const active = gaugeMapByBucket(grouped, "pg_stat_database_numbackends");
-  // pg_settings_max_connections is a single value, label-less.
-  const maxMap = gaugeMapByBucket(grouped, "pg_settings_max_connections");
-  return buckets.map((t) => ({
-    t,
-    active: active.get(t) ?? 0,
-    idle: 0,
-    max: maxMap.get(t) ?? 0,
-  }));
-}
-
-function buildTransactionsSeries(
-  grouped: Map<string, Map<string, RawSample[]>>,
-  buckets: string[],
-  bucketSec: number,
-): TransactionsPoint[] {
-  const commits = aggregateRateAcrossLabels(grouped, "pg_stat_database_xact_commit", bucketSec);
-  const rolls = aggregateRateAcrossLabels(grouped, "pg_stat_database_xact_rollback", bucketSec);
-  return buckets.map((t) => ({
-    t,
-    commitsPerSec: commits.get(t) ?? 0,
-    rollbacksPerSec: rolls.get(t) ?? 0,
-  }));
-}
-
-function buildCacheHitSeries(
-  grouped: Map<string, Map<string, RawSample[]>>,
-  buckets: string[],
-  bucketSec: number,
-): CacheHitPoint[] {
-  const hits = aggregateRateAcrossLabels(grouped, "pg_stat_database_blks_hit", bucketSec);
-  const reads = aggregateRateAcrossLabels(grouped, "pg_stat_database_blks_read", bucketSec);
-  return buckets.map((t) => {
-    const h = hits.get(t) ?? 0;
-    const r = reads.get(t) ?? 0;
-    const total = h + r;
-    return { t, ratio: total > 0 ? h / total : 1 };
-  });
-}
-
-function buildDeadlocksSeries(
-  grouped: Map<string, Map<string, RawSample[]>>,
-  buckets: string[],
-  bucketSec: number,
-): DeadlocksPoint[] {
-  const dl = aggregateRateAcrossLabels(grouped, "pg_stat_database_deadlocks", bucketSec);
-  return buckets.map((t) => ({ t, perSec: dl.get(t) ?? 0 }));
-}
-
 function buildReplicationLagSeries(
   grouped: Map<string, Map<string, RawSample[]>>,
   buckets: string[],
 ): ReplicationLagPoint[] {
   const lag = gaugeMapByBucket(grouped, "replication_realtime_lag_bytes");
   return buckets.map((t) => ({ t, bytes: lag.has(t) ? lag.get(t) ?? 0 : null }));
-}
-
-function buildPoolSeries(
-  grouped: Map<string, Map<string, RawSample[]>>,
-  buckets: string[],
-): PoolPoint[] {
-  // All pooler series are gauges. supavisor_db_servers_active may be
-  // emitted per-pool-label; gaugeMapByBucket sums across labels which
-  // is the right aggregate for a single user+db+mode pool. pg backends
-  // is per-datname; sum across the one app database.
-  const clientsActive = gaugeMapByBucket(grouped, "supavisor_db_clients_active");
-  const clientsWaiting = gaugeMapByBucket(grouped, "supavisor_db_clients_waiting");
-  const serversActive = gaugeMapByBucket(grouped, "supavisor_db_servers_active");
-  const serversIdle = gaugeMapByBucket(grouped, "supavisor_db_servers_idle");
-  const poolSize = gaugeMapByBucket(grouped, "supavisor_db_pool_size");
-  const pgBackends = gaugeMapByBucket(grouped, "pg_stat_database_numbackends");
-  const pgMax = gaugeMapByBucket(grouped, "pg_settings_max_connections");
-  return buckets.map((t) => ({
-    t,
-    clientsActive: clientsActive.get(t) ?? 0,
-    clientsWaiting: clientsWaiting.get(t) ?? 0,
-    serversActive: serversActive.get(t) ?? 0,
-    serversIdle: serversIdle.get(t) ?? 0,
-    poolSize: poolSize.get(t) ?? 0,
-    pgBackends: pgBackends.get(t) ?? 0,
-    pgMaxConnections: pgMax.get(t) ?? 0,
-  }));
 }
 
 // Loud-when-empty diagnostic; keeps the logger import live so eslint

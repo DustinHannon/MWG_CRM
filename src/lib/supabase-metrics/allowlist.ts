@@ -1,16 +1,18 @@
 /**
- * Metric allowlist. The Supabase Prometheus endpoint emits ~200 series
- * per scrape; the dashboard renders ~30 derived charts that need a
- * specific subset. Anything not in this set is dropped at parse time so
- * storage stays bounded.
+ * Metric allowlist. This Supabase project's Prometheus endpoint emits
+ * exactly these 28 series per scrape; the dashboard derives every chart
+ * from this subset. Anything not in this set is dropped at parse time
+ * so storage stays bounded.
  *
- * Names verified against the Supabase reference dashboard:
- * https://github.com/supabase/supabase-grafana/blob/main/dashboard.json
+ * The set is the empirically observed emission, not the Supabase
+ * reference dashboard's superset — pg_stat_database_*, supavisor_db_*,
+ * pg_stat_bgwriter_*, pg_locks_count, and the node uptime pair are
+ * documented in the reference dashboard but are never emitted by this
+ * project's endpoint, so storing them would only accumulate dead names.
  *
- * Supabase's metrics endpoint is in beta; names may evolve. Missing
- * metrics silently disappear from the chart — never an error. The
- * scrape handler logs scraped/matched/dropped counts per run for drift
- * detection.
+ * The endpoint is in beta; names may evolve. Missing metrics silently
+ * disappear from the chart — never an error. The scrape handler logs
+ * scraped/matched/dropped counts per run for drift detection.
  */
 export const METRIC_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // Node — CPU
@@ -50,54 +52,12 @@ export const METRIC_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "node_disk_reads_completed_total",
   "node_disk_writes_completed_total",
 
-  // Node — Boot / uptime
-  "node_boot_time_seconds",
-  "node_time_seconds",
-
-  // Postgres — Connections / activity
-  "pg_stat_database_numbackends",
-  "pg_settings_max_connections",
-
-  // Postgres — Transactions
-  "pg_stat_database_xact_commit",
-  "pg_stat_database_xact_rollback",
-
-  // Postgres — Cache / IO
-  "pg_stat_database_blks_read",
-  "pg_stat_database_blks_hit",
-  "pg_stat_database_tup_returned",
-  "pg_stat_database_tup_fetched",
-  "pg_stat_database_tup_inserted",
-  "pg_stat_database_tup_updated",
-  "pg_stat_database_tup_deleted",
-
-  // Postgres — Conflicts / deadlocks
-  "pg_stat_database_deadlocks",
-  "pg_stat_database_conflicts",
-
   // Postgres — Database size
   "pg_database_size_bytes",
-
-  // Postgres — Background writer / checkpointer
-  "pg_stat_bgwriter_checkpoints_timed",
-  "pg_stat_bgwriter_checkpoints_req",
-  "pg_stat_bgwriter_buffers_checkpoint",
-  "pg_stat_bgwriter_buffers_clean",
-  "pg_stat_bgwriter_buffers_backend",
-
-  // Postgres — Locks
-  "pg_locks_count",
 
   // Replication (Realtime logical replication)
   "replication_realtime_slot_status",
   "replication_realtime_lag_bytes",
-
-  // Supavisor (connection pooler)
-  "supavisor_db_pool_size",
-  "supavisor_db_clients_active",
-  "supavisor_db_clients_waiting",
-  "supavisor_db_servers_active",
-  "supavisor_db_servers_idle",
 ]);
 
 /**

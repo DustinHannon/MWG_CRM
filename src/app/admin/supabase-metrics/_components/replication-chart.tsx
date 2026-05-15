@@ -2,7 +2,6 @@
 
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -12,7 +11,7 @@ import {
 } from "recharts";
 
 import { StandardEmptyState } from "@/components/standard";
-import type { TransactionsPoint } from "@/lib/supabase-metrics/types";
+import type { ReplicationLagPoint } from "@/lib/supabase-metrics/types";
 
 const TOOLTIP_STYLE = {
   backgroundColor: "var(--popover)",
@@ -31,17 +30,32 @@ function hhmm(iso: string): string {
   return iso.slice(11, 16);
 }
 
+// 1024-base human-readable bytes, 1 decimal.
+function fmtBytes(bytes: number): string {
+  const n = finite(bytes);
+  if (n < 1024) return `${n.toFixed(0)} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = n / 1024;
+  let unitIdx = 0;
+  while (value >= 1024 && unitIdx < units.length - 1) {
+    value /= 1024;
+    unitIdx += 1;
+  }
+  return `${value.toFixed(1)} ${units[unitIdx]}`;
+}
+
 /**
- * Commit vs rollback throughput per second. Rollbacks use the
- * destructive token because a sustained rollback rate is a problem
- * signal, not normal traffic.
+ * Realtime logical-replication lag in bytes over the window. Lag is
+ * null on instances without an active replica; the chart renders an
+ * inline empty placeholder rather than a flat zero line that would
+ * imply healthy replication that does not exist.
  */
-export function TransactionsChart({
+export function ReplicationChart({
   data,
   isLoading,
   error,
 }: {
-  data: TransactionsPoint[];
+  data: ReplicationLagPoint[];
   isLoading?: boolean;
   error?: string | null;
 }) {
@@ -55,26 +69,30 @@ export function TransactionsChart({
     );
   }
   if (isLoading && data.length === 0) {
-    return <div className="h-[260px] animate-pulse rounded-lg bg-muted" />;
+    return (
+      <div className="min-h-[260px] animate-pulse rounded-lg bg-muted" />
+    );
   }
-  if (data.length === 0) {
+
+  // Preserve null so connectNulls=false leaves a real gap; only coerce
+  // actual numeric values.
+  const safe = data.map((p) => ({
+    t: p.t,
+    bytes: p.bytes == null ? null : finite(p.bytes),
+  }));
+  const hasData = safe.some((p) => p.bytes != null);
+
+  if (!hasData) {
     return (
       <div className="flex h-[260px] items-center justify-center rounded-lg border border-dashed border-border bg-card text-sm text-muted-foreground">
-        No data in this window
+        No replication lag data
       </div>
     );
   }
 
-  // Coerce non-finite values to 0 so recharts never renders a gap or NaN.
-  const safe = data.map((p) => ({
-    t: p.t,
-    commitsPerSec: finite(p.commitsPerSec),
-    rollbacksPerSec: finite(p.rollbacksPerSec),
-  }));
-
   return (
-    <div className="h-[260px] rounded-lg border border-border bg-card p-4">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="rounded-lg border border-border bg-card p-4">
+      <ResponsiveContainer width="100%" height={228}>
         <LineChart
           data={safe}
           margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
@@ -93,29 +111,20 @@ export function TransactionsChart({
             fontSize={11}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v) => Number(v).toFixed(1)}
+            tickFormatter={(v) => fmtBytes(Number(v))}
+            width={64}
           />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
             itemStyle={{ color: "var(--popover-foreground)" }}
             labelStyle={{ color: "var(--muted-foreground)" }}
             labelFormatter={(v) => hhmm(String(v))}
-            formatter={(value) => `${Number(value).toFixed(1)}/s`}
-          />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Line
-            type="monotone"
-            dataKey="commitsPerSec"
-            stroke="var(--chart-2)"
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-            isAnimationActive={false}
+            formatter={(value) => [fmtBytes(Number(value)), "Replication lag"]}
           />
           <Line
             type="monotone"
-            dataKey="rollbacksPerSec"
-            stroke="var(--destructive)"
+            dataKey="bytes"
+            stroke="var(--chart-4)"
             strokeWidth={2}
             dot={false}
             connectNulls={false}
