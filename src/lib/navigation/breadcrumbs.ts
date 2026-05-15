@@ -165,7 +165,6 @@ export const adminCrumbs = {
   apiUsage: (): Breadcrumb[] => [ADMIN, { label: "API usage" }],
   data: (): Breadcrumb[] => [ADMIN, { label: "Data" }],
   settings: (): Breadcrumb[] => [ADMIN, { label: "Settings" }],
-  importHelp: (): Breadcrumb[] => [ADMIN, { label: "Import help" }],
   emailFailures: (): Breadcrumb[] => [ADMIN, { label: "Email failures" }],
 
   // Platform insights — Better Stack-driven dashboard
