@@ -63,7 +63,13 @@ export async function fetchSnapshot(input: {
   const since = new Date(now.getTime() - rangeMs);
 
   return db.transaction(async (tx) => {
-    await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${STATEMENT_TIMEOUT}'`));
+    // set_config(name, value, is_local=true) is exactly `SET LOCAL`
+    // (transaction-scoped, released at COMMIT — Supavisor-safe) but
+    // takes the value as a bind parameter, so no string interpolation
+    // into SQL. STATEMENT_TIMEOUT is a module constant regardless.
+    await tx.execute(
+      sql`SELECT set_config('statement_timeout', ${STATEMENT_TIMEOUT}, true)`,
+    );
 
     const lastScrapeAt = await readLastScrapeAt(tx);
     const current = lastScrapeAt
