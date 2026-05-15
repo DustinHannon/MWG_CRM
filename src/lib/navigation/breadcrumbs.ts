@@ -176,6 +176,10 @@ export const adminCrumbs = {
   // Better Stack drain. Not a raw log tail.
   serverLogs: (): Breadcrumb[] => [ADMIN, { label: "Server logs" }],
 
+  // Supabase database monitoring — CPU/mem/disk/net + Postgres +
+  // connection-pool health, scraped from the Prometheus endpoint.
+  supabaseMetrics: (): Breadcrumb[] => [ADMIN, { label: "Supabase metrics" }],
+
   // D365 import
   d365Import: (): Breadcrumb[] => [ADMIN, { label: "D365 import" }],
   d365ImportRun: (runShortId: string): Breadcrumb[] => [

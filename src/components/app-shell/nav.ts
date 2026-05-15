@@ -143,5 +143,6 @@ export const ADMIN_NAV_ITEMS: NavLink[] = [
   { label: "API usage", href: "/admin/api-usage", iconKey: "Activity" },
   { label: "Insights", href: "/admin/insights", iconKey: "BarChart3" },
   { label: "Server logs", href: "/admin/server-logs", iconKey: "Server" },
+  { label: "Supabase metrics", href: "/admin/supabase-metrics", iconKey: "Database" },
   { label: "Email failures", href: "/admin/email-failures", iconKey: "MailWarning" },
 ];
