@@ -8,7 +8,9 @@
     { "path": "/api/cron/marketing-sync-suppressions", "schedule": "0 * * * *" },
     { "path": "/api/cron/marketing-process-scheduled-campaigns", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/marketing-list-refresh", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/process-jobs", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/process-jobs", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/scrape-supabase-metrics", "schedule": "* * * * *" },
+    { "path": "/api/cron/prune-supabase-metrics", "schedule": "0 3 * * *" }
   ],
   "redirects": [
     {
