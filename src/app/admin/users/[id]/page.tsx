@@ -5,6 +5,7 @@ import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { RoleBundleSelector } from "@/components/admin/role-bundle-selector";
 import { getPermissions, requireAdmin } from "@/lib/auth-helpers";
+import { SYSTEM_SENTINEL_USER_ID } from "@/lib/constants/system-users";
 import { DeleteUserButton } from "./delete-user";
 import { PermissionsEditor } from "./permissions-editor";
 import { RecheckMailboxButton } from "./recheck-mailbox-button";
@@ -30,6 +31,7 @@ export default async function UserDetailPage({
 
   const perms = await getPermissions(u.id);
   const isSelf = admin.id === u.id;
+  const isSystemAccount = u.id === SYSTEM_SENTINEL_USER_ID;
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -97,18 +99,22 @@ export default async function UserDetailPage({
             ? "You cannot delete your own account."
             : u.isBreakglass
               ? "The breakglass account cannot be deleted."
-              : "Removes the user, their personal saved views and preferences, OAuth links, and active sessions. Owned leads must be reassigned or deleted as part of the flow."}
+              : isSystemAccount
+                ? "The system account cannot be deleted. It owns system-attributed audit, email, and job history."
+                : "Removes the user, their personal saved views and preferences, OAuth links, and active sessions. Owned records are reassigned or deleted as part of the flow."}
         </p>
         <div className="mt-4">
           <DeleteUserButton
             userId={u.id}
-            disabled={isSelf || u.isBreakglass}
+            disabled={isSelf || u.isBreakglass || isSystemAccount}
             disabledReason={
               isSelf
                 ? "Cannot delete yourself."
                 : u.isBreakglass
                   ? "Cannot delete the breakglass account."
-                  : undefined
+                  : isSystemAccount
+                    ? "Cannot delete the system account."
+                    : undefined
             }
           />
         </div>
