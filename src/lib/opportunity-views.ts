@@ -619,8 +619,12 @@ export async function runOpportunityView(
   // (expectedCloseDate DESC NULLS LAST, id DESC). Custom sorts fall
   // back to OFFSET.
   const whereExpr = wheres.length > 0 ? and(...wheres) : undefined;
-  const useCursor = !!opts.cursor && isDefaultSort;
-  const cursorParsed = useCursor ? parseOpportunityCursor(opts.cursor!) : null;
+  // useCursor: caller is in cursor-pagination mode. The cursor route signals
+  // this by passing `cursor` (null/empty on first page; encoded on subsequent).
+  // `!!opts.cursor` short-circuit was a bug — first page evaluated false,
+  // sliceLimit dropped to pageSize (no +1), nextCursor never returned. F-89.
+  const useCursor = opts.cursor !== undefined && isDefaultSort;
+  const cursorParsed = useCursor && !!opts.cursor ? parseOpportunityCursor(opts.cursor) : null;
   const cursorWhere = (() => {
     if (!useCursor || !cursorParsed) return null;
     if (cursorParsed.date === null) {
@@ -697,11 +701,12 @@ export async function runOpportunityView(
       .orderBy(order, desc(opportunities.id))
       .limit(sliceLimit)
       .offset(offset),
-    useCursor
-      ? Promise.resolve([{ count: 0 }])
-      : db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(opportunities)
+    // Always run COUNT — sync_load_state dispatch in client consumes total
+    // on every page; returning 0 on subsequent pages would zero out the
+    // bulk-selection reducer's total counter. Cheap parallel query.
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(opportunities)
           .where(whereExpr),
   ]);
 

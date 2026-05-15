@@ -564,9 +564,13 @@ export async function runAccountView(
   // cursor pagination on the default sort
   // (updatedAt DESC, id DESC). Custom sorts fall back to OFFSET.
   const whereExpr = wheres.length > 0 ? and(...wheres) : undefined;
+  // useCursor: caller is in cursor-pagination mode. The cursor route signals
+  // this by passing `cursor` (null/empty on first page; encoded on subsequent).
+  // `!!opts.cursor` short-circuit was a bug — first page evaluated false,
+  // sliceLimit dropped to pageSize (no +1), nextCursor never returned. F-89.
   const useCursor =
-    !!opts.cursor && sort.field === "updatedAt" && sort.direction === "desc";
-  const cursorParsed = useCursor ? parseCursor(opts.cursor!) : null;
+    opts.cursor !== undefined && sort.field === "updatedAt" && sort.direction === "desc";
+  const cursorParsed = useCursor && !!opts.cursor ? parseCursor(opts.cursor) : null;
   const cursorWhere = (() => {
     if (!useCursor || !cursorParsed || !cursorParsed.ts) return null;
     return sql`(
@@ -644,11 +648,12 @@ export async function runAccountView(
       .orderBy(order, desc(crmAccounts.id))
       .limit(sliceLimit)
       .offset(offset),
-    useCursor
-      ? Promise.resolve([{ count: 0 }])
-      : db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(crmAccounts)
+    // Always run COUNT — sync_load_state dispatch in client consumes total
+    // on every page; returning 0 on subsequent pages would zero out the
+    // bulk-selection reducer's total counter. Cheap parallel query.
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(crmAccounts)
           .where(whereExpr),
   ]);
 
