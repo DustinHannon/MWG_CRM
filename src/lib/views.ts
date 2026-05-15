@@ -633,9 +633,17 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
   // Pre-cursor `whereExpr` powers the COUNT query (cursor mode skips
   // the count); the cursor predicate joins via `finalWhere`.
   const whereExpr = wheres.length > 0 ? and(...wheres) : undefined;
+  // useCursor: caller is in cursor-pagination mode. The cursor route (and
+  // expand-filtered) signal this by always passing `cursor` (null/empty on
+  // the first page; an encoded string on subsequent pages). When `cursor`
+  // is undefined the caller is doing legacy page-offset mode.
+  // The `!!opts.cursor` form used to short-circuit here was a bug: on the
+  // first cursor page the cursor value is null/"", so useCursor was false,
+  // sliceLimit dropped to pageSize (no +1 lookahead), and nextCursor was
+  // never returned even when more rows existed (F-89).
   const useCursor =
-    !!opts.cursor && sort.field === "lastActivityAt" && sort.direction === "desc";
-  const cursorParsed = useCursor ? parseCursor(opts.cursor!) : null;
+    opts.cursor !== undefined && sort.field === "lastActivityAt" && sort.direction === "desc";
+  const cursorParsed = useCursor && !!opts.cursor ? parseCursor(opts.cursor) : null;
   const cursorWhere = (() => {
     if (!useCursor || !cursorParsed) return null;
     if (cursorParsed.ts === null) {
@@ -715,14 +723,16 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
       .orderBy(order, desc(leads.id))
       .limit(sliceLimit)
       .offset(offset),
-    // skip the COUNT in cursor mode. The +1 row trick on
-    // sliceLimit gives the UI everything it needs to show "Load more".
-    useCursor
-      ? Promise.resolve([{ count: 0 }])
-      : db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(leads)
-          .where(whereExpr),
+    // Always run COUNT — the +1 lookahead on sliceLimit handles "is there
+    // a next page", but the UI ("Showing X of Y") and the bulk-action
+    // toolbar dispatch state both consume `total` on every page. Returning
+    // 0 on subsequent pages would overwrite the bulk-selection reducer's
+    // state. COUNT against the indexed predicate is cheap and runs in
+    // parallel with the row fetch (Promise.all below).
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(whereExpr),
   ]);
 
   let trimmedRows = rowsRaw;
