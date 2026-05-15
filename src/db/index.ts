@@ -27,6 +27,17 @@ import * as schema from "./schema";
  */
 const client = postgres(env.POSTGRES_URL, {
   prepare: false,
+  // Supavisor transaction-pool (:6543) does not support prepared
+  // statements. `prepare: false` stops postgres-js from creating
+  // *named* prepared statements, but on first connect postgres-js
+  // still issues a hidden `pg_catalog` type-introspection query to
+  // learn column type OIDs. Under transaction-pool + warm-Lambda
+  // reuse that startup query interleaves with the pooled backend's
+  // state and can wedge the connection (observed as 300s function
+  // timeouts on every Drizzle-builder query path). Disabling it makes
+  // postgres-js infer types at runtime instead — safe, and required
+  // for transaction-pool compatibility with the Drizzle query builder.
+  fetch_types: false,
   max: 1,
   idle_timeout: 20,
   connect_timeout: 10,
