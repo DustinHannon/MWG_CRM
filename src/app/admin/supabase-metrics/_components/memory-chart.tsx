@@ -15,6 +15,8 @@ import {
 import { StandardEmptyState } from "@/components/standard";
 import type { MemoryPoint } from "@/lib/supabase-metrics/types";
 
+import { formatBucketTick } from "./chart-format";
+
 const TOOLTIP_STYLE = {
   backgroundColor: "var(--popover)",
   color: "var(--popover-foreground)",
@@ -27,11 +29,6 @@ const GIB = 1024 * 1024 * 1024;
 
 function finite(n: number): number {
   return Number.isFinite(n) ? n : 0;
-}
-
-function hhmm(iso: string): string {
-  // ISO timestamp -> HH:MM. Slice the time portion without parsing a Date.
-  return iso.slice(11, 16);
 }
 
 // 1024-base human-readable bytes, 1 decimal.
@@ -110,7 +107,7 @@ export function MemoryChart({
             fontSize={11}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v) => hhmm(String(v))}
+            tickFormatter={(v) => formatBucketTick(String(v))}
           />
           <YAxis
             stroke="var(--muted-foreground)"
@@ -123,7 +120,7 @@ export function MemoryChart({
             contentStyle={TOOLTIP_STYLE}
             itemStyle={{ color: "var(--popover-foreground)" }}
             labelStyle={{ color: "var(--muted-foreground)" }}
-            labelFormatter={(v) => hhmm(String(v))}
+            labelFormatter={(v) => formatBucketTick(String(v))}
             formatter={(value) => fmtBytes(Number(value))}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />

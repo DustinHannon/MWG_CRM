@@ -33,9 +33,11 @@ export async function GET(req: Request) {
   try {
     const result = await db
       .delete(supabaseMetrics)
-      .where(lt(supabaseMetrics.time, sql`now() - interval '7 days'`))
-      .returning({ time: supabaseMetrics.time });
-    const deletedRows = result.length;
+      .where(lt(supabaseMetrics.time, sql`now() - interval '7 days'`));
+    // postgres-js driver: the delete result is a RowList whose `count`
+    // carries the affected-row count. Reading it avoids materializing
+    // every deleted row just to size the batch.
+    const deletedRows = result.count;
 
     const durationMs = Date.now() - startedAt;
     logger.info("supabase_metrics.prune.completed", {

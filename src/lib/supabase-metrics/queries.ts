@@ -98,9 +98,12 @@ export async function fetchSnapshot(input: {
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function readLastScrapeAt(tx: Tx): Promise<Date | null> {
+  // Match the retention window: the prune job deletes rows older than
+  // 7 days, so any surviving row is a meaningful last-scrape signal.
+  // A narrower bound would mask a true >24h staleness as "no scrapes".
   const rows = await tx.execute<{ time: Date }>(sql`
     SELECT MAX(time) AS time FROM supabase_metrics
-    WHERE time >= now() - interval '1 day'
+    WHERE time >= now() - interval '7 days'
   `);
   const first = (rows as unknown as Array<{ time: Date | null }>)[0];
   if (!first || !first.time) return null;
@@ -188,9 +191,63 @@ async function buildCurrentSnapshot(
   }
 
   const cpuModes = byName.get("node_cpu_seconds_total") ?? [];
-  const idleSum = sumWhere(cpuModes, (s) => s.labels.mode === "idle");
-  const allSum = sumValues(cpuModes);
-  const cpuBusyPct = allSum > 0 ? Math.max(0, Math.min(100, 100 * (1 - idleSum / allSum))) : 0;
+
+  // `node_cpu_seconds_total` is a monotonic counter, so the latest
+  // cumulative value is average-since-boot, not "current". Rate it
+  // across the two most-recent distinct scrape timestamps — the same
+  // delta logic the history CPU chart uses via counterRate. Fewer
+  // than 2 scrapes → no rate yet → 0 (self-heals next scrape minute).
+  const cpuRateRows = await tx.execute<{
+    time: Date;
+    labels: Record<string, string>;
+    value: number;
+  }>(sql`
+    WITH t AS (
+      SELECT DISTINCT time FROM supabase_metrics
+      WHERE metric_name = 'node_cpu_seconds_total'
+        AND time >= ${lo.toISOString()}::timestamptz
+        AND time <= ${lastScrapeAt.toISOString()}::timestamptz
+      ORDER BY time DESC
+      LIMIT 2
+    )
+    SELECT time, labels, value FROM supabase_metrics
+    WHERE metric_name = 'node_cpu_seconds_total'
+      AND time IN (SELECT time FROM t)
+  `);
+  const cpuRateSamples = cpuRateRows as unknown as Array<{
+    time: Date;
+    labels: Record<string, string>;
+    value: number;
+  }>;
+
+  let cpuBusyPct = 0;
+  if (cpuRateSamples.length > 0) {
+    const times = [
+      ...new Set(cpuRateSamples.map((s) => new Date(s.time).getTime())),
+    ].sort((a, b) => b - a);
+    if (times.length >= 2) {
+      const [newerT, olderT] = times;
+      const olderByKey = new Map<string, number>();
+      for (const s of cpuRateSamples) {
+        if (new Date(s.time).getTime() === olderT) {
+          olderByKey.set(stableLabelKey(s.labels ?? {}), Number(s.value));
+        }
+      }
+      let idleDelta = 0;
+      let totalDelta = 0;
+      for (const s of cpuRateSamples) {
+        if (new Date(s.time).getTime() !== newerT) continue;
+        const prev = olderByKey.get(stableLabelKey(s.labels ?? {}));
+        if (prev == null) continue;
+        const delta = Number(s.value) - prev;
+        if (delta < 0) continue; // counter reset — skip like counterRate
+        totalDelta += delta;
+        if ((s.labels ?? {}).mode === "idle") idleDelta += delta;
+      }
+      cpuBusyPct =
+        totalDelta > 0 ? clampPct(100 * (1 - idleDelta / totalDelta)) : 0;
+    }
+  }
 
   const memTotal = firstValue(byName.get("node_memory_MemTotal_bytes"));
   const memAvail = firstValue(byName.get("node_memory_MemAvailable_bytes"));
@@ -363,20 +420,6 @@ function stableLabelKey(labels: Record<string, string>): string {
   return keys.map((k) => `${k}=${labels[k]}`).join(",");
 }
 
-function sumValues(arr: Array<{ value: number }>): number {
-  let s = 0;
-  for (const x of arr) s += Number(x.value);
-  return s;
-}
-
-function sumWhere<T>(arr: T[], pred: (x: T) => boolean): number {
-  let s = 0;
-  for (const x of arr as Array<T & { value: number }>) {
-    if (pred(x)) s += Number(x.value);
-  }
-  return s;
-}
-
 function firstValue(arr: Array<{ value: number }> | undefined): number {
   if (!arr || arr.length === 0) return 0;
   return Number(arr[0]?.value ?? 0);
@@ -529,11 +572,29 @@ function aggregateRateAcrossLabels(
   const out = new Map<string, number>();
   const map = grouped.get(name);
   if (!map) return out;
-  for (const series of map.values()) {
-    const rates = counterRate(series);
-    for (const [bucket, r] of rates) {
-      if (r == null) continue;
-      out.set(bucket, (out.get(bucket) ?? 0) + r);
+  const seriesRates = [...map.values()].map((s) => counterRate(s));
+  // Union of all buckets, chronologically (ISO strings sort lexically
+  // == chronologically here). Carry-forward each device's last good
+  // rate over a mid-stream null (counter reset / gap) so a single
+  // device's null doesn't undercount the summed multi-device total
+  // and render a false throughput dip. No carry before a series' first
+  // real rate — that would fabricate data.
+  const allBuckets = new Set<string>();
+  for (const rates of seriesRates) {
+    for (const b of rates.keys()) allBuckets.add(b);
+  }
+  const sortedBuckets = [...allBuckets].sort((a, b) => a.localeCompare(b));
+  for (const rates of seriesRates) {
+    let carry: number | undefined;
+    for (const bucket of sortedBuckets) {
+      if (!rates.has(bucket)) continue; // device absent — contribute nothing
+      const r = rates.get(bucket);
+      if (r != null) {
+        carry = r;
+        out.set(bucket, (out.get(bucket) ?? 0) + r);
+      } else if (carry !== undefined) {
+        out.set(bucket, (out.get(bucket) ?? 0) + carry);
+      }
     }
   }
   return out;

@@ -14,6 +14,8 @@ import {
 import { StandardEmptyState } from "@/components/standard";
 import type { CpuPoint } from "@/lib/supabase-metrics/types";
 
+import { formatBucketTick } from "./chart-format";
+
 const TOOLTIP_STYLE = {
   backgroundColor: "var(--popover)",
   color: "var(--popover-foreground)",
@@ -37,11 +39,6 @@ const CPU_MODES: { key: keyof Omit<CpuPoint, "t">; color: string }[] = [
 
 function finite(n: number): number {
   return Number.isFinite(n) ? n : 0;
-}
-
-function hhmm(iso: string): string {
-  // ISO timestamp -> HH:MM. Slice the time portion without parsing a Date.
-  return iso.slice(11, 16);
 }
 
 /**
@@ -103,7 +100,7 @@ export function CpuChart({
             fontSize={11}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v) => hhmm(String(v))}
+            tickFormatter={(v) => formatBucketTick(String(v))}
           />
           <YAxis
             stroke="var(--muted-foreground)"
@@ -115,7 +112,7 @@ export function CpuChart({
             contentStyle={TOOLTIP_STYLE}
             itemStyle={{ color: "var(--popover-foreground)" }}
             labelStyle={{ color: "var(--muted-foreground)" }}
-            labelFormatter={(v) => hhmm(String(v))}
+            labelFormatter={(v) => formatBucketTick(String(v))}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {CPU_MODES.map(({ key, color }) => (

@@ -219,6 +219,8 @@ function parseLabels(body: string): Record<string, string> {
     }
     // skip closing `"` (or terminate if missing).
     if (body[i] === '"') i += 1;
+    // Defensive bound against pathological upstream input bloating jsonb.
+    if (v.length > 1024) v = v.slice(0, 1024);
     out[key] = v;
   }
   return out;

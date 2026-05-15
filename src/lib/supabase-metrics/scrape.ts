@@ -99,9 +99,11 @@ export async function fetchMetricsBody(opts?: {
 /**
  * Filter parsed samples by the allowlist and shape them for insert.
  * Strips labels not in KEEP_LABELS so the jsonb column stays bounded.
- * Replaces non-finite values with 0 — counters / gauges should never
- * have legitimate NaN/Inf values, and storing them would poison rate
- * computations downstream.
+ * Non-finite samples (NaN/±Inf) are skipped entirely — the bucket is
+ * left as a true gap rather than zero-filled. Storing 0 would lie:
+ * a +Inf (e.g. a stalled replication slot's lag) would read as
+ * "healthy", and a 0 after positive values looks like a counter reset
+ * to the downstream rate computation.
  */
 export function shapeRowsForInsert(
   parsed: ParseResult,
@@ -114,11 +116,12 @@ export function shapeRowsForInsert(
     for (const [k, v] of Object.entries(s.labels)) {
       if (KEEP_LABELS.has(k)) kept[k] = v;
     }
+    if (!Number.isFinite(s.value)) continue;
     rows.push({
       time: asOf,
       metricName: s.name,
       labels: kept,
-      value: Number.isFinite(s.value) ? s.value : 0,
+      value: s.value,
     });
   }
   return rows;

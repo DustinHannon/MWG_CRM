@@ -1,22 +1,21 @@
 import { NextResponse } from "next/server";
 
-import { writeAudit } from "@/lib/audit";
 import { withInternalListApi } from "@/lib/api/internal-list";
 import { logger } from "@/lib/logger";
 import { fetchSnapshot } from "@/lib/supabase-metrics/queries";
 import { parseRange, type Snapshot } from "@/lib/supabase-metrics/types";
 
 /**
- * GET /api/admin/supabase-metrics/snapshot?range=30m&initial=1
+ * GET /api/admin/supabase-metrics/snapshot?range=30m
  *
  * Single round-trip returning the current scrape + bucketed history.
  * Admin-gated through `withInternalListApi({ auth: "admin" })`.
  *
  * Audit emission:
- *   The dashboard polls every 60s via TanStack Query. Emitting an
- *   audit row per poll would noise up the log; we only audit when the
- *   server component issues the *initial* fetch (`initial=1`). The
- *   polling endpoint reads the same payload but does not audit.
+ *   This polling endpoint does not audit. The dashboard polls every
+ *   60s via TanStack Query, so a per-request audit row would only add
+ *   noise. The once-per-view audit is emitted by the server component
+ *   that renders the page, not by this endpoint.
  *
  * Degraded response:
  *   On any internal error we log `supabase_metrics.snapshot.degraded`
@@ -37,8 +36,6 @@ export const GET = withInternalListApi(
         return NextResponse.json({ error: "Invalid range" }, { status: 400 });
       }
 
-      const isInitial = url.searchParams.get("initial") === "1";
-
       const snapshot: Snapshot = await fetchSnapshot({ range });
 
       const durationMs = Date.now() - startedAt;
@@ -47,15 +44,6 @@ export const GET = withInternalListApi(
           durationMs,
           range,
           userId: user.id,
-        });
-      }
-
-      if (isInitial) {
-        await writeAudit({
-          actorId: user.id,
-          action: "supabase_metrics.view",
-          targetType: "supabase_metrics",
-          targetId: range,
         });
       }
 

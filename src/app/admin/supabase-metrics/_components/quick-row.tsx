@@ -51,7 +51,11 @@ export function QuickRow({ current, isLoading }: QuickRowProps) {
   }
 
   const cpuCount = num(current.cpuCount);
-  const load5Max = cpuCount > 0 ? cpuCount * 2 : 2;
+  // When the upstream `cpu` label is absent, cpuCount is 0; clamp to a
+  // 1-core floor so the load gauge max is never 0 (which would flag a
+  // normal load as false-red).
+  const cpuCores = cpuCount > 0 ? cpuCount : 1;
+  const load5Max = cpuCores * 2;
 
   return (
     <div className="flex flex-col gap-6">

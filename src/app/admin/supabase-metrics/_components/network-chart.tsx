@@ -14,6 +14,8 @@ import {
 import { StandardEmptyState } from "@/components/standard";
 import type { NetworkPoint } from "@/lib/supabase-metrics/types";
 
+import { formatBucketTick } from "./chart-format";
+
 const TOOLTIP_STYLE = {
   backgroundColor: "var(--popover)",
   color: "var(--popover-foreground)",
@@ -43,15 +45,10 @@ function fmtRate(bytesPerSec: number): string {
   return `${n.toFixed(1)} ${units[i]}`;
 }
 
-// Accepts `unknown` because Recharts types both the axis tick value
-// and the tooltip label as ReactNode, not string.
+// Recharts types the axis tick value and tooltip label as ReactNode,
+// not string, so coerce before handing to the shared formatter.
 function fmtTime(t: unknown): string {
-  const raw = String(t ?? "");
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
-  return `${String(d.getHours()).padStart(2, "0")}:${String(
-    d.getMinutes(),
-  ).padStart(2, "0")}`;
+  return formatBucketTick(String(t ?? ""));
 }
 
 /**

@@ -36,7 +36,7 @@ export function TrafficTimelineChart({ data }: { data: TrafficDay[] }) {
   }
   return (
     <div className="h-[260px] rounded-lg border border-border bg-card p-4">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height={228}>
         <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
           <XAxis
