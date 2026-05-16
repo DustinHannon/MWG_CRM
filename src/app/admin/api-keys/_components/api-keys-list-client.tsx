@@ -193,6 +193,7 @@ export function ApiKeysListClient() {
   return (
     <>
       <StandardListPage<ApiKeyRow, ApiKeysFilters>
+        entityType="api_key"
         queryKey={["admin-api-keys", reloadKey]}
         fetchPage={fetchPage}
         filters={memoizedFilters}

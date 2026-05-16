@@ -244,6 +244,7 @@ export function CampaignsListClient({
 
   return (
     <StandardListPage<MarketingCampaignRow, CampaignsFilters>
+      entityType="marketing_campaign"
       queryKey={["marketing-campaigns"]}
       fetchPage={fetchPage}
       filters={memoizedFilters}

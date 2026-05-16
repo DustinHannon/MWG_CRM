@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { StandardEmptyState } from "./standard-empty-state";
+import { StandardErrorBoundary } from "./standard-error-boundary";
 import { StandardLoadingState } from "./standard-loading-state";
 import {
   StandardPageHeader,
@@ -88,6 +89,12 @@ export interface StandardListPageProps<T, F> {
   renderRow: (item: T, index: number) => ReactNode;
   /** Mobile card renderer. Same contract as `renderRow`. */
   renderCard: (item: T, index: number) => ReactNode;
+  /**
+   * Entity name for per-item render-error logs (e.g. "lead",
+   * "audit_log"). Required: each item render is error-boundary-wrapped
+   * and a log without entity context is not actionable.
+   */
+  entityType: string;
   /** Initial estimate for desktop row height (px). Variable height supported via measureElement. */
   rowEstimateSize: number;
   /** Initial estimate for mobile card height (px). */
@@ -199,6 +206,7 @@ export function StandardListPage<T, F>({
   filters,
   renderRow,
   renderCard,
+  entityType,
   rowEstimateSize,
   cardEstimateSize,
   emptyState,
@@ -465,6 +473,9 @@ export function StandardListPage<T, F>({
                   <VirtualScrollContainer
                     rows={rows}
                     renderItem={renderRow}
+                    entityType={entityType}
+                    viewport="desktop"
+                    resolveRowId={resolveRowId}
                     estimateSize={rowEstimateSize}
                     hasNextPage={Boolean(hasNextPage)}
                     isFetchingNextPage={isFetchingNextPage}
@@ -480,6 +491,9 @@ export function StandardListPage<T, F>({
               <VirtualScrollContainer
                 rows={rows}
                 renderItem={renderCard}
+                entityType={entityType}
+                viewport="mobile"
+                resolveRowId={resolveRowId}
                 estimateSize={cardEstimateSize}
                 hasNextPage={Boolean(hasNextPage)}
                 isFetchingNextPage={isFetchingNextPage}
@@ -517,6 +531,16 @@ export function StandardListPage<T, F>({
 interface VirtualScrollContainerProps<T> {
   rows: T[];
   renderItem: (item: T, index: number) => ReactNode;
+  /** Entity name for the per-item render-error log. */
+  entityType: string;
+  /**
+   * Both containers render simultaneously (one CSS-hidden), so a
+   * throwing row logs from both — this tags the structured log so the
+   * two lines are attributable and dedupable.
+   */
+  viewport: "desktop" | "mobile";
+  /** Resolves the stable id of a row — included in the error log and keys the per-item boundary. */
+  resolveRowId: (item: T, index: number) => string;
   estimateSize: number;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
@@ -551,6 +575,9 @@ interface VirtualScrollContainerProps<T> {
 function VirtualScrollContainer<T>({
   rows,
   renderItem,
+  entityType,
+  viewport,
+  resolveRowId,
   estimateSize,
   hasNextPage,
   isFetchingNextPage,
@@ -657,22 +684,42 @@ function VirtualScrollContainer<T>({
           position: "relative",
         }}
       >
-        {virtualItems.map((virtualItem) => (
-          <div
-            key={virtualItem.key}
-            data-index={virtualItem.index}
-            ref={virtualizer.measureElement}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              transform: `translateY(${virtualItem.start - virtualizer.options.scrollMargin}px)`,
-            }}
-          >
-            {renderItem(rows[virtualItem.index] as T, virtualItem.index)}
-          </div>
-        ))}
+        {virtualItems.map((virtualItem) => {
+          const item = rows[virtualItem.index] as T;
+          // resolveRowId runs outside the per-item boundary, so
+          // getRowId must be total (defaultGetRowId is).
+          const rowId = resolveRowId(item, virtualItem.index);
+          return (
+            <div
+              key={virtualItem.key}
+              data-index={virtualItem.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: `translateY(${virtualItem.start - virtualizer.options.scrollMargin}px)`,
+              }}
+            >
+              {/* Per-item isolation: one throwing renderRow/renderCard
+                  degrades to a placeholder instead of unmounting the
+                  list. Keyed by rowId so a recycled virtual slot resets
+                  its error state. Happy path returns children with no
+                  wrapper DOM, so measureElement / data-row-flash are
+                  unaffected. */}
+              <StandardErrorBoundary
+                key={rowId}
+                variant="inline"
+                entityType={entityType}
+                viewport={viewport}
+                rowId={rowId}
+              >
+                {renderItem(item, virtualItem.index)}
+              </StandardErrorBoundary>
+            </div>
+          );
+        })}
       </div>
       {/* Real sentinel in normal flow after the spacer. Never evicted
           by maxPages; its position is always the true content end. */}

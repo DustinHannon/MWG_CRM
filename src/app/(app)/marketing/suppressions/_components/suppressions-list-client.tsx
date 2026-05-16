@@ -280,6 +280,7 @@ export function SuppressionsListClient({
 
   return (
     <StandardListPage<MarketingSuppressionRow, SuppressionsFilters>
+      entityType="marketing_suppression"
       queryKey={["marketing-suppressions", reloadKey]}
       fetchPage={fetchPage}
       filters={memoizedFilters}

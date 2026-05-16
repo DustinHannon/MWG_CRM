@@ -378,6 +378,7 @@ function LeadsListInner({
 
   return (
     <StandardListPage<LeadRow, LeadFilters>
+      entityType="lead"
       queryKey={["leads", activeViewParam, activeColumns.join(",")]}
       fetchPage={fetchPageInstrumented}
       filters={memoizedFilters}

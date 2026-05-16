@@ -406,6 +406,7 @@ function ContactsListInner({
 
   return (
     <StandardListPage<ContactRow, ContactFilters>
+      entityType="contact"
       queryKey={["contacts", activeViewParam, activeColumns.join(",")]}
       fetchPage={fetchPageInstrumented}
       filters={memoizedFilters}

@@ -431,6 +431,7 @@ function OpportunitiesListInner({
 
   return (
     <StandardListPage<OpportunityRow, OpportunityFilters>
+      entityType="opportunity"
       queryKey={["opportunities", activeViewParam, activeColumns.join(",")]}
       fetchPage={fetchPageInstrumented}
       filters={memoizedFilters}

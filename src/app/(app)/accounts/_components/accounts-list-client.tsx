@@ -375,6 +375,7 @@ function AccountsListInner({
 
   return (
     <StandardListPage<AccountRow, AccountFilters>
+      entityType="account"
       queryKey={["accounts", activeViewParam, activeColumns.join(",")]}
       fetchPage={fetchPageInstrumented}
       filters={memoizedFilters}

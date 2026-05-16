@@ -166,6 +166,7 @@ export function D365RunsListClient({
 
   return (
     <StandardListPage<ImportRunListRow, ImportRunsFilters>
+      entityType="d365_import_run"
       queryKey={["admin-d365-import-runs"]}
       fetchPage={fetchPage}
       filters={memoizedFilters}

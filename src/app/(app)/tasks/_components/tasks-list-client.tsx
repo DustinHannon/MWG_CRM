@@ -737,6 +737,7 @@ function TasksListInner({
   return (
     <>
       <StandardListPage<TaskRow, TaskFilters>
+        entityType="task"
         queryKey={[
           "tasks",
           activeViewParam,

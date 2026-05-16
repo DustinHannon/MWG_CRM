@@ -308,6 +308,7 @@ export function ApiUsageListClient({
 
   return (
     <StandardListPage<ApiUsageRow, ApiUsageFilters>
+      entityType="api_usage"
       queryKey={["admin-api-usage"]}
       fetchPage={fetchPage}
       filters={memoizedFilters}

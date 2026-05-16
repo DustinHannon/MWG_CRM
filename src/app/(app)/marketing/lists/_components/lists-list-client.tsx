@@ -236,6 +236,7 @@ export function ListsListClient({ timePrefs, canCreate }: ListsListClientProps) 
 
   return (
     <StandardListPage<MarketingListRow, ListsFilters>
+      entityType="marketing_list"
       queryKey={["marketing-lists"]}
       fetchPage={fetchPage}
       filters={memoizedFilters}

@@ -285,6 +285,7 @@ export function MarketingAuditListClient({
     <div className="flex flex-col gap-4">
       {backLink}
       <StandardListPage<MarketingAuditRow, AuditFilters>
+        entityType="marketing_audit_log"
         queryKey={["marketing-audit"]}
         fetchPage={fetchPage}
         filters={memoizedFilters}

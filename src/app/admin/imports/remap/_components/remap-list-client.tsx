@@ -109,6 +109,7 @@ export function RemapListClient({ timePrefs }: RemapListClientProps) {
 
   return (
     <StandardListPage<PendingRow, EmptyFilters>
+      entityType="import_remap"
       queryKey={["admin-imports-remap"]}
       fetchPage={fetchPage}
       filters={filters}

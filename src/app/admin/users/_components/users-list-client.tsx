@@ -174,6 +174,7 @@ export function UsersListClient({
 
   return (
     <StandardListPage<UserRow, UsersFilters>
+      entityType="user"
       queryKey={["admin-users"]}
       fetchPage={fetchPage}
       filters={memoizedFilters}

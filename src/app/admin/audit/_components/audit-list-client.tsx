@@ -232,6 +232,7 @@ export function AuditListClient({
 
   return (
     <StandardListPage<AuditRow, AuditFilters>
+      entityType="audit_log"
       queryKey={["admin-audit"]}
       fetchPage={fetchPage}
       filters={memoizedFilters}

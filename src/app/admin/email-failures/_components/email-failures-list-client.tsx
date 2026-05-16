@@ -282,6 +282,7 @@ export function EmailFailuresListClient({
   return (
     <>
       <StandardListPage<FailureRow, EmailFailuresFilters>
+        entityType="email_failure"
         queryKey={["admin-email-failures", reloadKey]}
         fetchPage={fetchPage}
         filters={memoizedFilters}

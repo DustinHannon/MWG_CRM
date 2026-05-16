@@ -165,6 +165,7 @@ export function ReportsListClient() {
 
   return (
     <StandardListPage<ReportRow, ReportsFilters>
+      entityType="report"
       queryKey={["reports-user-and-shared"]}
       fetchPage={fetchPage}
       filters={memoizedFilters}

@@ -243,6 +243,7 @@ export function TemplatesListClient({
 
   return (
     <StandardListPage<MarketingTemplateRow, TemplateFilters>
+      entityType="marketing_template"
       queryKey={["marketing-templates"]}
       fetchPage={fetchPage}
       filters={memoizedFilters}

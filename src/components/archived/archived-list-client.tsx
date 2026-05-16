@@ -200,6 +200,7 @@ export function ArchivedListClient({
 
   return (
     <StandardListPage<ArchivedRow, Record<string, never>>
+      entityType={`archived:${queryKey}`}
       queryKey={[queryKey]}
       fetchPage={fetchPage}
       filters={{}}
