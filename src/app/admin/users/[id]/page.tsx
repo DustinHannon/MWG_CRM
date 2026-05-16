@@ -33,6 +33,19 @@ export default async function UserDetailPage({
   const isSelf = admin.id === u.id;
   const isSystemAccount = u.id === SYSTEM_SENTINEL_USER_ID;
 
+  // The permission map is the single source of truth. RoleBundleSelector
+  // and PermissionsEditor each seed local state from these props ONCE
+  // (useState/useMemo), so after applyRoleBundleAction / Save revalidates
+  // this route they would keep showing the pre-mutation toggles until a
+  // full reload. Key both on a stable signature of the permission values
+  // so they remount with fresh state when — and only when — a permission
+  // actually changed (React-canonical state reset; unrelated revalidations
+  // keep the key stable and do not disturb an in-progress edit).
+  const permsKey = (Object.keys(perms) as (keyof typeof perms)[])
+    .sort()
+    .map((k) => `${String(k)}:${perms[k] ? 1 : 0}`)
+    .join("|");
+
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter
@@ -65,6 +78,7 @@ export default async function UserDetailPage({
 
       <div className="mt-8">
         <RoleBundleSelector
+          key={permsKey}
           userId={u.id}
           currentPermissions={perms}
           isBreakglass={u.isBreakglass}
@@ -72,6 +86,7 @@ export default async function UserDetailPage({
       </div>
 
       <PermissionsEditor
+        key={permsKey}
         userId={u.id}
         initialPermissions={perms}
         isBreakglass={u.isBreakglass}
