@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { signIn } from "next-auth/react";
 import { scheduleMeetingAction, sendEmailAction } from "./actions";
 import type { ActionResult } from "@/lib/server-action";
@@ -8,71 +8,7 @@ import { useShowPicker } from "@/hooks/use-show-picker";
 
 const initial: ActionResult = { ok: true };
 
-export function GraphActionPanel({
-  leadId,
-  defaultEmail,
-  defaultName,
-  defaultTimeZone,
-}: {
-  leadId: string;
-  defaultEmail?: string | null;
-  defaultName?: string | null;
-  defaultTimeZone: string;
-}) {
-  const [tab, setTab] = useState<"email" | "meeting">("email");
-
-  return (
-    <div className="rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
-      <div className="flex gap-2">
-        <Pill active={tab === "email"} onClick={() => setTab("email")}>
-          Send email
-        </Pill>
-        <Pill active={tab === "meeting"} onClick={() => setTab("meeting")}>
-          Schedule meeting
-        </Pill>
-      </div>
-
-      <div className="mt-4">
-        {tab === "email" ? (
-          <EmailForm leadId={leadId} defaultEmail={defaultEmail} />
-        ) : (
-          <MeetingForm
-            leadId={leadId}
-            defaultEmail={defaultEmail}
-            defaultName={defaultName}
-            defaultTimeZone={defaultTimeZone}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Pill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs uppercase tracking-wide transition ${
-        active
-          ? "bg-primary text-primary-foreground"
-          : "border border-border bg-muted/40 text-muted-foreground hover:bg-muted"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function EmailForm({
+export function EmailForm({
   leadId,
   defaultEmail,
 }: {
@@ -117,7 +53,7 @@ function EmailForm({
   );
 }
 
-function MeetingForm({
+export function MeetingForm({
   leadId,
   defaultEmail,
   defaultName,

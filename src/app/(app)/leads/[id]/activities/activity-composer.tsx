@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import {
   addCallAction,
   addNoteAction,
@@ -11,59 +11,7 @@ import { useShowPicker } from "@/hooks/use-show-picker";
 
 const initial: ActionResult = { ok: true };
 
-type Tab = "note" | "call" | "task";
-
-export function ActivityComposer({ leadId }: { leadId: string }) {
-  const [tab, setTab] = useState<Tab>("note");
-
-  return (
-    <div className="rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">
-      <div className="flex gap-2">
-        <Pill active={tab === "note"} onClick={() => setTab("note")}>
-          Note
-        </Pill>
-        <Pill active={tab === "call"} onClick={() => setTab("call")}>
-          Log call
-        </Pill>
-        <Pill active={tab === "task"} onClick={() => setTab("task")}>
-          Add task
-        </Pill>
-      </div>
-
-      <div className="mt-4">
-        {tab === "note" ? <NoteForm leadId={leadId} /> : null}
-        {tab === "call" ? <CallForm leadId={leadId} /> : null}
-        {tab === "task" ? <TaskForm leadId={leadId} /> : null}
-      </div>
-    </div>
-  );
-}
-
-function Pill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs uppercase tracking-wide transition ${
-        active
-          ? "bg-primary text-primary-foreground"
-          : "border border-border bg-muted/40 text-muted-foreground hover:bg-muted"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function NoteForm({ leadId }: { leadId: string }) {
+export function NoteForm({ leadId }: { leadId: string }) {
   const [state, action, pending] = useActionState(
     async (_p: ActionResult, fd: FormData) => addNoteAction(fd),
     initial,
@@ -84,7 +32,7 @@ function NoteForm({ leadId }: { leadId: string }) {
   );
 }
 
-function CallForm({ leadId }: { leadId: string }) {
+export function CallForm({ leadId }: { leadId: string }) {
   const [state, action, pending] = useActionState(
     async (_p: ActionResult, fd: FormData) => addCallAction(fd),
     initial,
@@ -126,7 +74,7 @@ function CallForm({ leadId }: { leadId: string }) {
   );
 }
 
-function TaskForm({ leadId }: { leadId: string }) {
+export function TaskForm({ leadId }: { leadId: string }) {
   const [state, action, pending] = useActionState(
     async (_p: ActionResult, fd: FormData) => addTaskAction(fd),
     initial,

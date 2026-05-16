@@ -26,9 +26,8 @@ import { canDeleteLead } from "@/lib/access/can-delete";
 import { formatPersonName as _fpn } from "@/lib/format/person-name";
 void _fpn;
 import { ConvertModal } from "./convert/_components/convert-modal";
-import { ActivityComposer } from "./activities/activity-composer";
 import { ActivityFeed } from "./activities/activity-feed";
-import { GraphActionPanel } from "./graph/graph-actions";
+import { LeadActionsPanel } from "./lead-actions-panel";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { EmailActivityTimeline } from "@/components/leads/email-activity-timeline";
 import { getEmailActivityForLead } from "@/lib/leads/email-activity";
@@ -238,19 +237,16 @@ export default async function LeadDetailPage({
           </p>
         </Card>
 
-        {(perms.canSendEmail || user.isAdmin) && !lead.doNotEmail ? (
-          <div className="lg:col-span-3">
-            <GraphActionPanel
-              leadId={lead.id}
-              defaultEmail={lead.email}
-              defaultName={formatPersonName(lead)}
-              defaultTimeZone={env.DEFAULT_TIMEZONE}
-            />
-          </div>
-        ) : null}
-
         <div className="lg:col-span-3">
-          <ActivityComposer leadId={lead.id} />
+          <LeadActionsPanel
+            leadId={lead.id}
+            canSendEmail={
+              (perms.canSendEmail || user.isAdmin) && !lead.doNotEmail
+            }
+            defaultEmail={lead.email}
+            defaultName={formatPersonName(lead)}
+            defaultTimeZone={env.DEFAULT_TIMEZONE}
+          />
         </div>
 
         <div className="lg:col-span-3">
@@ -262,7 +258,7 @@ export default async function LeadDetailPage({
 
         {/* Tasks list. Read-only display of tasks where lead_id =
             currentLead.id. Task creation on the lead detail page is
-            canonical via the tabbed Activity composer's Add task tab
+            canonical via the merged lead actions panel's Add task tab
             (above) per STANDARDS §17.1; the EntityTasksSection
             quick-add is suppressed here to avoid the duplicate
             affordance. Same `tasks` table backs this and /tasks;
