@@ -164,12 +164,20 @@ export function UsersListClient({
   );
 
   const headerActions = (
-    <Link
-      href="/admin/users/help"
-      className="shrink-0 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/80 whitespace-nowrap transition hover:bg-accent/40"
-    >
-      Permission help
-    </Link>
+    <div className="flex shrink-0 items-center gap-2">
+      <Link
+        href="/admin/users/sync"
+        className="shrink-0 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/80 whitespace-nowrap transition hover:bg-accent/40"
+      >
+        Sync from Entra
+      </Link>
+      <Link
+        href="/admin/users/help"
+        className="shrink-0 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground/80 whitespace-nowrap transition hover:bg-accent/40"
+      >
+        Permission help
+      </Link>
+    </div>
   );
 
   return (
