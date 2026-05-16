@@ -8,7 +8,7 @@ import Link from "next/link";
  */
 const LINKS: { label: string; href: string }[] = [
   { label: "Insights", href: "/admin/insights" },
-  { label: "Server logs", href: "/admin/server-logs" },
+  { label: "Server metrics", href: "/admin/server-metrics" },
   { label: "Database metrics", href: "/admin/supabase-metrics" },
   { label: "Email failures", href: "/admin/email-failures" },
   { label: "Audit log", href: "/admin/audit" },

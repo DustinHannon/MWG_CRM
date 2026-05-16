@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { emailSendLog } from "@/db/schema/email-send-log";
-import { getErrorPatterns } from "@/lib/observability/server-logs-queries";
+import { getErrorPatterns } from "@/lib/observability/server-metrics-queries";
 import { logger } from "@/lib/logger";
 import { OverviewTile } from "./overview-ui";
 

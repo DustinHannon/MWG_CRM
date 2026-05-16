@@ -37,7 +37,7 @@ const ROUTES_TO_CHECK = [
   "/welcome",
   "/admin",
   "/admin/insights",
-  "/admin/server-logs",
+  "/admin/server-metrics",
 ];
 
 // Phase 28 §0 banned-word list. The marketing-surface allowlist in

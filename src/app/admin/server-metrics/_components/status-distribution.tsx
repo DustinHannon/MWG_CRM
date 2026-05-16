@@ -5,8 +5,8 @@ import {
 } from "@/components/standard";
 import {
   getStatusDistribution,
-  type ServerLogsRange,
-} from "@/lib/observability/server-logs-queries";
+  type ServerMetricsRange,
+} from "@/lib/observability/server-metrics-queries";
 import {
   BetterStackNotConfiguredError,
   isBetterStackConfigured,
@@ -25,7 +25,7 @@ import { StatusDistributionChart } from "./status-distribution-chart";
  */
 
 export interface StatusDistributionPanelProps {
-  range: ServerLogsRange;
+  range: ServerMetricsRange;
 }
 
 export async function StatusDistributionPanel({

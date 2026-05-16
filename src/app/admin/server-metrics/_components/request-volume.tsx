@@ -1,35 +1,32 @@
-import { Gauge } from "lucide-react";
+import { Activity } from "lucide-react";
 import {
   StandardEmptyState,
   StandardPageHeader,
 } from "@/components/standard";
 import {
-  getSlowEndpoints,
-  type ServerLogsRange,
-} from "@/lib/observability/server-logs-queries";
+  getRequestVolume,
+  type ServerMetricsRange,
+} from "@/lib/observability/server-metrics-queries";
 import {
   BetterStackNotConfiguredError,
   isBetterStackConfigured,
 } from "@/lib/observability/betterstack";
 
 /**
- * Panel 4: top 10 endpoints by p95 response time.
+ * Panel 2: top 20 endpoints by request count.
  *
- * Duration is parsed from each Lambda REPORT line's `message` text
- * via ClickHouse regex (see `getSlowEndpoints`). Rows are tinted
- * destructive at p95 ≥ 1s and warning at p95 ≥ 500ms, mirroring the
- * semantic-token pattern in request-volume.tsx (error-rate column)
- * and the email-failures admin page.
+ * The query excludes `/_next/*` and `/favicon*` so static-asset noise
+ * doesn't dominate. Each row shows total requests, 5xx error count,
+ * and the computed error rate. The error-rate cell is tinted at the
+ * destructive token when ≥1%, mirroring the email-failures admin page
+ * approach (semantic color, not raw red).
  */
 
-const WARN_MS = 500;
-const CRIT_MS = 1000;
-
-export interface SlowEndpointsPanelProps {
-  range: ServerLogsRange;
+export interface RequestVolumePanelProps {
+  range: ServerMetricsRange;
 }
 
-export async function SlowEndpointsPanel({ range }: SlowEndpointsPanelProps) {
+export async function RequestVolumePanel({ range }: RequestVolumePanelProps) {
   if (!isBetterStackConfigured()) {
     return (
       <PanelShell>
@@ -42,9 +39,9 @@ export async function SlowEndpointsPanel({ range }: SlowEndpointsPanelProps) {
     );
   }
 
-  let rows: Awaited<ReturnType<typeof getSlowEndpoints>>;
+  let rows: Awaited<ReturnType<typeof getRequestVolume>>;
   try {
-    rows = await getSlowEndpoints(range);
+    rows = await getRequestVolume(range);
   } catch (err) {
     if (err instanceof BetterStackNotConfiguredError) {
       return (
@@ -72,8 +69,8 @@ export async function SlowEndpointsPanel({ range }: SlowEndpointsPanelProps) {
     return (
       <PanelShell>
         <StandardEmptyState
-          title="No endpoints meet the sample threshold"
-          description="No path received ≥5 invocations in this window. Try a longer time range."
+          title="No requests in this window"
+          description="Either no traffic reached the app or the drain hasn't caught up."
         />
       </PanelShell>
     );
@@ -86,24 +83,17 @@ export async function SlowEndpointsPanel({ range }: SlowEndpointsPanelProps) {
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-2.5 font-medium">Path</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">Samples</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">p50</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">p95</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">Max</th>
+              <th className="px-4 py-2.5 font-medium tabular-nums">Requests</th>
+              <th className="px-4 py-2.5 font-medium tabular-nums">5xx</th>
+              <th className="px-4 py-2.5 font-medium tabular-nums">Error rate</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
             {rows.map((row, i) => {
-              const samples = Number(row.samples ?? 0);
-              const p50 = Number(row.p50_ms ?? 0);
-              const p95 = Number(row.p95_ms ?? 0);
-              const max = Number(row.max_ms ?? 0);
-              const p95Tone =
-                p95 >= CRIT_MS
-                  ? "text-destructive"
-                  : p95 >= WARN_MS
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-foreground/90";
+              const requests = Number(row.requests ?? 0);
+              const errors = Number(row.errors ?? 0);
+              const rate = requests > 0 ? errors / requests : 0;
+              const highError = rate >= 0.01;
               return (
                 <tr key={`${row.path ?? "null"}-${i}`}>
                   <td className="px-4 py-3">
@@ -111,22 +101,19 @@ export async function SlowEndpointsPanel({ range }: SlowEndpointsPanelProps) {
                       {row.path ?? "(null)"}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
-                    {samples.toLocaleString()}
-                  </td>
                   <td className="px-4 py-3 text-xs tabular-nums text-foreground/90">
-                    {p50.toLocaleString()} ms
+                    {requests.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
+                    {errors.toLocaleString()}
                   </td>
                   <td
                     className={[
-                      "px-4 py-3 text-xs tabular-nums font-medium",
-                      p95Tone,
+                      "px-4 py-3 text-xs tabular-nums",
+                      highError ? "text-destructive" : "text-muted-foreground",
                     ].join(" ")}
                   >
-                    {p95.toLocaleString()} ms
-                  </td>
-                  <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
-                    {max.toLocaleString()} ms
+                    {(rate * 100).toFixed(2)}%
                   </td>
                 </tr>
               );
@@ -145,15 +132,15 @@ function PanelShell({ children }: { children: React.ReactNode }) {
         variant="section"
         title={
           <span className="inline-flex items-center gap-2">
-            <Gauge
+            <Activity
               aria-hidden="true"
               className="h-4 w-4 text-muted-foreground"
               strokeWidth={1.5}
             />
-            Slow endpoints
+            Request volume
           </span>
         }
-        description="Top 10 by p95 response time (≥5 samples). Duration parsed from Lambda REPORT lines; RSC query strings stripped so /dashboard and /dashboard?_rsc=... aggregate together."
+        description="Top 20 endpoints by request count. Static-asset paths excluded."
       />
       {children}
     </section>

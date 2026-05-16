@@ -179,7 +179,7 @@ const envSchema = z.object({
 
   // / §5.2 — Better Stack SQL Query API. All optional so the
   // app still boots if a phase-26 prerequisite isn't provisioned yet;
-  // the /admin/insights and /admin/server-logs pages render an empty
+  // the /admin/insights and /admin/server-metrics pages render an empty
   // state via StandardEmptyState when any of these is missing.
   BETTERSTACK_SOURCE_ID: z.string().optional(),
   BETTERSTACK_TEAM_ID: z.string().optional(),
@@ -193,14 +193,10 @@ const envSchema = z.object({
   VERCEL_TEAM_ID: z.string().optional(),
   VERCEL_PROJECT_ID: z.string().optional(),
 
-  // + §5.5 — server-side cache TTLs (seconds) for the two
-  // admin observability pages.
+  // Server-side cache TTL (seconds) shared by the Better Stack-backed
+  // admin observability pages (insights + server metrics) and the
+  // Vercel deployments panel.
   INSIGHTS_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
-  SERVER_LOGS_CACHE_TTL_SECONDS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(60),
 
   // Supabase Prometheus metrics scrape (admin Supabase Metrics dashboard).
   // Both optional so a missing secret only disables the scrape; the rest

@@ -8,7 +8,7 @@ import { writeSystemAudit } from "@/lib/audit";
 
 /**
  * Better Stack SQL Query API client. Shared by
- * /admin/insights (Sub-agent A) and /admin/server-logs (Sub-agent B).
+ * /admin/insights (Sub-agent A) and /admin/server-metrics (Sub-agent B).
  *
  * Auth: HTTP Basic with env.BETTERSTACK_QUERY_USERNAME +
  * env.BETTERSTACK_QUERY_PASSWORD. Source resolved via
@@ -80,7 +80,7 @@ export function betterStackS3Collection(sourceSlug = "mwg_crm"): string {
  * caps logs queries at 4 concurrent per user. The Insights page
  * issues 5–6 panel queries via Suspense streaming; without a limiter
  * we hit HTTP 429. Cap at 3 to leave headroom for any other panel
- * (e.g., Server Logs page rendering in the same render pass).
+ * (e.g., Server Metrics page rendering in the same render pass).
  *
  * Semaphore is per-Node-process. Fluid Compute reuses instances, so
  * the queue persists across requests on the same worker — desirable

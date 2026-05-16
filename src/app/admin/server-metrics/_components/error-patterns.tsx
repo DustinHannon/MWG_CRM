@@ -6,8 +6,8 @@ import {
 import { UserTime } from "@/components/ui/user-time";
 import {
   getErrorPatterns,
-  type ServerLogsRange,
-} from "@/lib/observability/server-logs-queries";
+  type ServerMetricsRange,
+} from "@/lib/observability/server-metrics-queries";
 import {
   BetterStackNotConfiguredError,
   isBetterStackConfigured,
@@ -25,7 +25,7 @@ import {
  */
 
 export interface ErrorPatternsPanelProps {
-  range: ServerLogsRange;
+  range: ServerMetricsRange;
 }
 
 export async function ErrorPatternsPanel({ range }: ErrorPatternsPanelProps) {

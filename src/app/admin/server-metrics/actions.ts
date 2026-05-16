@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth-helpers";
 
 /**
- * Manual refresh for /admin/server-logs.
+ * Manual refresh for /admin/server-metrics.
  *
  * The page is `revalidate = 60`, and every Better Stack query is
  * wrapped in `unstable_cache` with the same TTL. Clicking "Refresh"
@@ -16,7 +16,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
  * but the action also gates so the endpoint can't be POSTed from
  * a non-admin session.
  */
-export async function refreshServerLogsAction(): Promise<void> {
+export async function refreshServerMetricsAction(): Promise<void> {
   await requireAdmin();
-  revalidatePath("/admin/server-logs");
+  revalidatePath("/admin/server-metrics");
 }

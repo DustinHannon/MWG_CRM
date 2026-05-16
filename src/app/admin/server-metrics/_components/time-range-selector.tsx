@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
 /**
- * Time range selector for /admin/server-logs.
+ * Time range selector for /admin/server-metrics.
  *
  * URL-state component. Renders a segmented button group of 1h/6h/24h/7d.
  * Selection writes `?range=...` and triggers a navigation; the server
@@ -39,7 +39,7 @@ export function TimeRangeSelector({ currentRange }: TimeRangeSelectorProps) {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     params.set("range", value);
     startTransition(() => {
-      router.push(`/admin/server-logs?${params.toString()}`);
+      router.push(`/admin/server-metrics?${params.toString()}`);
     });
   };
 

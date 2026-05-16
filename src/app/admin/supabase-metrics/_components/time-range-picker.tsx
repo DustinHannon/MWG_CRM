@@ -3,11 +3,11 @@
 import type { Range } from "@/lib/supabase-metrics/types";
 
 /**
- * Controlled segmented range picker. Unlike the server-logs selector
+ * Controlled segmented range picker. Unlike the server-metrics selector
  * this drives client state (the TanStack Query key in dashboard.tsx),
  * not a URL navigation — the dashboard polls in place so a full
  * server re-render per range change would throw away the poll cache.
- * Visual style mirrors the server-logs TimeRangeSelector for chrome
+ * Visual style mirrors the server-metrics TimeRangeSelector for chrome
  * consistency across admin observability pages.
  */
 

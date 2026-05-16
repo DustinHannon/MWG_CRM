@@ -6,7 +6,7 @@ import { leads } from "@/db/schema/leads";
 import { activities } from "@/db/schema/activities";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader, StandardLoadingState } from "@/components/standard";
-import { SlowEndpointsPanel } from "./server-logs/_components/slow-endpoints";
+import { SlowEndpointsPanel } from "./server-metrics/_components/slow-endpoints";
 import { OverviewSection } from "./_components/overview/overview-ui";
 import { HealthStrip } from "./_components/overview/health-strip";
 import { DatabaseHealth } from "./_components/overview/database-health";

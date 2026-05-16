@@ -171,9 +171,9 @@ export const adminCrumbs = {
   // for traffic, error rate, and deployment health.
   insights: (): Breadcrumb[] => [ADMIN, { label: "Platform insights" }],
 
-  // Server logs — aggregated telemetry from the
+  // Server metrics — aggregated telemetry from the
   // Better Stack drain. Not a raw log tail.
-  serverLogs: (): Breadcrumb[] => [ADMIN, { label: "Server logs" }],
+  serverMetrics: (): Breadcrumb[] => [ADMIN, { label: "Server metrics" }],
 
   // Supabase database monitoring — CPU/mem/disk/net + Postgres +
   // connection-pool health, scraped from the Prometheus endpoint.

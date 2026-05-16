@@ -3,7 +3,7 @@ import {
   StandardEmptyState,
   StandardPageHeader,
 } from "@/components/standard";
-import { getDeployTimeline } from "@/lib/observability/server-logs-queries";
+import { getDeployTimeline } from "@/lib/observability/server-metrics-queries";
 import {
   BetterStackNotConfiguredError,
   isBetterStackConfigured,

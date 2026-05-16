@@ -2,13 +2,13 @@
 
 import { RotateCw } from "lucide-react";
 import { useTransition } from "react";
-import { refreshServerLogsAction } from "../actions";
+import { refreshServerMetricsAction } from "../actions";
 
 /**
- * Refresh button for /admin/server-logs.
+ * Refresh button for /admin/server-metrics.
  *
- * Invokes `refreshServerLogsAction` (server action) which calls
- * `revalidatePath('/admin/server-logs')`. That invalidates both the
+ * Invokes `refreshServerMetricsAction` (server action) which calls
+ * `revalidatePath('/admin/server-metrics')`. That invalidates both the
  * route segment cache (page-level `revalidate = 60`) and the
  * `unstable_cache` wrapper inside `queryBetterStack`, so the next
  * render fetches fresh telemetry.
@@ -18,7 +18,7 @@ export function RefreshButton() {
 
   const handleClick = () => {
     startTransition(async () => {
-      await refreshServerLogsAction();
+      await refreshServerMetricsAction();
     });
   };
 

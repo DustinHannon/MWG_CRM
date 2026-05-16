@@ -6,7 +6,7 @@ import {
 } from "@/components/standard";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { breadcrumbs } from "@/lib/navigation/breadcrumbs";
-import type { ServerLogsRange } from "@/lib/observability/server-logs-queries";
+import type { ServerMetricsRange } from "@/lib/observability/server-metrics-queries";
 import { ErrorPatternsPanel } from "./_components/error-patterns";
 import { RequestVolumePanel } from "./_components/request-volume";
 import { StatusDistributionPanel } from "./_components/status-distribution";
@@ -16,7 +16,7 @@ import { TimeRangeSelector } from "./_components/time-range-selector";
 import { RefreshButton } from "./_components/refresh-button";
 
 /**
- * /admin/server-logs.
+ * /admin/server-metrics.
  *
  * Aggregated telemetry from production Vercel runtime logs. NOT a raw
  * log tail — every panel renders a grouped/derived view (top error
@@ -37,14 +37,14 @@ export const revalidate = 60;
 
 const VALID_RANGES = ["1h", "6h", "24h", "7d"] as const;
 
-function parseRange(input: string | undefined): ServerLogsRange {
+function parseRange(input: string | undefined): ServerMetricsRange {
   if (input && (VALID_RANGES as readonly string[]).includes(input)) {
-    return input as ServerLogsRange;
+    return input as ServerMetricsRange;
   }
   return "1h";
 }
 
-export default async function ServerLogsPage({
+export default async function ServerMetricsPage({
   searchParams,
 }: {
   searchParams: Promise<{ range?: string }>;
@@ -56,11 +56,11 @@ export default async function ServerLogsPage({
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
-      <BreadcrumbsSetter crumbs={breadcrumbs.admin.serverLogs()} />
+      <BreadcrumbsSetter crumbs={breadcrumbs.admin.serverMetrics()} />
 
       <StandardPageHeader
         kicker="Admin"
-        title="Server logs"
+        title="Server metrics"
         description="Aggregated telemetry from production runtime logs."
         fontFamily="display"
         actions={
