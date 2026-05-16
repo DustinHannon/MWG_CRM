@@ -53,8 +53,8 @@ const client = postgres(url, {
   // order (see process-jobs route), so it never issues concurrent
   // queries on this client. max:1 provably bounds each Lambda to one
   // direct-connection backend, matches @/db, and preserves the
-  // ~60-conn direct-connection ceiling when minute-cadence cron
-  // invocations overlap a long-running tick.
+  // direct-connection ceiling if a */5 cron tick overlaps a prior
+  // long-running tick (worker max runtime is 4 min).
   max: 1,
   idle_timeout: 20,
   connect_timeout: 10,

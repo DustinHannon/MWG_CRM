@@ -52,9 +52,9 @@ export const maxDuration = 300;
  *   7. Returns a JSON summary so cron monitoring can inspect the run
  *      outcome directly.
  *
- * Schedule: every minute (`* * * * *`). See `vercel.json`. The minute
- * cadence matches the queue's "fast-feedback" intent — typical job
- * latency from enqueue to first attempt should stay well under 60s.
+ * Schedule: every 5 minutes (see `vercel.json` crons). The cadence
+ * balances fast-feedback against worker connection pressure;
+ * enqueue-to-first-attempt latency stays within a few minutes.
  */
 
 /**
