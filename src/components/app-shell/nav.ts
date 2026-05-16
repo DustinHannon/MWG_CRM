@@ -17,6 +17,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  Archive,
   ArrowLeft,
   BarChart3,
   Server,
@@ -36,6 +37,7 @@ import {
   Star,
   Tag,
   Target,
+  UserCheck,
   UserCog,
   Users,
 } from "lucide-react";
@@ -65,6 +67,8 @@ export const ICON_KEYS = [
   "DownloadCloud",
   "ArrowLeft",
   "Server",
+  "Archive",
+  "UserCheck",
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -92,6 +96,8 @@ export const ICON_MAP: Record<IconKey, LucideIcon> = {
   DownloadCloud,
   ArrowLeft,
   Server,
+  Archive,
+  UserCheck,
 };
 
 export type NavLink = { label: string; href: string; iconKey?: IconKey };
@@ -134,7 +140,9 @@ export const ADMIN_NAV_ITEMS: NavLink[] = [
   { label: "Settings", href: "/admin/settings", iconKey: "SlidersHorizontal" },
   { label: "Audit log", href: "/admin/audit", iconKey: "ScrollText" },
   { label: "Data tools", href: "/admin/data", iconKey: "Database" },
+  { label: "Archived leads", href: "/leads/archived", iconKey: "Archive" },
   { label: "D365 import", href: "/admin/d365-import", iconKey: "DownloadCloud" },
+  { label: "Imported-by remap", href: "/admin/imports/remap", iconKey: "UserCheck" },
   { label: "API keys", href: "/admin/api-keys", iconKey: "Key" },
   { label: "API usage", href: "/admin/api-usage", iconKey: "Activity" },
   { label: "Insights", href: "/admin/insights", iconKey: "BarChart3" },
