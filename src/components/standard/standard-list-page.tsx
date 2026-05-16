@@ -17,7 +17,6 @@ import {
   StandardPageHeader,
   type StandardPageHeaderProps,
 } from "./standard-page-header";
-import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 
 /**
@@ -114,12 +113,11 @@ export interface StandardListPageProps<T, F> {
   className?: string;
 }
 
-const DEFAULT_PAGE_SIZE = 50;
 
 /**
  * Canonical list-page shell. Owns infinite scroll, virtualization,
  * scroll restoration, accessibility scaffolding (skip-links, ARIA live
- * region, reduced-motion fallback), and empty/loading/error states.
+ * region), and empty/loading/error states.
  *
  * Data-shape constraints:
  * `fetchPage` MUST return an opaque cursor string (or null when
@@ -128,13 +126,14 @@ const DEFAULT_PAGE_SIZE = 50;
  * `total` MAY be the page's running total or the overall result-set
  * total — the shell uses it only for the "Showing N of M" affordance.
  *
- * Reduced-motion behavior:
- * Auto-fetch via intersection sentinel is disabled when
- * `prefers-reduced-motion: reduce` is set. Users must click the
- * always-visible "Load more" button. The button is also always
- * rendered when there are more pages, regardless of the user's
- * motion preference — it's the keyboard- and screen-reader-friendly
- * path.
+ * Auto-fetch:
+ * The next page is fetched automatically when the index-based sentinel
+ * (the last virtual row) enters the rendered window — unconditionally,
+ * on every environment. `prefers-reduced-motion` is intentionally NOT
+ * honored: this is an internal tool with a consistent-behavior
+ * requirement across Windows Server / RDP / VDI / desktop / mobile.
+ * There is no "Load more" button; scrolling is the only pagination
+ * affordance.
  */
 export function StandardListPage<T, F>({
   queryKey,
@@ -148,14 +147,11 @@ export function StandardListPage<T, F>({
   errorState,
   loadingState,
   bulkActions,
-  pageSize = DEFAULT_PAGE_SIZE,
   header,
   filtersSlot,
   columnHeaderSlot,
   className,
 }: StandardListPageProps<T, F>) {
-  const reducedMotion = useReducedMotion();
-
   const query = useInfiniteQuery<StandardListPagePage<T>, Error>({
     queryKey: [...queryKey, filters],
     queryFn: ({ pageParam, signal }) =>
@@ -333,7 +329,6 @@ export function StandardListPage<T, F>({
                     hasNextPage={Boolean(hasNextPage)}
                     isFetchingNextPage={isFetchingNextPage}
                     fetchNextPage={fetchNextPage}
-                    reducedMotion={reducedMotion}
                   />
                 </div>
               </div>
@@ -349,33 +344,19 @@ export function StandardListPage<T, F>({
                 hasNextPage={Boolean(hasNextPage)}
                 isFetchingNextPage={isFetchingNextPage}
                 fetchNextPage={fetchNextPage}
-                reducedMotion={reducedMotion}
               />
             </div>
 
-            {/* Load-more button: always rendered when more pages exist.
-                Sole trigger when reduced-motion is preferred. Keyboard
-                + screen-reader friendly regardless. */}
-            <div className="flex items-center justify-center pt-2">
-              {hasNextPage ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!isFetchingNextPage) void fetchNextPage();
-                  }}
-                  disabled={isFetchingNextPage}
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isFetchingNextPage
-                    ? "Loading more"
-                    : `Load ${Math.min(pageSize, Math.max(0, total - loadedCount)).toLocaleString()} more (${loadedCount.toLocaleString()} of ${total.toLocaleString()} shown)`}
-                </button>
-              ) : (
+            {/* No "Load more" button — scrolling drives the index
+                sentinel (auto-fetch is unconditional). Terminal line
+                shows only once every page is loaded. */}
+            {!hasNextPage ? (
+              <div className="flex items-center justify-center pt-2">
                 <p className="text-xs text-muted-foreground">
                   {`End of results — ${total.toLocaleString()} ${total === 1 ? "item" : "items"} shown`}
                 </p>
-              )}
-            </div>
+              </div>
+            ) : null}
           </>
         )}
       </div>
@@ -399,13 +380,12 @@ interface VirtualScrollContainerProps<T> {
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;
-  reducedMotion: boolean;
 }
 
 /**
  * Virtualized scroll surface with variable-height rows, an
- * intersection sentinel that triggers `fetchNextPage` (suppressed when
- * `reducedMotion` is true), and per-URL scroll restoration.
+ * intersection sentinel that triggers `fetchNextPage`, and per-URL
+ * scroll restoration.
  *
  * Uses `useWindowVirtualizer` so the page itself is the scroll surface
  * (window). The list reports its `offsetTop` as `scrollMargin` so the
@@ -424,7 +404,6 @@ function VirtualScrollContainer<T>({
   hasNextPage,
   isFetchingNextPage,
   fetchNextPage,
-  reducedMotion,
 }: VirtualScrollContainerProps<T>) {
   // TanStack Virtual returns functions that cannot be safely memoized;
   // opt this component out of the React Compiler to preserve correct
@@ -489,9 +468,9 @@ function VirtualScrollContainer<T>({
 
   const virtualItems = virtualizer.getVirtualItems();
 
-  // Sentinel-driven auto-fetch. Suppressed when reduced-motion is on.
+  // Sentinel-driven auto-fetch (original index-based sentinel). Always
+  // on — no prefers-reduced-motion gate, no button.
   useEffect(() => {
-    if (reducedMotion) return;
     if (!hasNextPage || isFetchingNextPage) return;
     const last = virtualItems.at(-1);
     if (!last) return;
@@ -505,7 +484,6 @@ function VirtualScrollContainer<T>({
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-    reducedMotion,
   ]);
 
   return (
