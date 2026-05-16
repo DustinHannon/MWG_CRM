@@ -9,7 +9,7 @@ import { crmAccounts, contacts, opportunities } from "@/db/schema/crm-records";
 import { tasks } from "@/db/schema/tasks";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
-import { ValidationError, NotFoundError, ForbiddenError } from "@/lib/errors";
+import { ValidationError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { AUDIT_EVENTS } from "@/lib/audit/events";
 import { env } from "@/lib/env";
@@ -306,14 +306,13 @@ export async function commitEntraUserImport(
             });
             continue;
           }
-          // Domain allowlist — parity with the interactive JIT path's
-          // EntraDomainNotAllowedError invariant. Never call the core
-          // provisioner for a disallowed domain.
+          // Domain allowlist — exact parity with the interactive JIT
+          // path's EntraDomainNotAllowedError invariant (entra-
+          // provisioning.ts): same condition, fail-closed on an empty
+          // allowlist. Never call the core provisioner for a disallowed
+          // domain.
           const domain = profile.email.split("@")[1]?.toLowerCase();
-          if (
-            env.ALLOWED_EMAIL_DOMAINS.length > 0 &&
-            (!domain || !env.ALLOWED_EMAIL_DOMAINS.includes(domain))
-          ) {
+          if (!domain || !env.ALLOWED_EMAIL_DOMAINS.includes(domain)) {
             failed.push({
               entraOid: u.id,
               error: "Email domain is not in the allowed list",
@@ -445,10 +444,10 @@ export async function offboardMissingUsers(
               .limit(1);
 
             if (!target) {
-              throw new NotFoundError("User not found");
+              throw new ValidationError("User not found");
             }
             if (target.isBreakglass) {
-              throw new ForbiddenError(
+              throw new ValidationError(
                 "Cannot offboard the breakglass account",
               );
             }
@@ -476,7 +475,7 @@ export async function offboardMissingUsers(
                 .where(eq(users.id, item.reassignTo))
                 .limit(1);
               if (!reassignTarget) {
-                throw new NotFoundError(
+                throw new ValidationError(
                   "Reassignment target not found",
                 );
               }
@@ -486,7 +485,7 @@ export async function offboardMissingUsers(
                 );
               }
               if (reassignTarget.isBreakglass) {
-                throw new ForbiddenError(
+                throw new ValidationError(
                   "Cannot reassign to the breakglass account",
                 );
               }
