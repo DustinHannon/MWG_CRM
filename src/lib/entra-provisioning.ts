@@ -10,7 +10,6 @@ import { notifyAdminsOfNewUser } from "@/lib/notifications";
 import {
   graphFetchWithToken,
   GraphError,
-  type GraphMeProfile,
   type GraphMeProfileExtended,
   type GraphManager,
 } from "@/lib/graph";
@@ -27,6 +26,12 @@ import {
  *
  * On returning sign-ins we refresh display_name/first_name/last_name/email
  * from Graph, but never touch is_admin, is_active, or permissions.
+ *
+ * The resolution-order + insert body lives in
+ * {@link createOrUpdateUserFromEntraProfile}, which takes a normalized,
+ * transport-agnostic {@link NormalizedEntraProfile}. Interactive SSO (this
+ * function) and a future admin bulk-sync wizard both create users through
+ * that single core so the two paths cannot drift.
  */
 export interface ProvisionInput {
   entraOid: string;
@@ -49,6 +54,76 @@ export interface ProvisionedUser {
    * to plumb a "first login" flag onto the token.
    */
   firstLoginAt: Date | null;
+}
+
+/**
+ * One normalized, transport-agnostic shape that both create paths feed into.
+ * Interactive SSO builds this from a delegated /me + /me/manager fetch; the
+ * admin bulk-sync wizard builds it from a directory /users row. Whatever the
+ * source, the create-core only ever sees this.
+ */
+export interface NormalizedEntraProfile {
+  entraOid: string;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  /**
+   * false → do not write any of the Entra profile columns (job_title,
+   * department, office_location, business_phones, mobile_phone, country,
+   * entra_synced_at). Mirrors the legacy `if (me)` guard: when the
+   * delegated /me fetch failed we must NOT overwrite a returning user's
+   * existing profile with nulls, nor stamp entra_synced_at. Directory
+   * sync always has the row, so it sets this true.
+   */
+  profileTouched: boolean;
+  jobTitle?: string | null;
+  department?: string | null;
+  officeLocation?: string | null;
+  businessPhones?: string[];
+  mobilePhone?: string | null;
+  country?: string | null;
+  /** false → do not write any manager_* column (transient/unknown). */
+  managerTouched: boolean;
+  managerEntraOid: string | null;
+  managerDisplayName: string | null;
+  managerEmail: string | null;
+}
+
+/**
+ * Microsoft Graph `/users` (directory) row shape (subset). Declared here so
+ * the future directory-sync module imports it from this module rather than
+ * the reverse, avoiding an import cycle (directory-sync → entra-provisioning,
+ * never back).
+ */
+export interface GraphDirectoryUser {
+  id: string;
+  displayName?: string | null;
+  givenName?: string | null;
+  surname?: string | null;
+  mail?: string | null;
+  userPrincipalName?: string | null;
+  jobTitle?: string | null;
+  department?: string | null;
+  officeLocation?: string | null;
+  mobilePhone?: string | null;
+  businessPhones?: string[] | null;
+  accountEnabled?: boolean | null;
+  userType?: string | null;
+  assignedLicenses?: Array<{ skuId?: string | null }> | null;
+}
+
+/** Result of the shared create-core. `created` distinguishes insert vs update. */
+export interface ProvisionCoreResult {
+  id: string;
+  email: string;
+  displayName: string;
+  isActive: boolean;
+  isAdmin: boolean;
+  sessionVersion: number;
+  firstLoginAt: Date | null;
+  created: boolean;
 }
 
 export async function provisionEntraUser(
@@ -101,6 +176,8 @@ export async function provisionEntraUser(
     }
   }
 
+  // Compute name/email exactly as before: naive UPN parse, overridden by
+  // Graph /me's givenName/surname/displayName when present.
   const naive = parseUpn(input.upn);
   const firstName = trimOrFallback(me?.givenName, naive.firstName);
   const lastName = trimOrFallback(me?.surname, naive.lastName);
@@ -113,45 +190,199 @@ export async function provisionEntraUser(
     trimOrFallback(input.email, input.upn),
   ).toLowerCase();
 
+  // Map the manager tri-state onto the normalized profile's manager fields:
+  //   fresh      → touched, fields from the resolved manager (or all null)
+  //   no_manager → touched, all manager fields explicitly null (Graph 404)
+  //   error      → NOT touched, so the core writes no manager_* columns
+  let managerTouched: boolean;
+  let managerEntraOid: string | null = null;
+  let managerDisplayName: string | null = null;
+  let managerEmail: string | null = null;
+  if (managerState.kind === "fresh") {
+    managerTouched = true;
+    managerEntraOid = managerState.manager?.id ?? null;
+    managerDisplayName = managerState.manager?.displayName ?? null;
+    managerEmail =
+      managerState.manager?.mail ??
+      managerState.manager?.userPrincipalName ??
+      null;
+  } else if (managerState.kind === "no_manager") {
+    managerTouched = true;
+  } else {
+    managerTouched = false;
+  }
+
+  const profile: NormalizedEntraProfile = {
+    entraOid: input.entraOid,
+    username: naive.username,
+    email,
+    firstName,
+    lastName,
+    displayName,
+    // Mirror the legacy `if (me)` guard: only carry profile fields when
+    // the /me fetch succeeded; otherwise the core skips those columns and
+    // a returning user's existing profile is preserved.
+    profileTouched: me !== null,
+    jobTitle: me ? (me.jobTitle ?? null) : undefined,
+    department: me ? (me.department ?? null) : undefined,
+    officeLocation: me ? (me.officeLocation ?? null) : undefined,
+    businessPhones: me ? (me.businessPhones ?? []) : undefined,
+    mobilePhone: me ? (me.mobilePhone ?? null) : undefined,
+    country: me ? (me.country ?? null) : undefined,
+    managerTouched,
+    managerEntraOid,
+    managerDisplayName,
+    managerEmail,
+  };
+
+  const r = await createOrUpdateUserFromEntraProfile(profile, {
+    source: "entra_sso",
+  });
+
+  return {
+    id: r.id,
+    email: r.email,
+    displayName: r.displayName,
+    isActive: r.isActive,
+    isAdmin: r.isAdmin,
+    sessionVersion: r.sessionVersion,
+    firstLoginAt: r.firstLoginAt,
+  };
+}
+
+/**
+ * Build a normalized profile from a Microsoft Graph directory (`/users`) row.
+ * Reuses the same UPN parsing / trim-or-fallback rules as the interactive
+ * path so a bulk-synced user resolves identically to a JIT one.
+ *
+ * The directory `/users` payload does not expand `manager`, so manager
+ * fields are left untouched (`managerTouched: false`); a separate
+ * `/users/{id}/manager` pass would set them.
+ */
+export function normalizeDirectoryUserToProfile(
+  u: GraphDirectoryUser,
+): NormalizedEntraProfile {
+  const upn = (u.userPrincipalName ?? u.mail ?? "").toLowerCase();
+  const naive = parseUpn(upn);
+  const firstName = trimOrFallback(u.givenName, naive.firstName);
+  const lastName = trimOrFallback(u.surname, naive.lastName);
+  const displayName = trimOrFallback(
+    u.displayName,
+    `${firstName} ${lastName}`.trim(),
+  );
+  const email = trimOrFallback(u.mail, upn).toLowerCase();
+
+  return {
+    entraOid: u.id,
+    username: naive.username,
+    email,
+    firstName,
+    lastName,
+    displayName,
+    // A directory /users row always carries the profile fields.
+    profileTouched: true,
+    jobTitle: u.jobTitle ?? null,
+    department: u.department ?? null,
+    officeLocation: u.officeLocation ?? null,
+    businessPhones: u.businessPhones ?? [],
+    mobilePhone: u.mobilePhone ?? null,
+    country: null,
+    managerTouched: false,
+    managerEntraOid: null,
+    managerDisplayName: null,
+    managerEmail: null,
+  };
+}
+
+/**
+ * The shared user create-core: resolution order (entra_oid → email → insert)
+ * plus default permissions, preferences, audit, and admin notification. Both
+ * interactive SSO and the admin bulk-sync wizard call this so they cannot
+ * drift.
+ *
+ * `opts.source`:
+ *  - "entra_sso": the person is signing in now, so we bump login timestamps
+ *    (first_login_at backfill, last_login_at) and on insert set
+ *    first_login_at / last_login_at = now().
+ *  - "admin_sync": the person has NOT logged in (admin pre-provisioning), so
+ *    we set NO login timestamps — but still mark jit_provisioned/-At because
+ *    the origin is the Entra identity directory; this keeps the admin
+ *    "Recently joined" filter accurate.
+ */
+export async function createOrUpdateUserFromEntraProfile(
+  profile: NormalizedEntraProfile,
+  opts: { source: "entra_sso" | "admin_sync" },
+): Promise<ProvisionCoreResult> {
+  // Profile-field patch. Only when profile data is present
+  // (profileTouched) write the profile columns + stamp entra_synced_at;
+  // only when the caller resolved the manager (managerTouched) write the
+  // manager_* columns. When neither is touched the patch is empty, so a
+  // returning user's existing profile/manager is preserved on update —
+  // critical for the degraded path where the Graph /me fetch failed.
+  const profilePatch: Record<string, unknown> = {};
+  if (profile.profileTouched) {
+    profilePatch.jobTitle = profile.jobTitle ?? null;
+    profilePatch.department = profile.department ?? null;
+    profilePatch.officeLocation = profile.officeLocation ?? null;
+    profilePatch.businessPhones = profile.businessPhones ?? [];
+    profilePatch.mobilePhone = profile.mobilePhone ?? null;
+    profilePatch.country = profile.country ?? null;
+    profilePatch.entraSyncedAt = new Date();
+  }
+  if (profile.managerTouched) {
+    profilePatch.managerEntraOid = profile.managerEntraOid;
+    profilePatch.managerDisplayName = profile.managerDisplayName;
+    profilePatch.managerEmail = profile.managerEmail;
+  }
+
+  // Only interactive sign-in bumps login telemetry. Admin pre-provisioning
+  // never touches first/last login (the person has not logged in).
+  const bumpLogin = opts.source === "entra_sso";
+
   // Find existing by entra_oid first. Single SELECT, fast.
   const byOid = await db
     .select()
     .from(users)
-    .where(eq(users.entraOid, input.entraOid))
+    .where(eq(users.entraOid, profile.entraOid))
     .limit(1);
 
   if (byOid[0]) {
     const existing = byOid[0];
     // one-time backfill of first_login_at for users that
     // pre-date the JIT telemetry columns. Only set when null; never
-    // overwritten on subsequent sign-ins.
-    const needsFirstLoginBackfill = existing.firstLoginAt === null;
+    // overwritten on subsequent sign-ins. Only on an interactive sign-in.
+    const needsFirstLoginBackfill =
+      bumpLogin && existing.firstLoginAt === null;
     // Refresh user-derived facts. Never overwrite admin/active/perms.
     await db
       .update(users)
       .set({
-        firstName,
-        lastName,
-        displayName,
-        email,
-        ...buildEntraProfilePatch(me, managerState),
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        displayName: profile.displayName,
+        email: profile.email,
+        ...profilePatch,
         ...(needsFirstLoginBackfill ? { firstLoginAt: sql`now()` } : {}),
-        lastLoginAt: sql`now()`,
+        ...(bumpLogin ? { lastLoginAt: sql`now()` } : {}),
         updatedAt: sql`now()`,
       })
       .where(eq(users.id, existing.id));
 
     return {
       id: existing.id,
-      email,
-      displayName,
+      email: profile.email,
+      displayName: profile.displayName,
       isActive: existing.isActive,
       isAdmin: existing.isAdmin,
       sessionVersion: existing.sessionVersion,
       // If we just backfilled, surface "now" so callers don't see a stale
       // null. Otherwise return the persisted value (may be null on legacy
-      // rows we chose not to backfill — but the branch above always does).
-      firstLoginAt: needsFirstLoginBackfill ? new Date() : existing.firstLoginAt,
+      // rows we chose not to backfill — but the branch above always does
+      // when bumpLogin). admin_sync never bumps → returns existing value.
+      firstLoginAt: needsFirstLoginBackfill
+        ? new Date()
+        : existing.firstLoginAt,
+      created: false,
     };
   }
 
@@ -159,60 +390,67 @@ export async function provisionEntraUser(
   const byEmail = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(users.email, profile.email))
     .limit(1);
 
   if (byEmail[0]) {
     const existing = byEmail[0];
-    const needsFirstLoginBackfill = existing.firstLoginAt === null;
+    const needsFirstLoginBackfill =
+      bumpLogin && existing.firstLoginAt === null;
     await db
       .update(users)
       .set({
-        entraOid: input.entraOid,
-        firstName,
-        lastName,
-        displayName,
-        ...buildEntraProfilePatch(me, managerState),
+        entraOid: profile.entraOid,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        displayName: profile.displayName,
+        ...profilePatch,
         ...(needsFirstLoginBackfill ? { firstLoginAt: sql`now()` } : {}),
-        lastLoginAt: sql`now()`,
+        ...(bumpLogin ? { lastLoginAt: sql`now()` } : {}),
         updatedAt: sql`now()`,
       })
       .where(eq(users.id, existing.id));
     return {
       id: existing.id,
-      email,
-      displayName,
+      email: profile.email,
+      displayName: profile.displayName,
       isActive: existing.isActive,
       isAdmin: existing.isAdmin,
       sessionVersion: existing.sessionVersion,
-      firstLoginAt: needsFirstLoginBackfill ? new Date() : existing.firstLoginAt,
+      firstLoginAt: needsFirstLoginBackfill
+        ? new Date()
+        : existing.firstLoginAt,
+      created: false,
     };
   }
 
   // Create new. Default permissions per §7.3.
-  const username = naive.username;
   const created = await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(users)
       .values({
-        entraOid: input.entraOid,
-        username,
-        email,
-        firstName,
-        lastName,
-        displayName,
+        entraOid: profile.entraOid,
+        username: profile.username,
+        email: profile.email,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        displayName: profile.displayName,
         isBreakglass: false,
         isAdmin: false,
         isActive: true,
-        ...buildEntraProfilePatch(me, managerState),
-        // JIT telemetry. `jit_provisioned` flags rows created
-        // by SSO (vs manually-seeded breakglass / fixtures); the
-        // timestamps power the admin "Recently joined" filter and the
-        // /welcome page's 5-minute first-login window.
+        ...profilePatch,
+        // JIT telemetry. `jit_provisioned` flags rows created from the
+        // Entra identity directory (vs manually-seeded breakglass /
+        // fixtures); the timestamps power the admin "Recently joined"
+        // filter and the /welcome page's 5-minute first-login window.
+        // Set for BOTH sources — admin pre-provisioning still originates
+        // from Entra — but the login timestamps below are
+        // interactive-only.
         jitProvisioned: true,
         jitProvisionedAt: sql`now()`,
-        firstLoginAt: sql`now()`,
-        lastLoginAt: sql`now()`,
+        ...(bumpLogin
+          ? { firstLoginAt: sql`now()`, lastLoginAt: sql`now()` }
+          : {}),
       })
       .returning({
         id: users.id,
@@ -257,29 +495,31 @@ export async function provisionEntraUser(
   // leave a half-provisioned user. Both helpers swallow their own errors.
   await writeAudit({
     actorId: created.id,
-    actorEmailSnapshot: email,
+    actorEmailSnapshot: profile.email,
     action: "user.create.jit",
     targetType: "user",
     targetId: created.id,
-    after: { upn: input.upn, email, source: "entra_sso" },
+    after: { upn: profile.username, email: profile.email, source: opts.source },
   });
   await notifyAdminsOfNewUser({
     userId: created.id,
-    displayName,
-    email,
+    displayName: profile.displayName,
+    email: profile.email,
   });
 
   return {
     id: created.id,
-    email,
-    displayName,
+    email: profile.email,
+    displayName: profile.displayName,
     isActive: created.isActive,
     isAdmin: created.isAdmin,
     sessionVersion: created.sessionVersion,
-    // We just inserted the row; firstLoginAt is "now". The DB-side
-    // `now()` would be more precise but this is only used for a 5-minute
-    // window check, so the < 100ms drift is irrelevant.
-    firstLoginAt: new Date(),
+    // We just inserted the row; on an interactive sign-in firstLoginAt is
+    // "now" (the DB-side now() would be more precise but this is only used
+    // for a 5-minute window check, so the < 100ms drift is irrelevant).
+    // Admin pre-provisioning set no login timestamp → null.
+    firstLoginAt: bumpLogin ? new Date() : null,
+    created: true,
   };
 }
 
@@ -363,53 +603,4 @@ function trimOrFallback(
 ): string {
   const c = candidate?.trim();
   return c && c.length > 0 ? c : fallback;
-}
-
-/**
- * build the patch for Entra-sourced profile fields. Always sets
- * entra_synced_at when we have any profile data. Manager fields:
- * "fresh" → set to manager's data (or null all if manager is null)
- * "no_manager" → null all manager fields (Graph 404 = no manager set)
- * "error" → don't touch manager fields (transient failure)
- */
-function buildEntraProfilePatch(
-  me: GraphMeProfileExtended | null,
-  managerState:
-    | { kind: "fresh"; manager: GraphManager | null }
-    | { kind: "no_manager" }
-    | { kind: "error" },
-): Partial<{
-  jobTitle: string | null;
-  department: string | null;
-  officeLocation: string | null;
-  businessPhones: string[];
-  mobilePhone: string | null;
-  country: string | null;
-  managerEntraOid: string | null;
-  managerDisplayName: string | null;
-  managerEmail: string | null;
-  entraSyncedAt: Date;
-}> {
-  const patch: Record<string, unknown> = {};
-  if (me) {
-    patch.jobTitle = me.jobTitle ?? null;
-    patch.department = me.department ?? null;
-    patch.officeLocation = me.officeLocation ?? null;
-    patch.businessPhones = me.businessPhones ?? [];
-    patch.mobilePhone = me.mobilePhone ?? null;
-    patch.country = me.country ?? null;
-    patch.entraSyncedAt = new Date();
-  }
-  if (managerState.kind === "fresh") {
-    patch.managerEntraOid = managerState.manager?.id ?? null;
-    patch.managerDisplayName = managerState.manager?.displayName ?? null;
-    patch.managerEmail =
-      managerState.manager?.mail ?? managerState.manager?.userPrincipalName ?? null;
-  } else if (managerState.kind === "no_manager") {
-    patch.managerEntraOid = null;
-    patch.managerDisplayName = null;
-    patch.managerEmail = null;
-  }
-  // "error" → leave manager_* fields alone.
-  return patch as ReturnType<typeof buildEntraProfilePatch>;
 }
