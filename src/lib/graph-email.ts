@@ -1,4 +1,6 @@
 import "server-only";
+// consistency-exempt: canonical-email-path: delegated /me/sendMail preserves real per-user mailbox identity (From: the user, no "sent on behalf of" footer, faithful Sent-Items + attachment capture) that app-permission sendEmailAs structurally cannot; E2E + preflight + consent + dedupe gates are replicated inline. 2026-05-16
+import { createHash } from "node:crypto";
 import { logger } from "@/lib/logger";
 import { sql, inArray } from "drizzle-orm";
 import { db } from "@/db";
@@ -7,13 +9,23 @@ import { emailSendLog } from "@/db/schema/email-send-log";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
 import { eq } from "drizzle-orm";
-import { ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, ValidationError } from "@/lib/errors";
+import { isGraphAppConfigured } from "@/lib/email/graph-app-token";
+import { checkMailboxKind } from "@/lib/email/preflight";
 import {
   graphFetchAs,
   GraphRequestError,
 } from "@/lib/graph-token";
 
 const EMAIL_SEND_LOG_FEATURE = "lead.email_activity";
+
+// Short window for accidental-duplicate suppression. A double-click /
+// two-tab / retried-server-action lands in the same bucket and is rejected;
+// a deliberate identical resend later falls in a new bucket and proceeds.
+// Email is NOT idempotent (graph-app-token.ts documents sendMail is
+// non-retry-safe), so a time-bucketed key — not the jobs-queue unbounded
+// key — is the correct adaptation.
+const DEDUPE_WINDOW_MS = 2 * 60 * 1000;
 
 interface SentMessage {
   id: string;
@@ -89,50 +101,113 @@ export async function sendEmailAndTrack(args: {
   );
   const attachmentCount = args.attachments?.length ?? 0;
 
-  // Best-effort: snapshot sender email for the email_send_log row. Never
-  // block the actual send if this lookup fails.
-  let fromUserEmailSnapshot = "";
-  try {
-    const [u] = await db
-      .select({ email: users.email })
-      .from(users)
-      .where(eq(users.id, args.userId))
-      .limit(1);
-    fromUserEmailSnapshot = u?.email ?? "";
-  } catch (err) {
-    logger.error("graph_email.user_lookup_failed", {
-      userId: args.userId,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
+  // One select for everything the gates + log row need from the sender:
+  // email (log snapshot) + entraOid/mailboxKind/mailboxCheckedAt (preflight).
+  const [senderRow] = await db
+    .select({
+      email: users.email,
+      entraOid: users.entraOid,
+      mailboxKind: users.mailboxKind,
+      mailboxCheckedAt: users.mailboxCheckedAt,
+    })
+    .from(users)
+    .where(eq(users.id, args.userId))
+    .limit(1);
+  if (!senderRow) {
+    throw new ValidationError("Sender account not found.");
   }
+  const fromUserEmailSnapshot = senderRow.email ?? "";
 
-  // Insert a 'sending' email_send_log row (best-effort) so admin failure
-  // dashboard sees this attempt even if Graph crashes mid-call.
-  let logId: string | null = null;
-  const sendStart = Date.now();
-  try {
-    const inserted = await db
-      .insert(emailSendLog)
-      .values({
+  // Mailbox preflight. checkMailboxKind probes via app-permission Graph
+  // (graphAppRequest) — if app credentials are NOT configured it returns
+  // ok:false and would wrongly block a delegated send that needs only the
+  // user's own token. So gate the preflight on isGraphAppConfigured(); when
+  // app creds are absent, skip it (delegated /me/sendMail surfaces an
+  // on-prem mailbox as a Graph error the caller already handles).
+  if (isGraphAppConfigured()) {
+    const preflight = await checkMailboxKind({
+      userId: args.userId,
+      entraOid: senderRow.entraOid,
+      mailboxKind: senderRow.mailboxKind,
+      mailboxCheckedAt: senderRow.mailboxCheckedAt,
+    });
+    if (!preflight.ok) {
+      await db.insert(emailSendLog).values({
         fromUserId: args.userId,
         fromUserEmailSnapshot,
         toEmail: args.to,
         feature: EMAIL_SEND_LOG_FEATURE,
         featureRecordId: args.leadId,
         subject: args.subject,
-        hasAttachments: attachmentCount > 0,
-        attachmentCount,
-        totalSizeBytes: totalAttachmentBytes || null,
-        status: "sending",
-      })
-      .returning({ id: emailSendLog.id });
-    logId = inserted[0]?.id ?? null;
-  } catch (err) {
-    logger.error("graph_email.email_send_log_insert_failed", {
+        status: "blocked_preflight",
+        errorCode: "MAILBOX_NOT_EXCHANGE_ONLINE",
+        errorMessage:
+          preflight.message ?? `Sender mailbox kind: ${preflight.kind}`,
+      });
+      logger.warn("graph_email.preflight_blocked", {
+        userId: args.userId,
+        leadId: args.leadId,
+        mailboxKind: preflight.kind,
+      });
+      // checkMailboxKind already writes email.preflight.failed when it makes
+      // a fresh determination; the blocked_preflight log row is the
+      // per-attempt forensic record (parity with sendEmailAs). No second
+      // audit row here (would double-count).
+      throw new ForbiddenError(
+        preflight.message ?? "Your mailbox can't send email. Contact MWG IT.",
+      );
+    }
+  } else {
+    logger.warn("graph_email.preflight_skipped_app_unconfigured", {
       userId: args.userId,
       leadId: args.leadId,
-      errorMessage: err instanceof Error ? err.message : String(err),
     });
+  }
+
+  // Short-window send idempotency. Mirror the jobs-queue pattern (nullable
+  // dedupe column + partial unique index): a deterministic key over
+  // (feature, user, lead, recipient, subject, 2-min bucket). onConflictDoNothing
+  // + a 0-row return ⇒ a duplicate submit is already in flight / just
+  // completed — reject instead of issuing a second real Graph send.
+  const windowBucket = Math.floor(Date.now() / DEDUPE_WINDOW_MS);
+  const dedupeKey = createHash("sha256")
+    .update(
+      `${EMAIL_SEND_LOG_FEATURE}|${args.userId}|${args.leadId}|${args.to.toLowerCase()}|${args.subject}|${windowBucket}`,
+    )
+    .digest("hex");
+
+  const sendStart = Date.now();
+  // A genuine DB error here propagates (fails the send loudly) rather than
+  // being swallowed — a dedupe gate that can be silently skipped on insert
+  // error is not a gate. Deliberate behavior change vs the prior best-effort
+  // insert: correct for an idempotency control.
+  const dedupeInsert = await db
+    .insert(emailSendLog)
+    .values({
+      fromUserId: args.userId,
+      fromUserEmailSnapshot,
+      toEmail: args.to,
+      feature: EMAIL_SEND_LOG_FEATURE,
+      featureRecordId: args.leadId,
+      subject: args.subject,
+      hasAttachments: attachmentCount > 0,
+      attachmentCount,
+      totalSizeBytes: totalAttachmentBytes || null,
+      status: "sending",
+      dedupeKey,
+    })
+    .onConflictDoNothing({ target: emailSendLog.dedupeKey })
+    .returning({ id: emailSendLog.id });
+  const logId: string | null = dedupeInsert[0]?.id ?? null;
+  if (!logId) {
+    logger.warn("graph_email.duplicate_send_suppressed", {
+      userId: args.userId,
+      leadId: args.leadId,
+      to: args.to,
+    });
+    throw new ConflictError(
+      "This email was just sent (or is sending). Refresh the lead to see it.",
+    );
   }
 
   try {

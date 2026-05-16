@@ -31,9 +31,6 @@ import {
   withErrorBoundary,
   type ActionResult,
 } from "@/lib/server-action";
-// Sub-agent A modules. Imports kept loose (no top-level
-// type imports) so a missing implementation typechecks via the runtime
-// boundary; the lead resolves any coordination gap before merge.
 import { pushTemplateToSendGrid } from "@/lib/marketing/sendgrid/templates";
 import { sendTestEmail } from "@/lib/marketing/sendgrid/send";
 

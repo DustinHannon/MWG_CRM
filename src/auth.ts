@@ -17,8 +17,9 @@ import { entraConfigured, env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { refreshUserPhotoIfStale } from "@/lib/graph-photo";
-import { writeAudit } from "@/lib/audit";
-import { AUDIT_EVENTS } from "@/lib/audit/events";
+import { writeAudit, writeSystemAudit } from "@/lib/audit";
+import { AUDIT_EVENTS, AUDIT_SYSTEM_ACTORS } from "@/lib/audit/events";
+import { rateLimit } from "@/lib/security/rate-limit";
 
 /**
  * Auth.js v5 surface. The MicrosoftEntraID provider registers only when
@@ -41,32 +42,21 @@ const credentialsSchema = z.object({
 });
 
 /* ---------------------------------------------------------------------------
- * In-memory rate limit for breakglass authorize().
+ * Rate limit for breakglass authorize().
  *
- * Per-process map of username → recent timestamps. On every authorize() we
- * trim the bucket to the last 15 minutes and check that there are <5 entries
- * before recording a new one. Returns false (deny) when over the cap.
+ * Breakglass is a non-Entra password credential — the highest-value
+ * brute-force target on the platform. The limit is enforced through the
+ * canonical Postgres-backed sliding-window limiter (`rate_limit_buckets`
+ * via `rateLimit()`), the same primitive every other limited surface
+ * uses. Unlike a per-process Map, this counter is durable and shared
+ * across all Vercel instances, so it cannot be bypassed by spreading
+ * attempts across instances or by triggering cold starts.
  *
- * Intentionally simple — Vercel cold starts reset the counter, which is
- * fine because breakglass usage is rare. For higher-volume creds endpoints
- * upgrade to Upstash Redis with a sliding window.
+ * 5 attempts / 15 minutes per (lowercased) username. A denied attempt
+ * is both logged (WARN) and recorded as a forensic audit event.
  * ------------------------------------------------------------------------- */
 const BREAKGLASS_WINDOW_MS = 15 * 60 * 1000;
 const BREAKGLASS_MAX_ATTEMPTS = 5;
-const breakglassAttempts = new Map<string, number[]>();
-
-function checkBreakglassRateLimit(username: string): boolean {
-  const now = Date.now();
-  const cutoff = now - BREAKGLASS_WINDOW_MS;
-  const prev = (breakglassAttempts.get(username) ?? []).filter((t) => t > cutoff);
-  if (prev.length >= BREAKGLASS_MAX_ATTEMPTS) {
-    breakglassAttempts.set(username, prev);
-    return false;
-  }
-  prev.push(now);
-  breakglassAttempts.set(username, prev);
-  return true;
-}
 
 const providers: Provider[] = [
   Credentials({
@@ -81,14 +71,28 @@ const providers: Provider[] = [
       if (!parsed.success) return null;
       const { username, password } = parsed.data;
 
-      // Lightweight per-username rate limit: 5 attempts / 15 minutes.
-      // Breakglass is a brute-force target — non-Entra credential. The
-      // store is in-memory and per-process, so cold starts reset the
-      // counter — this is acceptable because breakglass usage is rare.
-      // If breakglass usage spikes, swap for Upstash Redis (TODO).
-      if (!checkBreakglassRateLimit(username.toLowerCase())) {
-        logger.warn("breakglass.rate_limited", {
-          username: username.toLowerCase(),
+      // Per-username rate limit: 5 attempts / 15 minutes. Breakglass
+      // is a non-Entra password credential — the highest-value
+      // brute-force target — so the counter is the durable
+      // cross-instance Postgres limiter, not a per-process Map that a
+      // distributed attempt or a cold start would defeat.
+      const username_lc = username.toLowerCase();
+      const rl = await rateLimit(
+        { kind: "breakglass", principal: username_lc },
+        BREAKGLASS_MAX_ATTEMPTS,
+        BREAKGLASS_WINDOW_MS / 1000,
+      );
+      if (!rl.allowed) {
+        logger.warn("breakglass.rate_limited", { username: username_lc });
+        // Forensic record of a brute-force lockout. Best-effort and
+        // non-throwing (writeSystemAudit swallows its own failures);
+        // no try/catch per the audit contract. System actor — a denied
+        // sign-in never produced an authenticated user.
+        await writeSystemAudit({
+          actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.AUTH,
+          action: AUDIT_EVENTS.AUTH_BREAKGLASS_RATE_LIMITED,
+          targetType: "user",
+          after: { username: username_lc },
         });
         return null;
       }

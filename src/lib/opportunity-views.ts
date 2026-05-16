@@ -431,6 +431,7 @@ function coerceAdhocMap(raw: unknown): Record<string, unknown> {
 
 export interface OpportunityRow {
   id: string;
+  version: number;
   name: string;
   stage: string;
   accountId: string | null;
@@ -655,6 +656,7 @@ export async function runOpportunityView(
     db
       .select({
         id: opportunities.id,
+        version: opportunities.version,
         name: opportunities.name,
         stage: sql<string>`${opportunities.stage}::text`,
         accountId: opportunities.accountId,

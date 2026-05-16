@@ -47,7 +47,9 @@ registry.registerPath({
   path: "/accounts/{id}",
   summary: "Update account",
   description:
-    "Partial update. When `version` is supplied and does not match, returns 409.",
+    "Partial update. `version` is required: GET the account, send back " +
+    "its `version`. On mismatch the request returns 409 CONFLICT; a " +
+    "missing `version` is 422.",
   tags: ["Accounts"],
   security: [{ BearerAuth: [] }],
   request: {
@@ -120,10 +122,10 @@ export const PATCH = withApi<{ id: string }>(
     });
     if (!existing) return errorResponse(404, "NOT_FOUND", "Account not found");
 
-    if (
-      typeof parsed.data.version === "number" &&
-      parsed.data.version !== existing.version
-    ) {
+    // OCC: `version` is schema-required (a missing/non-numeric value
+    // already returned 422 above), so this guard is unconditional —
+    // there is no last-write-wins path. Mismatch → 409 CONFLICT.
+    if (parsed.data.version !== existing.version) {
       return errorResponse(
         409,
         "CONFLICT",
@@ -181,10 +183,13 @@ export const PATCH = withApi<{ id: string }>(
       }
     }
     try {
+      // `version` is schema-required (missing → 422 above), so it is
+      // always a number here — pass it straight through. No
+      // unconditional-UPDATE last-write-wins path remains.
       await updateAccountForApi(
         params.id,
         patch,
-        typeof parsed.data.version === "number" ? parsed.data.version : undefined,
+        parsed.data.version,
         key.createdById,
       );
     } catch (err) {

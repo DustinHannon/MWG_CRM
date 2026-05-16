@@ -1,8 +1,8 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { and, count, eq, gte, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { apiKeys, apiUsageLog } from "@/db/schema/api-keys";
+import { apiKeys } from "@/db/schema/api-keys";
 import { hasScope, type Scope } from "./scopes";
 
 export interface AuthedKey {
@@ -100,31 +100,4 @@ export async function authenticateApiRequest(req: Request): Promise<
 
 export function requireScopeOnKey(key: AuthedKey, scope: Scope): boolean {
   return hasScope(key.scopes, scope);
-}
-
-/**
- * Postgres-backed sliding window: count usage rows for this key in
- * the last 60s. The `api_usage_log_key_idx` index makes this an O(log
- * n) seek + small range scan even at high volumes. Future: swap for
- * Upstash Redis token bucket if measured latency becomes an issue.
- */
-export async function checkRateLimit(
-  keyId: string,
-  limitPerMinute: number,
-): Promise<{ ok: true; remaining: number } | { ok: false; resetIn: number }> {
-  const [row] = await db
-    .select({ value: count() })
-    .from(apiUsageLog)
-    .where(
-      and(
-        eq(apiUsageLog.apiKeyId, keyId),
-        gte(apiUsageLog.createdAt, sql`now() - interval '1 minute'`),
-      ),
-    );
-
-  const used = Number(row?.value ?? 0);
-  if (used >= limitPerMinute) {
-    return { ok: false, resetIn: 60 };
-  }
-  return { ok: true, remaining: limitPerMinute - used };
 }

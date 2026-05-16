@@ -187,7 +187,15 @@ async function upsertBatch(
       .onConflictDoUpdate({
         target: marketingSuppressions.email,
         set: {
-          suppressionType: type,
+          // Preserve a manual classification. An address an operator
+          // manually suppressed that later turns up on a SendGrid list
+          // (e.g. it also bounces) is still operator-managed; `manual`
+          // is the higher-provenance label and must win over the synced
+          // endpoint's type so the suppressions source-filter and UI
+          // don't reclassify a deliberate manual entry as a bounce.
+          suppressionType: sql`CASE WHEN ${marketingSuppressions.suppressionType} = 'manual'
+                                    THEN 'manual'
+                                    ELSE ${type} END`,
           reason: sql`EXCLUDED.reason`,
           syncedAt: sql`now()`,
         },

@@ -493,7 +493,7 @@ function AccountDesktopRow({
       style={{ minWidth: `${minRowWidth}px` }}
     >
       <div className="w-10 shrink-0 px-2 py-3">
-        <RowCheckbox id={account.id} />
+        <RowCheckbox id={account.id} version={account.version} />
       </div>
       {columns.map((c) => {
         const colLabel =

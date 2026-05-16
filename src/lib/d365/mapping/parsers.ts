@@ -64,7 +64,17 @@ export interface ValidationWarning {
      * record has 1-2 quality issues but enough real data
      * to commit. Surfaces in the review UI for manual confirmation.
      */
-    | "suspicious_lead_quality";
+    | "suspicious_lead_quality"
+    /**
+     * the D365 owner could not be resolved to a user and fell back
+     * to the configured default owner. Aggregated / low-severity:
+     * feeds the batch-level owner-JIT-failure halt counter
+     * (`detectOwnerJitFailure`) but is excluded from the per-record
+     * review escalation and from `detectValidationRegression` — a
+     * default-owner fallback is an expected, resolvable condition,
+     * common in legacy data with former-employee owners.
+     */
+    | "owner_default_owner_used";
   message: string;
 }
 

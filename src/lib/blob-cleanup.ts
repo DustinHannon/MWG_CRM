@@ -1,8 +1,9 @@
 import "server-only";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, attachments } from "@/db/schema/activities";
 import { leads } from "@/db/schema/leads";
+import { opportunities } from "@/db/schema/crm-records";
 
 /**
  * Vercel Blob is not part of the Postgres FK graph — cascading deletes on
@@ -76,10 +77,24 @@ export async function gatherBlobsForUser(userId: string): Promise<string[]> {
  * the same problem `gatherBlobsForLeads` solves for leads. This helper
  * extends that contract to the other three activity-parent entities.
  *
+ * Account hard-delete is a deeper cascade than the other kinds. Deleting
+ * a `crm_accounts` row cascades to its `opportunities`
+ * (opportunities.account_id ON DELETE CASCADE), and each deleted
+ * opportunity cascades to ITS activities + attachments
+ * (activities.opportunity_id ON DELETE CASCADE). So the "account" branch
+ * must gather blobs for activities linked directly via `account_id` AND
+ * activities linked via an `opportunity_id` whose opportunity belongs to
+ * the account. Contacts are deliberately EXCLUDED: contacts.account_id is
+ * ON DELETE SET NULL, so contacts survive an account delete — their
+ * activities/attachments are NOT cascade-removed and their blobs are
+ * still live. Gathering contact blobs here would delete blobs for
+ * attachments that still exist (active-data loss). Do not add contacts.
+ *
  * Tasks are excluded — the `tasks` table is not an activity-parent
  * (attachments cascade off `activities` only, not `tasks`).
  *
- * STANDARDS §19.4 governs the hard-delete blob cleanup contract.
+ * STANDARDS §19.4 governs the hard-delete blob cleanup contract;
+ * §19.4.2 names this account-cascade closure (the F-58 leak class).
  */
 export type ActivityParentKind = "lead" | "account" | "contact" | "opportunity";
 
@@ -88,18 +103,45 @@ export async function gatherBlobsForActivityParent(
   ids: string[],
 ): Promise<string[]> {
   if (ids.length === 0) return [];
+  if (kind === "account") {
+    // Account hard-delete cascades: opportunities under the account
+    // (opportunities.account_id ON DELETE CASCADE) are deleted, taking
+    // their activities + attachments with them. Gather BOTH the
+    // activities tied directly to the account AND the activities tied
+    // to an opportunity that belongs to the account. Contacts are
+    // ON DELETE SET NULL — they survive the account delete, so their
+    // activities/attachments are still live. They are deliberately
+    // NOT included; gathering them would orphan-delete live blobs.
+    const rows = await db
+      .select({ pathname: attachments.blobPathname })
+      .from(attachments)
+      .innerJoin(activities, eq(activities.id, attachments.activityId))
+      .where(
+        or(
+          inArray(activities.accountId, ids),
+          inArray(
+            activities.opportunityId,
+            db
+              .select({ id: opportunities.id })
+              .from(opportunities)
+              .where(inArray(opportunities.accountId, ids)),
+          ),
+        ),
+      );
+    return rows.map((r) => r.pathname);
+  }
   // The Drizzle column reference is selected dynamically by `kind`.
-  // `inArray` against any one of the four parent FKs gives the same
+  // `inArray` against any one of the leaf parent FKs gives the same
   // attachments -> activities pre-cascade row set the per-entity
-  // helpers would produce.
+  // helpers would produce. (lead / contact / opportunity are leaf
+  // parents for this purpose — none cascade-deletes a child entity
+  // that itself carries activities.)
   const parentCol =
     kind === "lead"
       ? activities.leadId
-      : kind === "account"
-        ? activities.accountId
-        : kind === "contact"
-          ? activities.contactId
-          : activities.opportunityId;
+      : kind === "contact"
+        ? activities.contactId
+        : activities.opportunityId;
   const rows = await db
     .select({ pathname: attachments.blobPathname })
     .from(attachments)

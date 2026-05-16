@@ -322,18 +322,34 @@ export async function sendCampaign(
   // key is leadId for dynamic-list rows, `email:<lowercase>` for
   // static-imported rows (which have no lead row backing them).
   const recipientByLead = new Map<string, string>();
+  // rowKey → recipient row status. Used to gate the batch loop so a
+  // resumed send (after a mid-batch process kill) only sends recipients
+  // still in `queued`; rows already advanced to sent/bounced/dropped/
+  // etc. by an earlier partial run are skipped — resume never re-emails.
+  const recipientStatusByKey = new Map<string, string>();
   for (const row of inserted) {
     recipientByLead.set(row.rowKey, row.id);
+    recipientStatusByKey.set(row.rowKey, row.status);
   }
 
   let totalAccepted = 0;
   // Track the slice currently in flight so the outer catch can write a
-  // representative `email_send_log` row for the failing batch.
+  // representative `email_send_log` row for the failing batch. Holds the
+  // status-filtered slice (only recipients actually attempted) so the
+  // failures dashboard and dropped-marking reflect what was sent.
   let failingSlice: RecipientCandidate[] | null = null;
   const batchStart = { ts: Date.now() };
   try {
     for (let i = 0; i < candidateRows.length; i += BATCH_SIZE) {
-      const slice = candidateRows.slice(i, i + BATCH_SIZE);
+      const rawSlice = candidateRows.slice(i, i + BATCH_SIZE);
+      // Resume-safe gate: skip any candidate whose recipient row is no
+      // longer `queued` (already sent by a prior partial run, or already
+      // terminal via webhook). A genuinely-stuck campaign re-driven by
+      // an operator only re-sends rows that never went out.
+      const slice = rawSlice.filter(
+        (c) => recipientStatusByKey.get(recipientKey(c)) === "queued",
+      );
+      if (slice.length === 0) continue;
       failingSlice = slice;
       batchStart.ts = Date.now();
       const acceptedInBatch = await sendBatch({
@@ -854,8 +870,7 @@ async function loadCampaignContext(
 async function insertRecipientRows(
   campaignId: string,
   candidates: RecipientCandidate[],
-): Promise<{ id: string; rowKey: string }[]> {
-  const out: { id: string; rowKey: string }[] = [];
+): Promise<{ id: string; rowKey: string; status: string }[]> {
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
     const slice = candidates.slice(i, i + BATCH_SIZE);
     // Recipients enter `queued` — the canonical pre-send state. Rolled
@@ -874,7 +889,13 @@ async function insertRecipientRows(
     // already allows nullable leadId; the rowKey returned below uses
     // email-based fallback when leadId is null so the in-memory
     // recipientByLead map stays consistent across both source types.
-    const inserted = await db
+    //
+    // Resume-safe: a prior partial run (process killed mid-batch) may
+    // have already inserted some of these rows. The unique index on
+    // (campaign_id, lower(email)) plus this onConflictDoNothing makes a
+    // re-driven send a no-op for already-queued/sent rows instead of
+    // re-inserting duplicates and re-emailing the recipient.
+    await db
       .insert(campaignRecipients)
       .values(
         slice.map((c) => ({
@@ -885,19 +906,40 @@ async function insertRecipientRows(
           snapshotMergeData: buildMergeData(c),
         })),
       )
-      .returning({
-        id: campaignRecipients.id,
-        leadId: campaignRecipients.leadId,
-        email: campaignRecipients.email,
-      });
-    for (const row of inserted) {
-      out.push({
-        id: row.id,
-        rowKey: recipientKey({ leadId: row.leadId, email: row.email }),
-      });
-    }
+      // Untargeted ON CONFLICT DO NOTHING. The only unique constraint
+      // this INSERT can violate is the `(campaign_id, lower(email))`
+      // index (the resume-dedupe key): the PK is a generated uuid, and
+      // `mkt_rcpt_msgid_uniq` is partial on `sendgrid_message_id IS NOT
+      // NULL` while every row here is inserted with a null message id,
+      // so it can never match. Drizzle's typed `target` cannot express
+      // a functional `lower(email)` index in this version (IndexColumn =
+      // PgColumn only — see breakglass.ts for the same constraint), and
+      // the untargeted form is exactly equivalent here.
+      .onConflictDoNothing();
   }
-  return out;
+
+  // onConflictDoNothing does NOT return conflicted rows, so the inserts
+  // above cannot be relied on to surface rows from a prior partial run.
+  // Re-select the full recipient set for this campaign so the in-memory
+  // map is complete and resume can map every candidate to its row —
+  // including ones inserted before the process was killed. The per-row
+  // status lets the batch loop skip recipients already advanced past
+  // `queued` (sent/bounced/dropped/etc.) so resume never re-sends.
+  const allRows = await db
+    .select({
+      id: campaignRecipients.id,
+      leadId: campaignRecipients.leadId,
+      email: campaignRecipients.email,
+      status: campaignRecipients.status,
+    })
+    .from(campaignRecipients)
+    .where(eq(campaignRecipients.campaignId, campaignId));
+
+  return allRows.map((row) => ({
+    id: row.id,
+    rowKey: recipientKey({ leadId: row.leadId, email: row.email }),
+    status: row.status,
+  }));
 }
 
 /**

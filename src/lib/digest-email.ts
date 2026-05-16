@@ -16,6 +16,10 @@ export interface DigestRecord {
 interface DigestArgs {
   userId: string;
   viewName: string;
+  /** Singular entity noun, sentence-case (e.g. "lead", "account"). */
+  entityLabel: string;
+  /** Plural entity noun, sentence-case (e.g. "leads", "accounts"). */
+  entityPluralLabel: string;
   subscriptionId?: string;
   records: DigestRecord[];
   appUrl?: string;
@@ -39,14 +43,18 @@ export async function sendDigestEmail(args: DigestArgs): Promise<void> {
     .limit(1);
   if (!user) throw new NotFoundError("user");
 
+  const noun =
+    args.records.length === 1 ? args.entityLabel : args.entityPluralLabel;
+
   const html = renderDigestHtml({
     displayName: user.displayName,
     viewName: args.viewName,
+    noun,
     records: args.records,
     appUrl: args.appUrl ?? "https://crm.morganwhite.com",
   });
 
-  const subject = `${args.records.length} new lead${args.records.length === 1 ? "" : "s"} in "${args.viewName}"`;
+  const subject = `${args.records.length} new ${noun} in "${args.viewName}"`;
 
   await sendEmailAs({
     fromUserId: args.userId,
@@ -57,6 +65,7 @@ export async function sendDigestEmail(args: DigestArgs): Promise<void> {
     featureRecordId: args.subscriptionId,
     metadata: {
       viewName: args.viewName,
+      entityLabel: args.entityLabel,
       recordCount: args.records.length,
     },
   });
@@ -65,6 +74,7 @@ export async function sendDigestEmail(args: DigestArgs): Promise<void> {
 function renderDigestHtml(args: {
   displayName: string;
   viewName: string;
+  noun: string;
   records: DigestRecord[];
   appUrl: string;
 }): string {
@@ -97,7 +107,7 @@ function renderDigestHtml(args: {
     <div style="padding:22px;">
       <p style="margin:0 0 16px;font-size:14px;color:#333;">Hi ${escape(args.displayName.split(" ")[0])},</p>
       <p style="margin:0 0 14px;font-size:14px;color:#333;">
-        ${args.records.length} new lead${args.records.length === 1 ? " matches" : "s match"} your saved view
+        ${args.records.length} new ${escape(args.noun)} ${args.records.length === 1 ? "matches" : "match"} your saved view
         <strong style="color:#0a2342;">${escape(args.viewName)}</strong>:
       </p>
       <table style="width:100%;border-collapse:collapse;border:1px solid #e6e6e6;border-radius:6px;overflow:hidden;">

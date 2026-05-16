@@ -115,14 +115,18 @@ export const TaskUpdateSchema = registry.register(
     due_at: z.string().datetime().nullable().optional(),
     assigned_to_id: z.string().uuid().nullable().optional(),
     version: z
-      .number()
+      .number({
+        required_error: "version is required for updates",
+        invalid_type_error: "version must be a number",
+      })
       .int()
       .nonnegative()
-      .optional()
       .openapi({
         description:
-          "Optional optimistic-concurrency token. If supplied and " +
-          "mismatched, the request returns 409 CONFLICT.",
+          "Required optimistic-concurrency token. GET the resource " +
+          "first, then send back its current version value. If it " +
+          "no longer matches the stored row the request returns 409 " +
+          "CONFLICT; refetch and retry.",
         example: 1,
       }),
   }),

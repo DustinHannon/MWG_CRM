@@ -21,6 +21,14 @@ export const recentViews = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * Polymorphic by design: free-text entity_type + entity_id with no
+     * FK (a single column cannot reference five different tables).
+     * Dangling rows after a hard-delete/purge are expected — resolve
+     * queries gate on the target's is_deleted and drop unresolved rows,
+     * the delete/purge paths best-effort clean these, and orphan-scan
+     * reports any stragglers. Do not add an FK here.
+     */
     entityType: text("entity_type").notNull(),
     entityId: uuid("entity_id").notNull(),
     viewedAt: timestamp("viewed_at", { withTimezone: true })

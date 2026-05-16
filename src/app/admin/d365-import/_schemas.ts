@@ -121,6 +121,12 @@ const haltReasonSchema = z.enum([
   D365_HALT_REASONS.HIGH_VOLUME_CONFLICT,
   D365_HALT_REASONS.OWNER_JIT_FAILURE,
   D365_HALT_REASONS.VALIDATION_REGRESSION,
+  // The bad-lead-volume halt already fires today (map-batch's
+  // garbage-volume gate) but was missing from this enum, so
+  // resumeRunAction's safeParse rejected `reason: "bad_lead_volume"`
+  // — the operator could not resume a bad-lead-volume-halted run via
+  // the UI. resume-run's ALLOWED_RESOLUTIONS already handles it.
+  D365_HALT_REASONS.BAD_LEAD_VOLUME,
 ]);
 
 /**
@@ -143,4 +149,16 @@ export const resumeRunSchema = z.object({
 
 export const markCompleteSchema = z.object({
   runId: uuid,
+});
+
+/**
+ * Reset a batch stuck in `committing` (commit-batch's transient lock
+ * state) back to `reviewing`. Only used after a hard function kill
+ * (SIGKILL / OOM / wall-clock / deploy recycle) left the row in
+ * `committing` with no JS catch to roll it back. The action applies
+ * an atomic `WHERE status = 'committing'` guard so a still-running
+ * commit that finishes between inspection and click is not clobbered.
+ */
+export const resetStuckBatchSchema = z.object({
+  batchId: uuid,
 });

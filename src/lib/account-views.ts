@@ -411,6 +411,9 @@ function coerceAdhocMap(raw: unknown): Record<string, unknown> {
 
 export interface AccountRow {
   id: string;
+  // Exposed so the desktop bulk-archive selection can send a per-row
+  // optimistic-concurrency token (bulkArchiveAccounts).
+  version: number;
   name: string;
   accountNumber: string | null;
   industry: string | null;
@@ -599,6 +602,7 @@ export async function runAccountView(
     db
       .select({
         id: crmAccounts.id,
+        version: crmAccounts.version,
         name: crmAccounts.name,
         accountNumber: crmAccounts.accountNumber,
         industry: crmAccounts.industry,

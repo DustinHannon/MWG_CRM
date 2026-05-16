@@ -132,8 +132,8 @@ export class D365Client {
   }
 
   /**
-   * Fetch attribute metadata for an entity (used by §2.5 schema
-   * discovery and Sub-agent B's mapping registry validation).
+   * Fetch attribute metadata for an entity (used by schema discovery
+   * and mapping-registry validation).
    */
   async fetchEntityDefinitions(entityName: string, signal?: AbortSignal) {
     const path = `EntityDefinitions(LogicalName='${entityName}')/Attributes?$select=LogicalName,AttributeType,IsCustomAttribute,DisplayName`;

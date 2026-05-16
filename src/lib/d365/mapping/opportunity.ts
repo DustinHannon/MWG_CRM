@@ -164,6 +164,40 @@ export function mapD365Opportunity(
     metadata,
   };
 
+  // Stash raw D365 GUIDs for FK resolution at commit time (mirrors
+  // contact.ts / account.ts). commit-batch resolves these against
+  // external_ids before the opportunity insert and strips the
+  // `_`-prefixed virtuals via the underscore filter.
+  //
+  // `_customerid_value` is D365's polymorphic Customer lookup (account
+  // OR contact); the lookuplogicalname annotation is not pulled
+  // (client.ts includeAnnotations:false), so prefer the unambiguous
+  // typed lookups and fall back to customerid for both account and
+  // contact. external_ids is keyed by source_entity_type, so an
+  // account GUID can never resolve in a contact lookup and vice-versa
+  // — at most one of the two fallback attempts succeeds; the other
+  // produces a forensic RECORD_FK_UNRESOLVED row (acceptable, non-
+  // blocking, and strictly better than the prior silent NULL).
+  const customerSourceId = parseString(
+    (raw as Record<string, unknown>)._customerid_value,
+  );
+  const accountSourceId =
+    parseString(raw._parentaccountid_value) ?? customerSourceId;
+  if (accountSourceId) {
+    (mapped as Record<string, unknown>)._accountSourceId = accountSourceId;
+  }
+  const primaryContactSourceId =
+    parseString(raw._parentcontactid_value) ?? customerSourceId;
+  if (primaryContactSourceId) {
+    (mapped as Record<string, unknown>)._primaryContactSourceId =
+      primaryContactSourceId;
+  }
+  const sourceLeadSourceId = parseString(raw._originatingleadid_value);
+  if (sourceLeadSourceId) {
+    (mapped as Record<string, unknown>)._sourceLeadSourceId =
+      sourceLeadSourceId;
+  }
+
   const attached: AttachedActivity[] = [];
   return { mapped, attached, customFields, warnings };
 }

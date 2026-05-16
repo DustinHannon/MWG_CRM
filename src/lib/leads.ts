@@ -12,9 +12,12 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
+import { activities } from "@/db/schema/activities";
 import { leads } from "@/db/schema/leads";
+import { tasks } from "@/db/schema/tasks";
 import { leadTags, tags as tagsTable } from "@/db/schema/tags";
 import { users } from "@/db/schema/users";
+import { cascadeMarker, cascadeMarkerSql } from "@/lib/cascade-archive";
 import { expectAffected } from "@/lib/db/concurrent-update";
 import type { SessionUser } from "@/lib/auth-helpers";
 import {
@@ -527,9 +530,32 @@ export async function deleteLeadsById(ids: string[]): Promise<void> {
   await db.delete(leads).where(inArray(leads.id, ids));
 }
 
+/** Result of a cascade soft-delete / restore: child rows affected. */
+export interface CascadeArchiveResult {
+  cascadedTasks: number;
+  cascadedActivities: number;
+}
+
 /**
- * soft delete (archive). Sets `is_deleted=true` and the
- * deletion-attribution columns. Reversible via `restoreLeadsById()`.
+ * Cascade-archive a batch of leads and their dependent children.
+ *
+ * `string[]` signature: every caller archives by id without a client
+ * `version`. This single-record path (`softDeleteLeadAction`, public
+ * `/api/v1` delete, restore-undo) is the ONLY archive path for leads —
+ * the leads list has no bulk-archive selection surface, so there is no
+ * per-row-OCC bulk variant here (unlike accounts'
+ * `bulkArchiveAccounts`). If a leads bulk-archive surface is ever
+ * added, mirror the accounts OCC pattern (action + per-row `{id,
+ * version}` + conflict toast); do not reuse this id-only path for it.
+ *
+ * Soft-delete is a plain UPDATE so the DB `ON DELETE CASCADE` never
+ * fires; we replicate it in one transaction (STANDARDS 19.1.1 — the
+ * parent and its children must flip atomically; a partially-cascaded
+ * archive must never be observable). Only currently-active children are
+ * touched, and each carries the cascade sentinel in `delete_reason` so
+ * `restore` can reactivate exactly the rows this cascade archived
+ * (children the user archived independently keep their own reason and
+ * stay archived).
  *
  * @actor lead owner or admin
  */
@@ -537,43 +563,136 @@ export async function archiveLeadsById(
   ids: string[],
   actorId: string,
   reason?: string,
-): Promise<void> {
-  if (ids.length === 0) return;
-  await db
-    .update(leads)
+): Promise<CascadeArchiveResult> {
+  if (ids.length === 0) return { cascadedTasks: 0, cascadedActivities: 0 };
+  return db.transaction(async (tx) => {
+    await tx
+      .update(leads)
+      .set({
+        isDeleted: true,
+        deletedAt: sql`now()`,
+        deletedById: actorId,
+        deleteReason: reason ?? null,
+        // actor stamping for skip-self in Supabase Realtime.
+        updatedById: actorId,
+        updatedAt: sql`now()`,
+      })
+      .where(inArray(leads.id, ids));
+    return cascadeArchiveLeadChildren(tx, ids, actorId);
+  });
+}
+
+/**
+ * Soft-delete the active tasks/activities of the given leads, marking
+ * each with the cascade sentinel so restore is selective. Runs inside
+ * the caller's transaction. Set-based (one UPDATE per child table) so
+ * the bulk path stays O(1) round-trips regardless of id count.
+ */
+async function cascadeArchiveLeadChildren(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  leadIds: string[],
+  actorId: string,
+): Promise<CascadeArchiveResult> {
+  const cascadedTasks = await tx
+    .update(tasks)
     .set({
       isDeleted: true,
       deletedAt: sql`now()`,
       deletedById: actorId,
-      deleteReason: reason ?? null,
-      // actor stamping for skip-self in Supabase Realtime.
+      deleteReason: cascadeMarkerSql("lead", tasks.leadId),
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
-    .where(inArray(leads.id, ids));
+    .where(and(inArray(tasks.leadId, leadIds), eq(tasks.isDeleted, false)))
+    .returning({ id: tasks.id });
+  const cascadedActivities = await tx
+    .update(activities)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorId,
+      deleteReason: cascadeMarkerSql("lead", activities.leadId),
+      // activities has no updated_by_id (skip-self keys off user_id);
+      // do not alter user_id so authorship attribution is preserved.
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(inArray(activities.leadId, leadIds), eq(activities.isDeleted, false)),
+    )
+    .returning({ id: activities.id });
+  return {
+    cascadedTasks: cascadedTasks.length,
+    cascadedActivities: cascadedActivities.length,
+  };
 }
 
 /**
- * restore archived leads. Returns row count for logging.
+ * Restore archived leads and the children THIS lead's archive cascaded
+ * (matched by the exact `delete_reason` sentinel — independently
+ * archived children are intentionally left archived). One transaction.
  *
  * @actor admin only
  */
 export async function restoreLeadsById(
   ids: string[],
   actorId: string,
-): Promise<void> {
-  if (ids.length === 0) return;
-  await db
-    .update(leads)
-    .set({
-      isDeleted: false,
-      deletedAt: null,
-      deletedById: null,
-      deleteReason: null,
-      updatedAt: sql`now()`,
-      updatedById: actorId,
-    })
-    .where(inArray(leads.id, ids));
+): Promise<CascadeArchiveResult> {
+  if (ids.length === 0) return { cascadedTasks: 0, cascadedActivities: 0 };
+  return db.transaction(async (tx) => {
+    await tx
+      .update(leads)
+      .set({
+        isDeleted: false,
+        deletedAt: null,
+        deletedById: null,
+        deleteReason: null,
+        updatedAt: sql`now()`,
+        updatedById: actorId,
+      })
+      .where(inArray(leads.id, ids));
+    let cascadedTasks = 0;
+    let cascadedActivities = 0;
+    for (const id of ids) {
+      const t = await tx
+        .update(tasks)
+        .set({
+          isDeleted: false,
+          deletedAt: null,
+          deletedById: null,
+          deleteReason: null,
+          updatedById: actorId,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(tasks.leadId, id),
+            eq(tasks.isDeleted, true),
+            eq(tasks.deleteReason, cascadeMarker("lead", id)),
+          ),
+        )
+        .returning({ id: tasks.id });
+      const a = await tx
+        .update(activities)
+        .set({
+          isDeleted: false,
+          deletedAt: null,
+          deletedById: null,
+          deleteReason: null,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(activities.leadId, id),
+            eq(activities.isDeleted, true),
+            eq(activities.deleteReason, cascadeMarker("lead", id)),
+          ),
+        )
+        .returning({ id: activities.id });
+      cascadedTasks += t.length;
+      cascadedActivities += a.length;
+    }
+    return { cascadedTasks, cascadedActivities };
+  });
 }
 
 // ---------------------------------------------------------------------------

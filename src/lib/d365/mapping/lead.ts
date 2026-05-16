@@ -34,9 +34,9 @@ export type NewLead = InferInsertModel<typeof leads>;
 
 export interface LeadMapContext {
   /**
-   * mwg-crm `users.id` resolved by Sub-agent A from the D365
-   * `_ownerid_value` GUID via `resolveD365Owner`. The mapper itself
-   * does not call into the network.
+   * mwg-crm `users.id` resolved from the D365 `_ownerid_value` GUID
+   * via `resolveD365Owner`. The mapper itself does not call into the
+   * network.
    */
   resolvedOwnerId: string;
 }

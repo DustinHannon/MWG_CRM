@@ -31,6 +31,7 @@ const SCANS: { rel: string; query: string }[] = [
   { rel: "audit_log->users",         query: `SELECT count(*)::int AS n FROM audit_log al WHERE al.actor_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = al.actor_id)` },
   { rel: "saved_views->users",       query: `SELECT count(*)::int AS n FROM saved_views sv LEFT JOIN users u ON u.id = sv.user_id WHERE u.id IS NULL` },
   { rel: "recent_views->users",      query: `SELECT count(*)::int AS n FROM recent_views rv LEFT JOIN users u ON u.id = rv.user_id WHERE u.id IS NULL` },
+  { rel: "recent_views->entity",     query: `SELECT count(*)::int AS n FROM recent_views rv WHERE NOT EXISTS (SELECT 1 FROM leads l WHERE rv.entity_type = 'lead' AND l.id = rv.entity_id UNION ALL SELECT 1 FROM contacts c WHERE rv.entity_type = 'contact' AND c.id = rv.entity_id UNION ALL SELECT 1 FROM crm_accounts a WHERE rv.entity_type = 'account' AND a.id = rv.entity_id UNION ALL SELECT 1 FROM opportunities o WHERE rv.entity_type = 'opportunity' AND o.id = rv.entity_id)` },
   { rel: "user_preferences->users",  query: `SELECT count(*)::int AS n FROM user_preferences up LEFT JOIN users u ON u.id = up.user_id WHERE u.id IS NULL` },
 ];
 

@@ -67,6 +67,11 @@ export const MARKETING_AUDIT_EVENTS = {
   CAMPAIGN_SEND_COMPLETED: "marketing.campaign.send_completed",
   CAMPAIGN_SEND_FAILED: "marketing.campaign.send_failed",
   CAMPAIGN_TEST_SEND: "marketing.campaign.test_send",
+  // Recovery sweep flipped a campaign wedged in `sending` (process
+  // killed mid-batch, no catch ran) back to `failed` so it becomes
+  // cancellable/cloneable again. Per-campaign (governance/lifecycle
+  // event — always per-event, never aggregated).
+  CAMPAIGN_RECOVER_STUCK: "marketing.campaign.recover_stuck",
 
   SUPPRESSION_ADDED: "marketing.suppression.added",
   SUPPRESSION_REMOVED: "marketing.suppression.removed",

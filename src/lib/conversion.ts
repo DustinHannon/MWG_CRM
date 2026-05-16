@@ -1,12 +1,12 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { leads } from "@/db/schema/leads";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
-import { NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 
 export const conversionSchema = z.object({
   leadId: z.string().uuid(),
@@ -60,12 +60,14 @@ export interface ConversionResult {
 /**
  * Convert a lead to {Account, Contact, Opportunity} in one transaction.
  *
+ * 0. Atomically claim lead status='converted' (conditional UPDATE) —
+ *    the concurrency guard; aborts with ConflictError if already
+ *    converted or archived, before any INSERT.
  * 1. INSERT or use existing account.
  * 2. INSERT contact, link to account.
  * 3. INSERT opportunity, link to account + primary_contact.
- * 4. UPDATE lead → status='converted', converted_at=now().
- * 5. Reassign lead's existing activities → opportunity_id (lead_id null).
- * 6. Audit log: lead.convert.
+ * 4. Reassign lead's existing activities → opportunity_id (lead_id null).
+ * 5. Audit log: lead.convert (emitted after the transaction commits).
  */
 export async function convertLead(
   input: ConversionInput,
@@ -89,6 +91,39 @@ export async function convertLead(
   const lead = leadRow[0];
 
   return db.transaction(async (tx) => {
+    // 0. Atomically claim the lead's converted state BEFORE any INSERT.
+    // This is the authoritative concurrency guard: the conditional
+    // UPDATE only matches when the lead is still active and not yet
+    // converted, so two concurrent conversions (double-click, two
+    // tabs, two users) cannot both build a full account/contact/
+    // opportunity graph — the loser matches zero rows and aborts the
+    // transaction before inserting anything. Bumping `version` keeps
+    // the lead's OCC counter monotonic so a stale edit form for this
+    // lead also fails cleanly afterward. Supavisor-safe atomic
+    // conditional UPDATE (no session lock).
+    const claimed = await tx
+      .update(leads)
+      .set({
+        status: "converted",
+        convertedAt: sql`now()`,
+        updatedById: actorId,
+        updatedAt: sql`now()`,
+        version: sql`${leads.version} + 1`,
+      })
+      .where(
+        and(
+          eq(leads.id, input.leadId),
+          eq(leads.isDeleted, false),
+          ne(leads.status, "converted"),
+        ),
+      )
+      .returning({ id: leads.id });
+    if (claimed.length !== 1) {
+      throw new ConflictError(
+        "This lead has already been converted. Open the linked account to continue.",
+      );
+    }
+
     // 1. Account.
     let accountId: string;
     let accountCreated = false;
@@ -171,15 +206,7 @@ export async function convertLead(
       opportunityId = inserted[0].id;
     }
 
-    // 4. Mark lead converted.
-    await tx
-      .update(leads)
-      .set({
-        status: "converted",
-        convertedAt: sql`now()`,
-        updatedById: actorId,
-      })
-      .where(eq(leads.id, input.leadId));
+    // 4. (Lead already marked converted by the atomic claim in step 0.)
 
     // 5. Reassign lead's activities → opportunity (if created), else
     // leave them on the lead. The CHECK constraint requires

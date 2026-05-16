@@ -550,7 +550,7 @@ function OpportunityDesktopRow({
       style={{ minWidth: `${minRowWidth}px` }}
     >
       <div className="w-10 shrink-0 px-2 py-3">
-        <RowCheckbox id={opportunity.id} />
+        <RowCheckbox id={opportunity.id} version={opportunity.version} />
       </div>
       {columns.map((c) => {
         const colLabel =

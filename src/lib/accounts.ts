@@ -1,10 +1,17 @@
 import "server-only";
-import { and, asc, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { crmAccounts } from "@/db/schema/crm-records";
+import { activities } from "@/db/schema/activities";
+import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
+import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import {
+  cascadeMarker,
+  cascadeMarkerSql,
+  cascadeMarkerSqlFromExpr,
+} from "@/lib/cascade-archive";
 import {
   decodeCursor as decodeStandardCursor,
   encodeFromValues as encodeStandardCursor,
@@ -121,9 +128,45 @@ export async function listAccountsForPicker(
   return rows;
 }
 
+/** Per-row optimistic-concurrency input for bulk account archive. */
+export interface AccountArchiveRow {
+  id: string;
+  version: number;
+}
+
 /**
- * soft delete (archive). Sets `is_deleted=true` and the
- * deletion-attribution columns on a batch of accounts.
+ * Cascade soft-delete / restore counts. An account's closure spans its
+ * own child contacts & opportunities plus the tasks/activities of the
+ * account AND of those child contacts/opportunities.
+ */
+export interface AccountCascadeResult {
+  cascadedContacts: number;
+  cascadedOpportunities: number;
+  cascadedTasks: number;
+  cascadedActivities: number;
+}
+
+/**
+ * Cascade-archive accounts and their full dependent closure.
+ *
+ * Keeps the `string[]` signature for non-OCC callers (single-record
+ * soft-delete action, public `/api/v1` delete, restore-undo). Bulk OCC
+ * callers use `bulkArchiveAccounts`.
+ *
+ * Closure (one transaction — STANDARDS 19.1.1): the account row, then
+ * its child `contacts` and `opportunities` (these are child *entities*
+ * of the account in CRM terms — an archived account's contacts/opps
+ * must not stay active), then every task/activity linked to the
+ * account OR to one of those just-archived child contacts/opps. Every
+ * cascaded row carries the SAME account-scoped sentinel
+ * `__cascade__:account:<accountId>` so `restore` reactivates the whole
+ * closure together and leaves independently-archived rows alone.
+ *
+ * NOTE: soft-delete cascades to contacts (different from the *hard*-
+ * delete FK where `contacts.account_id` is ON DELETE SET NULL and
+ * contacts survive — that asymmetry is intentional: hard-delete is
+ * irreversible so it preserves contacts, soft-delete is reversible so
+ * it can safely take them down and bring them back).
  *
  * @actor account owner or admin (caller enforces)
  */
@@ -131,44 +174,378 @@ export async function archiveAccountsById(
   ids: string[],
   actorId: string,
   reason?: string,
-): Promise<void> {
-  if (ids.length === 0) return;
-  await db
-    .update(crmAccounts)
+): Promise<AccountCascadeResult> {
+  if (ids.length === 0) {
+    return {
+      cascadedContacts: 0,
+      cascadedOpportunities: 0,
+      cascadedTasks: 0,
+      cascadedActivities: 0,
+    };
+  }
+  return db.transaction(async (tx) => {
+    await tx
+      .update(crmAccounts)
+      .set({
+        isDeleted: true,
+        deletedAt: sql`now()`,
+        deletedById: actorId,
+        deleteReason: reason ?? null,
+        // actor stamping for skip-self in Supabase Realtime.
+        updatedById: actorId,
+        updatedAt: sql`now()`,
+      })
+      .where(inArray(crmAccounts.id, ids));
+    return cascadeArchiveAccountClosure(tx, ids, actorId);
+  });
+}
+
+/**
+ * Bulk archive accounts with per-row optimistic concurrency. A row is
+ * archived only when its on-disk `version` still matches; moved rows
+ * are returned in `conflicts` untouched (closes the silent-lost-update
+ * gap — single-row account edits enforce OCC, bulk archive did not).
+ * Whole batch (account flips + full closure) in one transaction.
+ *
+ * @actor account owner or admin (caller enforces per-record permission)
+ */
+export async function bulkArchiveAccounts(
+  rows: AccountArchiveRow[],
+  actorId: string,
+  reason?: string,
+): Promise<
+  { updated: string[]; conflicts: string[] } & AccountCascadeResult
+> {
+  if (rows.length === 0) {
+    return {
+      updated: [],
+      conflicts: [],
+      cascadedContacts: 0,
+      cascadedOpportunities: 0,
+      cascadedTasks: 0,
+      cascadedActivities: 0,
+    };
+  }
+  return db.transaction(async (tx) => {
+    const updated: string[] = [];
+    const conflicts: string[] = [];
+    for (const row of rows) {
+      const claimed = await tx
+        .update(crmAccounts)
+        .set({
+          isDeleted: true,
+          deletedAt: sql`now()`,
+          deletedById: actorId,
+          deleteReason: reason ?? null,
+          updatedById: actorId,
+          updatedAt: sql`now()`,
+          version: sql`${crmAccounts.version} + 1`,
+        })
+        .where(
+          and(
+            eq(crmAccounts.id, row.id),
+            eq(crmAccounts.version, row.version),
+            eq(crmAccounts.isDeleted, false),
+          ),
+        )
+        .returning({ id: crmAccounts.id });
+      if (claimed.length === 1) {
+        updated.push(row.id);
+        continue;
+      }
+      // 0 rows: distinguish a stale version (conflict) from an
+      // already-archived no-op (idempotent skip). Probe the live row
+      // in-transaction — consistent with the bulk task OCC fns
+      // (STANDARDS 1.8 sibling parity).
+      const [live] = await tx
+        .select({ version: crmAccounts.version })
+        .from(crmAccounts)
+        .where(eq(crmAccounts.id, row.id))
+        .limit(1);
+      if (live && live.version !== row.version) conflicts.push(row.id);
+      // else: already archived at the same version — idempotent no-op.
+    }
+    const cascade =
+      updated.length > 0
+        ? await cascadeArchiveAccountClosure(tx, updated, actorId)
+        : {
+            cascadedContacts: 0,
+            cascadedOpportunities: 0,
+            cascadedTasks: 0,
+            cascadedActivities: 0,
+          };
+    return { updated, conflicts, ...cascade };
+  });
+}
+
+/**
+ * Archive the active closure of the given accounts inside the caller's
+ * transaction. Order matters: archive child contacts/opportunities
+ * first (capturing their ids) so the subsequent task/activity sweep can
+ * key off both the account ids AND those child ids in one pass each.
+ * Every cascaded row gets the account-scoped sentinel.
+ */
+async function cascadeArchiveAccountClosure(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  accountIds: string[],
+  actorId: string,
+): Promise<AccountCascadeResult> {
+  // Child contacts of the archived accounts.
+  const archivedContacts = await tx
+    .update(contacts)
     .set({
       isDeleted: true,
       deletedAt: sql`now()`,
       deletedById: actorId,
-      deleteReason: reason ?? null,
-      // actor stamping for skip-self in Supabase Realtime.
+      deleteReason: cascadeMarkerSql("account", contacts.accountId),
       updatedById: actorId,
       updatedAt: sql`now()`,
     })
-    .where(inArray(crmAccounts.id, ids));
+    .where(
+      and(
+        inArray(contacts.accountId, accountIds),
+        eq(contacts.isDeleted, false),
+      ),
+    )
+    .returning({ id: contacts.id });
+  const contactIds = archivedContacts.map((c) => c.id);
+
+  // Child opportunities of the archived accounts.
+  const archivedOpps = await tx
+    .update(opportunities)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorId,
+      deleteReason: cascadeMarkerSql("account", opportunities.accountId),
+      updatedById: actorId,
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(
+        inArray(opportunities.accountId, accountIds),
+        eq(opportunities.isDeleted, false),
+      ),
+    )
+    .returning({ id: opportunities.id });
+  const opportunityIds = archivedOpps.map((o) => o.id);
+
+  // Account-scoped sentinel value for the grandchild tasks/activities
+  // (they may be linked via account_id, contact_id, or opportunity_id —
+  // all collapse to the one account-level marker so restore reverses
+  // the whole closure atomically). The marker must reference the
+  // account id, not the immediate parent, so a single sentinel string
+  // governs the entire closure.
+  const taskPredicates = [inArray(tasks.accountId, accountIds)];
+  const actPredicates = [inArray(activities.accountId, accountIds)];
+  if (contactIds.length > 0) {
+    taskPredicates.push(inArray(tasks.contactId, contactIds));
+    actPredicates.push(inArray(activities.contactId, contactIds));
+  }
+  if (opportunityIds.length > 0) {
+    taskPredicates.push(inArray(tasks.opportunityId, opportunityIds));
+    actPredicates.push(inArray(activities.opportunityId, opportunityIds));
+  }
+
+  // Each grandchild task/activity may be linked via account_id,
+  // contact_id, or opportunity_id. COALESCE resolves the owning account
+  // per row (direct account_id, else via its contact's / opportunity's
+  // account_id — those parent rows still exist; they were soft-deleted
+  // earlier in this same tx, not removed) so every cascaded row's
+  // sentinel points at one account and the closure restores together.
+  //
+  // Bounded limitation (M-4, accepted by design): COALESCE precedence
+  // pins each row to exactly ONE account. A task multi-linked across
+  // two accounts archived in the same batch (e.g. account_id=A1 while
+  // its contact belongs to A2) is stamped with A1 only; restoring A1
+  // brings it back even if A2 stays archived. This is intentional —
+  // one account-scoped sentinel per row is what lets the whole closure
+  // restore atomically; account_id precedence is the row's primary
+  // account. The inverse (a NULL marker) cannot occur: a row enters
+  // this sweep only via account_id ∈ accountIds OR via a
+  // contact_id/opportunity_id whose parent was selected by
+  // account_id ∈ accountIds (non-null), so COALESCE always resolves.
+  const acctMarker = cascadeMarkerSqlFromExpr(
+    "account",
+    sql`COALESCE(
+      ${tasks.accountId}::text,
+      (SELECT account_id::text FROM contacts WHERE contacts.id = ${tasks.contactId}),
+      (SELECT account_id::text FROM opportunities WHERE opportunities.id = ${tasks.opportunityId})
+    )`,
+  );
+  const cascadedTasks = await tx
+    .update(tasks)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorId,
+      deleteReason: acctMarker,
+      updatedById: actorId,
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(
+        taskPredicates.length === 1
+          ? taskPredicates[0]
+          : or(...taskPredicates)!,
+        eq(tasks.isDeleted, false),
+      ),
+    )
+    .returning({ id: tasks.id });
+
+  const actAcctMarker = cascadeMarkerSqlFromExpr(
+    "account",
+    sql`COALESCE(
+      ${activities.accountId}::text,
+      (SELECT account_id::text FROM contacts WHERE contacts.id = ${activities.contactId}),
+      (SELECT account_id::text FROM opportunities WHERE opportunities.id = ${activities.opportunityId})
+    )`,
+  );
+  const cascadedActivities = await tx
+    .update(activities)
+    .set({
+      isDeleted: true,
+      deletedAt: sql`now()`,
+      deletedById: actorId,
+      deleteReason: actAcctMarker,
+      // activities.user_id (authorship) intentionally untouched.
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(
+        actPredicates.length === 1
+          ? actPredicates[0]
+          : or(...actPredicates)!,
+        eq(activities.isDeleted, false),
+      ),
+    )
+    .returning({ id: activities.id });
+
+  return {
+    cascadedContacts: archivedContacts.length,
+    cascadedOpportunities: archivedOpps.length,
+    cascadedTasks: cascadedTasks.length,
+    cascadedActivities: cascadedActivities.length,
+  };
 }
 
 /**
- * restore archived accounts.
+ * Restore archived accounts and exactly the closure THIS account's
+ * archive cascaded (matched by the account-scoped sentinel — rows a
+ * user archived independently keep their own reason and stay archived).
+ * One transaction.
  *
  * @actor admin only (caller enforces)
  */
 export async function restoreAccountsById(
   ids: string[],
   actorId: string,
-): Promise<void> {
-  if (ids.length === 0) return;
-  await db
-    .update(crmAccounts)
-    .set({
-      isDeleted: false,
-      deletedAt: null,
-      deletedById: null,
-      deleteReason: null,
-      // actor stamping for skip-self in Supabase Realtime.
-      updatedById: actorId,
-      updatedAt: sql`now()`,
-    })
-    .where(inArray(crmAccounts.id, ids));
+): Promise<AccountCascadeResult> {
+  if (ids.length === 0) {
+    return {
+      cascadedContacts: 0,
+      cascadedOpportunities: 0,
+      cascadedTasks: 0,
+      cascadedActivities: 0,
+    };
+  }
+  return db.transaction(async (tx) => {
+    await tx
+      .update(crmAccounts)
+      .set({
+        isDeleted: false,
+        deletedAt: null,
+        deletedById: null,
+        deleteReason: null,
+        // actor stamping for skip-self in Supabase Realtime.
+        updatedById: actorId,
+        updatedAt: sql`now()`,
+      })
+      .where(inArray(crmAccounts.id, ids));
+    let cascadedContacts = 0;
+    let cascadedOpportunities = 0;
+    let cascadedTasks = 0;
+    let cascadedActivities = 0;
+    for (const id of ids) {
+      const marker = cascadeMarker("account", id);
+      const c = await tx
+        .update(contacts)
+        .set({
+          isDeleted: false,
+          deletedAt: null,
+          deletedById: null,
+          deleteReason: null,
+          updatedById: actorId,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(contacts.accountId, id),
+            eq(contacts.isDeleted, true),
+            eq(contacts.deleteReason, marker),
+          ),
+        )
+        .returning({ id: contacts.id });
+      const o = await tx
+        .update(opportunities)
+        .set({
+          isDeleted: false,
+          deletedAt: null,
+          deletedById: null,
+          deleteReason: null,
+          updatedById: actorId,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(opportunities.accountId, id),
+            eq(opportunities.isDeleted, true),
+            eq(opportunities.deleteReason, marker),
+          ),
+        )
+        .returning({ id: opportunities.id });
+      const t = await tx
+        .update(tasks)
+        .set({
+          isDeleted: false,
+          deletedAt: null,
+          deletedById: null,
+          deleteReason: null,
+          updatedById: actorId,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(eq(tasks.isDeleted, true), eq(tasks.deleteReason, marker)),
+        )
+        .returning({ id: tasks.id });
+      const a = await tx
+        .update(activities)
+        .set({
+          isDeleted: false,
+          deletedAt: null,
+          deletedById: null,
+          deleteReason: null,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(activities.isDeleted, true),
+            eq(activities.deleteReason, marker),
+          ),
+        )
+        .returning({ id: activities.id });
+      cascadedContacts += c.length;
+      cascadedOpportunities += o.length;
+      cascadedTasks += t.length;
+      cascadedActivities += a.length;
+    }
+    return {
+      cascadedContacts,
+      cascadedOpportunities,
+      cascadedTasks,
+      cascadedActivities,
+    };
+  });
 }
 
 /**

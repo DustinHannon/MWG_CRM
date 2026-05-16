@@ -60,8 +60,10 @@ registry.registerPath({
   path: "/leads/{id}",
   summary: "Update lead",
   description:
-    "Partial update. When `version` is supplied and does not match the " +
-    "current row, returns 409 CONFLICT. Without `version`, last-write-wins.",
+    "Partial update. `version` is required: GET the lead, send back its " +
+    "`version`. If it no longer matches the stored row the request " +
+    "returns 409 CONFLICT (refetch and retry); a missing `version` is " +
+    "422.",
   tags: ["Leads"],
   security: [{ BearerAuth: [] }],
   request: {
@@ -135,15 +137,11 @@ export const PATCH = withApi<{ id: string }>(
       return errorResponse(404, "NOT_FOUND", "Lead not found");
     }
 
-    // OCC: when `version` provided and mismatched, return 409 CONFLICT.
-    const expectedVersion =
-      typeof parsed.data.version === "number"
-        ? parsed.data.version
-        : existing.version;
-    if (
-      typeof parsed.data.version === "number" &&
-      parsed.data.version !== existing.version
-    ) {
+    // OCC: `version` is schema-required (a missing/non-numeric value
+    // already returned 422 above), so there is no synthesized
+    // fallback and no last-write-wins path. Mismatch → 409 CONFLICT.
+    const expectedVersion = parsed.data.version;
+    if (parsed.data.version !== existing.version) {
       return errorResponse(
         409,
         "CONFLICT",

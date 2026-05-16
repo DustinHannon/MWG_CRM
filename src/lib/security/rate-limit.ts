@@ -52,7 +52,26 @@ export type RateLimitKey =
   // /api/{entity}/list, /api/{entity}/archived, /api/admin/*/list,
   // /api/marketing/*/list. Public REST surface has its own per-API-key
   // limit; this covers the session-auth siblings.
-  | { kind: "internal_list"; principal: string };
+  | { kind: "internal_list"; principal: string }
+  // Admin destructive "delete all <entity>" data operations. Principal
+  // is the admin user id. These are typed-confirmation-gated and
+  // permanently destructive; the limit bounds a scripted or
+  // double-submitted danger op from firing repeatedly.
+  | { kind: "admin_danger_op"; principal: string }
+  // Public REST API per-key limit. Principal is the API key id. Each
+  // key carries its own `rate_limit_per_minute`; this replaces the
+  // earlier count-then-act read of `api_usage_log` (which raced under
+  // burst concurrency, letting N concurrent requests all pass the
+  // pre-write count). `api_usage_log` is still written every request
+  // for forensics/observability — it is no longer the limiter source
+  // of truth.
+  | { kind: "api_key"; principal: string }
+  // Breakglass (emergency credentials) sign-in attempts. Principal is
+  // the lowercased username. Replaces the per-process in-memory Map
+  // (defeatable across Vercel instances / cold starts) with a durable
+  // cross-instance Postgres counter. The username is a non-PII admin
+  // handle, stored verbatim (same posture as `internal_list`).
+  | { kind: "breakglass"; principal: string };
 
 export interface RateLimitResult {
   allowed: boolean;

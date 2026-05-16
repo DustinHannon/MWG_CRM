@@ -3,9 +3,9 @@ import "server-only";
 /**
  * D365 import pipeline barrel.
  *
- * Exports the public surface for callers in admin pages, server
- * actions, and (later) cron handlers. Sub-agents A/B/C/D extend this
- * with their entity mappers, fetchers, and commit helpers.
+ * Exports the public surface for callers in admin pages and server
+ * actions: the D365 client, retry wrapper, env helpers, audit/halt/
+ * realtime taxonomies, and owner resolution.
  */
 export {
   D365Client,

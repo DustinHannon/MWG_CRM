@@ -42,16 +42,11 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
  * do NOT roll back the batch. After all records process we update the
  * batch counters + status='committed' and audit.
  *
- * Sub-agent C calls this from `commitBatchAction`. The mapped payload
- * shape persisted by Sub-agent B's mappers (`NewLead`, `NewContact`,
- * `NewAccount`, `NewOpportunity`, etc.) is what we insert. Activities
- * insert into the unified `activities` table with the parent FK
- * resolved from the parent entity's `external_ids` row.
- *
- * NOTE: This is a pragmatic implementation. Sub-agent B may ship a
- * richer commit-batch later that handles more nuanced merge rules.
- * If this file is replaced, keep the same exported signature so
- * `commitBatchAction` doesn't need to change.
+ * Called from `commitBatchAction`. The mapped-payload shape persisted
+ * by the entity mappers (`NewLead`, `NewContact`, `NewAccount`,
+ * `NewOpportunity`, etc.) is what we insert. Activities insert into
+ * the unified `activities` table with the parent FK resolved from the
+ * parent entity's `external_ids` row.
  */
 
 export interface CommitBatchResult {
@@ -384,6 +379,13 @@ async function commitOneRecord(
     typeof mappedRaw._primaryContactSourceId === "string"
       ? (mappedRaw._primaryContactSourceId as string)
       : null;
+  // Opportunity mapper stashes the originating-lead GUID here; the
+  // account/primary-contact GUIDs reuse the shared
+  // `_accountSourceId` / `_primaryContactSourceId` virtuals above.
+  const sourceLeadSourceId =
+    typeof mappedRaw._sourceLeadSourceId === "string"
+      ? (mappedRaw._sourceLeadSourceId as string)
+      : null;
 
   // Strip every `_`-prefixed virtual (`_meta`, `_parentEntityType`,
   // `_parentSourceId`, `_qualityVerdict`, `_qualityReasons`,
@@ -444,6 +446,57 @@ async function commitOneRecord(
             field: "primaryContactId",
             sourceId: primaryContactSourceId,
             targetEntity: "contact",
+          });
+      }
+    }
+    if (entityType === "opportunity") {
+      // `accountSourceId` / `primaryContactSourceId` are the shared
+      // virtuals (also consumed by the contact/account branches); the
+      // per-entityType guards make these branches mutually exclusive
+      // so reuse is safe. `_customerid_value` polymorphism is handled
+      // in the opportunity mapper (it seeds both source-id virtuals);
+      // a wrong-type GUID simply fails its lookup and records a
+      // forensic unresolved-FK entry rather than corrupting data.
+      if (accountSourceId) {
+        const localAccountId = await lookupLocalId(
+          tx,
+          "account",
+          accountSourceId,
+        );
+        if (localAccountId) cleanPayload.accountId = localAccountId;
+        else
+          unresolvedFks.push({
+            field: "accountId",
+            sourceId: accountSourceId,
+            targetEntity: "account",
+          });
+      }
+      if (primaryContactSourceId) {
+        const localContactId = await lookupLocalId(
+          tx,
+          "contact",
+          primaryContactSourceId,
+        );
+        if (localContactId) cleanPayload.primaryContactId = localContactId;
+        else
+          unresolvedFks.push({
+            field: "primaryContactId",
+            sourceId: primaryContactSourceId,
+            targetEntity: "contact",
+          });
+      }
+      if (sourceLeadSourceId) {
+        const localLeadId = await lookupLocalId(
+          tx,
+          "lead",
+          sourceLeadSourceId,
+        );
+        if (localLeadId) cleanPayload.sourceLeadId = localLeadId;
+        else
+          unresolvedFks.push({
+            field: "sourceLeadId",
+            sourceId: sourceLeadSourceId,
+            targetEntity: "lead",
           });
       }
     }
@@ -676,9 +729,9 @@ async function insertParentEntity(
   const clean: Record<string, unknown> = { ...payload };
   if (!clean.createdById) clean.createdById = actorId;
   if (!clean.updatedById) clean.updatedById = actorId;
-  // The mapped payloads from Sub-agent B already match each table's
-  // NewX shape (NewLead, NewContact, …). The cast keeps TS from
-  // demanding the union narrow at the call site.
+  // The mapped payloads already match each table's NewX shape
+  // (NewLead, NewContact, …). The cast keeps TS from demanding the
+  // union narrow at the call site.
   const inserted = await tx
     .insert(table)
     .values(clean)

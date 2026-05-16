@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   getPermissions,
-  requireLeadAccess,
   requireLeadEditAccess,
   requireSession,
 } from "@/lib/auth-helpers";
@@ -21,9 +20,11 @@ import {
   updateLead,
 } from "@/lib/leads";
 import { setLeadTags } from "@/lib/tags";
-import { eq, inArray } from "drizzle-orm";
+import { isCascadeMarker } from "@/lib/cascade-archive";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
+import { recentViews } from "@/db/schema/recent-views";
 import { tags as tagsTable } from "@/db/schema/tags";
 import { gatherBlobsForLeads } from "@/lib/blob-cleanup";
 import { enqueueJob } from "@/lib/jobs/queue";
@@ -212,45 +213,6 @@ export async function updateLeadAction(
 }
 
 /**
- * what was "delete" is now "archive". Sets `is_deleted=true`;
- * the row is preserved for 30 days, then `cron/purge-archived` hard-deletes.
- * Admins can hard-delete from /leads/archived.
- *
- * kept for backwards compatibility on the existing detail-page
- * form action. New callers should prefer `softDeleteLeadAction`.
- *
- * @actor signed-in user with delete permission and lead access
- */
-export async function deleteLeadAction(
-  formData: FormData,
-): Promise<ActionResult<never>> {
-  return withErrorBoundary(
-    { action: "lead.archive" },
-    async () => {
-      const user = await requireSession();
-      const perms = await getPermissions(user.id);
-      if (!user.isAdmin && !perms.canDeleteLeads) {
-        throw new ForbiddenError("You don't have permission to delete leads.");
-      }
-      const id = z.string().uuid().parse(formData.get("id"));
-      await requireLeadAccess(user, id);
-      const reason =
-        (formData.get("reason") as string | null)?.trim() || undefined;
-      await archiveLeadsById([id], user.id, reason);
-      await writeAudit({
-        actorId: user.id,
-        action: "lead.archive",
-        targetType: "lead",
-        targetId: id,
-        after: { reason: reason ?? null },
-      });
-      revalidatePath("/leads");
-      redirect("/leads");
-    },
-  );
-}
-
-/**
  * JSON-input variant for the new client UI. Returns an
  * `undoToken` that the toast Undo button can replay. Permission gate
  * is strict ownership-or-admin per the matrix.
@@ -267,6 +229,11 @@ export async function softDeleteLeadAction(input: {
       const user = await requireSession();
       const id = z.string().uuid().parse(input.id);
       const reason = input.reason?.trim() || undefined;
+      if (reason && isCascadeMarker(reason)) {
+        throw new ValidationError(
+          "That delete reason is reserved by the system. Enter a different reason.",
+        );
+      }
 
       // Re-fetch — never trust the client's claim of ownership.
       const [row] = await db
@@ -285,14 +252,18 @@ export async function softDeleteLeadAction(input: {
         throw new ForbiddenError("You can't archive this lead.");
       }
 
-      await archiveLeadsById([id], user.id, reason);
+      const cascade = await archiveLeadsById([id], user.id, reason);
       await writeAudit({
         actorId: user.id,
         action: "lead.archive",
         targetType: "lead",
         targetId: id,
         before: { firstName: row.firstName, lastName: row.lastName, ownerId: row.ownerId },
-        after: { reason: reason ?? null },
+        after: {
+          reason: reason ?? null,
+          cascadedTasks: cascade.cascadedTasks,
+          cascadedActivities: cascade.cascadedActivities,
+        },
       });
 
       const undoToken = signUndoToken({
@@ -341,12 +312,16 @@ export async function undoArchiveLeadAction(input: {
       if (!canDeleteLead(user, row)) {
         throw new ForbiddenError("You can't restore this lead.");
       }
-      await restoreLeadsById([payload.id], user.id);
+      const undoCascade = await restoreLeadsById([payload.id], user.id);
       await writeAudit({
         actorId: user.id,
         action: "lead.unarchive_undo",
         targetType: "lead",
         targetId: payload.id,
+        after: {
+          cascadedTasks: undoCascade.cascadedTasks,
+          cascadedActivities: undoCascade.cascadedActivities,
+        },
       });
       revalidatePath("/leads");
       revalidatePath("/leads/archived");
@@ -368,12 +343,16 @@ export async function restoreLeadAction(
       const user = await requireSession();
       if (!user.isAdmin) throw new ForbiddenError("Admin only.");
       const id = z.string().uuid().parse(formData.get("id"));
-      await restoreLeadsById([id], user.id);
+      const cascade = await restoreLeadsById([id], user.id);
       await writeAudit({
         actorId: user.id,
         action: "lead.restore",
         targetType: "lead",
         targetId: id,
+        after: {
+          cascadedTasks: cascade.cascadedTasks,
+          cascadedActivities: cascade.cascadedActivities,
+        },
       });
       revalidatePath("/leads/archived");
       revalidatePath("/leads");
@@ -417,6 +396,28 @@ export async function hardDeleteLeadAction(
         .where(eq(leads.id, id))
         .limit(1);
       await deleteLeadsById([id]);
+      // recent_views has no polymorphic FK (free-text entity_type), so
+      // hard-deleting the lead does NOT cascade its Cmd+K recent-view
+      // rows — purge them explicitly. Best-effort: a failure here must
+      // never roll back or block the hard delete (the resolve-time
+      // is_deleted gate already hides it from the user; this just
+      // reclaims the row). Mirrors the blob-cleanup enqueue placement.
+      try {
+        await db
+          .delete(recentViews)
+          .where(
+            and(
+              eq(recentViews.entityType, "lead"),
+              eq(recentViews.entityId, id),
+            ),
+          );
+      } catch (err) {
+        logger.error("recent_views.cleanup_failed", {
+          entityType: "lead",
+          ids: [id],
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
       await writeAudit({
         actorId: user.id,
         action: "lead.hard_delete",
@@ -441,6 +442,7 @@ export async function hardDeleteLeadAction(
             },
             {
               actorId: user.id,
+              idempotencyKey: `blob-cleanup:lead:${id}`,
               metadata: {
                 originAction: "lead.hard_delete",
                 leadId: id,

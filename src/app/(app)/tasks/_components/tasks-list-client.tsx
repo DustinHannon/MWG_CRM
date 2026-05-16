@@ -253,6 +253,11 @@ function TasksListInner({
   const [filters, setFilters] = useState<TaskFilters>(EMPTY_TASK_FILTERS);
   const [draft, setDraft] = useState<TaskFilters>(EMPTY_TASK_FILTERS);
   const [loadedIds, setLoadedIds] = useState<string[]>([]);
+  // Maps every loaded task id to the `version` it was fetched with so
+  // bulk actions can send per-row optimistic-concurrency tokens. A ref
+  // (not state) — it's read at action time, never rendered, and must
+  // not trigger re-renders as pages stream in.
+  const versionById = useRef<Map<string, number>>(new Map());
   const { dispatch } = useBulkSelection();
 
   // Per-row selection set for the legacy bulk-action toolbar
@@ -310,6 +315,9 @@ function TasksListInner({
   const fetchPageInstrumented = useCallback(
     async (cursor: string | null, f: TaskFilters, signal?: AbortSignal) => {
       const page = await fetchPage(cursor, f, signal);
+      for (const row of page.data) {
+        versionById.current.set(row.id, row.version);
+      }
       if (cursor === null) {
         const ids = page.data.map((row) => row.id);
         setLoadedIds(ids);
@@ -359,12 +367,41 @@ function TasksListInner({
     });
   }
 
+  // Build per-row OCC tokens for the current selection. A selected id
+  // whose version we never loaded (shouldn't happen — selection only
+  // toggles on rendered rows) is skipped defensively.
+  function selectedItems(): Array<{ id: string; version: number }> {
+    const items: Array<{ id: string; version: number }> = [];
+    for (const id of selected) {
+      const version = versionById.current.get(id);
+      if (typeof version === "number") items.push({ id, version });
+    }
+    return items;
+  }
+
+  // CRM-standard conflict surface: tell the user exactly how many rows
+  // someone else changed and what to do, without losing the successes.
+  function notifyConflicts(conflicts: string[]) {
+    if (conflicts.length === 0) return;
+    toast.warning(
+      `${conflicts.length} ${
+        conflicts.length === 1 ? "task was" : "tasks were"
+      } modified by someone else and were skipped. Refresh to see the latest, then retry.`,
+      { duration: Infinity, dismissible: true },
+    );
+  }
+
   function bulkComplete() {
     if (selected.size === 0) return;
     startTransition(async () => {
-      const res = await bulkCompleteTasksAction({ ids: Array.from(selected) });
+      const items = selectedItems();
+      if (items.length === 0) return;
+      const res = await bulkCompleteTasksAction({ items });
       if (res.ok) {
-        toast.success(`Marked ${res.data.updated} task(s) complete`);
+        toast.success(
+          `Marked ${res.data.updated.length} task(s) complete`,
+        );
+        notifyConflicts(res.data.conflicts);
         clearSelection();
         router.refresh();
       } else {
@@ -383,9 +420,12 @@ function TasksListInner({
       return;
     }
     startTransition(async () => {
-      const res = await bulkDeleteTasksAction({ ids: Array.from(selected) });
+      const items = selectedItems();
+      if (items.length === 0) return;
+      const res = await bulkDeleteTasksAction({ items });
       if (res.ok) {
-        toast.success(`Deleted ${res.data.updated} task(s)`);
+        toast.success(`Deleted ${res.data.updated.length} task(s)`);
+        notifyConflicts(res.data.conflicts);
         clearSelection();
         router.refresh();
       } else {
@@ -406,12 +446,15 @@ function TasksListInner({
     }
     if (selected.size === 0) return;
     startTransition(async () => {
+      const items = selectedItems();
+      if (items.length === 0) return;
       const res = await bulkReassignTasksAction({
-        ids: Array.from(selected),
+        items,
         newAssigneeId: reassignTo,
       });
       if (res.ok) {
-        toast.success(`Reassigned ${res.data.updated} task(s)`);
+        toast.success(`Reassigned ${res.data.updated.length} task(s)`);
+        notifyConflicts(res.data.conflicts);
         setReassignOpen(false);
         setReassignTo("");
         clearSelection();

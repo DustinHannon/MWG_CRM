@@ -49,9 +49,9 @@ export type ImportRecordForDetect = Pick<
 >;
 
 /**
- * Shape of a single entry in `validation_warnings`. Mappers (Sub-agent
- * B) emit objects of this shape; we only depend on the `code` field
- * here, but the full shape is documented for clarity.
+ * Shape of a single entry in `validation_warnings`. The entity
+ * mappers emit objects of this shape; we only depend on the `code`
+ * field here, but the full shape is documented for clarity.
  */
 export interface ValidationWarning {
   field?: string;
@@ -180,12 +180,20 @@ export function detectOwnerJitFailure(
  * Counts records carrying any non-empty validation warnings. A spike
  * here means a schema drift or a mapper bug — we pause for human
  * review rather than commit dirty data.
+ *
+ * `owner_default_owner_used` is excluded: a default-owner fallback is
+ * an expected, resolvable condition (common in legacy data with
+ * former-employee owners), not a regression. It has its own
+ * batch-level gate via `detectOwnerJitFailure`; counting it here too
+ * would false-trip the regression halt on otherwise-clean imports.
  */
 export function detectValidationRegression(
   records: ImportRecordForDetect[],
 ): ValidationRegressionResult {
   const warningCount = records.reduce((acc, r) => {
-    const warnings = asWarnings(r.validationWarnings);
+    const warnings = asWarnings(r.validationWarnings).filter(
+      (w) => w.code !== "owner_default_owner_used",
+    );
     return warnings.length > 0 ? acc + 1 : acc;
   }, 0);
   return {

@@ -283,10 +283,42 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
     rawPayload: event as unknown as object,
   });
 
+  // Compliance suppression is recipient-row-independent. A terminal
+  // event (bounce / unsubscribe / group_unsubscribe / spamreport /
+  // dropped) MUST reach `marketing_suppressions` even when it arrives
+  // before the recipient row is inserted (send-time race), never
+  // matched a row (legacy / transactional stray), or had its
+  // custom_args stripped. Doing this BELOW the early-return left those
+  // addresses unsuppressed until the hourly sync cron — a campaign sent
+  // in that window could re-mail a just-bounced / just-unsubscribed
+  // address. `upsertSuppression` needs only `event.email` / type /
+  // reason; the recipient-state audit + counter reconcile below still
+  // gate on recipientId / campaignId (they genuinely need them).
+  if (eventType === "unsubscribe") {
+    await upsertSuppression(event.email, "unsubscribe", event.reason ?? null);
+  } else if (eventType === "group_unsubscribe") {
+    await upsertSuppression(
+      event.email,
+      "group_unsubscribe",
+      event.reason ?? null,
+    );
+  } else if (eventType === "bounce") {
+    await upsertSuppression(
+      event.email,
+      event.type === "blocked" ? "block" : "bounce",
+      event.reason ?? null,
+    );
+  } else if (eventType === "spamreport") {
+    await upsertSuppression(event.email, "spamreport", null);
+  } else if (eventType === "dropped") {
+    await upsertSuppression(event.email, "invalid", event.reason ?? null);
+  }
+
   if (!recipientId || !campaignId) {
     // Unmatched event — common for legacy sg_message_ids or transactional
     // sends that wandered into the marketing webhook. Logged in the
-    // events table; no further action.
+    // events table; suppression (above) still recorded; no further
+    // recipient/counter reconcile is possible without a matched row.
     return;
   }
 
@@ -299,29 +331,30 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
     event,
   );
 
-  // 4. Suppressions for terminal events.
+  // 4. Recipient-state forensic row for terminal compliance events.
   //
-  // Compliance-relevant recipient-state transitions (unsubscribe,
-  // group_unsubscribe, spamreport, bounce) each emit TWO distinct,
-  // intentional forensic rows: one recipient-state row here
-  // (`MKT_RECIPIENT_COMPLIANCE_STATE` — "this recipient transitioned to
-  // bounced/unsubscribed/…") and one suppression-provenance row inside
-  // `upsertSuppression` (`MKT_SUPPRESSION_WEBHOOK` — "this address was
-  // added to the suppression list"). They record different facts and
-  // are deliberately not collapsed. This dispatch block discriminates
-  // exactly the compliance transitions and excludes the high-frequency
-  // delivered/open/click telemetry, so each transition emits the
-  // recipient-state row exactly once. Duplicate webhook deliveries are
-  // deduped upstream by `webhook_event_dedupe` (the route claims each
-  // `sg_event_id` once before `processEvent` runs), so emission can be
-  // unconditional.
-  if (eventType === "unsubscribe") {
-    // Account-level unsubscribe. The user opted out at the SendGrid
-    // account level (rare via the marketing footer — the footer's
-    // ASM link produces `group_unsubscribe` instead). Mapped to
-    // `unsubscribe` so the operator audit-trail distinguishes the
-    // two flavors.
-    await upsertSuppression(event.email, "unsubscribe", event.reason ?? null);
+  // The suppression-list upsert for these events runs ABOVE the
+  // early-return (it is recipient-row-independent). What remains here
+  // is the recipient-state row (`MKT_RECIPIENT_COMPLIANCE_STATE` —
+  // "THIS recipient transitioned to bounced/unsubscribed/…"), which
+  // genuinely needs `recipientId`/`campaignId` and therefore stays
+  // below the early-return. It and the suppression-provenance row
+  // (`MKT_SUPPRESSION_WEBHOOK`, emitted inside `upsertSuppression`)
+  // record different facts and are deliberately not collapsed. This
+  // dispatch discriminates exactly the compliance transitions and
+  // excludes the high-frequency delivered/open/click telemetry, so each
+  // transition emits the recipient-state row exactly once. Duplicate
+  // webhook deliveries are deduped upstream by `webhook_event_dedupe`
+  // (the route claims each `sg_event_id` once before `processEvent`
+  // runs), so emission can be unconditional. `dropped` has no
+  // recipient-state row (its only effect is the suppression upsert,
+  // already done above), so it is not handled here.
+  if (
+    eventType === "unsubscribe" ||
+    eventType === "group_unsubscribe" ||
+    eventType === "bounce" ||
+    eventType === "spamreport"
+  ) {
     await writeSystemAudit({
       actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.WEBHOOK,
       action: AUDIT_EVENTS.MKT_RECIPIENT_COMPLIANCE_STATE,
@@ -329,58 +362,6 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
       targetId: recipientId,
       after: { state: eventType, campaignId },
     });
-  } else if (eventType === "group_unsubscribe") {
-    // Per-group unsubscribe. The CRM's marketing pipeline uses ASM
-    // with a single `group_id`, so the unsubscribe link in every
-    // marketing email produces this event type, NOT `unsubscribe`.
-    // Mapped to a distinct `group_unsubscribe` suppression_type so:
-    // (a) the events table and admin UI can distinguish the two,
-    // (b) the hourly cron sync of /v3/asm/groups/{id}/suppressions
-    //     can reconcile this type without collision.
-    await upsertSuppression(
-      event.email,
-      "group_unsubscribe",
-      event.reason ?? null,
-    );
-    await writeSystemAudit({
-      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.WEBHOOK,
-      action: AUDIT_EVENTS.MKT_RECIPIENT_COMPLIANCE_STATE,
-      targetType: "marketing_campaign_recipient",
-      targetId: recipientId,
-      after: { state: eventType, campaignId },
-    });
-  } else if (eventType === "bounce") {
-    // SendGrid's `bounce` event has type='hard'|'soft' in `type`;
-    // a blocked-by-ISP event uses event='dropped' or `type='blocked'`.
-    // Hard and soft bounces both reach the suppression list as
-    // `bounce`; only the explicit `blocked` subtype is mapped to
-    // `block` so the operator audit-trail can distinguish them.
-    const isBlocked = event.type === "blocked";
-    await upsertSuppression(
-      event.email,
-      isBlocked ? "block" : "bounce",
-      event.reason ?? null,
-    );
-    await writeSystemAudit({
-      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.WEBHOOK,
-      action: AUDIT_EVENTS.MKT_RECIPIENT_COMPLIANCE_STATE,
-      targetType: "marketing_campaign_recipient",
-      targetId: recipientId,
-      after: { state: eventType, campaignId },
-    });
-  } else if (eventType === "spamreport") {
-    await upsertSuppression(event.email, "spamreport", null);
-    await writeSystemAudit({
-      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.WEBHOOK,
-      action: AUDIT_EVENTS.MKT_RECIPIENT_COMPLIANCE_STATE,
-      targetType: "marketing_campaign_recipient",
-      targetId: recipientId,
-      after: { state: eventType, campaignId },
-    });
-  } else if (eventType === "dropped") {
-    // Dropped events from Invalid Email reach the suppression list as
-    // `invalid` so future sends to the same address skip immediately.
-    await upsertSuppression(event.email, "invalid", event.reason ?? null);
   }
 
   if (!reconciledCounter) {
@@ -503,7 +484,14 @@ async function upsertSuppression(
     .onConflictDoUpdate({
       target: marketingSuppressions.email,
       set: {
-        suppressionType: type,
+        // Preserve a manual classification. A webhook bounce on an
+        // address an operator manually suppressed must not relabel it
+        // away from `manual` — same provenance contract as the hourly
+        // sync upsert (sendgrid/suppressions.ts). The address stays
+        // suppressed either way; only the higher-provenance label wins.
+        suppressionType: sql`CASE WHEN ${marketingSuppressions.suppressionType} = 'manual'
+                                  THEN 'manual'
+                                  ELSE ${type} END`,
         reason,
         syncedAt: sql`now()`,
       },

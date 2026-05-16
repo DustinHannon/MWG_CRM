@@ -64,7 +64,7 @@ function getServerClient(): SupabaseClient | null {
 /**
  * Broadcast a single event on the per-run channel. Fire-and-forget
  * semantics; resolves once the message is acknowledged by Supabase
- * realtime (or the local stub no-ops).
+ * realtime.
  *
  * NOTE: We send via a transient channel each call rather than caching
  * a long-lived channel because import runs are short-lived (minutes

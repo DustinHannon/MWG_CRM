@@ -21,8 +21,8 @@
  * without extending the surface
  * `@odata.etag` and other annotation keys (`*@OData.Community.Display.V1.FormattedValue`)
  * pass through without lying about the type
- * mapper code (Sub-agent B) is not blocked by missing field types
- * while we're still discovering the schema in production
+ * mapper code is not blocked by missing field types while the schema
+ * is still being discovered in production
  *
  * Conventions:
  * all GUID fields are typed as `string` (D365 returns lowercase
@@ -283,9 +283,8 @@ export interface D365SystemUser {
 
 /**
  * `entity_type` strings persisted on `import_runs.entityType` and
- * `import_records.sourceEntityType`. Sub-agent A constrains the pull
- * pipeline to these nine values; Sub-agent B's mappers consume the
- * same union.
+ * `import_records.sourceEntityType`. The pull pipeline is constrained
+ * to these nine values; the entity mappers consume the same union.
  */
 export const D365_ENTITY_TYPES = [
   "lead",

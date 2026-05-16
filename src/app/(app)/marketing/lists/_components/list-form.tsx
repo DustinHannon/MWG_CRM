@@ -40,9 +40,9 @@ export function ListForm({ mode, initial }: Props) {
   const [dsl, setDsl] = useState<FilterDsl | null>(
     initial?.filterDsl ?? null,
   );
-  // source entity for dynamic lists. Only 'leads' is wired
-  // today; the picker shows the others greyed out for forward
-  // compatibility.
+  // Source entity for dynamic lists. The schema enum carries other
+  // values for forward compatibility, but only `leads` is backed by a
+  // resolver, so the picker exposes only that option.
   const [sourceEntity, setSourceEntity] = useState<MarketingListSourceEntity>(
     initial?.sourceEntity ?? "leads",
   );
@@ -164,24 +164,11 @@ export function ListForm({ mode, initial }: Props) {
             }
             disabled={mode === "edit"}
             className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:opacity-60"
-            title="Not yet available"
           >
             <option value="leads">Leads</option>
-            <option value="contacts" disabled>
-              Contacts (not yet available)
-            </option>
-            <option value="accounts" disabled>
-              Accounts (not yet available)
-            </option>
-            <option value="opportunities" disabled>
-              Opportunities (coming soon)
-            </option>
-            <option value="mixed" disabled>
-              Mixed (coming soon)
-            </option>
           </select>
           <p className="text-xs text-muted-foreground">
-            Filter rules evaluate against this entity. Only leads are wired today.
+            Filter rules evaluate against leads.
           </p>
         </div>
 

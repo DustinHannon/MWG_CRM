@@ -2,9 +2,12 @@ import "server-only";
 import { and, asc, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
+import { activities } from "@/db/schema/activities";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
+import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import { cascadeMarker, cascadeMarkerSql } from "@/lib/cascade-archive";
 import {
   decodeCursor as decodeStandardCursor,
   encodeFromValues as encodeStandardCursor,
@@ -114,45 +117,274 @@ export async function listContactsForAccountPicker(
   return rows;
 }
 
-/** soft-delete opportunities. */
+/** Cascade soft-delete / restore counts for an opportunity. */
+export interface OpportunityCascadeResult {
+  cascadedTasks: number;
+  cascadedActivities: number;
+}
+
+/**
+ * Cascade-archive opportunities and their dependent tasks/activities in
+ * one transaction (STANDARDS 19.1.1). Cascaded children carry the
+ * opportunity-scoped sentinel `__cascade__:opportunity:<id>` so restore
+ * is selective (account-driven cascades use the account sentinel, so an
+ * opportunity archived inside an account closure restores with that
+ * account, not on its own).
+ *
+ * @actor opportunity owner or admin (caller enforces)
+ */
 export async function archiveOpportunitiesById(
   ids: string[],
   actorId: string,
   reason?: string,
-): Promise<void> {
-  if (ids.length === 0) return;
-  await db
-    .update(opportunities)
-    .set({
-      isDeleted: true,
-      deletedAt: sql`now()`,
-      deletedById: actorId,
-      deleteReason: reason ?? null,
-      // actor stamping for skip-self in Supabase Realtime.
-      updatedById: actorId,
-      updatedAt: sql`now()`,
-    })
-    .where(inArray(opportunities.id, ids));
+): Promise<OpportunityCascadeResult> {
+  if (ids.length === 0) return { cascadedTasks: 0, cascadedActivities: 0 };
+  return db.transaction(async (tx) => {
+    await tx
+      .update(opportunities)
+      .set({
+        isDeleted: true,
+        deletedAt: sql`now()`,
+        deletedById: actorId,
+        deleteReason: reason ?? null,
+        // actor stamping for skip-self in Supabase Realtime.
+        updatedById: actorId,
+        updatedAt: sql`now()`,
+      })
+      .where(inArray(opportunities.id, ids));
+    const cascadedTasks = await tx
+      .update(tasks)
+      .set({
+        isDeleted: true,
+        deletedAt: sql`now()`,
+        deletedById: actorId,
+        deleteReason: cascadeMarkerSql("opportunity", tasks.opportunityId),
+        updatedById: actorId,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          inArray(tasks.opportunityId, ids),
+          eq(tasks.isDeleted, false),
+        ),
+      )
+      .returning({ id: tasks.id });
+    const cascadedActivities = await tx
+      .update(activities)
+      .set({
+        isDeleted: true,
+        deletedAt: sql`now()`,
+        deletedById: actorId,
+        deleteReason: cascadeMarkerSql("opportunity", activities.opportunityId),
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          inArray(activities.opportunityId, ids),
+          eq(activities.isDeleted, false),
+        ),
+      )
+      .returning({ id: activities.id });
+    return {
+      cascadedTasks: cascadedTasks.length,
+      cascadedActivities: cascadedActivities.length,
+    };
+  });
 }
 
-/** restore archived opportunities. */
+/** Per-row optimistic-concurrency input for bulk opportunity archive. */
+export interface OpportunityArchiveRow {
+  id: string;
+  version: number;
+}
+
+/**
+ * Bulk archive opportunities with per-row optimistic concurrency. A
+ * row is archived only when its on-disk `version` still matches the
+ * version the client loaded; rows another writer moved are returned in
+ * `conflicts` untouched (no silent lost update — closes the asymmetry
+ * where single-row opportunity edits enforced OCC but bulk archive did
+ * not). The whole batch (opportunity flips + child tasks/activities
+ * cascade) runs in one transaction (STANDARDS 19.1.1).
+ *
+ * Mirrors `bulkArchiveAccounts`: the caller filters to permitted rows
+ * first, then this enforces OCC and cascades the opportunity-scoped
+ * sentinel so restore stays selective.
+ *
+ * @actor opportunity owner or admin (caller enforces per-record
+ * permission)
+ */
+export async function bulkArchiveOpportunities(
+  rows: OpportunityArchiveRow[],
+  actorId: string,
+  reason?: string,
+): Promise<
+  { updated: string[]; conflicts: string[] } & OpportunityCascadeResult
+> {
+  if (rows.length === 0) {
+    return {
+      updated: [],
+      conflicts: [],
+      cascadedTasks: 0,
+      cascadedActivities: 0,
+    };
+  }
+  return db.transaction(async (tx) => {
+    const updated: string[] = [];
+    const conflicts: string[] = [];
+    for (const row of rows) {
+      const claimed = await tx
+        .update(opportunities)
+        .set({
+          isDeleted: true,
+          deletedAt: sql`now()`,
+          deletedById: actorId,
+          deleteReason: reason ?? null,
+          updatedById: actorId,
+          updatedAt: sql`now()`,
+          version: sql`${opportunities.version} + 1`,
+        })
+        .where(
+          and(
+            eq(opportunities.id, row.id),
+            eq(opportunities.version, row.version),
+            eq(opportunities.isDeleted, false),
+          ),
+        )
+        .returning({ id: opportunities.id });
+      if (claimed.length === 1) {
+        updated.push(row.id);
+        continue;
+      }
+      // 0 rows: distinguish a stale version (conflict) from an
+      // already-archived no-op (idempotent skip). Probe the live row
+      // in-transaction — consistent with the bulk task OCC fns
+      // (STANDARDS 1.8 sibling parity).
+      const [live] = await tx
+        .select({ version: opportunities.version })
+        .from(opportunities)
+        .where(eq(opportunities.id, row.id))
+        .limit(1);
+      if (live && live.version !== row.version) conflicts.push(row.id);
+      // else: already archived at the same version — idempotent no-op.
+    }
+    if (updated.length === 0) {
+      return { updated, conflicts, cascadedTasks: 0, cascadedActivities: 0 };
+    }
+    const cascadedTasks = await tx
+      .update(tasks)
+      .set({
+        isDeleted: true,
+        deletedAt: sql`now()`,
+        deletedById: actorId,
+        deleteReason: cascadeMarkerSql("opportunity", tasks.opportunityId),
+        updatedById: actorId,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          inArray(tasks.opportunityId, updated),
+          eq(tasks.isDeleted, false),
+        ),
+      )
+      .returning({ id: tasks.id });
+    const cascadedActivities = await tx
+      .update(activities)
+      .set({
+        isDeleted: true,
+        deletedAt: sql`now()`,
+        deletedById: actorId,
+        deleteReason: cascadeMarkerSql(
+          "opportunity",
+          activities.opportunityId,
+        ),
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          inArray(activities.opportunityId, updated),
+          eq(activities.isDeleted, false),
+        ),
+      )
+      .returning({ id: activities.id });
+    return {
+      updated,
+      conflicts,
+      cascadedTasks: cascadedTasks.length,
+      cascadedActivities: cascadedActivities.length,
+    };
+  });
+}
+
+/**
+ * Restore archived opportunities and exactly the tasks/activities THIS
+ * opportunity's archive cascaded (opportunity-scoped sentinel match).
+ * One transaction.
+ *
+ * @actor admin only (caller enforces)
+ */
 export async function restoreOpportunitiesById(
   ids: string[],
   actorId: string,
-): Promise<void> {
-  if (ids.length === 0) return;
-  await db
-    .update(opportunities)
-    .set({
-      isDeleted: false,
-      deletedAt: null,
-      deletedById: null,
-      deleteReason: null,
-      // actor stamping for skip-self in Supabase Realtime.
-      updatedById: actorId,
-      updatedAt: sql`now()`,
-    })
-    .where(inArray(opportunities.id, ids));
+): Promise<OpportunityCascadeResult> {
+  if (ids.length === 0) return { cascadedTasks: 0, cascadedActivities: 0 };
+  return db.transaction(async (tx) => {
+    await tx
+      .update(opportunities)
+      .set({
+        isDeleted: false,
+        deletedAt: null,
+        deletedById: null,
+        deleteReason: null,
+        // actor stamping for skip-self in Supabase Realtime.
+        updatedById: actorId,
+        updatedAt: sql`now()`,
+      })
+      .where(inArray(opportunities.id, ids));
+    let cascadedTasks = 0;
+    let cascadedActivities = 0;
+    for (const id of ids) {
+      const marker = cascadeMarker("opportunity", id);
+      const t = await tx
+        .update(tasks)
+        .set({
+          isDeleted: false,
+          deletedAt: null,
+          deletedById: null,
+          deleteReason: null,
+          updatedById: actorId,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(tasks.opportunityId, id),
+            eq(tasks.isDeleted, true),
+            eq(tasks.deleteReason, marker),
+          ),
+        )
+        .returning({ id: tasks.id });
+      const a = await tx
+        .update(activities)
+        .set({
+          isDeleted: false,
+          deletedAt: null,
+          deletedById: null,
+          deleteReason: null,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(activities.opportunityId, id),
+            eq(activities.isDeleted, true),
+            eq(activities.deleteReason, marker),
+          ),
+        )
+        .returning({ id: activities.id });
+      cascadedTasks += t.length;
+      cascadedActivities += a.length;
+    }
+    return { cascadedTasks, cascadedActivities };
+  });
 }
 
 /** admin hard-delete. */

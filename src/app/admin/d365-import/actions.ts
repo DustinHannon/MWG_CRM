@@ -19,6 +19,11 @@ import { logger } from "@/lib/logger";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { AUDIT_EVENTS } from "@/lib/audit/events";
 import { D365_AUDIT_EVENTS } from "@/lib/d365/audit-events";
+import { pullNextBatch } from "@/lib/d365/pull-batch";
+import { mapBatch } from "@/lib/d365/map-batch";
+import { commitBatch } from "@/lib/d365/commit-batch";
+import { resumeRun, type ResumeResolution } from "@/lib/d365/resume-run";
+import { backfillOpportunityFks } from "@/lib/d365/backfill-opportunity-fks";
 import {
   abortRunSchema,
   approveRecordSchema,
@@ -30,6 +35,7 @@ import {
   pullNextBatchSchema,
   quickPullSchema,
   rejectRecordSchema,
+  resetStuckBatchSchema,
   resumeRunSchema,
   setConflictResolutionSchema,
 } from "./_schemas";
@@ -42,11 +48,10 @@ import {
  * leaking stack traces. Mutations that change run/batch/record state
  * write to `audit_log` via `writeAudit`.
  *
- * Sub-agent A is shipping `pullNextBatch`, `mapBatch`, `resumeRun`
- * helpers; Sub-agent B is shipping `commitBatch`. Until those land
- * we either dynamically import them (so the build doesn't break) or
- * fall back to a minimal inline implementation that exercises the DB
- * + audit + revalidate paths the UI needs to be functional.
+ * The pipeline helpers (`pullNextBatch`, `mapBatch`, `commitBatch`,
+ * `resumeRun`) are statically imported from `@/lib/d365`; each action
+ * loads records, calls the relevant pipeline helper, audits the state
+ * transition, and revalidates the affected admin paths.
  */
 
 /* -------------------------------------------------------------------------- *
@@ -92,104 +97,15 @@ function defaultQuickPullScope(_entityType: string): Record<string, unknown> {
 }
 
 /**
- * Optional dynamic import of Sub-agent A's queries module. Returns
- * null (not throws) when the module isn't on disk yet. The action
- * caller falls back to its inline minimum behavior.
+ * Translate the resume form-data shape (`reason` + optional
+ * `conflictResolution`) into the `ResumeResolution` discriminated
+ * union that `resumeRun` consumes, so the action contract stays
+ * form-friendly.
  */
-async function tryLoadPullBatch(): Promise<
-  | ((runId: string, actorId: string) => Promise<{ batchId: string }>)
-  | null
-> {
-  try {
-    const mod = (await import("@/lib/d365/pull-batch")) as {
-      pullNextBatch?: (
-        runId: string,
-        actorId: string,
-      ) => Promise<{ batchId: string }>;
-    };
-    return mod.pullNextBatch ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function tryLoadMapBatch(): Promise<
-  | ((batchId: string, actorId: string) => Promise<void>)
-  | null
-> {
-  try {
-    const mod = (await import("@/lib/d365/map-batch")) as unknown as {
-      mapBatch?: (batchId: string, actorId: string) => Promise<void>;
-    };
-    return mod.mapBatch ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function tryLoadCommitBatch(): Promise<
-  | ((batchId: string, actorId: string) => Promise<{
-      committed: number;
-      skipped: number;
-      failed: number;
-    }>)
-  | null
-> {
-  try {
-    const mod = (await import("@/lib/d365/commit-batch")) as {
-      commitBatch?: (
-        batchId: string,
-        actorId: string,
-      ) => Promise<{
-        committed: number;
-        skipped: number;
-        failed: number;
-      }>;
-    };
-    return mod.commitBatch ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Sub-agent A's `resumeRun(runId, resolution, actorId)` takes a
- * `ResumeResolution` discriminated union. We translate the form-data
- * shape (`reason` + optional `conflictResolution`) into that union
- * here so the action contract stays form-friendly.
- */
-type ResumeResolutionKind =
-  | { kind: "retry" }
-  | { kind: "fix_picklist" }
-  | { kind: "use_default_owner" }
-  | { kind: "open_for_review" }
-  | {
-      kind: "apply_dedup_default";
-      defaultBehavior: "skip" | "overwrite" | "merge";
-    };
-
-async function tryLoadResumeRun(): Promise<
-  | ((runId: string, resolution: ResumeResolutionKind, actorId: string) => Promise<void>)
-  | null
-> {
-  try {
-    const mod = (await import("@/lib/d365/resume-run")) as unknown as {
-      resumeRun?: (
-        runId: string,
-        resolution: ResumeResolutionKind,
-        actorId: string,
-      ) => Promise<void>;
-    };
-    return mod.resumeRun ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function mapResumeFormToResolution(
   reason: string,
   conflictResolution: string | undefined,
-): ResumeResolutionKind {
+): ResumeResolution {
   switch (reason) {
     case "d365_unreachable":
       return { kind: "retry" };
@@ -208,6 +124,12 @@ function mapResumeFormToResolution(
             : "merge";
       return { kind: "apply_dedup_default", defaultBehavior: behavior };
     }
+    case "bad_lead_volume":
+      // Bad-lead-volume halts only resolve via human review of the
+      // auto-skipped batch (resume-run's ALLOWED_RESOLUTIONS allows
+      // only open_for_review here). Explicit so the resolution isn't
+      // an undocumented fall-through to the default.
+      return { kind: "open_for_review" };
     default:
       return { kind: "open_for_review" };
   }
@@ -337,26 +259,20 @@ export async function quickPullAction(
         });
       }
 
-      // Chain pull + map (best-effort — Sub-agent A/B may not be
-      // shipped yet; in that case we still return runId so the user
-      // lands on the run-detail page and sees the stub messaging).
-      const pull = await tryLoadPullBatch();
-      const map = await tryLoadMapBatch();
-
+      // Chain pull + map. Best-effort: a pull/map failure is logged
+      // and the user still lands on the run-detail page (which shows
+      // the failure via the run audit log) rather than getting an
+      // opaque action error on the overview.
       let batchId: string | null = null;
-      if (pull) {
-        try {
-          const out = await pull(runId, user.id);
-          batchId = out.batchId;
-          if (map) {
-            await map(batchId, user.id);
-          }
-        } catch (err) {
-          logger.warn("d365.quick_pull.pull_or_map_failed", {
-            runId,
-            errorMessage: err instanceof Error ? err.message : String(err),
-          });
-        }
+      try {
+        const out = await pullNextBatch(runId, user.id);
+        batchId = out.batchId;
+        await mapBatch(batchId, user.id);
+      } catch (err) {
+        logger.warn("d365.quick_pull.pull_or_map_failed", {
+          runId,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
       }
 
       revalidatePath("/admin/d365-import");
@@ -392,16 +308,9 @@ export async function pullNextBatchAction(
         );
       }
 
-      const pull = await tryLoadPullBatch();
-      if (!pull) {
-        throw new ValidationError(
-          "Pull pipeline not yet available (sub-agent A pending).",
-        );
-      }
-
       let batchId: string | null = null;
       try {
-        const out = await pull(runId, user.id);
+        const out = await pullNextBatch(runId, user.id);
         batchId = out.batchId;
       } catch (err) {
         logger.error("d365.pull_batch.failed", {
@@ -421,10 +330,9 @@ export async function pullNextBatchAction(
         });
       }
 
-      const map = await tryLoadMapBatch();
-      if (map && batchId) {
+      if (batchId) {
         try {
-          await map(batchId, user.id);
+          await mapBatch(batchId, user.id);
         } catch (err) {
           logger.error("d365.map_batch.failed", {
             batchId,
@@ -501,7 +409,13 @@ export async function markRunCompleteAction(
         throw new ValidationError("Cannot complete an aborted run.");
       }
 
-      // Refuse if any batch is still pending/reviewing.
+      // Refuse if any batch is still in a non-terminal state. This
+      // includes `committing` (a stuck or in-flight commit must not
+      // be buried) and `failed` (partial CRM writes occurred — the
+      // operator must re-review and recommit before the run can be
+      // considered complete). `commitBatchAction` already treats
+      // `failed` as needing explicit operator action; run-completion
+      // must be consistent with that.
       const blockers = await db
         .select({ id: importBatches.id, status: importBatches.status })
         .from(importBatches)
@@ -513,13 +427,15 @@ export async function markRunCompleteAction(
               "fetched",
               "reviewing",
               "approved",
+              "committing",
+              "failed",
             ]),
           ),
         )
         .limit(1);
       if (blockers[0]) {
         throw new ValidationError(
-          "Cannot mark complete while batches are still pending or under review.",
+          "Cannot mark complete while batches are pending, in review, committing, or failed. Resolve failed or stuck batches first.",
         );
       }
 
@@ -543,6 +459,90 @@ export async function markRunCompleteAction(
   );
 }
 
+/**
+ * Reset a batch stuck in `committing` back to `reviewing`.
+ *
+ * commit-batch flips a batch to `committing` at the start of its loop
+ * and back to a terminal state (`committed` / `failed`) at the end. A
+ * caught JS error rolls it back to `reviewing`, but an uncaught hard
+ * kill (SIGKILL / OOM / 300s wall / deploy recycle) leaves the row in
+ * `committing` permanently — `commitBatchAction` then refuses the
+ * batch forever. The d365-imports schema documents this as a known
+ * gap requiring a manual reset after inspection; this is that reset,
+ * built in-app.
+ *
+ * Safety: the reset is an atomic conditional UPDATE guarded on
+ * `status = 'committing'`. If a slow-but-alive commit finishes
+ * between the operator's inspection and the click, the UPDATE affects
+ * zero rows and we throw `ConflictError` rather than clobber it.
+ */
+export async function resetStuckBatchAction(
+  formData: FormData,
+): Promise<ActionResult<never>> {
+  return withErrorBoundary(
+    { action: "d365.import.batch.reset_stuck" },
+    async () => {
+      const user = await requireAdmin();
+      const { batchId } = parse(resetStuckBatchSchema, formData);
+
+      const [batch] = await db
+        .select({
+          id: importBatches.id,
+          runId: importBatches.runId,
+          status: importBatches.status,
+        })
+        .from(importBatches)
+        .where(eq(importBatches.id, batchId))
+        .limit(1);
+      if (!batch) throw new NotFoundError("import batch");
+      if (batch.status !== "committing") {
+        throw new ValidationError(
+          `Batch is ${batch.status}, not committing — nothing to reset.`,
+        );
+      }
+
+      const reset = await db
+        .update(importBatches)
+        .set({ status: "reviewing" })
+        .where(
+          and(
+            eq(importBatches.id, batchId),
+            eq(importBatches.status, "committing"),
+          ),
+        )
+        .returning({ id: importBatches.id });
+      if (reset.length === 0) {
+        throw new ConflictError(
+          "Batch is no longer committing — the commit may have finished or already been reset.",
+          { batchId },
+        );
+      }
+
+      logger.warn("d365.batch.reset_stuck", {
+        batchId,
+        runId: batch.runId,
+        actorId: user.id,
+      });
+
+      await writeAudit({
+        actorId: user.id,
+        action: D365_AUDIT_EVENTS.BATCH_RESET_STUCK,
+        targetType: "d365_import_batch",
+        targetId: batchId,
+        before: { status: "committing" },
+        after: {
+          status: "reviewing",
+          resetBy: user.id,
+          reason: "manual_unstick",
+        },
+      });
+
+      revalidatePath("/admin/d365-import");
+      revalidatePath(`/admin/d365-import/${batch.runId}`);
+    },
+  );
+}
+
 export async function resumeRunAction(
   formData: FormData,
 ): Promise<ActionResult<never>> {
@@ -556,7 +556,6 @@ export async function resumeRunAction(
         .select({
           id: importRuns.id,
           status: importRuns.status,
-          notes: importRuns.notes,
         })
         .from(importRuns)
         .where(eq(importRuns.id, input.runId))
@@ -566,29 +565,11 @@ export async function resumeRunAction(
         throw new ValidationError(`Run is ${run.status} — nothing to resume.`);
       }
 
-      const resumeFn = await tryLoadResumeRun();
       const resolution = mapResumeFormToResolution(
         input.reason,
         input.conflictResolution,
       );
-      if (resumeFn) {
-        await resumeFn(input.runId, resolution, user.id);
-      } else {
-        // Inline minimum: persist resolution to notes, transition to
-        // 'reviewing' so the next pullNextBatch can fire, audit.
-        const noteLine = JSON.stringify({
-          at: new Date().toISOString(),
-          kind: "resumed",
-          reason: input.reason,
-          resolution: input.conflictResolution ?? null,
-          actorId: user.id,
-        });
-        const nextNotes = run.notes ? `${run.notes}\n${noteLine}` : noteLine;
-        await db
-          .update(importRuns)
-          .set({ status: "reviewing", notes: nextNotes })
-          .where(eq(importRuns.id, input.runId));
-      }
+      await resumeRun(input.runId, resolution, user.id);
 
       await writeAudit({
         actorId: user.id,
@@ -887,14 +868,7 @@ export async function commitBatchAction(
         );
       }
 
-      const commitFn = await tryLoadCommitBatch();
-      if (!commitFn) {
-        throw new ValidationError(
-          "Commit pipeline not yet available (sub-agent B pending).",
-        );
-      }
-
-      const out = await commitFn(batchId, user.id);
+      const out = await commitBatch(batchId, user.id);
 
       await writeAudit({
         actorId: user.id,
@@ -907,6 +881,48 @@ export async function commitBatchAction(
       revalidatePath(`/admin/d365-import/${batch.runId}`);
       revalidatePath(`/admin/d365-import/${batch.runId}/${batchId}`);
       return out;
+    },
+  );
+}
+
+/* -------------------------------------------------------------------------- *
+ * Opportunity FK backfill *
+ * -------------------------------------------------------------------------- */
+
+/**
+ * One-shot, idempotent backfill of NULL parent FKs on already-
+ * committed D365 opportunities.
+ *
+ * Opportunities imported before the commit-batch opportunity
+ * FK-resolution branch landed were inserted with `account_id` /
+ * `primary_contact_id` / `source_lead_id` permanently NULL even when
+ * the parent rows existed in `external_ids`. The opportunity mapper
+ * did not stash the source-id virtuals, so a re-import did not
+ * self-heal them. This sweep re-derives the parent D365 GUIDs from
+ * each opportunity's retained `import_records.rawPayload` and resolves
+ * them via `external_ids`.
+ *
+ * Idempotent: only fills a column that is currently NULL, only when
+ * resolution succeeds. Safe to re-run after a later parent import.
+ * Audit (`d365.opportunity.fk_backfill` summary + per-field
+ * `RECORD_FK_UNRESOLVED`) and structured logging are emitted inside
+ * `backfillOpportunityFks`. The result count is returned to the UI.
+ */
+export async function backfillOpportunityFksAction(): Promise<
+  ActionResult<{
+    scanned: number;
+    resolved: number;
+    stillUnresolved: number;
+    noSourceProvenance: number;
+  }>
+> {
+  return withErrorBoundary(
+    { action: "d365.opportunity.fk_backfill" },
+    async () => {
+      const user = await requireAdmin();
+      const result = await backfillOpportunityFks(user.id);
+      revalidatePath("/admin/d365-import");
+      return result;
     },
   );
 }

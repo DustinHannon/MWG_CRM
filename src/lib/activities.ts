@@ -330,6 +330,15 @@ export async function restoreActivity(
         isDeleted: false,
         deletedAt: null,
         deletedById: null,
+        // Clear delete_reason so a now-live row never carries a stale
+        // cascade sentinel. If this activity was cascade-archived by a
+        // parent (delete_reason = '__cascade__:<parent>:<id>') and the
+        // user individually restores just it, the marker no longer
+        // applies; leaving it would mislead a forensic reviewer and
+        // diverges from every cascade restore + restoreTasksById,
+        // which all null delete_reason on restore (M-2 / cascade
+        // contract consistency).
+        deleteReason: null,
         updatedAt: sql`now()`,
       })
       .where(eq(activities.id, activityId));

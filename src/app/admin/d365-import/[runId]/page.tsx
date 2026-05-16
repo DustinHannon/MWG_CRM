@@ -23,6 +23,7 @@ import {
   BatchStatusPill,
 } from "../_components/run-status-pill";
 import { PullNextBatchButton } from "../_components/pull-next-batch-button";
+import { ResetStuckBatchButton } from "../_components/reset-stuck-batch-button";
 import { RunControls } from "../_components/run-controls";
 import type { RunCounters } from "@/components/admin/d365-import/use-run-realtime";
 
@@ -273,12 +274,17 @@ export default async function RunDetailPage({ params }: PageProps) {
                         )}
                       </Td>
                       <Td className="text-right">
-                        <Link
-                          href={`/admin/d365-import/${run.id}/${b.id}`}
-                          className="text-foreground underline-offset-2 hover:underline"
-                        >
-                          {b.status === "committed" ? "Re-review" : "Open"}
-                        </Link>
+                        <span className="inline-flex items-center justify-end gap-3">
+                          {b.status === "committing" ? (
+                            <ResetStuckBatchButton batchId={b.id} />
+                          ) : null}
+                          <Link
+                            href={`/admin/d365-import/${run.id}/${b.id}`}
+                            className="text-foreground underline-offset-2 hover:underline"
+                          >
+                            {b.status === "committed" ? "Re-review" : "Open"}
+                          </Link>
+                        </span>
                       </Td>
                     </tr>
                   ))}
@@ -296,7 +302,14 @@ export default async function RunDetailPage({ params }: PageProps) {
           canMarkComplete={
             (Number(batchAgg?.totalBatches ?? 0) > 0) &&
             !recentBatches.some((b) =>
-              ["pending", "fetched", "reviewing", "approved"].includes(b.status),
+              [
+                "pending",
+                "fetched",
+                "reviewing",
+                "approved",
+                "committing",
+                "failed",
+              ].includes(b.status),
             ) &&
             run.status !== "completed" &&
             run.status !== "aborted"

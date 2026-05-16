@@ -27,6 +27,10 @@ import {
   bulkDeleteTasks,
   bulkReassignTasks,
 } from "@/lib/tasks";
+import {
+  bulkReassignRowVersionsSchema,
+  bulkRowVersionsSchema,
+} from "@/lib/cascade-archive";
 import { getPermissions } from "@/lib/auth-helpers";
 
 /**
@@ -231,73 +235,68 @@ export async function resetTaskViewAction(
 // Bulk actions on selected rows
 // =============================================================================
 
-const bulkIdsSchema = z
-  .object({ ids: z.array(z.string().uuid()).min(1).max(500) });
+// Bulk task mutations enforce per-row optimistic concurrency: the
+// client sends each selected row's `{ id, version }` so the lib skips
+// (and reports in `conflicts`) any row another writer moved — no
+// silent lost update. Shared row-version schema lives in
+// `@/lib/cascade-archive` (same contract as bulk lead/account archive).
 
 export async function bulkCompleteTasksAction(
-  raw: z.infer<typeof bulkIdsSchema>,
-): Promise<ActionResult<{ updated: number }>> {
+  raw: z.infer<typeof bulkRowVersionsSchema>,
+): Promise<ActionResult<{ updated: string[]; conflicts: string[] }>> {
   return withErrorBoundary({ action: "task.completed" }, async () => {
     const session = await requireSession();
-    const parsed = bulkIdsSchema.parse(raw);
+    const parsed = bulkRowVersionsSchema.parse(raw);
     // Every user can complete tasks assigned to them. Cross-user
     // complete-others is gated by canEditOthersTasks; the lib-level
     // helper doesn't enforce — we enforce here by walking the ids OR
-    // delegating fully to admins. Simplest correct: admins / users
-    // with canEditOthersTasks complete any; otherwise the helper's
-    // UPDATE WHERE inArray(...) plus a defensive assignedToId match.
+    // delegating fully to admins. Admins / users with
+    // canEditOthersTasks complete any; otherwise every selected task
+    // must belong to the actor.
     const perms = await getPermissions(session.id);
     if (session.isAdmin || perms.canEditOthersTasks) {
-      const result = await bulkCompleteTasks(parsed.ids, session.id);
+      const result = await bulkCompleteTasks(parsed.items, session.id);
       revalidatePath("/tasks");
       return result;
     }
-    // Non-privileged user: silently scope the update to tasks they
-    // own — anything else fails the WHERE clause. The lib helper
-    // doesn't expose an owner gate, so we use a narrower path: query
-    // ids first, filter to owned, then call.
-    // For now this branch returns a ForbiddenError if any id isn't
-    // theirs (safer than silent partial-success).
+    // Non-privileged user: require every selected task to be theirs
+    // (safer than silent partial-success).
     const { db } = await import("@/db");
     const { tasks: tasksTable } = await import("@/db/schema/tasks");
     const { eq, inArray, and } = await import("drizzle-orm");
+    const ids = parsed.items.map((i) => i.id);
     const own = await db
       .select({ id: tasksTable.id })
       .from(tasksTable)
       .where(
         and(
-          inArray(tasksTable.id, parsed.ids),
+          inArray(tasksTable.id, ids),
           eq(tasksTable.assignedToId, session.id),
         ),
       );
-    if (own.length !== parsed.ids.length) {
+    if (own.length !== ids.length) {
       throw new ForbiddenError(
         "Some of the selected tasks are assigned to someone else.",
       );
     }
-    const result = await bulkCompleteTasks(parsed.ids, session.id);
+    const result = await bulkCompleteTasks(parsed.items, session.id);
     revalidatePath("/tasks");
     return result;
   });
 }
 
-const bulkReassignSchema = z.object({
-  ids: z.array(z.string().uuid()).min(1).max(500),
-  newAssigneeId: z.string().uuid(),
-});
-
 export async function bulkReassignTasksAction(
-  raw: z.infer<typeof bulkReassignSchema>,
-): Promise<ActionResult<{ updated: number }>> {
+  raw: z.infer<typeof bulkReassignRowVersionsSchema>,
+): Promise<ActionResult<{ updated: string[]; conflicts: string[] }>> {
   return withErrorBoundary({ action: "task.reassigned" }, async () => {
     const session = await requireSession();
-    const parsed = bulkReassignSchema.parse(raw);
+    const parsed = bulkReassignRowVersionsSchema.parse(raw);
     const perms = await getPermissions(session.id);
     if (!session.isAdmin && !perms.canReassignTasks) {
       throw new ForbiddenError("You don't have permission to reassign tasks.");
     }
     const result = await bulkReassignTasks(
-      parsed.ids,
+      parsed.items,
       parsed.newAssigneeId,
       session.id,
     );
@@ -307,33 +306,34 @@ export async function bulkReassignTasksAction(
 }
 
 export async function bulkDeleteTasksAction(
-  raw: z.infer<typeof bulkIdsSchema>,
-): Promise<ActionResult<{ updated: number }>> {
+  raw: z.infer<typeof bulkRowVersionsSchema>,
+): Promise<ActionResult<{ updated: string[]; conflicts: string[] }>> {
   return withErrorBoundary({ action: "task.deleted" }, async () => {
     const session = await requireSession();
-    const parsed = bulkIdsSchema.parse(raw);
+    const parsed = bulkRowVersionsSchema.parse(raw);
     const perms = await getPermissions(session.id);
     if (!session.isAdmin && !perms.canDeleteOthersTasks) {
       // Non-privileged users can still bulk-delete tasks they own.
       const { db } = await import("@/db");
       const { tasks: tasksTable } = await import("@/db/schema/tasks");
       const { eq, inArray, and } = await import("drizzle-orm");
+      const ids = parsed.items.map((i) => i.id);
       const own = await db
         .select({ id: tasksTable.id })
         .from(tasksTable)
         .where(
           and(
-            inArray(tasksTable.id, parsed.ids),
+            inArray(tasksTable.id, ids),
             eq(tasksTable.assignedToId, session.id),
           ),
         );
-      if (own.length !== parsed.ids.length) {
+      if (own.length !== ids.length) {
         throw new ForbiddenError(
           "Some of the selected tasks are assigned to someone else.",
         );
       }
     }
-    const result = await bulkDeleteTasks(parsed.ids, session.id);
+    const result = await bulkDeleteTasks(parsed.items, session.id);
     revalidatePath("/tasks");
     return result;
   });

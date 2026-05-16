@@ -12,6 +12,7 @@ import {
   encodeFromValues as encodeStandardCursor,
 } from "@/lib/cursors";
 import { expectAffected } from "@/lib/db/concurrent-update";
+import type { BulkRowVersion } from "@/lib/cascade-archive";
 
 /**
  * task cursor format: `<iso8601-due_at-or-"null">:<uuid>`.
@@ -475,100 +476,210 @@ export async function listTasksForOpportunity(
 // per bulk invocation. Caller must have already access-checked
 // (canEditOthersTasks / canDeleteOthersTasks / canReassignTasks).
 
+/** Result of an OCC-checked bulk task mutation. */
+export interface BulkTaskResult {
+  /** Ids whose row was actually mutated by this call. */
+  updated: string[];
+  /**
+   * Ids skipped because the client `version` no longer matches the DB
+   * (someone else changed the row first). The UI surfaces these so the
+   * user can refresh and retry — never a silent lost update.
+   */
+  conflicts: string[];
+}
+
+/**
+ * Bulk-complete tasks with per-row optimistic concurrency.
+ *
+ * Each row is claimed only when its on-disk `version` still matches the
+ * version the client loaded AND the task isn't already completed
+ * (STANDARDS 19.6.4 skip-in-target guard, preserved — a re-click does
+ * not overwrite `completedAt` or emit a duplicate `task.completed`
+ * audit). A row whose version moved is reported in `conflicts`; a row
+ * already completed at the matching version is a no-op (neither updated
+ * nor a conflict). All rows in one transaction; audit emitted AFTER the
+ * transaction (STANDARDS 19.1.2) for ids actually completed.
+ */
 export async function bulkCompleteTasks(
-  ids: string[],
+  items: BulkRowVersion[],
   actorId: string,
-): Promise<{ updated: number }> {
-  if (ids.length === 0) return { updated: 0 };
+): Promise<BulkTaskResult> {
+  if (items.length === 0) return { updated: [], conflicts: [] };
   const completedAt = new Date();
-  // Skip already-completed rows in the WHERE so a re-click on a
-  // partially-completed selection doesn't overwrite the original
-  // completedAt timestamps or emit redundant `task.completed`
-  // audits. The returning rows reflect only newly-completed tasks.
-  const updated = await db
-    .update(tasks)
-    .set({
-      status: "completed",
-      completedAt,
-      updatedById: actorId,
-      updatedAt: completedAt,
-      version: sql`${tasks.version} + 1`,
-    })
-    .where(
-      and(
-        inArray(tasks.id, ids),
-        eq(tasks.isDeleted, false),
-        sql`${tasks.status} <> 'completed'`,
-      ),
-    )
-    .returning({ id: tasks.id });
+  const { updated, conflicts } = await db.transaction(async (tx) => {
+    const updated: string[] = [];
+    const conflicts: string[] = [];
+    for (const item of items) {
+      const claimed = await tx
+        .update(tasks)
+        .set({
+          status: "completed",
+          completedAt,
+          updatedById: actorId,
+          updatedAt: completedAt,
+          version: sql`${tasks.version} + 1`,
+        })
+        .where(
+          and(
+            eq(tasks.id, item.id),
+            eq(tasks.version, item.version),
+            eq(tasks.isDeleted, false),
+            sql`${tasks.status} <> 'completed'`,
+          ),
+        )
+        .returning({ id: tasks.id });
+      if (claimed.length === 1) {
+        updated.push(item.id);
+        continue;
+      }
+      // 0 rows: distinguish a stale version (conflict) from an
+      // already-completed / archived no-op (idempotent skip). Probe
+      // the live row in-transaction.
+      const [live] = await tx
+        .select({ version: tasks.version, status: tasks.status })
+        .from(tasks)
+        .where(eq(tasks.id, item.id))
+        .limit(1);
+      if (live && live.version !== item.version) conflicts.push(item.id);
+      // else: already completed at the same version, or archived —
+      // intentional no-op (not a conflict).
+    }
+    return { updated, conflicts };
+  });
   await writeAuditBatch({
     actorId,
-    events: updated.map((t) => ({
+    events: updated.map((id) => ({
       action: "task.completed",
       targetType: "tasks",
-      targetId: t.id,
+      targetId: id,
       after: { completedAt: completedAt.toISOString() },
     })),
   });
-  return { updated: updated.length };
+  return { updated, conflicts };
 }
 
+/**
+ * Bulk-reassign tasks with per-row optimistic concurrency. A row whose
+ * client `version` no longer matches is reported in `conflicts` and
+ * left untouched; all rows in one transaction; audit after the tx
+ * (STANDARDS 19.1.2) for ids actually reassigned.
+ */
 export async function bulkReassignTasks(
-  ids: string[],
+  items: BulkRowVersion[],
   newAssigneeId: string,
   actorId: string,
-): Promise<{ updated: number }> {
-  if (ids.length === 0) return { updated: 0 };
-  const updated = await db
-    .update(tasks)
-    .set({
-      assignedToId: newAssigneeId,
-      updatedById: actorId,
-      updatedAt: new Date(),
-      version: sql`${tasks.version} + 1`,
-    })
-    .where(and(inArray(tasks.id, ids), eq(tasks.isDeleted, false)))
-    .returning({ id: tasks.id });
+): Promise<BulkTaskResult> {
+  if (items.length === 0) return { updated: [], conflicts: [] };
+  const updatedAt = new Date();
+  const { updated, conflicts } = await db.transaction(async (tx) => {
+    const updated: string[] = [];
+    const conflicts: string[] = [];
+    for (const item of items) {
+      const claimed = await tx
+        .update(tasks)
+        .set({
+          assignedToId: newAssigneeId,
+          updatedById: actorId,
+          updatedAt,
+          version: sql`${tasks.version} + 1`,
+        })
+        .where(
+          and(
+            eq(tasks.id, item.id),
+            eq(tasks.version, item.version),
+            eq(tasks.isDeleted, false),
+          ),
+        )
+        .returning({ id: tasks.id });
+      if (claimed.length === 1) {
+        updated.push(item.id);
+        continue;
+      }
+      // 0 rows: distinguish a stale version (conflict) from an
+      // already-archived no-op (idempotent skip). Probe the live row
+      // in-transaction — consistent with bulkComplete/bulkDeleteTasks
+      // (STANDARDS 1.8 sibling parity).
+      const [live] = await tx
+        .select({ version: tasks.version })
+        .from(tasks)
+        .where(eq(tasks.id, item.id))
+        .limit(1);
+      if (live && live.version !== item.version) conflicts.push(item.id);
+      // else: archived (no longer reassignable) at the same version —
+      // intentional no-op (not a conflict).
+    }
+    return { updated, conflicts };
+  });
   await writeAuditBatch({
     actorId,
-    events: updated.map((t) => ({
+    events: updated.map((id) => ({
       action: "task.reassigned",
       targetType: "tasks",
-      targetId: t.id,
+      targetId: id,
       after: { newAssigneeId },
     })),
   });
-  return { updated: updated.length };
+  return { updated, conflicts };
 }
 
+/**
+ * Bulk soft-delete tasks with per-row optimistic concurrency. A row
+ * whose client `version` no longer matches is reported in `conflicts`
+ * and left untouched (also skips rows already archived). One
+ * transaction; audit after the tx (STANDARDS 19.1.2) for ids actually
+ * archived.
+ */
 export async function bulkDeleteTasks(
-  ids: string[],
+  items: BulkRowVersion[],
   actorId: string,
-): Promise<{ updated: number }> {
-  if (ids.length === 0) return { updated: 0 };
+): Promise<BulkTaskResult> {
+  if (items.length === 0) return { updated: [], conflicts: [] };
   const deletedAt = new Date();
-  const updated = await db
-    .update(tasks)
-    .set({
-      isDeleted: true,
-      deletedAt,
-      deletedById: actorId,
-      updatedAt: deletedAt,
-      updatedById: actorId,
-      version: sql`${tasks.version} + 1`,
-    })
-    .where(and(inArray(tasks.id, ids), eq(tasks.isDeleted, false)))
-    .returning({ id: tasks.id });
+  const { updated, conflicts } = await db.transaction(async (tx) => {
+    const updated: string[] = [];
+    const conflicts: string[] = [];
+    for (const item of items) {
+      const claimed = await tx
+        .update(tasks)
+        .set({
+          isDeleted: true,
+          deletedAt,
+          deletedById: actorId,
+          updatedAt: deletedAt,
+          updatedById: actorId,
+          version: sql`${tasks.version} + 1`,
+        })
+        .where(
+          and(
+            eq(tasks.id, item.id),
+            eq(tasks.version, item.version),
+            eq(tasks.isDeleted, false),
+          ),
+        )
+        .returning({ id: tasks.id });
+      if (claimed.length === 1) {
+        updated.push(item.id);
+        continue;
+      }
+      const [live] = await tx
+        .select({ version: tasks.version })
+        .from(tasks)
+        .where(eq(tasks.id, item.id))
+        .limit(1);
+      if (live && live.version !== item.version) conflicts.push(item.id);
+      // else: already archived at the same version — idempotent no-op.
+    }
+    return { updated, conflicts };
+  });
   await writeAuditBatch({
     actorId,
-    events: updated.map((t) => ({
+    events: updated.map((id) => ({
       action: "task.deleted",
       targetType: "tasks",
-      targetId: t.id,
+      targetId: id,
     })),
   });
-  return { updated: updated.length };
+  return { updated, conflicts };
 }
 
 export async function listOpenTasksForUser(
@@ -751,6 +862,7 @@ export async function listTasksDueTodayForCron(): Promise<
       AND t.due_at IS NOT NULL
       AND t.due_at::date = (now() AT TIME ZONE 'America/Chicago')::date
       AND p.notify_tasks_due = true
+      AND t.is_deleted = false
   `);
   return rows.map((r) => ({
     id: r.id,

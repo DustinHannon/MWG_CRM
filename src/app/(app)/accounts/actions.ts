@@ -2,19 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
+import { recentViews } from "@/db/schema/recent-views";
 import { requireSession } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
   archiveAccountsById,
+  bulkArchiveAccounts,
   deleteAccountsById,
   restoreAccountsById,
   updateAccountForApi,
 } from "@/lib/accounts";
+import {
+  bulkRowVersionsSchema,
+  isCascadeMarker,
+} from "@/lib/cascade-archive";
 import { canDeleteAccount, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
 import { gatherBlobsForActivityParent } from "@/lib/blob-cleanup";
@@ -34,6 +40,11 @@ export async function softDeleteAccountAction(input: {
       const user = await requireSession();
       const id = z.string().uuid().parse(input.id);
       const reason = input.reason?.trim() || undefined;
+      if (reason && isCascadeMarker(reason)) {
+        throw new ValidationError(
+          "That delete reason is reserved by the system. Enter a different reason.",
+        );
+      }
 
       const [row] = await db
         .select({ id: crmAccounts.id, ownerId: crmAccounts.ownerId, name: crmAccounts.name })
@@ -51,14 +62,20 @@ export async function softDeleteAccountAction(input: {
         throw new ForbiddenError("You can't archive this account.");
       }
 
-      await archiveAccountsById([id], user.id, reason);
+      const cascade = await archiveAccountsById([id], user.id, reason);
       await writeAudit({
         actorId: user.id,
         action: "account.archive",
         targetType: "account",
         targetId: id,
         before: { name: row.name, ownerId: row.ownerId },
-        after: { reason: reason ?? null },
+        after: {
+          reason: reason ?? null,
+          cascadedContacts: cascade.cascadedContacts,
+          cascadedOpportunities: cascade.cascadedOpportunities,
+          cascadedTasks: cascade.cascadedTasks,
+          cascadedActivities: cascade.cascadedActivities,
+        },
       });
 
       revalidatePath("/accounts");
@@ -93,12 +110,18 @@ export async function undoArchiveAccountAction(input: {
       );
     }
     if (!canDeleteAccount(user, row)) throw new ForbiddenError("You can't restore this account.");
-    await restoreAccountsById([payload.id], user.id);
+    const undoCascade = await restoreAccountsById([payload.id], user.id);
     await writeAudit({
       actorId: user.id,
       action: "account.unarchive_undo",
       targetType: "account",
       targetId: payload.id,
+      after: {
+        cascadedContacts: undoCascade.cascadedContacts,
+        cascadedOpportunities: undoCascade.cascadedOpportunities,
+        cascadedTasks: undoCascade.cascadedTasks,
+        cascadedActivities: undoCascade.cascadedActivities,
+      },
     });
     revalidatePath("/accounts");
     revalidatePath("/accounts/archived");
@@ -115,12 +138,18 @@ export async function restoreAccountAction(
     const user = await requireSession();
     if (!canHardDelete(user)) throw new ForbiddenError("Admin only.");
     const id = z.string().uuid().parse(formData.get("id"));
-    await restoreAccountsById([id], user.id);
+    const cascade = await restoreAccountsById([id], user.id);
     await writeAudit({
       actorId: user.id,
       action: "account.restore",
       targetType: "account",
       targetId: id,
+      after: {
+        cascadedContacts: cascade.cascadedContacts,
+        cascadedOpportunities: cascade.cascadedOpportunities,
+        cascadedTasks: cascade.cascadedTasks,
+        cascadedActivities: cascade.cascadedActivities,
+      },
     });
     revalidatePath("/accounts/archived");
     revalidatePath("/accounts");
@@ -156,6 +185,27 @@ export async function hardDeleteAccountAction(
       });
     }
     await deleteAccountsById([id]);
+    // recent_views has no polymorphic FK (free-text entity_type), so
+    // hard-deleting the account does NOT cascade its Cmd+K recent-view
+    // rows — purge them explicitly. Best-effort: a failure here must
+    // never roll back or block the hard delete. Mirrors the
+    // blob-cleanup enqueue placement.
+    try {
+      await db
+        .delete(recentViews)
+        .where(
+          and(
+            eq(recentViews.entityType, "account"),
+            eq(recentViews.entityId, id),
+          ),
+        );
+    } catch (err) {
+      logger.error("recent_views.cleanup_failed", {
+        entityType: "account",
+        ids: [id],
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     await writeAudit({
       actorId: user.id,
       action: "account.hard_delete",
@@ -175,6 +225,7 @@ export async function hardDeleteAccountAction(
           },
           {
             actorId: user.id,
+            idempotencyKey: `blob-cleanup:account:${id}`,
             metadata: {
               originAction: "account.hard_delete",
               entityId: id,
@@ -327,14 +378,19 @@ export async function updateAccountAction(
 /**
  * bulk soft-delete from the /accounts list page toolbar.
  *
- * The caller passes the selected row ids; this action filters down to
- * those the actor is allowed to archive (own + admin) and applies the
- * archive in a single batch. Each archived id emits a per-row audit
- * event for forensic clarity. Forbidden ids surface in `denied` so
- * the UI can show a partial-success toast.
+ * The caller passes the selected rows as `{ id, version }` pairs. The
+ * action filters down to rows the actor may archive (own + admin) —
+ * forbidden ids surface in `denied` for a partial-success toast — then
+ * applies an OCC bulk archive: a row whose `version` was moved by
+ * another writer is skipped and reported in `conflicts` (no silent
+ * lost update). Each archived id emits a per-row `account.archive`
+ * audit event after the transaction for forensic clarity. The shared
+ * row-version schema lives in `@/lib/cascade-archive` (same contract
+ * as bulk task complete/reassign/delete). An optional free-text reason
+ * is recorded on the archived row(s); it must not collide with the
+ * reserved `__cascade__:` sentinel namespace.
  */
-const bulkArchiveSchema = z.object({
-  ids: z.array(z.string().uuid()).min(1).max(200),
+const bulkArchiveSchema = bulkRowVersionsSchema.extend({
   reason: z.string().max(500).optional(),
 });
 
@@ -344,14 +400,24 @@ export async function bulkArchiveAccountsAction(
   ActionResult<{
     archived: number;
     denied: number;
+    conflicts: string[];
   }>
 > {
   return withErrorBoundary({ action: "account.bulk_archive" }, async () => {
     const user = await requireSession();
     const parsed = bulkArchiveSchema.parse(payload);
-    if (parsed.ids.length === 0) {
+    if (parsed.items.length === 0) {
       throw new ValidationError("No accounts selected.");
     }
+    const reason = parsed.reason?.trim() || undefined;
+    if (reason && isCascadeMarker(reason)) {
+      throw new ValidationError(
+        "That delete reason is reserved by the system. Enter a different reason.",
+      );
+    }
+    // Per-record permission gate FIRST: only rows the actor may
+    // archive (own + admin) reach the OCC mutation. Forbidden rows
+    // surface in `denied` for a partial-success toast.
     const rows = await db
       .select({
         id: crmAccounts.id,
@@ -359,37 +425,66 @@ export async function bulkArchiveAccountsAction(
         ownerId: crmAccounts.ownerId,
       })
       .from(crmAccounts)
-      .where(inArray(crmAccounts.id, parsed.ids));
-    const allowed: typeof rows = [];
+      .where(inArray(
+        crmAccounts.id,
+        parsed.items.map((i) => i.id),
+      ));
+    const rowById = new Map(rows.map((r) => [r.id, r]));
+    const allowedItems: { id: string; version: number }[] = [];
     const denied: string[] = [];
-    for (const row of rows) {
-      if (canDeleteAccount(user, row)) allowed.push(row);
-      else denied.push(row.id);
+    for (const item of parsed.items) {
+      const row = rowById.get(item.id);
+      if (row && canDeleteAccount(user, row)) {
+        allowedItems.push({ id: item.id, version: item.version });
+      } else {
+        denied.push(item.id);
+      }
     }
-    if (allowed.length === 0) {
+    if (allowedItems.length === 0) {
       throw new ForbiddenError("You can't archive any of these accounts.");
     }
-    const reason = parsed.reason?.trim() || undefined;
-    await archiveAccountsById(
-      allowed.map((r) => r.id),
+    // OCC bulk archive + full account closure cascade, one
+    // transaction (STANDARDS 19.1.1). Returns the ids actually
+    // mutated plus the ids skipped because their version moved.
+    const result = await bulkArchiveAccounts(
+      allowedItems,
       user.id,
       reason,
     );
-    // Per-record audit rows via single-INSERT batch helper (see
-    // src/lib/audit.ts writeAuditBatch). Same emitted event name
-    // (account.archive) per row — bulk batching is a perf-only
-    // change; downstream forensic queries are unaffected.
-    await writeAuditBatch({
-      actorId: user.id,
-      events: allowed.map((row) => ({
-        action: "account.archive",
-        targetType: "account",
-        targetId: row.id,
-        before: { name: row.name, ownerId: row.ownerId },
-        after: { reason: reason ?? null, bulk: true },
-      })),
-    });
+    // Per-record audit rows via single-INSERT batch helper, emitted
+    // AFTER the transaction (STANDARDS 19.1.2) and only for the ids
+    // actually archived. Same emitted event name (account.archive)
+    // per row — bulk batching is a perf-only change; downstream
+    // forensic queries are unaffected.
+    if (result.updated.length > 0) {
+      await writeAuditBatch({
+        actorId: user.id,
+        events: result.updated.map((id) => {
+          const row = rowById.get(id);
+          return {
+            action: "account.archive",
+            targetType: "account",
+            targetId: id,
+            before: row
+              ? { name: row.name, ownerId: row.ownerId }
+              : undefined,
+            after: {
+              reason: reason ?? null,
+              bulk: true,
+              batchCascadedContacts: result.cascadedContacts,
+              batchCascadedOpportunities: result.cascadedOpportunities,
+              batchCascadedTasks: result.cascadedTasks,
+              batchCascadedActivities: result.cascadedActivities,
+            },
+          };
+        }),
+      });
+    }
     revalidatePath("/accounts");
-    return { archived: allowed.length, denied: denied.length };
+    return {
+      archived: result.updated.length,
+      denied: denied.length,
+      conflicts: result.conflicts,
+    };
   });
 }

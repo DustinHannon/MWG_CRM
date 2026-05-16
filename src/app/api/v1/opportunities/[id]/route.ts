@@ -47,7 +47,9 @@ registry.registerPath({
   path: "/opportunities/{id}",
   summary: "Update opportunity",
   description:
-    "Partial update. Optional `version` for optimistic concurrency.",
+    "Partial update. `version` is required: GET the opportunity, send " +
+    "back its `version`. On mismatch the request returns 409 " +
+    "CONFLICT; a missing `version` is 422.",
   tags: ["Opportunities"],
   security: [{ BearerAuth: [] }],
   request: {
@@ -119,10 +121,10 @@ export const PATCH = withApi<{ id: string }>(
     });
     if (!existing) return errorResponse(404, "NOT_FOUND", "Opportunity not found");
 
-    if (
-      typeof parsed.data.version === "number" &&
-      parsed.data.version !== existing.version
-    ) {
+    // OCC: `version` is schema-required (a missing/non-numeric value
+    // already returned 422 above), so this guard is unconditional —
+    // there is no last-write-wins path. Mismatch → 409 CONFLICT.
+    if (parsed.data.version !== existing.version) {
       return errorResponse(
         409,
         "CONFLICT",
@@ -152,10 +154,14 @@ export const PATCH = withApi<{ id: string }>(
     }
     if (m.description !== undefined) patch.description = m.description ?? null;
     try {
+      // `version` is schema-required (missing -> 422 above), so it
+      // is always a number here. Pass it through directly; the prior
+      // `: undefined` branch produced an unconditional UPDATE
+      // (pure last-write-wins) and is now removed.
       await updateOpportunityForApi(
         params.id,
         patch,
-        typeof parsed.data.version === "number" ? parsed.data.version : undefined,
+        parsed.data.version,
         key.createdById,
       );
     } catch (err) {

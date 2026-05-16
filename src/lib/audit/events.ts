@@ -55,6 +55,13 @@ export const AUDIT_EVENTS = {
   AUTH_SESSION_FORCE_LOGOUT: "auth.session.force_logout",
   /** Disabled-user login attempt (kept as a constant; already emitted). */
   AUTH_LOGIN_DISABLED_ATTEMPT: "auth.login_disabled_attempt",
+  /**
+   * A breakglass (emergency credentials) sign-in was denied because the
+   * per-username attempt limit was exceeded. Security-governance event
+   * (per-event, never aggregated) so brute-force lockouts are forensic.
+   * System actor — there is no authenticated user on a denied sign-in.
+   */
+  AUTH_BREAKGLASS_RATE_LIMITED: "auth.breakglass.rate_limited",
 
   // — User account lifecycle —————————————————————————————————
   /** A user account row was created via Entra just-in-time provisioning. */
@@ -113,6 +120,12 @@ export const AUDIT_SYSTEM_ACTORS = {
   CRON: "system@cron",
   BOOTSTRAP: "system@bootstrap",
   WEBHOOK: "system@webhook",
+  /**
+   * Auth-plane system events with no authenticated user — e.g. a
+   * breakglass sign-in denied by the rate limiter (the request never
+   * produced a session, so there is no actor to attribute).
+   */
+  AUTH: "system@auth",
 } as const;
 
 export interface AuditEventCategory {

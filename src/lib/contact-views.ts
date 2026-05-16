@@ -412,6 +412,7 @@ function coerceAdhocMap(raw: unknown): Record<string, unknown> {
 
 export interface ContactRow {
   id: string;
+  version: number;
   firstName: string;
   lastName: string | null;
   jobTitle: string | null;
@@ -594,6 +595,7 @@ export async function runContactView(
     db
       .select({
         id: contacts.id,
+        version: contacts.version,
         firstName: contacts.firstName,
         lastName: contacts.lastName,
         jobTitle: contacts.jobTitle,

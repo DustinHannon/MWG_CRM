@@ -32,6 +32,10 @@ import {
 } from "./mapping";
 import { resolveD365Owner } from "./owner-mapping";
 import { shouldHaltOnGarbageVolume } from "./quality";
+import {
+  detectBatchHalt,
+  type ImportRecordForDetect,
+} from "./halt-detection";
 import { NotFoundError } from "@/lib/errors";
 import type {
   D365Account,
@@ -51,12 +55,13 @@ import type {
  *
  * Loads pending `import_records` for a batch, runs the right mapper,
  * then dedup, then persists the mappedPayload + warnings + conflict
- * resolution. Halts the run if any mapper reports an unmapped
- * picklist (per brief — humans must review these before commit).
+ * resolution. Halts the run on an unmapped picklist (per-record), a
+ * bad-lead-volume spike, or — after the per-record loop — a
+ * batch-level threshold halt (high-volume conflict / owner-JIT
+ * failure / validation regression).
  *
- * Realtime broadcast is delegated to `broadcastD365Event` (kept
- * lightweight here — Sub-agent A wires the actual Supabase channel
- * publish in `broadcast.ts`; this stub logs).
+ * Realtime broadcast is delegated to `broadcastD365Event`, which
+ * publishes on the per-run Supabase channel via `broadcastRunEvent`.
  */
 
 export interface MapBatchResult {
@@ -67,14 +72,14 @@ export interface MapBatchResult {
 
 /**
  * Resolve a D365 owner GUID + cached email lookup → mwg-crm user id.
- * Sub-agent A's pull-batch flow attaches the resolved email to the
- * stored raw payload (see types `_ownerid_value_email` synthetic key).
- * If absent, the resolver falls back to the default owner.
+ * The pull-batch flow attaches the resolved owner email to the stored
+ * raw payload (see the `_ownerid_value_email` synthetic key). If
+ * absent, the resolver falls back to the default owner.
  */
 function getOwnerEmailFromRaw(
   raw: Record<string, unknown>,
 ): string | null | undefined {
-  // Sub-agent A's pull stores the resolved email under a synthetic
+  // pull-batch stores the resolved email under a synthetic
   // `_ownerid_value_email` key (or `_ownerid_value@OData.Community.Display.V1.FormattedValue`
   // depending on how the owninguser expand was issued).
   const direct = raw["_ownerid_value_email"];
@@ -86,9 +91,9 @@ function getOwnerEmailFromRaw(
 }
 
 /**
- * Thin wrapper over Sub-agent A's `broadcastRunEvent`. Centralises
- * the typed event-name lookup so map-batch never references string
- * literals (every event flows through `D365_REALTIME_EVENTS`).
+ * Thin wrapper over `broadcastRunEvent`. Centralises the typed
+ * event-name lookup so map-batch never references string literals
+ * (every event flows through `D365_REALTIME_EVENTS`).
  */
 async function broadcastD365Event(args: {
   runId: string;
@@ -99,8 +104,8 @@ async function broadcastD365Event(args: {
 }
 
 /**
- * Halt the run with a reason. Inline implementation here — Sub-agent
- * A may extract a reusable `haltRun(...)` helper later.
+ * Halt the run with a reason: append a JSON-line halt note, flip the
+ * run to `paused_for_review`, audit `RUN_HALTED`, and broadcast.
  */
 async function haltRun(args: {
   runId: string;
@@ -108,8 +113,9 @@ async function haltRun(args: {
   reason: string;
   detail: Record<string, unknown>;
 }): Promise<void> {
-  // JSON-line note shape MUST match the contract read by Sub-agent C's
-  // parseHaltFromNotes (`kind: "halt"` + `reason: <D365HaltReason>`).
+  // JSON-line note shape MUST match the contract read by the
+  // run-detail page's parseHaltFromNotes (`kind: "halt"` + `reason:
+  // <D365HaltReason>`).
   const noteEntry = {
     kind: "halt" as const,
     reason: args.reason,
@@ -329,6 +335,23 @@ export async function mapBatch(
         resolvedUserId: owner.userId,
       });
       warnings = result.warnings;
+      // Emit an aggregated, low-severity marker when the D365 owner
+      // could not be resolved to a user and fell back to the
+      // configured default owner. This feeds the batch-level
+      // owner-JIT-failure halt counter (detectOwnerJitFailure keys on
+      // this code) WITHOUT forcing every default-owner record into
+      // per-record review — former-employee-owned rows are common in
+      // legacy data; a per-record gate on each would defeat the point
+      // of having a default owner. The per-record `review` escalation
+      // below and detectValidationRegression both exclude this code.
+      if (owner.source === "default_owner") {
+        warnings.push({
+          field: "ownerId",
+          code: "owner_default_owner_used",
+          message:
+            "D365 owner could not be resolved to a user; assigned to the configured default owner.",
+        });
+      }
       mappedPayload = {
         mapped: result.mapped,
         attached: result.attached,
@@ -356,10 +379,18 @@ export async function mapBatch(
         });
       }
 
-      if (warnings.length > 0) {
+      // Default-owner fallback is an expected, resolvable condition
+      // (not a data problem), so it is excluded from the per-record
+      // `review` escalation — it is handled at the batch level by the
+      // owner-JIT-failure halt instead. A record carrying ONLY that
+      // marker still maps cleanly and stays `mapped`.
+      const reviewWorthyWarnings = warnings.filter(
+        (w) => w.code !== "owner_default_owner_used",
+      );
+      if (reviewWorthyWarnings.length > 0) {
         nextStatus = "review";
-        warningCount += warnings.length;
       }
+      warningCount += warnings.length;
 
       // bad-lead quality auto-skip. The lead mapper writes
       // `_qualityVerdict` + `_qualityReasons` virtuals onto the mapped
@@ -524,6 +555,42 @@ export async function mapBatch(
           ratio: Number((garbageCount / processed).toFixed(2)),
           message: `${garbageCount} of ${processed} records auto-skipped as bad-quality. Likely a known-bad import era — review the batch before continuing.`,
         },
+      });
+      halted = true;
+    }
+  }
+
+  // Batch-level threshold halts (high-volume conflict / owner-JIT
+  // failure / validation regression). Evaluated once over the records
+  // just persisted, after the per-record loop, only if no per-record
+  // halt already fired. `unmapped_picklist` is excluded here because
+  // it is already handled inline per-record above — letting
+  // detectBatchHalt's picklist branch fire again would double-halt.
+  if (!halted) {
+    const detectRows = await db
+      .select({
+        id: importRecords.id,
+        validationWarnings: importRecords.validationWarnings,
+        conflictWith: importRecords.conflictWith,
+        mappedPayload: importRecords.mappedPayload,
+      })
+      .from(importRecords)
+      .where(eq(importRecords.batchId, batchId));
+    const batchHalt = detectBatchHalt(
+      detectRows as ImportRecordForDetect[],
+    );
+    if (batchHalt && batchHalt.reason !== "unmapped_picklist") {
+      const reason =
+        batchHalt.reason === "high_volume_conflict"
+          ? D365_HALT_REASONS.HIGH_VOLUME_CONFLICT
+          : batchHalt.reason === "owner_jit_failure"
+            ? D365_HALT_REASONS.OWNER_JIT_FAILURE
+            : D365_HALT_REASONS.VALIDATION_REGRESSION;
+      await haltRun({
+        runId,
+        actorId,
+        reason,
+        detail: { batchId, ...batchHalt.detail },
       });
       halted = true;
     }

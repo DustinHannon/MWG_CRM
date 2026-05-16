@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
@@ -61,9 +62,21 @@ export const emailSendLog = pgTable(
     sentAt: timestamp("sent_at", { withTimezone: true }),
     requestId: text("request_id"),
     retryOfId: uuid("retry_of_id"),
+    /**
+     * Short-window send-idempotency key (sha256 of sender+recipient+
+     * subject+feature within a ~2-minute bucket). NULL for paths that
+     * opt out (e.g. retries, marketing). The partial unique index below
+     * makes a duplicate insert fail so a double-click / two-tab compose
+     * cannot fan out two real Graph sends + two activities + two log
+     * rows.
+     */
+    dedupeKey: text("dedupe_key"),
   },
   (t) => [
     index("email_send_from_user_idx").on(t.fromUserId, t.queuedAt.desc()),
+    uniqueIndex("email_send_dedupe_key_idx")
+      .on(t.dedupeKey)
+      .where(sql`dedupe_key IS NOT NULL`),
     index("email_send_status_idx")
       .on(t.status, t.queuedAt.desc())
       .where(sql`status IN ('failed','blocked_preflight')`),

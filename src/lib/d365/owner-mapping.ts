@@ -58,15 +58,15 @@ interface GraphUserResponse {
  * 3. DEFAULT OWNER — UPN cannot be resolved (former employee, system
  * account, no email on D365 owner record). Assign to the
  * configured default-owner email (D365_DEFAULT_OWNER_EMAIL,
- * default `dustin.hannon@morganwhite.com`). The user explicitly
- * chose this over a placeholder/unassigned account so unattributed
- * imports land somewhere a human will see them.
+ * default `dustin.hannon@morganwhite.com`) so unattributed imports
+ * land somewhere a human will see them rather than on a placeholder
+ * or unassigned account.
  *
- * NOTE: This module is a SKELETON. The JIT path requires a Microsoft
- * Graph lookup against the configured tenant which Sub-agent A wires
- * in. Until then the resolver returns 'default_owner' for any
- * non-existing user. The §4.5 H-4 halt threshold (≥ 5 records in a
- * batch falling to default_owner) provides the explicit user gate.
+ * The JIT path performs a live Microsoft Graph `/users/{upn}` lookup
+ * against the configured tenant. A batch whose default-owner
+ * fallback count crosses the H-4 threshold (`detectOwnerJitFailure`,
+ * keyed on the `owner_default_owner_used` warning map-batch emits)
+ * pauses the run for explicit operator review.
  */
 
 export type OwnerResolutionSource =
@@ -82,8 +82,7 @@ export interface ResolvedOwner {
 /**
  * Resolve a D365 systemuser's UPN/email to a mwg-crm `users.id`.
  *
- * now wires the Microsoft Graph `/users/{upn}`
- * lookup that left as a TODO. Resolution order:
+ * Resolution order:
  *
  * 1. Cache hit (positive or negative) from this lambda instance.
  * 2. Local users.email exact match (case-insensitive).

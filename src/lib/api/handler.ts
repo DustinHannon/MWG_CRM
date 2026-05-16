@@ -6,11 +6,11 @@ import { logger, newRequestId } from "@/lib/logger";
 import { runWithRequestContext } from "@/lib/observability/request-context";
 import {
   authenticateApiRequest,
-  checkRateLimit,
   requireScopeOnKey,
   type AuthedKey,
 } from "./auth";
 import { errorResponse } from "./errors";
+import { rateLimit } from "@/lib/security/rate-limit";
 import type { Scope } from "./scopes";
 
 interface HandlerArgs<P> {
@@ -121,16 +121,27 @@ async function runApiHandler<P>(
       return res;
     }
 
-    // 3. Rate limit.
-    const rl = await checkRateLimit(key.id, key.rateLimitPerMinute);
-    if (!rl.ok) {
+    // 3. Rate limit. Atomic increment-and-read via the canonical
+    // Postgres sliding-window limiter (`rate_limit_buckets`). This
+    // replaces an earlier `COUNT(*)` of `api_usage_log` that raced:
+    // the matching insert happened AFTER the handler ran, so N
+    // concurrent requests for one key all read the same pre-write
+    // count and all passed. `api_usage_log` is still written every
+    // request (step 7) purely for forensics/observability.
+    const rl = await rateLimit(
+      { kind: "api_key", principal: key.id },
+      key.rateLimitPerMinute,
+      60,
+    );
+    if (!rl.allowed) {
+      const retryAfter = rl.retryAfter ?? 60;
       const headers = {
         "X-RateLimit-Limit": String(key.rateLimitPerMinute),
         "X-RateLimit-Remaining": "0",
         "X-RateLimit-Reset": String(
-          Math.floor(Date.now() / 1000) + rl.resetIn,
+          Math.floor(Date.now() / 1000) + retryAfter,
         ),
-        "Retry-After": String(rl.resetIn),
+        "Retry-After": String(retryAfter),
       };
       const res = errorResponse(429, "RATE_LIMITED", "Too many requests", {
         headers,
@@ -212,14 +223,17 @@ async function runApiHandler<P>(
       response = errorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 
-    // 6. Decorate with rate-limit headers.
+    // 6. Decorate with rate-limit headers. `rl.remaining` is already
+    // post-decrement (the atomic bucket counted THIS request when it
+    // incremented in step 3), so no `-1` fudge — that compensated for
+    // the old count-before-write lag, which no longer exists.
     response.headers.set(
       "X-RateLimit-Limit",
       String(key.rateLimitPerMinute),
     );
     response.headers.set(
       "X-RateLimit-Remaining",
-      String(Math.max(0, rl.remaining - 1)),
+      String(Math.max(0, rl.remaining)),
     );
     response.headers.set(
       "X-RateLimit-Reset",

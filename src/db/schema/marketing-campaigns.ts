@@ -174,14 +174,13 @@ export const campaignRecipients = pgTable(
      */
     snapshotMergeData: jsonb("snapshot_merge_data"),
     /**
-     * reserved for future per-recipient subject
-     * override. NULL means the SendGrid Dynamic Template's own subject
-     * is used.
+     * Per-recipient subject override. NULL means the SendGrid Dynamic
+     * Template's own subject is used (the only behavior today).
      */
     snapshotSubject: text("snapshot_subject"),
     /**
-     * reserved for future per-recipient preheader
-     * override. NULL means the template's preheader is used.
+     * Per-recipient preheader override. NULL means the template's
+     * preheader is used (the only behavior today).
      */
     snapshotPreheader: text("snapshot_preheader"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -201,6 +200,17 @@ export const campaignRecipients = pgTable(
     uniqueIndex("mkt_rcpt_msgid_uniq")
       .on(t.sendgridMessageId)
       .where(sql`sendgrid_message_id IS NOT NULL`),
+    /**
+     * Idempotency key for campaign sends: a campaign never holds two
+     * rows for the same address (case-insensitive). insertRecipientRows
+     * uses ON CONFLICT DO NOTHING so a resumed/retried send after a
+     * mid-batch crash cannot re-insert — and therefore cannot re-email —
+     * a recipient.
+     */
+    uniqueIndex("mkt_rcpt_campaign_email_uniq").on(
+      t.campaignId,
+      sql`lower(${t.email})`,
+    ),
   ],
 );
 

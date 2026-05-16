@@ -8,9 +8,9 @@ import "server-only";
  * verification that all 14 names appear in `audit_log` within 7 days
  * of go-live; missing names are P0 findings.
  *
- * Sub-agents reference these constants — no string literals at emit
- * sites — so a typo in one place fails typecheck instead of silently
- * breaking SOC 2 forensic trail.
+ * Emit sites reference these constants — no string literals — so a
+ * typo in one place fails typecheck instead of silently breaking the
+ * SOC 2 forensic trail.
  */
 export const D365_AUDIT_EVENTS = {
   RUN_CREATED: "d365.import.run.created",
@@ -43,14 +43,33 @@ export const D365_AUDIT_EVENTS = {
   /** JIT owner provisioning failed for a record. */
   OWNER_JIT_FAILED: "d365.import.owner.jit_failed",
   /**
-   * commit-batch tried to resolve a related D365 GUID (e.g.
-   * contact._parentcustomerid_value, account._parentaccountid_value,
-   * account._primarycontactid_value) to a local UUID via external_ids
-   * but the foreign record hasn't been imported yet. The FK is left
-   * null on the committed row; a re-import will resolve once the
-   * foreign record lands.
+   * commit-batch tried to resolve a related D365 GUID to a local UUID
+   * via external_ids but the foreign record hasn't been imported yet.
+   * Covers: contact._parentcustomerid_value;
+   * account._parentaccountid_value / account._primarycontactid_value;
+   * opportunity._parentaccountid_value (accountId),
+   * opportunity._parentcontactid_value (primaryContactId),
+   * opportunity._originatingleadid_value (sourceLeadId). The FK is
+   * left null on the committed row; a re-import or the
+   * backfill action resolves it once the foreign record lands.
    */
   RECORD_FK_UNRESOLVED: "d365.import.record.fk_unresolved",
+  /**
+   * One-shot operator-triggered backfill that re-resolves NULL parent
+   * FKs on already-committed D365 opportunities from their retained
+   * `import_records.rawPayload`. Summary event carries
+   * `{ scanned, resolved, stillUnresolved, noSourceProvenance }`.
+   */
+  BACKFILL_OPPORTUNITY_FK: "d365.opportunity.fk_backfill",
+  /**
+   * Operator manually reset a batch stuck in the transient
+   * `committing` lock state (commit-batch left it there after a hard
+   * function kill with no JS catch to roll it back) back to
+   * `reviewing`. Governance event — always per-event; a manual
+   * unstick after a crash is materially distinct from a normal review
+   * and must be separately greppable in the forensic trail.
+   */
+  BATCH_RESET_STUCK: "d365.import.batch.reset_stuck",
 } as const;
 
 export type D365AuditEvent =

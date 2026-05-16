@@ -90,15 +90,19 @@ export async function listRecentForUser(
         WHEN 'opportunity' THEN o.stage::text
       END AS sublabel
     FROM r
-    LEFT JOIN leads l ON r.entity_type = 'lead' AND l.id = r.entity_id
-    LEFT JOIN contacts c ON r.entity_type = 'contact' AND c.id = r.entity_id
-    LEFT JOIN crm_accounts a ON r.entity_type = 'account' AND a.id = r.entity_id
-    LEFT JOIN opportunities o ON r.entity_type = 'opportunity' AND o.id = r.entity_id
+    LEFT JOIN leads l ON r.entity_type = 'lead' AND l.id = r.entity_id AND l.is_deleted = false
+    LEFT JOIN contacts c ON r.entity_type = 'contact' AND c.id = r.entity_id AND c.is_deleted = false
+    LEFT JOIN crm_accounts a ON r.entity_type = 'account' AND a.id = r.entity_id AND a.is_deleted = false
+    LEFT JOIN opportunities o ON r.entity_type = 'opportunity' AND o.id = r.entity_id AND o.is_deleted = false
     ORDER BY r.viewed_at DESC
   `)) as unknown as Row[];
 
   return rows
-    .filter((r) => r.label) // skip dangling refs (deleted rows)
+    // Drop refs that resolved no label: hard-deleted/purged rows (every
+    // JOIN missed) AND archived rows (the JOIN now also requires
+    // is_deleted = false, so an archived entity yields a NULL label and
+    // is excluded from Cmd+K instead of linking to a 404 / archived page).
+    .filter((r) => r.label)
     .map((r) => ({
       entityType: r.entity_type,
       entityId: r.entity_id,

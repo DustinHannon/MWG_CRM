@@ -34,89 +34,120 @@ export async function refreshList(
   listId: string,
   actorId: string | null,
 ): Promise<RefreshResult> {
-  const [list] = await db
-    .select({
-      id: marketingLists.id,
-      filterDsl: marketingLists.filterDsl,
-      isDeleted: marketingLists.isDeleted,
-    })
-    .from(marketingLists)
-    .where(eq(marketingLists.id, listId))
-    .limit(1);
-  if (!list) throw new ValidationError("List not found.");
-  if (list.isDeleted) throw new ValidationError("List is archived.");
+  // Captured inside the transaction, used for the post-commit audit.
+  // The read → diff → INSERT/DELETE → member_count write must be atomic
+  // AND serialized against a concurrent refresh of the same list
+  // (manual action vs. the daily cron, or two manual refreshes): the
+  // `marketing_list_members` PK + onConflictDoNothing already prevents
+  // duplicate member rows, but `member_count` was last-writer-wins and
+  // could transiently drift. A txn-scoped `SELECT … FOR UPDATE` on the
+  // parent list row makes a second refresh of the SAME list block until
+  // the first commits, so the count is exact. Transaction-scoped lock —
+  // Supavisor-safe per STANDARDS §9.2 (no advisory locks).
+  let addedCount = 0;
+  let removedCount = 0;
+  let totalCount = 0;
 
-  const where = and(
-    compileFilterDsl(list.filterDsl as unknown),
-    eq(leads.isDeleted, false),
-    eq(leads.doNotEmail, false),
-  );
+  await db.transaction(async (tx) => {
+    // Serialize concurrent refreshes of THIS list. Must precede the
+    // members read so the diff/write is consistent.
+    await tx.execute(
+      sql`SELECT id FROM ${marketingLists} WHERE id = ${listId} FOR UPDATE`,
+    );
 
-  const matched = await db
-    .select({
-      id: leads.id,
-      email: leads.email,
-    })
-    .from(leads)
-    .where(where)
-    .limit(MAX_LIST_SIZE);
+    const [list] = await tx
+      .select({
+        id: marketingLists.id,
+        filterDsl: marketingLists.filterDsl,
+        isDeleted: marketingLists.isDeleted,
+      })
+      .from(marketingLists)
+      .where(eq(marketingLists.id, listId))
+      .limit(1);
+    if (!list) throw new ValidationError("List not found.");
+    if (list.isDeleted) throw new ValidationError("List is archived.");
 
-  const matchedWithEmail = matched.filter(
-    (m): m is { id: string; email: string } => Boolean(m.email),
-  );
+    const where = and(
+      compileFilterDsl(list.filterDsl as unknown),
+      eq(leads.isDeleted, false),
+      eq(leads.doNotEmail, false),
+    );
 
-  const matchedIds = new Set(matchedWithEmail.map((m) => m.id));
+    const matched = await tx
+      .select({
+        id: leads.id,
+        email: leads.email,
+      })
+      .from(leads)
+      .where(where)
+      .limit(MAX_LIST_SIZE);
 
-  const existing = await db
-    .select({ leadId: marketingListMembers.leadId })
-    .from(marketingListMembers)
-    .where(eq(marketingListMembers.listId, listId));
-  const existingIds = new Set(existing.map((e) => e.leadId));
+    const matchedWithEmail = matched.filter(
+      (m): m is { id: string; email: string } => Boolean(m.email),
+    );
 
-  const toAdd = matchedWithEmail.filter((m) => !existingIds.has(m.id));
-  const toRemove = existing
-    .filter((e) => !matchedIds.has(e.leadId))
-    .map((e) => e.leadId);
+    const matchedIds = new Set(matchedWithEmail.map((m) => m.id));
 
-  if (toAdd.length > 0) {
-    // Chunk inserts to keep statement sizes bounded.
-    for (let i = 0; i < toAdd.length; i += 1000) {
-      const slice = toAdd.slice(i, i + 1000);
-      await db
-        .insert(marketingListMembers)
-        .values(
-          slice.map((m) => ({
-            listId,
-            leadId: m.id,
-            email: m.email,
-          })),
-        )
-        .onConflictDoNothing();
+    const existing = await tx
+      .select({ leadId: marketingListMembers.leadId })
+      .from(marketingListMembers)
+      .where(eq(marketingListMembers.listId, listId));
+    const existingIds = new Set(existing.map((e) => e.leadId));
+
+    const toAdd = matchedWithEmail.filter((m) => !existingIds.has(m.id));
+    const toRemove = existing
+      .filter((e) => !matchedIds.has(e.leadId))
+      .map((e) => e.leadId);
+
+    if (toAdd.length > 0) {
+      // Chunk inserts to keep statement sizes bounded.
+      for (let i = 0; i < toAdd.length; i += 1000) {
+        const slice = toAdd.slice(i, i + 1000);
+        await tx
+          .insert(marketingListMembers)
+          .values(
+            slice.map((m) => ({
+              listId,
+              leadId: m.id,
+              email: m.email,
+            })),
+          )
+          // Defense-in-depth — the FOR UPDATE lock already serializes
+          // same-list refreshes; this stays harmless against any retry.
+          .onConflictDoNothing();
+      }
     }
-  }
 
-  if (toRemove.length > 0) {
-    for (let i = 0; i < toRemove.length; i += 1000) {
-      const slice = toRemove.slice(i, i + 1000);
-      await db
-        .delete(marketingListMembers)
-        .where(
-          and(
-            eq(marketingListMembers.listId, listId),
-            inArray(marketingListMembers.leadId, slice),
-          ),
-        );
+    if (toRemove.length > 0) {
+      for (let i = 0; i < toRemove.length; i += 1000) {
+        const slice = toRemove.slice(i, i + 1000);
+        await tx
+          .delete(marketingListMembers)
+          .where(
+            and(
+              eq(marketingListMembers.listId, listId),
+              inArray(marketingListMembers.leadId, slice),
+            ),
+          );
+      }
     }
-  }
 
-  await db
-    .update(marketingLists)
-    .set({
-      memberCount: matchedWithEmail.length,
-      lastRefreshedAt: sql`now()`,
-    })
-    .where(eq(marketingLists.id, listId));
+    await tx
+      .update(marketingLists)
+      .set({
+        memberCount: matchedWithEmail.length,
+        lastRefreshedAt: sql`now()`,
+      })
+      .where(eq(marketingLists.id, listId));
 
+    addedCount = toAdd.length;
+    removedCount = toRemove.length;
+    totalCount = matchedWithEmail.length;
+  });
+
+  // Audit AFTER the transaction commits — §19.1.2: data write + audit
+  // emission must NOT share a transaction (audit is best-effort; an
+  // audit failure must never roll back the refresh).
   if (actorId) {
     await writeAudit({
       actorId,
@@ -124,18 +155,18 @@ export async function refreshList(
       targetType: "marketing_list",
       targetId: listId,
       after: {
-        added: toAdd.length,
-        removed: toRemove.length,
-        total: matchedWithEmail.length,
+        added: addedCount,
+        removed: removedCount,
+        total: totalCount,
       },
     });
   }
 
   return {
     listId,
-    added: toAdd.length,
-    removed: toRemove.length,
-    total: matchedWithEmail.length,
+    added: addedCount,
+    removed: removedCount,
+    total: totalCount,
   };
 }
 

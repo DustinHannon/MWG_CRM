@@ -10,6 +10,7 @@ import { isD365Configured } from "@/lib/d365";
 import { QuickPullButtons } from "@/components/admin/d365-import/quick-pull-buttons";
 import { NewRunModal } from "./_components/new-run-modal";
 import { D365RunsListClient } from "./_components/d365-runs-list-client";
+import { BackfillOpportunityFksButton } from "./_components/backfill-opportunity-fks-button";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,11 @@ export default async function D365ImportPage({
           <NewRunModal />
         </div>
         <QuickPullButtons disabled={!configured} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium text-foreground">Maintenance</h2>
+        <BackfillOpportunityFksButton />
       </section>
 
       <D365RunsListClient

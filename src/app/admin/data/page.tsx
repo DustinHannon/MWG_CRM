@@ -4,6 +4,15 @@ import { DangerSection } from "./danger-section";
 
 export const dynamic = "force-dynamic";
 
+// The delete-all server actions run batched cascade DELETEs over
+// potentially large tables. This route segment governs the request that
+// executes those Server Actions, so the duration ceiling belongs here,
+// not in the "use server" actions module (which may only export async
+// functions). Batching (the LIMIT-loop deletes) is the real safeguard;
+// this is the ceiling. If the platform plan caps duration lower, the
+// cap wins.
+export const maxDuration = 300;
+
 export default function DataToolsPage() {
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">

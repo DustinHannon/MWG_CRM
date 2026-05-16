@@ -154,11 +154,19 @@ export async function getUserProfilePage(
   const summary = await getUserProfileSummary(userId);
   if (!summary) return null;
 
-  // Activities authored across all parent types.
+  // Activities authored across all parent types. Exclude archived /
+  // cascade-soft-deleted activities so a user profile never counts or
+  // links activity that was removed (directly or via a parent
+  // entity's cascade-archive).
   const [authoredRow] = await db
     .select({ n: count() })
     .from(activities)
-    .where(eq(activities.userId, userId));
+    .where(
+      and(
+        eq(activities.userId, userId),
+        eq(activities.isDeleted, false),
+      ),
+    );
 
   // Last 20 activities authored by user with parent names for linking.
   const recent = await db
@@ -178,7 +186,12 @@ export async function getUserProfilePage(
     .from(activities)
     .leftJoin(leads, eq(leads.id, activities.leadId))
     .leftJoin(crmAccounts, eq(crmAccounts.id, activities.accountId))
-    .where(eq(activities.userId, userId))
+    .where(
+      and(
+        eq(activities.userId, userId),
+        eq(activities.isDeleted, false),
+      ),
+    )
     .orderBy(desc(activities.occurredAt))
     .limit(20);
 

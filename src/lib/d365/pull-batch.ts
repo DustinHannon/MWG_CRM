@@ -398,7 +398,7 @@ async function handleFetchFailure(
   }
 
   const haltReason = D365_HALT_REASONS.D365_UNREACHABLE;
-  // Note shape MUST match the contract read by Sub-agent C's
+  // Note shape MUST match the contract read by the run-detail page's
   // parseHaltFromNotes (`kind: "halt"` + `reason: <D365HaltReason>` +
   // optional `message`). Don't change without updating both sides.
   const errorMessage = err instanceof Error ? err.message : String(err);

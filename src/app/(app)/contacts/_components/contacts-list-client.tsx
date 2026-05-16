@@ -524,7 +524,7 @@ function ContactDesktopRow({
       style={{ minWidth: `${minRowWidth}px` }}
     >
       <div className="w-10 shrink-0 px-2 py-3">
-        <RowCheckbox id={contact.id} />
+        <RowCheckbox id={contact.id} version={contact.version} />
       </div>
       {columns.map((c) => {
         const colLabel =

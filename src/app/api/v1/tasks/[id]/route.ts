@@ -44,7 +44,9 @@ registry.registerPath({
   path: "/tasks/{id}",
   summary: "Update task",
   description:
-    "Partial update. Optional `version` for optimistic concurrency.",
+    "Partial update. `version` is required: GET the task, send back " +
+    "its `version`. On mismatch the request returns 409 CONFLICT; a " +
+    "missing `version` is 422.",
   tags: ["Tasks"],
   security: [{ BearerAuth: [] }],
   request: {
@@ -117,10 +119,10 @@ export const PATCH = withApi<{ id: string }>(
     });
     if (!existing) return errorResponse(404, "NOT_FOUND", "Task not found");
 
-    if (
-      typeof parsed.data.version === "number" &&
-      parsed.data.version !== existing.version
-    ) {
+    // OCC: `version` is schema-required (a missing/non-numeric value
+    // already returned 422 above), so this guard is unconditional —
+    // there is no last-write-wins path. Mismatch → 409 CONFLICT.
+    if (parsed.data.version !== existing.version) {
       return errorResponse(
         409,
         "CONFLICT",
@@ -150,13 +152,13 @@ export const PATCH = withApi<{ id: string }>(
     }
 
     try {
-      // The existing updateTask requires a version. Fall back to the
-      // existing row's version when caller omitted one (last-write-wins).
+      // `version` is schema-required (missing → 422 above), so it is
+      // always a number — pass it straight to updateTask. The earlier
+      // fall-back to the just-read row version (last-write-wins) is
+      // removed.
       await updateTask(
         params.id,
-        typeof parsed.data.version === "number"
-          ? parsed.data.version
-          : existing.version,
+        parsed.data.version,
         patch,
         key.createdById,
       );

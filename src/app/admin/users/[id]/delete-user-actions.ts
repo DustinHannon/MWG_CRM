@@ -402,6 +402,7 @@ export async function deleteUserAction(
           { pathnames: blobPaths },
           {
             actorId: admin.id,
+            idempotencyKey: `blob-cleanup:user:${userId}`,
             metadata: {
               originAction: "user.delete",
               targetUserId: userId,

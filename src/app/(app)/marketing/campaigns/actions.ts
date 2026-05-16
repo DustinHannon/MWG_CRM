@@ -28,9 +28,6 @@ import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
-// Sub-agent A is delivering these. Importing as named so a missing
-// module surfaces as a build-time error in this file rather than a
-// silent runtime miss.
 import { sendTestEmail } from "@/lib/marketing/sendgrid/send";
 import { resolveListRecipients } from "@/lib/marketing/lists/resolution";
 
