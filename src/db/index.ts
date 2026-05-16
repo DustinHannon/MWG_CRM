@@ -49,7 +49,14 @@ const client = postgres(env.POSTGRES_URL, {
   // recycle. Setting search_path explicitly on every new postgres-js
   // connection eliminates that staleness — the parameter is sent in
   // the StartupMessage so it applies to every session immediately.
-  connection: { search_path: "public, extensions" },
+  // application_name lets app connections be told apart from the
+  // job-worker's direct connection (mwg-crm-job-worker) in
+  // pg_stat_activity — required to diagnose pool pressure from the
+  // Supabase dashboard alone.
+  connection: {
+    application_name: "mwg-crm-app",
+    search_path: "public, extensions",
+  },
   // Surface postgres notice / error context in logs so we can see what's
   // actually wrong instead of a Drizzle "Failed query" wrapper.
   onnotice: (n) => {

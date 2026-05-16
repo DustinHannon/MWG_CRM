@@ -49,15 +49,24 @@ const client = postgres(url, {
   // pg_catalog round trip.
   prepare: false,
   fetch_types: false,
-  // The worker claims in batches and may run a short pipeline of
-  // state-transition statements per tick; a tiny pool (not max:1)
-  // lets sweep + claim + mark overlap without head-of-line blocking,
-  // while staying well within any connection budget.
-  max: 3,
+  // The worker awaits sweep -> claim -> dispatch -> mark in strict
+  // order (see process-jobs route), so it never issues concurrent
+  // queries on this client. max:1 provably bounds each Lambda to one
+  // direct-connection backend, matches @/db, and preserves the
+  // ~60-conn direct-connection ceiling when minute-cadence cron
+  // invocations overlap a long-running tick.
+  max: 1,
   idle_timeout: 20,
   connect_timeout: 10,
   ssl: "require",
-  connection: { search_path: "public, extensions" },
+  // application_name distinguishes the worker (direct connection)
+  // from the app (Supavisor session pool) in pg_stat_activity, so
+  // pool pressure can be diagnosed from the Supabase dashboard alone.
+  // search_path: pg_trgm + unaccent live in the `extensions` schema.
+  connection: {
+    application_name: "mwg-crm-job-worker",
+    search_path: "public, extensions",
+  },
 });
 
 export const jobsDb = drizzle(client, { schema });
