@@ -3,9 +3,9 @@
 // w-56 action mnemonic, w-32 request id, w-24 diff) rather than the
 // canonical 140px flex-basis pattern because the columns have
 // intrinsically non-uniform widths (audit action codes are long, diff
-// cell is narrow). No columnHeaderSlot to align against. pageSize=100
-// because audit volume is high. Admin operational page — no saved
-// views, no MODIFIED badge, no bulk selection.
+// cell is narrow). No columnHeaderSlot to align against. Admin
+// operational page — no saved views, no MODIFIED badge, no bulk
+// selection.
 "use client";
 
 import Link from "next/link";
@@ -239,7 +239,6 @@ export function AuditListClient({
       renderCard={renderCard}
       rowEstimateSize={64}
       cardEstimateSize={160}
-      pageSize={100}
       emptyState={
         <StandardEmptyState
           title="No audit events match"

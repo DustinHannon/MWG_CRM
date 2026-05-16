@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useInView } from "react-intersection-observer";
 import {
   useCallback,
   useEffect,
@@ -41,6 +42,17 @@ export interface BulkActionsSlot {
 }
 
 /**
+ * Snapshot emitted by `onLoadedIds` after each page settles. `ids` is
+ * the live accumulator Set (every row identity seen this query session,
+ * monotonic across `maxPages` eviction); treat it as read-only.
+ */
+export interface LoadedIdsSnapshot {
+  ids: ReadonlySet<string>;
+  count: number;
+  total: number;
+}
+
+/**
  * Render contract for the canonical list-page shell.
  *
  * Generic over `T` (the row type) and `F` (the filters object that
@@ -63,7 +75,7 @@ export interface StandardListPageProps<T, F> {
    * Page loader. Receives the current cursor (null for first page) and
    * the active filter object. Returns the data array, the next cursor
    * (null when the end of the result set is reached), and the total
-   * count (used for the "Showing N of M" line and the load-more label).
+   * count (used for the "Showing N of M" line).
    */
   fetchPage: (
     cursor: string | null,
@@ -96,8 +108,21 @@ export interface StandardListPageProps<T, F> {
    * scroll surface.
    */
   bulkActions?: BulkActionsSlot;
-  /** Page size hint forwarded to `fetchPage` callers via the Load-more label. Default 50. */
-  pageSize?: number;
+  /**
+   * Stable per-row identity. Powers the monotonic "Showing N of M"
+   * counter, which must keep growing as the user scrolls even though
+   * `maxPages` evicts the oldest in-memory page. Defaults to a typed
+   * read of `(item).id` (string | number) with an index fallback —
+   * no `any`, no `T extends { id }` constraint imposed on callers.
+   */
+  getRowId?: (item: T, index: number) => string;
+  /**
+   * Fired after each page settles (post-accumulate). Lets bulk-selection
+   * consumers consume the shell's loaded-id accumulator instead of
+   * reimplementing one inside a wrapped `fetchPage`. The `ids` Set is
+   * the live accumulator — read-only; do not mutate.
+   */
+  onLoadedIds?: (snapshot: LoadedIdsSnapshot) => void;
   /** Header props — forwarded to `<StandardPageHeader />`. */
   header: StandardPageHeaderProps;
   /** Optional filter bar rendered between the header and the result list. */
@@ -113,6 +138,34 @@ export interface StandardListPageProps<T, F> {
   className?: string;
 }
 
+/**
+ * How many in-memory pages the shell retains. `useInfiniteQuery` trims
+ * the oldest page on each forward `fetchNextPage` once this is exceeded
+ * (forward-only — no `getPreviousPageParam` is defined, so query-core
+ * never runs the backward `addToStart` path). Memory is therefore
+ * bounded at `serverPageSize × MAX_PAGES` rows regardless of how far
+ * the user scrolls. The loaded-id accumulator below is what keeps the
+ * "Showing N of M" counter monotonic across this eviction.
+ */
+const MAX_PAGES = 5;
+
+/**
+ * Default `getRowId`. Reads a string/number `id` without an `any` cast
+ * and without forcing `T extends { id }` on callers. The index
+ * fallback exists ONLY so a malformed row shape doesn't throw — it is
+ * NOT eviction-safe (the same logical row gets a new index after a
+ * maxPages trim and would re-enter the Set under a different key,
+ * inflating the count). Every current StandardListPage row type has a
+ * stable `id`, so the fallback is never reached; any future consumer
+ * whose rows lack a stable id MUST pass an explicit `getRowId`.
+ */
+function defaultGetRowId(item: unknown, index: number): string {
+  if (item && typeof item === "object" && "id" in item) {
+    const v = (item as { id: unknown }).id;
+    if (typeof v === "string" || typeof v === "number") return String(v);
+  }
+  return String(index);
+}
 
 /**
  * Canonical list-page shell. Owns infinite scroll, virtualization,
@@ -125,15 +178,20 @@ export interface StandardListPageProps<T, F> {
  * underlying SQL strategy.
  * `total` MAY be the page's running total or the overall result-set
  * total — the shell uses it only for the "Showing N of M" affordance.
+ * A first page that returns zero rows WITH a non-null cursor renders
+ * the empty state and does not auto-advance (pre-existing contract):
+ * `fetchPage` must not return an empty first page while more data
+ * exists behind the cursor.
  *
  * Auto-fetch:
- * The next page is fetched automatically when the index-based sentinel
- * (the last virtual row) enters the rendered window — unconditionally,
- * on every environment. `prefers-reduced-motion` is intentionally NOT
- * honored: this is an internal tool with a consistent-behavior
- * requirement across Windows Server / RDP / VDI / desktop / mobile.
- * There is no "Load more" button; scrolling is the only pagination
- * affordance.
+ * The next page is fetched when a 1px IntersectionObserver sentinel,
+ * rendered after the virtualized list, scrolls within 200px of the
+ * viewport (`react-intersection-observer`). A synchronous ref latch
+ * guarantees one in-flight fetch per settle even under React batching.
+ * There is no "Load more" button and no `prefers-reduced-motion` gate:
+ * scrolling is the only pagination affordance and auto-fetch runs
+ * unconditionally on every environment (Windows Server / RDP / VDI /
+ * desktop / mobile). Memory is bounded by `MAX_PAGES`.
  */
 export function StandardListPage<T, F>({
   queryKey,
@@ -147,6 +205,8 @@ export function StandardListPage<T, F>({
   errorState,
   loadingState,
   bulkActions,
+  getRowId,
+  onLoadedIds,
   header,
   filtersSlot,
   columnHeaderSlot,
@@ -158,6 +218,15 @@ export function StandardListPage<T, F>({
       fetchPage((pageParam as string | null) ?? null, filters, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    // Forward-only window. No getPreviousPageParam → eviction is
+    // exclusively the forward addToEnd trim (verified against the
+    // installed @tanstack/query-core infiniteQueryBehavior source).
+    // A refetch/invalidation of the SAME query replays forward from
+    // oldPageParams[0] (the oldest *surviving* cursor after eviction),
+    // not from page 1 — standard query-core maxPages behavior. The
+    // first-load error path still restarts from null (no pages cached
+    // yet), so DefaultErrorState's Retry button is page 1.
+    maxPages: MAX_PAGES,
   });
 
   const {
@@ -171,44 +240,112 @@ export function StandardListPage<T, F>({
     refetch,
   } = query;
 
-  // Flatten pages → rows.
+  // Flatten the in-memory page window → rows. With maxPages this is a
+  // sliding window: the oldest page is gone from `rows` after eviction.
+  // The loaded-id accumulator below preserves the cumulative count.
   const rows = useMemo<T[]>(
     () => data?.pages.flatMap((p) => p.data) ?? [],
     [data],
   );
   const total = data?.pages.at(-1)?.total ?? rows.length;
-  const loadedCount = rows.length;
 
   const retry = useCallback(() => {
     void refetch();
   }, [refetch]);
 
-  // ---- ARIA live region announcement ----
-  const liveRef = useRef<HTMLDivElement | null>(null);
-  const lastAnnouncedCount = useRef(0);
-  const lastQueryKeyRef = useRef<string>("");
+  // ---- Monotonic loaded-id accumulator ----
+  // The "Showing N of M" counter must keep climbing as the user scrolls
+  // even though `rows` is a bounded window. We accumulate every row
+  // identity ever seen this query session into a Set that only grows;
+  // it resets when the query identity (filters / view / sort) changes.
+  //
+  // No page is ever missed: (1) the fetch latch + isFetchingNextPage
+  // serialize fetches so page N+1 cannot start until page N has
+  // settled AND a render has occurred; (2) React flushes a commit's
+  // passive effects before the next commit's, so the effect below runs
+  // with every distinct `rows` value (every page is in `rows` for at
+  // least one observed commit before it can be evicted); (3) the effect
+  // unions the FULL current `rows`, not a delta, so observing any
+  // commit that contained a page captures all of that page's ids. The
+  // Set is therefore complete regardless of how fast the user scrolls.
+  const resolveRowId = getRowId ?? defaultGetRowId;
+  const loadedIdsRef = useRef<Set<string>>(new Set());
+  const accumKeyRef = useRef<string>("");
+  const [loaded, setLoaded] = useState<{ count: number; total: number }>({
+    count: 0,
+    total: 0,
+  });
+
   // Stable serialization of the active query identity. When the user
-  // changes filter / view / sort, this string changes and the live
-  // region's "loaded N more" counter resets so it doesn't announce
-  // (new first page size − old loaded count) as if the user had
-  // paginated.
+  // changes filter / view / sort this string changes: the accumulator
+  // and the live-region counter both reset so they never report a
+  // stale delta as if the user had paginated.
   const queryKeySerialized = useMemo(
     () => JSON.stringify([...queryKey, filters]),
     [queryKey, filters],
   );
+
+  useEffect(() => {
+    if (accumKeyRef.current !== queryKeySerialized) {
+      loadedIdsRef.current = new Set();
+      accumKeyRef.current = queryKeySerialized;
+    }
+    const set = loadedIdsRef.current;
+    for (let i = 0; i < rows.length; i++) {
+      set.add(resolveRowId(rows[i] as T, i));
+    }
+    const count = set.size;
+    setLoaded((prev) =>
+      prev.count === count && prev.total === total
+        ? prev
+        : { count, total },
+    );
+  }, [rows, total, queryKeySerialized, resolveRowId]);
+
+  // Emit the snapshot only when it materially changes (not every
+  // render) so bulk-selection consumers can wire `onLoadedIds`
+  // straight into a reducer dispatch without an extra equality guard.
+  useEffect(() => {
+    if (!onLoadedIds) return;
+    if (loaded.count === 0 && loaded.total === 0) return;
+    onLoadedIds({
+      ids: loadedIdsRef.current,
+      count: loaded.count,
+      total: loaded.total,
+    });
+  }, [loaded.count, loaded.total, onLoadedIds]);
+
+  // Caption source. Fall back to the in-memory window length on the
+  // first paint (before the accumulator effect commits) so the caption
+  // never flashes "0 of 0"; thereafter `loaded.count` is monotonic
+  // under maxPages eviction. Eviction ≠ deletion, though: a same-query
+  // refetch after another user deletes records can lower `total` below
+  // the accumulated id count, so clamp to never render N > M.
+  const captionTotal = loaded.total || total;
+  const captionCount = Math.min(loaded.count || rows.length, captionTotal);
+
+  // ---- ARIA live region announcement ----
+  const liveRef = useRef<HTMLDivElement | null>(null);
+  const lastAnnouncedCount = useRef(0);
+  const lastQueryKeyRef = useRef<string>("");
+  // This effect may read a one-render-stale `captionCount` right after
+  // a query-identity change (the accumulator effect's setLoaded commits
+  // next render). That is safe: on identity change lastAnnouncedCount
+  // resets to 0, so the `lastAnnouncedCount.current > 0` guard
+  // suppresses the spurious first delta. Steady-state deltas are exact.
   useEffect(() => {
     if (!liveRef.current) return;
     if (lastQueryKeyRef.current !== queryKeySerialized) {
       lastAnnouncedCount.current = 0;
       lastQueryKeyRef.current = queryKeySerialized;
     }
-    if (rows.length === 0) return;
-    const delta = rows.length - lastAnnouncedCount.current;
+    if (captionCount === 0) return;
+    const delta = captionCount - lastAnnouncedCount.current;
     if (delta > 0 && lastAnnouncedCount.current > 0) {
-      liveRef.current.textContent = `Loaded ${delta} more ${delta === 1 ? "item" : "items"}. ${rows.length} of ${total} shown.`;
+      liveRef.current.textContent = `Loaded ${delta} more ${delta === 1 ? "item" : "items"}. ${captionCount} of ${captionTotal} shown.`;
     }
-    lastAnnouncedCount.current = rows.length;
-  }, [rows.length, total, queryKeySerialized]);
+    lastAnnouncedCount.current = captionCount;
+  }, [captionCount, captionTotal, queryKeySerialized]);
 
   // Window-scoped scroll restoration. Owned at the page level so the
   // single restoration applies regardless of which virtualized
@@ -280,10 +417,13 @@ export function StandardListPage<T, F>({
             inside the sticky chrome. Scrolls away with the data so it
             doesn't visually compete with the column-header tier during
             scroll. Screen-reader announcements come from the live
-            region above; this caption is plain text only. */}
+            region above; this caption is plain text only. The count is
+            the monotonic loaded-id accumulator, not the in-memory
+            window length, so it never goes backwards when maxPages
+            evicts the oldest page. */}
         {!isPending && !isError && rows.length > 0 ? (
           <p className="mb-2 text-xs text-muted-foreground">
-            {`Showing ${loadedCount.toLocaleString()} of ${total.toLocaleString()}`}
+            {`Showing ${captionCount.toLocaleString()} of ${captionTotal.toLocaleString()}`}
           </p>
         ) : null}
 
@@ -347,13 +487,14 @@ export function StandardListPage<T, F>({
               />
             </div>
 
-            {/* No "Load more" button — scrolling drives the index
-                sentinel (auto-fetch is unconditional). Terminal line
-                shows only once every page is loaded. */}
+            {/* No "Load more" button — the IntersectionObserver
+                sentinel inside VirtualScrollContainer drives
+                pagination. Terminal line shows only once every page is
+                loaded. */}
             {!hasNextPage ? (
               <div className="flex items-center justify-center pt-2">
                 <p className="text-xs text-muted-foreground">
-                  {`End of results — ${total.toLocaleString()} ${total === 1 ? "item" : "items"} shown`}
+                  {`End of results — ${captionTotal.toLocaleString()} ${captionTotal === 1 ? "item" : "items"} shown`}
                 </p>
               </div>
             ) : null}
@@ -379,13 +520,13 @@ interface VirtualScrollContainerProps<T> {
   estimateSize: number;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
-  fetchNextPage: () => void;
+  fetchNextPage: () => Promise<unknown>;
 }
 
 /**
- * Virtualized scroll surface with variable-height rows, an
- * intersection sentinel that triggers `fetchNextPage`, and per-URL
- * scroll restoration.
+ * Virtualized scroll surface with variable-height rows and a real 1px
+ * IntersectionObserver sentinel (rendered after the virtualizer
+ * spacer) that triggers `fetchNextPage`.
  *
  * Uses `useWindowVirtualizer` so the page itself is the scroll surface
  * (window). The list reports its `offsetTop` as `scrollMargin` so the
@@ -393,6 +534,16 @@ interface VirtualScrollContainerProps<T> {
  * container's local coordinate space. The container has NO height
  * constraint and NO `overflow-auto` — it grows to the virtualizer's
  * total size and the document body scrolls.
+ *
+ * The sentinel is a normal-flow element after the spacer, not a
+ * phantom virtual row, so it can never be evicted by `maxPages` and
+ * is always last in DOM order. Its *viewport* position still depends
+ * on the spacer height (`getTotalSize()`) being roughly correct under
+ * variable-height `measureElement`; the 200px rootMargin + post-spacer
+ * placement make it self-correcting on the next scroll/resize. A
+ * synchronous ref latch plus the shared `isFetchingNextPage` flag
+ * prevent in-container double-fire under React batching and fast
+ * scrolling (see the effect body for cross-container dedupe).
  *
  * See CLAUDE.md "List page scroll behavior" for the architectural
  * contract.
@@ -455,11 +606,8 @@ function VirtualScrollContainer<T>({
     };
   }, []);
 
-  // Count includes a trailing sentinel row when more pages exist.
-  const count = hasNextPage ? rows.length + 1 : rows.length;
-
   const virtualizer = useWindowVirtualizer({
-    count,
+    count: rows.length,
     estimateSize: () => estimateSize,
     overscan: 6,
     scrollMargin: listOffset,
@@ -468,23 +616,32 @@ function VirtualScrollContainer<T>({
 
   const virtualItems = virtualizer.getVirtualItems();
 
-  // Sentinel-driven auto-fetch (original index-based sentinel). Always
-  // on — no prefers-reduced-motion gate, no button.
+  // IntersectionObserver sentinel auto-fetch. The sentinel enters view
+  // (200px rootMargin lookahead) as the user nears the end.
+  //
+  // Continuation: when the sentinel stays in view after a page settles
+  // (tall viewport / short page) `inView` does NOT re-toggle — the
+  // re-fire comes from `isFetchingNextPage` flipping true→false in the
+  // dep array re-running this effect. Do not remove that dep.
+  //
+  // Double-fire: the per-container ref latch stops a re-fire within
+  // THIS container. The desktop and mobile containers each have their
+  // own latch and do not coordinate; cross-container single-flight
+  // relies on (a) the CSS-hidden container's sentinel never
+  // intersecting (display:none) and (b) TanStack's own in-flight
+  // fetchNextPage de-dupe. Net effect is one network request.
+  const { ref: sentinelRef, inView } = useInView({
+    rootMargin: "200px 0px",
+  });
+  const fetchLatch = useRef(false);
   useEffect(() => {
+    if (!inView || fetchLatch.current) return;
     if (!hasNextPage || isFetchingNextPage) return;
-    const last = virtualItems.at(-1);
-    if (!last) return;
-    // The sentinel is the last virtual row when hasNextPage is true.
-    if (last.index >= rows.length - 1) {
-      fetchNextPage();
-    }
-  }, [
-    virtualItems,
-    rows.length,
-    hasNextPage,
-    isFetchingNextPage,
-    fetchNextPage,
-  ]);
+    fetchLatch.current = true;
+    void Promise.resolve(fetchNextPage()).finally(() => {
+      fetchLatch.current = false;
+    });
+  }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
     <div
@@ -500,44 +657,28 @@ function VirtualScrollContainer<T>({
           position: "relative",
         }}
       >
-        {virtualItems.map((virtualItem) => {
-          const isSentinel = virtualItem.index >= rows.length;
-          return (
-            <div
-              key={virtualItem.key}
-              data-index={virtualItem.index}
-              ref={virtualizer.measureElement}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                transform: `translateY(${virtualItem.start - virtualizer.options.scrollMargin}px)`,
-              }}
-            >
-              {isSentinel ? (
-                <SkeletonRow estimateSize={estimateSize} />
-              ) : (
-                renderItem(rows[virtualItem.index] as T, virtualItem.index)
-              )}
-            </div>
-          );
-        })}
+        {virtualItems.map((virtualItem) => (
+          <div
+            key={virtualItem.key}
+            data-index={virtualItem.index}
+            ref={virtualizer.measureElement}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${virtualItem.start - virtualizer.options.scrollMargin}px)`,
+            }}
+          >
+            {renderItem(rows[virtualItem.index] as T, virtualItem.index)}
+          </div>
+        ))}
       </div>
-    </div>
-  );
-}
-
-function SkeletonRow({ estimateSize }: { estimateSize: number }) {
-  return (
-    <div
-      className="flex items-center gap-3 border-b border-border px-4"
-      style={{ minHeight: `${estimateSize}px` }}
-      aria-hidden="true"
-    >
-      <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
-      <div className="h-3 w-1/5 animate-pulse rounded bg-muted" />
-      <div className="ml-auto h-3 w-16 animate-pulse rounded bg-muted" />
+      {/* Real sentinel in normal flow after the spacer. Never evicted
+          by maxPages; its position is always the true content end. */}
+      {hasNextPage ? (
+        <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
+      ) : null}
     </div>
   );
 }

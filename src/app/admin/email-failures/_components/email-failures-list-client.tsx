@@ -5,10 +5,10 @@
 // consistency-exempt: list-page-pattern: admin-utility-table —
 // fixed-width row cells (w-32 timestamp, w-40 sender, w-48 recipient,
 // w-40 feature, w-32 status, flex-1 error) preserved because columns
-// carry non-uniform semantic widths; no columnHeaderSlot. pageSize=100
-// (high-volume admin reading). Per-row detail dialog + Retry button
-// are documented carveouts. Admin operational page — no saved views,
-// no MODIFIED badge, no bulk selection.
+// carry non-uniform semantic widths; no columnHeaderSlot. Per-row
+// detail dialog + Retry button are documented carveouts. Admin
+// operational page — no saved views, no MODIFIED badge, no bulk
+// selection.
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
@@ -289,7 +289,6 @@ export function EmailFailuresListClient({
         renderCard={renderCard}
         rowEstimateSize={72}
         cardEstimateSize={160}
-        pageSize={100}
         emptyState={
           <StandardEmptyState
             title="No email failures match"

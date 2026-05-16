@@ -7,8 +7,8 @@
 // fixed-width row cells (w-32 timestamp, w-32 key, flex-1 method+path,
 // w-36 status, w-20 duration, w-32 ip, w-24 detail) preserved because
 // columns have intrinsically non-uniform widths; no columnHeaderSlot.
-// pageSize=100 (high-volume admin reading). Admin operational page —
-// no saved views, no MODIFIED badge, no bulk selection.
+// Admin operational page — no saved views, no MODIFIED badge, no bulk
+// selection.
 "use client";
 
 import Link from "next/link";
@@ -315,7 +315,6 @@ export function ApiUsageListClient({
       renderCard={renderCard}
       rowEstimateSize={72}
       cardEstimateSize={160}
-      pageSize={100}
       emptyState={
         <StandardEmptyState
           title="No API requests match"

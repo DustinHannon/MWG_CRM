@@ -1,10 +1,3 @@
-// consistency-exempt: list-page-pattern: page size 100 (default 50)
-// for high-volume admin reading per STANDARDS §17 "Allowed page-
-// specific deviations". The marketing audit log accumulates fast (one
-// row per template open, template edit, list import, campaign send,
-// suppression add, etc.) so admins reviewing recent activity need a
-// larger window to scan without paging.
-
 "use client";
 
 import Link from "next/link";
@@ -287,8 +280,7 @@ export function MarketingAuditListClient({
   // consistency-exempt: list-page-pattern: marketing-audit renders a
   // backLink above StandardListPage as a deliberate sub-navigation
   // affordance (the page is a deep admin surface reached from
-  // /marketing). consistency-exempt: list-page-pattern: page size 100
-  // for high-volume admin reading.
+  // /marketing).
   return (
     <div className="flex flex-col gap-4">
       {backLink}
@@ -300,7 +292,6 @@ export function MarketingAuditListClient({
         renderCard={renderCard}
         rowEstimateSize={64}
         cardEstimateSize={140}
-        pageSize={100}
         emptyState={
           <StandardEmptyState
             title="No marketing audit events match these filters."

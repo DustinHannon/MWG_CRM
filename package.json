@@ -51,6 +51,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-email-editor": "^1.8.0",
+    "react-intersection-observer": "^10.0.3",
     "react-simple-maps": "^3.0.0",
     "recharts": "^3.8.1",
     "server-only": "^0.0.1",
