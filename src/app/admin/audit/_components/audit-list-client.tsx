@@ -18,6 +18,7 @@ import {
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import { UserChip } from "@/components/user-display/user-chip";
 import { type TimePrefs } from "@/lib/format-time";
+import { AUDIT_CATEGORY_OPTIONS } from "@/lib/audit/events";
 import { useShowPicker } from "@/hooks/use-show-picker";
 
 export interface AuditRow {
@@ -36,6 +37,7 @@ export interface AuditRow {
 interface AuditFilters {
   q: string;
   action: string;
+  category: string;
   targetType: string;
   requestId: string;
   from: string;
@@ -45,6 +47,7 @@ interface AuditFilters {
 const EMPTY_FILTERS: AuditFilters = {
   q: "",
   action: "",
+  category: "",
   targetType: "",
   requestId: "",
   from: "",
@@ -78,6 +81,7 @@ export function AuditListClient({
       if (cursor) params.set("cursor", cursor);
       if (f.q) params.set("q", f.q);
       if (f.action) params.set("action", f.action);
+      if (f.category) params.set("category", f.category);
       if (f.targetType) params.set("target_type", f.targetType);
       if (f.requestId) params.set("request_id", f.requestId);
       if (f.from) params.set("created_at_gte", f.from);
@@ -111,6 +115,7 @@ export function AuditListClient({
   const filtersAreModified = Boolean(
     filters.q ||
       filters.action ||
+      filters.category ||
       filters.targetType ||
       filters.requestId ||
       filters.from ||
@@ -122,6 +127,7 @@ export function AuditListClient({
   const exportParams = new URLSearchParams();
   if (filters.q) exportParams.set("q", filters.q);
   if (filters.action) exportParams.set("action", filters.action);
+  if (filters.category) exportParams.set("category", filters.category);
   if (filters.targetType) exportParams.set("target_type", filters.targetType);
   if (filters.requestId) exportParams.set("request_id", filters.requestId);
   if (filters.from) exportParams.set("created_at_gte", filters.from);
@@ -147,6 +153,21 @@ export function AuditListClient({
           placeholder="action / target / actor"
           className="h-11 min-w-[220px] rounded-md border border-border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:h-9 md:py-1.5"
         />
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        Category
+        <select
+          value={draft.category}
+          onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+          className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+        >
+          <option value="">All categories</option>
+          {AUDIT_CATEGORY_OPTIONS.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">
         Action

@@ -18,6 +18,7 @@ import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { refreshUserPhotoIfStale } from "@/lib/graph-photo";
 import { writeAudit } from "@/lib/audit";
+import { AUDIT_EVENTS } from "@/lib/audit/events";
 
 /**
  * Auth.js v5 surface. The MicrosoftEntraID provider registers only when
@@ -286,6 +287,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             userId: provisioned.id,
             email,
           });
+          // Forensic record of a successful interactive Entra sign-in.
+          // Best-effort: writeAudit never throws (swallows its own
+          // failures), and it runs after the token is fully built so a
+          // logic error here cannot affect the mint.
+          await writeAudit({
+            actorId: provisioned.id,
+            actorEmailSnapshot: provisioned.email,
+            action: AUDIT_EVENTS.AUTH_LOGIN_ENTRA,
+            targetType: "user",
+            targetId: provisioned.id,
+          });
           return token;
         } catch (err) {
           if (err instanceof EntraDomainNotAllowedError) {
@@ -321,6 +333,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.displayName = row.displayName;
           token.email = row.email;
         }
+        // Forensic record of a successful breakglass (emergency
+        // credentials) sign-in. Best-effort and non-throwing; placed
+        // after token hydration so it cannot affect the mint.
+        await writeAudit({
+          actorId: user.id,
+          actorEmailSnapshot: row?.email ?? null,
+          action: AUDIT_EVENTS.AUTH_LOGIN_BREAKGLASS,
+          targetType: "user",
+          targetId: user.id,
+        });
         return token;
       }
 
@@ -375,6 +397,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           typeof token.sessionVersion === "number" &&
           token.sessionVersion !== row.sessionVersion
         ) {
+          // Forensic record of a mid-flight forced re-auth (admin
+          // offboard / force-reauth bumped session_version). Best-effort
+          // and non-throwing; emitted before the token is invalidated.
+          await writeAudit({
+            actorId: token.userId as string,
+            actorEmailSnapshot: row.email,
+            action: AUDIT_EVENTS.AUTH_SESSION_FORCE_LOGOUT,
+            targetType: "user",
+            targetId: token.userId as string,
+          });
           return null;
         }
         token.isAdmin = row.isAdmin;
@@ -403,5 +435,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: "/auth/signin",
+  },
+  events: {
+    /**
+     * Forensic record of user-initiated sign-out. JWT strategy, so the
+     * message carries `{ token }`; the jwt() callback writes the local
+     * user id to `token.userId`. Anonymous / unresolvable sign-outs are
+     * skipped (no system row). Best-effort and non-throwing.
+     */
+    async signOut(message) {
+      const token = "token" in message ? message.token : null;
+      const userId =
+        token && typeof token.userId === "string" ? token.userId : null;
+      if (!userId) return;
+      await writeAudit({
+        actorId: userId,
+        action: AUDIT_EVENTS.AUTH_LOGOUT,
+        targetType: "user",
+        targetId: userId,
+      });
+    },
   },
 });

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { writeSystemAudit } from "@/lib/audit";
+import { AUDIT_EVENTS, AUDIT_SYSTEM_ACTORS } from "@/lib/audit/events";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { listTasksDueTodayForCron } from "@/lib/tasks";
@@ -21,6 +23,15 @@ export async function GET(req: Request) {
   try {
     const tasks = await listTasksDueTodayForCron();
     if (tasks.length === 0) {
+      // System-initiated cron self-audit. Mirrors the
+      // marketing-sync-suppressions cron pattern (after work, before the
+      // JSON response, success path only). Emitted on the zero-task path
+      // too so a successful no-op run still leaves a forensic trail.
+      await writeSystemAudit({
+        actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.CRON,
+        action: AUDIT_EVENTS.SYSTEM_TASKS_DUE_TODAY,
+        after: { notificationsCreated: 0, tasksDue: 0 },
+      });
       return NextResponse.json({ ok: true, processed: 0 });
     }
 
@@ -32,6 +43,12 @@ export async function GET(req: Request) {
         link: t.leadId ? `/leads/${t.leadId}` : "/tasks",
       })),
     );
+
+    await writeSystemAudit({
+      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.CRON,
+      action: AUDIT_EVENTS.SYSTEM_TASKS_DUE_TODAY,
+      after: { notificationsCreated: tasks.length, tasksDue: tasks.length },
+    });
 
     return NextResponse.json({ ok: true, processed: tasks.length });
   } catch (err) {

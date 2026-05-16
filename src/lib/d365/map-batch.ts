@@ -437,6 +437,25 @@ export async function mapBatch(
           entityType,
           errorMessage: errorText,
         });
+        // Pair the row's status='failed' with a forensic audit row so
+        // the failure class is reconstructible from audit_log alone
+        // (not just transient logger output). Bare run `actorId`;
+        // targetType is the canonical `d365_import_record` used by
+        // commit-batch + the admin d365 actions so target_type filters
+        // surface validation failures alongside the other record
+        // events. writeAudit is best-effort.
+        await writeAudit({
+          actorId,
+          action: D365_AUDIT_EVENTS.RECORD_VALIDATION_FAILED,
+          targetType: "d365_import_record",
+          targetId: rec.id,
+          after: {
+            reason: errorText,
+            errorClass: "MappingError",
+            entityType,
+            sourceId: rec.sourceId,
+          },
+        });
       } else {
         nextStatus = "failed";
         errorText = err instanceof Error ? err.message : String(err);
@@ -444,6 +463,18 @@ export async function mapBatch(
           batchId,
           recordId: rec.id,
           errorMessage: errorText,
+        });
+        await writeAudit({
+          actorId,
+          action: D365_AUDIT_EVENTS.RECORD_VALIDATION_FAILED,
+          targetType: "d365_import_record",
+          targetId: rec.id,
+          after: {
+            reason: errorText,
+            errorClass: "unexpected",
+            entityType,
+            sourceId: rec.sourceId,
+          },
         });
       }
     }

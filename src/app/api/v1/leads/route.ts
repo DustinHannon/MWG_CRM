@@ -1,4 +1,5 @@
 import { createLead, getLeadById, listLeads } from "@/lib/leads";
+import { writeAudit } from "@/lib/audit";
 import { withApi } from "@/lib/api/handler";
 import { errorResponse } from "@/lib/api/errors";
 import { registry } from "@/lib/openapi/registry";
@@ -184,6 +185,18 @@ export const POST = withApi(
       estimatedCloseDate: parsed.data.estimated_close_date ?? null,
       salutation: parsed.data.salutation ?? null,
       mobilePhone: parsed.data.mobile_phone ?? null,
+    });
+
+    await writeAudit({
+      actorId: user.id,
+      action: "lead.create",
+      targetType: "lead",
+      targetId: created.id,
+      after: {
+        firstName: parsed.data.first_name,
+        lastName: parsed.data.last_name ?? null,
+        source: "api_v1",
+      },
     });
 
     const fresh = await getLeadById(user, created.id, true);

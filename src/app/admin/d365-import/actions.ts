@@ -17,6 +17,7 @@ import {
 } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
+import { AUDIT_EVENTS } from "@/lib/audit/events";
 import { D365_AUDIT_EVENTS } from "@/lib/d365/audit-events";
 import {
   abortRunSchema,
@@ -410,6 +411,16 @@ export async function pullNextBatchAction(
         throw err;
       }
 
+      if (batchId) {
+        await writeAudit({
+          actorId: user.id,
+          action: AUDIT_EVENTS.D365_BATCH_PULL_NEXT,
+          targetType: "d365_import_run",
+          targetId: runId,
+          after: { batchId, priorStatus: run.status },
+        });
+      }
+
       const map = await tryLoadMapBatch();
       if (map && batchId) {
         try {
@@ -607,6 +618,7 @@ async function loadRecord(recordId: string): Promise<{
   status: string;
   runId: string;
   mappedPayload: unknown;
+  conflictResolution: string | null;
 }> {
   const rows = await db
     .select({
@@ -615,6 +627,7 @@ async function loadRecord(recordId: string): Promise<{
       status: importRecords.status,
       runId: importBatches.runId,
       mappedPayload: importRecords.mappedPayload,
+      conflictResolution: importRecords.conflictResolution,
     })
     .from(importRecords)
     .innerJoin(importBatches, eq(importBatches.id, importRecords.batchId))
@@ -742,8 +755,16 @@ export async function editRecordFieldsAction(
         typeof existingWrapper.customFields === "object"
           ? (existingWrapper.customFields as Record<string, unknown>)
           : {};
+      // Reuse the `loadRecord` read for the audit `before` — the UI only
+      // edits the unwrapped `mapped` object, so that is the
+      // forensically meaningful prior state.
+      const priorMapped =
+        existingWrapper.mapped && typeof existingWrapper.mapped === "object"
+          ? (existingWrapper.mapped as Record<string, unknown>)
+          : {};
+      const newMapped = parsed as Record<string, unknown>;
       const newWrapper = {
-        mapped: parsed as Record<string, unknown>,
+        mapped: newMapped,
         attached: existingAttached,
         customFields: existingCustom,
       };
@@ -753,10 +774,13 @@ export async function editRecordFieldsAction(
         .set({ mappedPayload: newWrapper })
         .where(eq(importRecords.id, recordId));
 
-      // No dedicated audit event — bundles into approve/commit history.
-      logger.info("d365.import.record.edited", {
-        recordId,
+      await writeAudit({
         actorId: user.id,
+        action: AUDIT_EVENTS.D365_RECORD_EDIT_FIELDS,
+        targetType: "d365_import_record",
+        targetId: recordId,
+        before: priorMapped,
+        after: newMapped,
       });
 
       revalidatePath(`/admin/d365-import/${rec.runId}/${rec.batchId}`);
@@ -781,15 +805,19 @@ export async function setConflictResolutionAction(
           `Record is ${rec.status} — cannot change conflict resolution.`,
         );
       }
+      const priorResolution = rec.conflictResolution;
       await db
         .update(importRecords)
         .set({ conflictResolution: resolution })
         .where(eq(importRecords.id, recordId));
 
-      logger.info("d365.import.record.conflict_resolution_set", {
-        recordId,
+      await writeAudit({
         actorId: user.id,
-        resolution,
+        action: AUDIT_EVENTS.D365_RECORD_SET_CONFLICT_RESOLUTION,
+        targetType: "d365_import_record",
+        targetId: recordId,
+        before: { resolution: priorResolution },
+        after: { resolution },
       });
 
       revalidatePath(`/admin/d365-import/${rec.runId}/${rec.batchId}`);

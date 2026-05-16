@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 interface AuditSearchParams {
   q?: string;
   action?: string;
+  category?: string;
   target_type?: string;
   request_id?: string;
   created_at_gte?: string;
@@ -32,6 +33,7 @@ export default async function AuditLogPage({
   const initialFilters = {
     q: sp.q ?? "",
     action: sp.action ?? "",
+    category: sp.category ?? "",
     targetType: sp.target_type ?? "",
     requestId: sp.request_id ?? "",
     from: sp.created_at_gte ?? "",

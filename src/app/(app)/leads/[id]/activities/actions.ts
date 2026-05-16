@@ -52,6 +52,7 @@ export async function addNoteAction(
       action: "activity.note_create",
       targetType: "activity",
       targetId: id,
+      after: { body: parsed.body.slice(0, 500) },
     });
     revalidatePath(`/leads/${parsed.leadId}`);
   });
@@ -78,6 +79,11 @@ export async function addCallAction(
       action: "activity.call_create",
       targetType: "activity",
       targetId: id,
+      after: {
+        subject: parsed.subject ?? null,
+        outcome: parsed.outcome ?? null,
+        durationMinutes: parsed.durationMinutes ?? null,
+      },
     });
     revalidatePath(`/leads/${parsed.leadId}`);
   });
@@ -102,6 +108,7 @@ export async function addTaskAction(
       action: "activity.task_create",
       targetType: "activity",
       targetId: id,
+      after: { subject: parsed.subject },
     });
     revalidatePath(`/leads/${parsed.leadId}`);
   });

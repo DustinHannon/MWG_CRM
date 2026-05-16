@@ -83,6 +83,12 @@ export async function updatePreferencesAction(
 
       const parsed = updatePreferencesSchema.parse(cleanPatch);
 
+      const beforeRows = await db
+        .select()
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, session.id))
+        .limit(1);
+
       const set: Record<string, unknown> = {
         ...parsed,
         updatedAt: sql`now()`,
@@ -117,6 +123,7 @@ export async function updatePreferencesAction(
         action: "user_preferences.update",
         targetType: "user_preferences",
         targetId: session.id,
+        before: beforeRows[0] ?? null,
         after: parsed,
       });
 

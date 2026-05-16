@@ -646,6 +646,14 @@ export async function updateTask(
   } else if (patch.status === "open" || patch.status === "in_progress") {
     set.completedAt = null;
   }
+  // Capture the pre-update row so the audit records what changed. There
+  // is no prior read in this fn — OCC is enforced atomically by the
+  // version predicate on the UPDATE itself, not a read-then-write.
+  const beforeRows = await db
+    .select()
+    .from(tasks)
+    .where(eq(tasks.id, id))
+    .limit(1);
   const rows = await db
     .update(tasks)
     .set(set)
@@ -657,6 +665,7 @@ export async function updateTask(
     action: "task.update",
     targetType: "tasks",
     targetId: id,
+    before: beforeRows[0] ?? null,
     after: patch as Record<string, unknown>,
   });
   return rows[0];

@@ -173,6 +173,13 @@ export async function commitBatch(
             targetId: rec.id,
             after: {
               sourceEntityType: rec.sourceEntityType,
+              // Forensic linkage: name the CRM row this staged record
+              // wrote and whether it was an INSERT or an UPDATE.
+              // targetType/targetId stay the staging-record identity
+              // (still useful); this enriches `after` only.
+              crmEntityType: result.crmEntityType,
+              crmEntityId: result.crmEntityId,
+              operation: result.operation,
               // F-08: surface activity-reuse via subkind so a no-op
               // re-import (external_id already mapped) doesn't look
               // like a fresh write in the audit trail.
@@ -309,6 +316,14 @@ type CommitOneResult =
       subkind?: "already_existed";
       unresolvedFks?: UnresolvedFk[];
       before?: { version?: number };
+      // Forensic linkage: which CRM row the staged record resolved to,
+      // and whether it was a fresh INSERT or an UPDATE of an existing
+      // row. Without this the RECORD_COMMITTED audit can only name the
+      // staging-record id, not the lead/contact/account/opportunity it
+      // actually wrote.
+      crmEntityType: "lead" | "contact" | "account" | "opportunity" | "activity";
+      crmEntityId: string;
+      operation: "created" | "updated";
     }
   | {
       outcome: "skipped";
@@ -473,14 +488,26 @@ async function commitOneRecord(
         .where(eq(importRecords.id, rec.id));
       // F-08: an idempotent re-import (external_id already mapped)
       // is forensically distinct from a fresh activity insert. Surface
-      // via subkind so audit consumers can filter no-op re-runs.
+      // via subkind so audit consumers can filter no-op re-runs. The
+      // CRM row written is an `activities` row; `alreadyExisted` is the
+      // existing created-vs-updated signal (re-import maps to an
+      // already-present row → "updated"; fresh insert → "created").
       return result.alreadyExisted
         ? {
             outcome: "committed",
             subkind: "already_existed",
             unresolvedFks,
+            crmEntityType: "activity",
+            crmEntityId: result.localId,
+            operation: "updated",
           }
-        : { outcome: "committed", unresolvedFks };
+        : {
+            outcome: "committed",
+            unresolvedFks,
+            crmEntityType: "activity",
+            crmEntityId: result.localId,
+            operation: "created",
+          };
     }
 
     // Parent entity path (lead / contact / account / opportunity).
@@ -516,6 +543,15 @@ async function commitOneRecord(
     return {
       outcome: "committed",
       unresolvedFks,
+      // `entityType` is narrowed to a parent type here (activities
+      // returned earlier). `beforeVersion` is set only on the
+      // `conflictWith` UPDATE path (`commitParentEntity` returns it
+      // from the existing-row branch); its absence means the INSERT
+      // path ran — so it is the existing created-vs-updated signal.
+      crmEntityType: entityType,
+      crmEntityId: parentResult.localId,
+      operation:
+        parentResult.beforeVersion !== undefined ? "updated" : "created",
       // capture pre-update version on the audit `before` payload so a
       // concurrent user edit's OCC interaction is reconstructible from
       // the forensic trail. The D365 import is the documented

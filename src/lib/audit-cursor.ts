@@ -3,10 +3,34 @@ import { and, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema/audit";
 import { users } from "@/db/schema/users";
+import { getAuditCategory } from "@/lib/audit/events";
 import {
   decodeCursor as decodeStandardCursor,
   encodeFromValues as encodeStandardCursor,
 } from "@/lib/cursors";
+
+/**
+ * Translate an audit-event category id into a SQL predicate that
+ * matches every action whose name starts with one of the category's
+ * dotted prefixes. Returns `undefined` for an unknown id (treated as
+ * "no category filter" — fail-open so a stale bookmarked URL still
+ * lists rows rather than erroring). `starts_with` is exact-prefix (no
+ * LIKE wildcard ambiguity from `_` in prefixes like `task_view.`).
+ *
+ * Shared by the cursor list and the CSV export so the filter the
+ * admin sees is exactly what they download.
+ */
+export function auditCategorySql(
+  categoryId: string | null | undefined,
+): SQL | undefined {
+  const category = getAuditCategory(categoryId);
+  if (!category) return undefined;
+  const parts = category.prefixes.map(
+    (p) => sql`starts_with(${auditLog.action}, ${p})`,
+  );
+  if (parts.length === 0) return undefined;
+  return parts.length === 1 ? parts[0] : or(...parts)!;
+}
 
 /**
  * Row shape returned by `listAuditLogCursor`. Mirrors the columns the
@@ -28,6 +52,8 @@ export interface AuditLogRow {
 export interface AuditLogCursorFilters {
   search?: string;
   action?: string;
+  /** Audit-event category id (see AUDIT_EVENT_CATEGORIES). */
+  category?: string;
   targetType?: string;
   requestId?: string;
   from?: Date;
@@ -68,6 +94,8 @@ export async function listAuditLogCursor(args: {
     );
   }
   if (filters.action) wheres.push(eq(auditLog.action, filters.action));
+  const categoryWhere = auditCategorySql(filters.category);
+  if (categoryWhere) wheres.push(categoryWhere);
   if (filters.targetType) {
     wheres.push(eq(auditLog.targetType, filters.targetType));
   }
@@ -95,9 +123,12 @@ export async function listAuditLogCursor(args: {
       : cursorWhere
     : baseWhere;
 
-  // Guard slow searches: ILIKE %q% across multiple text columns can be
-  // expensive on a 1M-row audit log. 5s cap matches the prior surface.
-  if (filters.search) {
+  // Guard slow scans: ILIKE %q% across multiple text columns, and the
+  // category `starts_with(action, …)` OR-group, both bypass the plain
+  // btree `audit_action_idx` and seq-scan a growing forensic table. 5s
+  // cap matches the prior search surface; the category path has the
+  // same scan profile so it shares the guard.
+  if (filters.search || filters.category) {
     await db.execute(sql`SET LOCAL statement_timeout = '5s'`);
   }
 

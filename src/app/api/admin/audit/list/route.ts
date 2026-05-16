@@ -13,6 +13,7 @@ export const runtime = "nodejs";
  *   ?cursor=<opaque>          — null on first page.
  *   ?q                        — search term across action / target / actor.
  *   ?action                   — exact-match action string.
+ *   ?category                 — audit-event category id (prefix group).
  *   ?target_type              — exact-match target_type.
  *   ?request_id               — exact-match request id (cross-line correlation).
  *   ?created_at_gte / ?created_at_lte — ISO timestamps for the createdAt range.
@@ -41,6 +42,7 @@ export const GET = withInternalListApi(
     filters: {
       search: sp.get("q")?.trim() || undefined,
       action: sp.get("action")?.trim() || undefined,
+      category: sp.get("category")?.trim() || undefined,
       targetType: sp.get("target_type")?.trim() || undefined,
       requestId: sp.get("request_id")?.trim() || undefined,
       from:

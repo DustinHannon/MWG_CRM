@@ -5,6 +5,7 @@ import {
   verifyActivityParent,
   type ParentKind,
 } from "@/lib/activities";
+import { writeAudit } from "@/lib/audit";
 import { withApi } from "@/lib/api/handler";
 import { errorResponse } from "@/lib/api/errors";
 import { registry } from "@/lib/openapi/registry";
@@ -177,6 +178,13 @@ export const POST = withApi(
       occurredAt: m.occurred_at ? new Date(m.occurred_at) : null,
       durationMinutes: m.duration_minutes ?? null,
       outcome: m.outcome ?? null,
+    });
+    await writeAudit({
+      actorId: key.createdById,
+      action: "activity." + m.kind + "_create",
+      targetType: "activity",
+      targetId: created.id,
+      after: { kind: m.kind, parentKind: parent.kind, parentId: parent.id },
     });
     const fresh = await getActivityForApi(created.id, {
       actorId: key.createdById,

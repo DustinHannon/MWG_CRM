@@ -409,12 +409,20 @@ export async function hardDeleteLeadAction(
           errorMessage: err instanceof Error ? err.message : String(err),
         });
       }
+      // Capture the full row BEFORE the delete so the forensic trail
+      // mirrors every other entity's hard-delete (which records `before`).
+      const [beforeRow] = await db
+        .select()
+        .from(leads)
+        .where(eq(leads.id, id))
+        .limit(1);
       await deleteLeadsById([id]);
       await writeAudit({
         actorId: user.id,
         action: "lead.hard_delete",
         targetType: "lead",
         targetId: id,
+        before: beforeRow ?? null,
       });
       // Durable async cleanup via the job queue (F-Ω-8). The previous
       // `void deleteBlobsByPathnames(...).catch(...)` pattern was not

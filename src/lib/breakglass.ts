@@ -5,6 +5,8 @@ import { db } from "@/db";
 import { permissions, users } from "@/db/schema/users";
 import { userPreferences } from "@/db/schema/views";
 import { hashPassword } from "@/lib/password";
+import { writeSystemAudit } from "@/lib/audit";
+import { AUDIT_EVENTS, AUDIT_SYSTEM_ACTORS } from "@/lib/audit/events";
 
 /**
  * Breakglass account bootstrap.
@@ -97,9 +99,20 @@ export async function ensureBreakglass(): Promise<void> {
     insertedId = id;
   });
 
-  const inserted = insertedId !== null;
+  const bootstrappedId: string | null = insertedId;
 
-  if (inserted) {
+  if (bootstrappedId !== null) {
+    // Forensic record of the emergency-access account bootstrap. System
+    // actor (no user yet exists). Best-effort: writeSystemAudit swallows
+    // its own failures and never throws, so it cannot break the seed.
+    await writeSystemAudit({
+      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.BOOTSTRAP,
+      action: AUDIT_EVENTS.USER_CREATE_BREAKGLASS,
+      targetType: "user",
+      targetId: bootstrappedId,
+      after: { username: BREAKGLASS_USERNAME, isAdmin: true, isBreakglass: true },
+    });
+
     // ONE-TIME LOG. After this Lambda restarts and finds the row, no further log.
     // Vercel runtime captures stdout; retrieve via mcp__vercel__get_runtime_logs.
     // Intentional plaintext print — single-shot bootstrap event captured via

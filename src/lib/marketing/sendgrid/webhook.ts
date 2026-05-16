@@ -12,6 +12,8 @@ import {
   marketingSuppressions,
 } from "@/db/schema/marketing-events";
 import { webhookEventDedupe } from "@/db/schema/security";
+import { writeSystemAudit } from "@/lib/audit";
+import { AUDIT_EVENTS, AUDIT_SYSTEM_ACTORS } from "@/lib/audit/events";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { WebhookSignatureError } from "@/lib/marketing/errors";
@@ -298,6 +300,21 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
   );
 
   // 4. Suppressions for terminal events.
+  //
+  // Compliance-relevant recipient-state transitions (unsubscribe,
+  // group_unsubscribe, spamreport, bounce) each emit TWO distinct,
+  // intentional forensic rows: one recipient-state row here
+  // (`MKT_RECIPIENT_COMPLIANCE_STATE` — "this recipient transitioned to
+  // bounced/unsubscribed/…") and one suppression-provenance row inside
+  // `upsertSuppression` (`MKT_SUPPRESSION_WEBHOOK` — "this address was
+  // added to the suppression list"). They record different facts and
+  // are deliberately not collapsed. This dispatch block discriminates
+  // exactly the compliance transitions and excludes the high-frequency
+  // delivered/open/click telemetry, so each transition emits the
+  // recipient-state row exactly once. Duplicate webhook deliveries are
+  // deduped upstream by `webhook_event_dedupe` (the route claims each
+  // `sg_event_id` once before `processEvent` runs), so emission can be
+  // unconditional.
   if (eventType === "unsubscribe") {
     // Account-level unsubscribe. The user opted out at the SendGrid
     // account level (rare via the marketing footer — the footer's
@@ -305,6 +322,13 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
     // `unsubscribe` so the operator audit-trail distinguishes the
     // two flavors.
     await upsertSuppression(event.email, "unsubscribe", event.reason ?? null);
+    await writeSystemAudit({
+      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.WEBHOOK,
+      action: AUDIT_EVENTS.MKT_RECIPIENT_COMPLIANCE_STATE,
+      targetType: "marketing_campaign_recipient",
+      targetId: recipientId,
+      after: { state: eventType, campaignId },
+    });
   } else if (eventType === "group_unsubscribe") {
     // Per-group unsubscribe. The CRM's marketing pipeline uses ASM
     // with a single `group_id`, so the unsubscribe link in every
@@ -318,6 +342,13 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
       "group_unsubscribe",
       event.reason ?? null,
     );
+    await writeSystemAudit({
+      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.WEBHOOK,
+      action: AUDIT_EVENTS.MKT_RECIPIENT_COMPLIANCE_STATE,
+      targetType: "marketing_campaign_recipient",
+      targetId: recipientId,
+      after: { state: eventType, campaignId },
+    });
   } else if (eventType === "bounce") {
     // SendGrid's `bounce` event has type='hard'|'soft' in `type`;
     // a blocked-by-ISP event uses event='dropped' or `type='blocked'`.
@@ -330,8 +361,22 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
       isBlocked ? "block" : "bounce",
       event.reason ?? null,
     );
+    await writeSystemAudit({
+      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.WEBHOOK,
+      action: AUDIT_EVENTS.MKT_RECIPIENT_COMPLIANCE_STATE,
+      targetType: "marketing_campaign_recipient",
+      targetId: recipientId,
+      after: { state: eventType, campaignId },
+    });
   } else if (eventType === "spamreport") {
     await upsertSuppression(event.email, "spamreport", null);
+    await writeSystemAudit({
+      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.WEBHOOK,
+      action: AUDIT_EVENTS.MKT_RECIPIENT_COMPLIANCE_STATE,
+      targetType: "marketing_campaign_recipient",
+      targetId: recipientId,
+      after: { state: eventType, campaignId },
+    });
   } else if (eventType === "dropped") {
     // Dropped events from Invalid Email reach the suppression list as
     // `invalid` so future sends to the same address skip immediately.
@@ -463,6 +508,23 @@ async function upsertSuppression(
         syncedAt: sql`now()`,
       },
     });
+
+  // Compliance-relevant: a suppression row was created/updated from an
+  // inbound webhook event. Emitted unconditionally — `onConflictDoUpdate`
+  // always touches the row so insert-vs-no-op is not cleanly detectable
+  // without a riskier query change, and duplicate webhook deliveries are
+  // already deduped upstream by `webhook_event_dedupe` (the route claims
+  // each `sg_event_id` once before `processEvent` runs), so there is no
+  // duplicate-delivery audit spam to guard against here. `email` is the
+  // natural key (`marketing_suppressions` is keyed by `email`, no
+  // surrogate id column), so it is the audit target id.
+  await writeSystemAudit({
+    actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.WEBHOOK,
+    action: AUDIT_EVENTS.MKT_SUPPRESSION_WEBHOOK,
+    targetType: "marketing_suppression",
+    targetId: email,
+    after: { email, suppressionType: type, reason: reason ?? null },
+  });
 }
 
 function snakeCaseCol(camel: string): string {

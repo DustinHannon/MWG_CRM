@@ -11,7 +11,9 @@ import {
   type TagColor,
 } from "@/db/schema/tags";
 import { writeAudit } from "@/lib/audit";
+import { AUDIT_EVENTS } from "@/lib/audit/events";
 import { BULK_SCOPE_EXPANSION_CAP } from "@/lib/bulk-actions/expand-filtered";
+import { SYSTEM_SENTINEL_USER_ID } from "@/lib/constants/system-users";
 import { ConflictError, ValidationError } from "@/lib/errors";
 
 export type TagRow = typeof tags.$inferSelect;
@@ -436,7 +438,23 @@ export async function getOrCreateTag(
     })
     .onConflictDoNothing()
     .returning();
-  if (inserted[0]) return inserted[0];
+  if (inserted[0]) {
+    // Audit the tag-definition entity creation. createdById can be null
+    // for system/no-actor creates; attribute those to the system
+    // sentinel (same null-actor pattern as jobs/queue + marketing send).
+    await writeAudit({
+      actorId: createdById ?? SYSTEM_SENTINEL_USER_ID,
+      action: AUDIT_EVENTS.TAG_CREATE,
+      targetType: "tags",
+      targetId: inserted[0].id,
+      after: {
+        name: inserted[0].name,
+        slug: inserted[0].slug,
+        color: inserted[0].color,
+      },
+    });
+    return inserted[0];
+  }
 
   const reselect = await db
     .select()
@@ -499,6 +517,13 @@ export async function setLeadTags(
         })),
       );
     }
+  });
+  await writeAudit({
+    actorId,
+    action: AUDIT_EVENTS.TAG_SET_REPLACED,
+    targetType: "lead",
+    targetId: leadId,
+    after: { tagIds: unique },
   });
 }
 

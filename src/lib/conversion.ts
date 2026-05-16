@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { leads } from "@/db/schema/leads";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 
 export const conversionSchema = z.object({
@@ -51,6 +51,10 @@ export interface ConversionResult {
   accountId: string;
   contactId: string | null;
   opportunityId: string | null;
+  // True only when a NEW account row was inserted by this conversion;
+  // false when an existing account was reused (existingAccountId). Gates
+  // the per-entity account.create audit so reuse isn't logged as a create.
+  accountCreated: boolean;
 }
 
 /**
@@ -87,6 +91,7 @@ export async function convertLead(
   return db.transaction(async (tx) => {
     // 1. Account.
     let accountId: string;
+    let accountCreated = false;
     if (input.existingAccountId) {
       accountId = input.existingAccountId;
     } else if (input.newAccount) {
@@ -109,6 +114,7 @@ export async function convertLead(
         })
         .returning({ id: crmAccounts.id });
       accountId = inserted[0].id;
+      accountCreated = true;
     } else {
       throw new ValidationError(
         "Must specify existingAccountId or newAccount.",
@@ -186,7 +192,7 @@ export async function convertLead(
         .where(eq(activities.leadId, input.leadId));
     }
 
-    return { accountId, contactId, opportunityId };
+    return { accountId, contactId, opportunityId, accountCreated };
   });
 }
 
@@ -211,5 +217,35 @@ export async function convertLeadWithAudit(
       opportunityId: result.opportunityId,
     },
   });
+  // Per-entity create audit so converted records are individually
+  // attributable. Only entities actually created here are emitted —
+  // a reused existing account, or a skipped contact/opportunity, is
+  // excluded.
+  const createEvents: Parameters<typeof writeAuditBatch>[0]["events"] = [];
+  if (result.accountCreated) {
+    createEvents.push({
+      action: "account.create",
+      targetType: "account",
+      targetId: result.accountId,
+      after: { via: "lead_convert", leadId: input.leadId },
+    });
+  }
+  if (result.contactId) {
+    createEvents.push({
+      action: "contact.create",
+      targetType: "contact",
+      targetId: result.contactId,
+      after: { via: "lead_convert", leadId: input.leadId },
+    });
+  }
+  if (result.opportunityId) {
+    createEvents.push({
+      action: "opportunity.create",
+      targetType: "opportunity",
+      targetId: result.opportunityId,
+      after: { via: "lead_convert", leadId: input.leadId },
+    });
+  }
+  await writeAuditBatch({ actorId, events: createEvents });
   return result;
 }

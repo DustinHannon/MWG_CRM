@@ -5,6 +5,7 @@ import { auditLog } from "@/db/schema/audit";
 import { users } from "@/db/schema/users";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { writeAudit } from "@/lib/audit";
+import { auditCategorySql } from "@/lib/audit-cursor";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest) {
   const wheres = buildWhereClauses({
     q: sp.get("q") ?? undefined,
     action: sp.get("action") ?? undefined,
+    category: sp.get("category") ?? undefined,
     targetType: sp.get("target_type") ?? undefined,
     requestId: sp.get("request_id") ?? undefined,
     createdAtGte: sp.get("created_at_gte") ?? undefined,
@@ -101,6 +103,7 @@ export async function GET(req: NextRequest) {
       filters: {
         q: sp.get("q") ?? null,
         action: sp.get("action") ?? null,
+        category: sp.get("category") ?? null,
         target_type: sp.get("target_type") ?? null,
         request_id: sp.get("request_id") ?? null,
         created_at_gte: sp.get("created_at_gte") ?? null,
@@ -122,6 +125,7 @@ export async function GET(req: NextRequest) {
 interface AuditFilterInput {
   q?: string;
   action?: string;
+  category?: string;
   targetType?: string;
   requestId?: string;
   createdAtGte?: string;
@@ -143,6 +147,10 @@ function buildWhereClauses(f: AuditFilterInput) {
     );
   }
   if (f.action) wheres.push(eq(auditLog.action, f.action));
+  if (f.category && f.category.trim()) {
+    const categoryWhere = auditCategorySql(f.category.trim());
+    if (categoryWhere) wheres.push(categoryWhere);
+  }
   if (f.targetType) wheres.push(eq(auditLog.targetType, f.targetType));
   // exact-match on requestId (no
   // wildcard scan).

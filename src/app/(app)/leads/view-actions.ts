@@ -9,6 +9,7 @@ import { COLUMN_KEYS, type ColumnKey } from "@/lib/view-constants";
 import {
   createSavedView,
   deleteSavedView,
+  getSavedView,
   savedViewSchema,
   setAdhocColumns,
   setLastUsedView,
@@ -96,6 +97,8 @@ export async function updateViewAction(
       }
       const result = savedViewSchema.partial().parse(parsed);
 
+      const before = await getSavedView(user.id, id);
+
       await updateSavedView(user.id, id, version, result);
 
       await writeAudit({
@@ -103,6 +106,8 @@ export async function updateViewAction(
         action: "view.update",
         targetType: "saved_view",
         targetId: id,
+        before: before ?? null,
+        after: result,
       });
       revalidatePath("/leads");
       return { id };
@@ -116,12 +121,14 @@ export async function deleteViewAction(
   return withErrorBoundary({ action: "view.delete" }, async () => {
     const user = await requireSession();
     const id = z.string().uuid().parse(formData.get("id"));
+    const before = await getSavedView(user.id, id);
     await deleteSavedView(user.id, id);
     await writeAudit({
       actorId: user.id,
       action: "view.delete",
       targetType: "saved_view",
       targetId: id,
+      before: before ?? null,
     });
     revalidatePath("/leads");
   });
