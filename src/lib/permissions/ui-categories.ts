@@ -119,6 +119,25 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
 ] as const;
 
 /**
+ * Permission keys that default to ON for a freshly provisioned user.
+ *
+ * Mirrors the column defaults on the `permissions` table in
+ * `src/db/schema/users.ts` — the schema is authoritative; every key not
+ * listed here defaults OFF. Kept alongside the catalog so read-only
+ * surfaces (the `/admin/users/help` reference page) can show each
+ * flag's out-of-the-box state without importing the Drizzle schema.
+ * When a permission column's `.default(...)` changes in the schema,
+ * update this set in the same change.
+ */
+export const PERMISSION_DEFAULT_ON: ReadonlySet<PermissionKey> =
+  new Set<PermissionKey>([
+    "canCreateLeads",
+    "canEditLeads",
+    "canSendEmail",
+    "canViewReports",
+  ]);
+
+/**
  * Human-readable label for each permission key. Sentence case per the
  * UI copy conventions. Hints are kept short (≤12 words) per the
  * tooltip guidance.
