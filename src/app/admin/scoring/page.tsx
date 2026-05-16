@@ -100,7 +100,13 @@ export default async function AdminScoringPage() {
           otherwise <strong>cold</strong>. Hot &gt; Warm &gt; Cool is
           enforced server-side.
         </p>
+        {/* ThresholdSliders seeds slider state once from these props;
+            setScoringThresholdsAction revalidates this route, so key it
+            on the persisted values to remount with fresh state when they
+            change (React-canonical reset; same idiom as the permission
+            editor on /admin/users/[id]). */}
         <ThresholdSliders
+          key={`${t.hotThreshold}:${t.warmThreshold}:${t.coolThreshold}`}
           initial={{
             hot: t.hotThreshold,
             warm: t.warmThreshold,
