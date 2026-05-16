@@ -177,7 +177,7 @@ export const adminCrumbs = {
 
   // Supabase database monitoring — CPU/mem/disk/net + Postgres +
   // connection-pool health, scraped from the Prometheus endpoint.
-  supabaseMetrics: (): Breadcrumb[] => [ADMIN, { label: "Supabase metrics" }],
+  supabaseMetrics: (): Breadcrumb[] => [ADMIN, { label: "Database metrics" }],
 
   // D365 import
   d365Import: (): Breadcrumb[] => [ADMIN, { label: "D365 import" }],

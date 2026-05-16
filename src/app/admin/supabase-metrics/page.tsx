@@ -25,7 +25,7 @@ import { SupabaseMetricsDashboard } from "./_components/dashboard";
  */
 
 export const metadata: Metadata = {
-  title: "Supabase metrics — MWG CRM admin",
+  title: "Database metrics — MWG CRM admin",
 };
 
 export const dynamic = "force-dynamic";
@@ -58,7 +58,7 @@ export default async function SupabaseMetricsPage() {
       <BreadcrumbsSetter crumbs={breadcrumbs.admin.supabaseMetrics()} />
       <StandardPageHeader
         kicker="Admin"
-        title="Supabase metrics"
+        title="Database metrics"
         fontFamily="display"
         description="Database CPU, memory, disk, network, Postgres, and connection-pool health. Scraped every minute; polls every 60s."
       />
