@@ -78,6 +78,16 @@ export const AUDIT_EVENTS = {
    * reconcile actually flipped at least one column. System actor.
    */
   USER_BREAKGLASS_PERMISSIONS_SYNC: "user.breakglass.permissions_sync",
+  /**
+   * Admin bulk-provisioned users from the Entra directory-sync wizard
+   * (one row per wizard run, summarising created/updated/failed counts).
+   */
+  USER_SYNC_IMPORT: "user.sync.import",
+  /**
+   * Admin deactivated a CRM user that is absent from the Entra
+   * directory (offboard), optionally reassigning their owned records.
+   */
+  USER_SYNC_OFFBOARD: "user.sync.offboard",
 
   // — Tags ————————————————————————————————————————————————————
   /** A new tag definition row was created (lib-level entity create). */

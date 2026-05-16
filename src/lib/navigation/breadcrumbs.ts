@@ -150,6 +150,11 @@ export const adminCrumbs = {
     { label: "Users", href: "/admin/users" },
     { label: "Help" },
   ],
+  usersSync: (): Breadcrumb[] => [
+    ADMIN,
+    { label: "Users", href: "/admin/users" },
+    { label: "Sync from Entra" },
+  ],
   userDetail: (name: string): Breadcrumb[] => [
     ADMIN,
     { label: "Users", href: "/admin/users" },
