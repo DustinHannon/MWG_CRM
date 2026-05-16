@@ -9,6 +9,8 @@ import {
   commitEntraUserImport,
   offboardMissingUsers,
   type EntraSyncPreview,
+  type CommitResult,
+  type OffboardResult,
 } from "../actions";
 import { SyncCandidateList } from "./sync-candidate-list";
 import { OffboardList } from "./offboard-list";
@@ -25,6 +27,12 @@ export function EntraSyncClient() {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [importFailures, setImportFailures] = useState<
+    CommitResult["failed"]
+  >([]);
+  const [offboardFailures, setOffboardFailures] = useState<
+    OffboardResult["failed"]
+  >([]);
 
   const handleToggle = useCallback((entraOid: string) => {
     setSelected((prev) => {
@@ -89,6 +97,7 @@ export function EntraSyncClient() {
         return;
       }
       const { created, updated, failed } = importRes.data;
+      setImportFailures(failed);
 
       const items = [...offboardDecisions.entries()].map(
         ([userId, reassignTo]) => ({ userId, reassignTo }),
@@ -96,6 +105,7 @@ export function EntraSyncClient() {
 
       let deactivated = 0;
       let reassigned = 0;
+      let offboardFailed: OffboardResult["failed"] = [];
       if (items.length > 0) {
         const offboardRes = await offboardMissingUsers({ items });
         if (!offboardRes.ok) {
@@ -107,7 +117,9 @@ export function EntraSyncClient() {
         }
         deactivated = offboardRes.data.deactivated;
         reassigned = offboardRes.data.reassigned;
+        offboardFailed = offboardRes.data.failed;
       }
+      setOffboardFailures(offboardFailed);
 
       const base = `${created} created, ${updated} updated, ${failed.length} failed`;
       const offboardPart =
@@ -127,6 +139,8 @@ export function EntraSyncClient() {
     setOffboardDecisions(new Map());
     setError(null);
     setResult(null);
+    setImportFailures([]);
+    setOffboardFailures([]);
   }, []);
 
   if (stage === "idle") {
@@ -200,10 +214,38 @@ export function EntraSyncClient() {
     );
   }
 
+  const hasFailures =
+    importFailures.length > 0 || offboardFailures.length > 0;
+
   return (
     <div className="flex flex-col gap-4">
       <StandardPageHeader title="Entra sync complete" />
       <p className="text-sm text-muted-foreground">{result}</p>
+      {hasFailures ? (
+        <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
+          <p className="text-sm text-destructive">
+            Some users could not be processed:
+          </p>
+          <ul className="flex flex-col gap-1">
+            {importFailures.map((f) => (
+              <li
+                key={`import-${f.entraOid}`}
+                className="text-sm text-muted-foreground"
+              >
+                {f.entraOid}: {f.error}
+              </li>
+            ))}
+            {offboardFailures.map((f) => (
+              <li
+                key={`offboard-${f.userId}`}
+                className="text-sm text-muted-foreground"
+              >
+                {f.userId}: {f.error}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div>
         <button
           type="button"

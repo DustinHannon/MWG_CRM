@@ -63,7 +63,13 @@ export function classifyDirectoryUser(
 const DIR_SELECT =
   "id,displayName,givenName,surname,mail,userPrincipalName,jobTitle,department,officeLocation,country,mobilePhone,businessPhones,accountEnabled,userType,assignedLicenses";
 
-const MAX_PAGES = 60; // 60 * 999 ≈ 60k users — defensive upper bound.
+// Graph picks the page size for /users (`$top=999` is only a ceiling; the
+// endpoint commonly returns ~100–200 rows per page), so this cap does NOT
+// correspond to a user count — it only bounds worst-case runtime against a
+// runaway pagination loop. The offboard safety guard is the `truncated`
+// flag below (set when the cap is hit with more pages still pending), NOT
+// this number.
+const MAX_PAGES = 200;
 
 interface GraphUsersPage {
   value: GraphDirectoryUser[];
@@ -75,6 +81,12 @@ export interface DirectoryFetchResult {
   users: GraphDirectoryUser[];
   /** set when the app token lacks User.Read.All / Directory.Read.All, or not configured. */
   permissionError?: string;
+  /**
+   * true when the pagination cap (`MAX_PAGES`) was reached with more
+   * pages still pending — the returned list is partial. Callers MUST NOT
+   * offboard on a truncated result (absent users may simply be unlisted).
+   */
+  truncated?: boolean;
 }
 
 /**
@@ -125,5 +137,11 @@ export async function fetchEntraDirectoryUsers(): Promise<DirectoryFetchResult> 
     page += 1;
   }
 
-  return { ok: true, users: all };
+  // The loop exited either because `path` became null (directory fully
+  // enumerated) OR because the MAX_PAGES cap was hit with `path` still
+  // non-null (more pages existed → list is partial). A still-non-null
+  // path is the truncation signal the offboard guard relies on.
+  const truncated = path !== null;
+
+  return { ok: true, users: all, truncated };
 }

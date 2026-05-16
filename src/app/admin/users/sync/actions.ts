@@ -9,7 +9,7 @@ import { crmAccounts, contacts, opportunities } from "@/db/schema/crm-records";
 import { tasks } from "@/db/schema/tasks";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
-import { ValidationError } from "@/lib/errors";
+import { ValidationError, NotFoundError, ForbiddenError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { AUDIT_EVENTS } from "@/lib/audit/events";
 import { env } from "@/lib/env";
@@ -82,6 +82,41 @@ function errorMessage(err: unknown): string {
 }
 
 /**
+ * True when a provisioning failure is a unique-constraint violation on
+ * the username index — the actionable case (a multi-domain UPN collision
+ * mapping two Entra accounts onto one sign-in name). Narrows `unknown`
+ * without `any`: checks the Error message and a Postgres `code`/
+ * `cause.code` of "23505" referencing the username constraint.
+ */
+function isUsernameUniqueViolation(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.message.includes("users_username_uniq")) return true;
+  const pgCode = (e: unknown): string | undefined => {
+    if (e && typeof e === "object" && "code" in e) {
+      const c = (e as { code?: unknown }).code;
+      if (typeof c === "string") return c;
+    }
+    return undefined;
+  };
+  const refsUsername =
+    err.message.includes("users_username_uniq") ||
+    err.message.toLowerCase().includes("username");
+  if (pgCode(err) === "23505" && refsUsername) return true;
+  const cause = (err as { cause?: unknown }).cause;
+  if (pgCode(cause) === "23505") {
+    const causeMsg =
+      cause instanceof Error ? cause.message : String(cause ?? "");
+    if (
+      causeMsg.includes("users_username_uniq") ||
+      causeMsg.toLowerCase().includes("username")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Build the wizard preview: every directory user (classified + CRM-match
  * annotated) plus the offboard list (CRM users absent from a *successful*
  * directory pull) and the reassignment-target dropdown.
@@ -137,11 +172,12 @@ export async function loadEntraSyncPreview(): Promise<
       };
     });
 
-    // Offboard candidates ONLY when the directory pull fully succeeded.
-    // A failed/incomplete pull would falsely make every CRM user look
-    // "absent" and mass-deactivate them — never offboard on !dir.ok.
+    // Offboard candidates ONLY when the directory pull fully succeeded
+    // AND was complete. A failed pull (!dir.ok) or a truncated one
+    // (dir.truncated) would falsely make every unlisted CRM user look
+    // "absent" and mass-deactivate them — never offboard then.
     let offboard: OffboardCandidate[] = [];
-    if (dir.ok) {
+    if (dir.ok && dir.truncated !== true) {
       const liveEnabledOids = new Set<string>();
       const liveEnabledEmails = new Set<string>();
       for (const u of dir.users) {
@@ -196,12 +232,19 @@ export async function loadEntraSyncPreview(): Promise<
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
+    // A hard fetch failure (!dir.ok) always wins the banner slot; only
+    // when the pull succeeded but was truncated do we surface the
+    // softer "offboarding disabled" note (import still works).
+    const banner = dir.permissionError
+      ? dir.permissionError
+      : dir.ok && dir.truncated === true
+        ? "The Entra directory listing was incomplete — more users exist than were retrieved. Importing users still works, but offboarding is disabled so active employees who were not listed are not deactivated."
+        : undefined;
+
     return {
       jobId: `entra-sync-${Date.now()}`,
       fetchedAt: new Date().toISOString(),
-      ...(dir.permissionError
-        ? { permissionError: dir.permissionError }
-        : {}),
+      ...(banner ? { permissionError: banner } : {}),
       candidates,
       offboard,
       reassignTargets,
@@ -263,15 +306,45 @@ export async function commitEntraUserImport(
             });
             continue;
           }
-          const r = await createOrUpdateUserFromEntraProfile(profile, {
-            source: "admin_sync",
-          });
-          if (r.created) {
-            created += 1;
-          } else {
-            updated += 1;
+          // Domain allowlist — parity with the interactive JIT path's
+          // EntraDomainNotAllowedError invariant. Never call the core
+          // provisioner for a disallowed domain.
+          const domain = profile.email.split("@")[1]?.toLowerCase();
+          if (
+            env.ALLOWED_EMAIL_DOMAINS.length > 0 &&
+            (!domain || !env.ALLOWED_EMAIL_DOMAINS.includes(domain))
+          ) {
+            failed.push({
+              entraOid: u.id,
+              error: "Email domain is not in the allowed list",
+            });
+            continue;
+          }
+          try {
+            const r = await createOrUpdateUserFromEntraProfile(profile, {
+              source: "admin_sync",
+            });
+            if (r.created) {
+              created += 1;
+            } else {
+              updated += 1;
+            }
+          } catch (provisionErr) {
+            // Never leak the raw Postgres/internal string to the client.
+            if (isUsernameUniqueViolation(provisionErr)) {
+              failed.push({
+                entraOid: u.id,
+                error: `The sign-in name "${profile.username}" already belongs to another account — not imported (likely a multi-domain UPN collision).`,
+              });
+            } else {
+              failed.push({
+                entraOid: u.id,
+                error: "Could not provision this user.",
+              });
+            }
           }
         } catch (err) {
+          // Pre-provisioning failure (normalize/guard). Generic, sanitized.
           failed.push({ entraOid: u.id, error: errorMessage(err) });
         }
       }
@@ -336,6 +409,12 @@ export async function offboardMissingUsers(
       let reassigned = 0;
       const failed: { userId: string; error: string }[] = [];
 
+      // The full set being offboarded in this batch — a reassign target
+      // that is itself being deactivated would orphan the records again.
+      const batchUserIds = new Set(
+        parsed.data.items.map((i) => i.userId),
+      );
+
       for (const item of parsed.data.items) {
         if (item.userId === admin.id) {
           failed.push({
@@ -366,13 +445,52 @@ export async function offboardMissingUsers(
               .limit(1);
 
             if (!target) {
-              throw new Error("User not found");
+              throw new NotFoundError("User not found");
             }
             if (target.isBreakglass) {
-              throw new Error("Cannot offboard the breakglass account");
+              throw new ForbiddenError(
+                "Cannot offboard the breakglass account",
+              );
             }
 
             if (item.reassignTo) {
+              // Validate the reassignment target BEFORE any ownership
+              // write so a bad target never partially moves records.
+              if (item.reassignTo === item.userId) {
+                throw new ValidationError(
+                  "Cannot reassign a user to themselves",
+                );
+              }
+              if (batchUserIds.has(item.reassignTo)) {
+                throw new ValidationError(
+                  "Reassignment target is also being offboarded",
+                );
+              }
+              const [reassignTarget] = await tx
+                .select({
+                  id: users.id,
+                  isActive: users.isActive,
+                  isBreakglass: users.isBreakglass,
+                })
+                .from(users)
+                .where(eq(users.id, item.reassignTo))
+                .limit(1);
+              if (!reassignTarget) {
+                throw new NotFoundError(
+                  "Reassignment target not found",
+                );
+              }
+              if (!reassignTarget.isActive) {
+                throw new ValidationError(
+                  "Reassignment target is not an active user",
+                );
+              }
+              if (reassignTarget.isBreakglass) {
+                throw new ForbiddenError(
+                  "Cannot reassign to the breakglass account",
+                );
+              }
+
               await tx
                 .update(leads)
                 .set({ ownerId: item.reassignTo })
