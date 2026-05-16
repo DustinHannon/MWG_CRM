@@ -96,7 +96,8 @@ export function EntraSyncClient() {
         });
         return;
       }
-      const { created, updated, failed } = importRes.data;
+      const { created, updated, failed, processed, totalSelected, stoppedEarly } =
+        importRes.data;
       setImportFailures(failed);
 
       const items = [...offboardDecisions.entries()].map(
@@ -121,11 +122,13 @@ export function EntraSyncClient() {
       }
       setOffboardFailures(offboardFailed);
 
-      const base = `${created} created, ${updated} updated, ${failed.length} failed`;
       const offboardPart =
         items.length > 0
           ? ` · ${deactivated} deactivated, ${reassigned} reassigned`
           : "";
+      const base = stoppedEarly
+        ? `Imported ${created} created, ${updated} updated, ${failed.length} failed (${processed} of ${totalSelected}). The run stopped at the time limit — click Load Entra directory and Import again to finish. Users already imported are skipped, not duplicated.`
+        : `${created} created, ${updated} updated, ${failed.length} failed (${processed} of ${totalSelected})`;
       setResult(`${base}${offboardPart}`);
       setStage("done");
       toast.success("Entra sync complete");

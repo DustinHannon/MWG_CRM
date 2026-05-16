@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
 import { EntraSyncClient } from "./_components/entra-sync-client";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export default async function AdminUsersSyncPage() {
   // Hard admin gate — URL-guessing a non-admin redirects to /dashboard

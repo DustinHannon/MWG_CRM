@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { leads } from "@/db/schema/leads";
@@ -12,6 +12,7 @@ import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { ValidationError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { AUDIT_EVENTS } from "@/lib/audit/events";
+import { createNotifications } from "@/lib/notifications";
 import { env } from "@/lib/env";
 import { SYSTEM_SENTINEL_USER_ID } from "@/lib/constants/system-users";
 import {
@@ -69,6 +70,9 @@ export interface CommitResult {
   created: number;
   updated: number;
   failed: { entraOid: string; error: string }[];
+  processed: number;
+  totalSelected: number;
+  stoppedEarly: boolean;
 }
 
 export interface OffboardResult {
@@ -291,12 +295,29 @@ export async function commitEntraUserImport(
 
     let created = 0;
     let updated = 0;
+    let processed = 0;
+    let stoppedEarly = false;
     const failed: { entraOid: string; error: string }[] = [];
+    const totalSelected = toProvision.length;
 
-    const CHUNK = 50;
+    // Self-imposed budget under the route's 300s function limit. We stop
+    // ourselves at 240s — leaving headroom for the trailing audit,
+    // summary notification, and response serialization — rather than
+    // letting the platform kill the run mid-loop and lose the summary.
+    // The path is idempotent (entra_oid→email→insert resolution turns
+    // already-created users into UPDATEs), so the admin can re-run to
+    // finish without duplicating anyone.
+    const startedAt = Date.now();
+    const BUDGET_MS = 240_000;
+    const CHUNK = 25;
     for (let i = 0; i < toProvision.length; i += CHUNK) {
+      if (Date.now() - startedAt > BUDGET_MS) {
+        stoppedEarly = true;
+        break;
+      }
       const chunk = toProvision.slice(i, i + CHUNK);
       for (const u of chunk) {
+        processed += 1;
         try {
           const profile = normalizeDirectoryUserToProfile(u);
           if (!profile.email || !profile.email.includes("@")) {
@@ -347,6 +368,11 @@ export async function commitEntraUserImport(
           failed.push({ entraOid: u.id, error: errorMessage(err) });
         }
       }
+      // Gentle inter-chunk pause to slow the loop and ease DB pressure.
+      // Skipped after the final chunk and when we are stopping early.
+      if (!stoppedEarly && i + CHUNK < toProvision.length) {
+        await new Promise((r) => setTimeout(r, 250));
+      }
     }
 
     await writeAudit({
@@ -359,11 +385,45 @@ export async function commitEntraUserImport(
         created,
         updated,
         failed: failed.length,
+        processed,
+        totalSelected,
+        stoppedEarly,
         source: "entra_directory",
       },
     });
 
-    return { created, updated, failed } satisfies CommitResult;
+    // One run-summary notification replaces the per-user admin-bell
+    // fan-out (suppressed for source=admin_sync in the core). Same active-
+    // admin query as notifyAdminsOfNewUser. createNotifications is best-
+    // effort and swallows its own errors — never wrapped in try/catch.
+    const admins = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.isAdmin, true), eq(users.isActive, true)));
+    if (admins.length > 0) {
+      await createNotifications(
+        admins.map((a) => ({
+          userId: a.id,
+          kind: "new_user_jit" as const,
+          title: `Entra user import: ${created} created, ${updated} updated`,
+          body: `Imported by ${admin.displayName}. ${failed.length} failed.${
+            stoppedEarly
+              ? " Stopped at the time limit — run the import again to finish; users already imported are skipped, not duplicated."
+              : ""
+          }`,
+          link: "/admin/users",
+        })),
+      );
+    }
+
+    return {
+      created,
+      updated,
+      failed,
+      processed,
+      totalSelected,
+      stoppedEarly,
+    } satisfies CommitResult;
   });
 }
 

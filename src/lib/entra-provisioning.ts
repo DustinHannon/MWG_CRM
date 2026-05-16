@@ -513,11 +513,16 @@ export async function createOrUpdateUserFromEntraProfile(
     targetId: created.id,
     after: { upn: profile.upn, email: profile.email, source: opts.source },
   });
-  await notifyAdminsOfNewUser({
-    userId: created.id,
-    displayName: profile.displayName,
-    email: profile.email,
-  });
+  // Interactive SSO (JIT) notifies admins per first-login — correct at
+  // one-at-a-time scale. Admin bulk sync would flood the bell with one
+  // per user; commitEntraUserImport emits a single run summary instead.
+  if (opts.source !== "admin_sync") {
+    await notifyAdminsOfNewUser({
+      userId: created.id,
+      displayName: profile.displayName,
+      email: profile.email,
+    });
+  }
 
   return {
     id: created.id,
