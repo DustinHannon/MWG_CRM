@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { and, asc, desc, eq, gt, ilike, or, sql, type SQL } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
@@ -21,11 +22,67 @@ const PAGE_SIZE = 50;
  *   ?q                 — search term (matches displayName / email / username).
  *   ?recent=jit-7d     — restrict to JIT-provisioned users from the last 7 days.
  *
- * Default sort: `(last_login_at DESC NULLS LAST, display_name ASC)`.
- * Recent filter swaps to `(jit_provisioned_at DESC, id DESC)`.
+ * Default sort: `(display_name ASC, id ASC)` — a fully stable, NULL-free
+ * keyset (display_name is NOT NULL, id is the uuid PK), so the list
+ * paginates cleanly all the way to the genuine end. Browsing a
+ * directory by name is the operative use case; `last_login_at` stays a
+ * displayed column. The recent filter swaps to
+ * `(jit_provisioned_at DESC, id DESC)` and keeps the canonical
+ * timestamp cursor codec.
  *
- * Returns `{ data, nextCursor, total }`.
+ * Returns `{ data, nextCursor, total }`. `total` is recomputed per
+ * page from the base filter (cursor-independent); under live inserts it
+ * may drift slightly from the count actually scrolled — accepted
+ * infinite-scroll soft-state (STANDARDS §19.9.2), clamped by the shell.
  */
+
+/**
+ * Route-local opaque keyset cursor for the default `(display_name, id)`
+ * sort. The canonical `@/lib/cursors` codec keys strictly on a
+ * timestamp (`ts: datetime | null`) and cannot carry a text sort
+ * column, so this route owns a small base64url-JSON `(name, id)` codec.
+ * Precedent for a route/lib-local codec living outside `@/lib/cursors`
+ * is `src/lib/leads.ts` (a colon-delimited `ts:id` token); the shape
+ * here differs because the sort key is text, not a timestamp.
+ * Tolerant by design: any malformed/stale token decodes to `null` and
+ * the caller falls back to the first page (matches the canonical
+ * codec's contract).
+ */
+const nameCursorSchema = z.object({
+  n: z.string(),
+  id: z.string().uuid(),
+});
+
+function encodeNameCursor(name: string, id: string): string {
+  return Buffer.from(JSON.stringify({ n: name, id }), "utf8").toString(
+    "base64url",
+  );
+}
+
+function decodeNameCursor(
+  raw: string | null,
+): { n: string; id: string } | null {
+  if (!raw) return null;
+  let decoded: string;
+  try {
+    decoded = Buffer.from(raw, "base64url").toString("utf8");
+  } catch {
+    // Deliberate optional-parse: a malformed/stale cursor is treated
+    // as "no cursor" so a bookmarked URL returns the first page.
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decoded);
+  } catch {
+    // Deliberate optional-parse: a malformed/stale cursor is treated
+    // as "no cursor" so a bookmarked URL returns the first page.
+    return null;
+  }
+  const result = nameCursorSchema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
 export const GET = withInternalListApi(
   { action: "admin.users.list", auth: "admin" },
   async (req: NextRequest) => {
@@ -52,17 +109,24 @@ export const GET = withInternalListApi(
 
   const baseWhere = wheres.length > 0 ? and(...wheres) : undefined;
 
-  // Cursor handling differs by sort. Recent filter sorts by jit_provisioned_at;
-  // default sort by last_login_at (NULLS LAST). Cursor is only emitted under
-  // the recent filter, since default sort has too many NULLs to paginate
-  // cleanly; default sort returns the entire small bounded list in one page.
+  // Cursor predicate differs by sort. Recent filter sorts by
+  // jit_provisioned_at (timestamp keyset, canonical codec); default
+  // sorts by (display_name, id) (text keyset, route-local codec).
   let cursorWhere: SQL | undefined;
-  if (isRecentFilter && cursorRaw) {
-    const parsed = decodeCursor(cursorRaw, "desc");
+  if (isRecentFilter) {
+    const parsed = cursorRaw ? decodeCursor(cursorRaw, "desc") : null;
     if (parsed && parsed.ts !== null) {
       cursorWhere = sql`(
         ${users.jitProvisionedAt} < ${parsed.ts.toISOString()}::timestamptz
         OR (${users.jitProvisionedAt} = ${parsed.ts.toISOString()}::timestamptz AND ${users.id} < ${parsed.id}::uuid)
+      )`;
+    }
+  } else {
+    const parsed = decodeNameCursor(cursorRaw);
+    if (parsed) {
+      cursorWhere = sql`(
+        ${users.displayName} > ${parsed.n}
+        OR (${users.displayName} = ${parsed.n} AND ${users.id} > ${parsed.id}::uuid)
       )`;
     }
   }
@@ -101,10 +165,7 @@ export const GET = withInternalListApi(
           .select(baseSelect)
           .from(users)
           .where(finalWhere)
-          .orderBy(
-            sql`${users.lastLoginAt} desc nulls last`,
-            asc(users.displayName),
-          )
+          .orderBy(asc(users.displayName), asc(users.id))
           .limit(PAGE_SIZE + 1),
     db
       .select({ count: sql<number>`count(*)::int` })
@@ -116,12 +177,12 @@ export const GET = withInternalListApi(
   let data = rowsRaw;
   if (rowsRaw.length > PAGE_SIZE) {
     data = rowsRaw.slice(0, PAGE_SIZE);
-    if (isRecentFilter) {
-      const last = data[data.length - 1];
-      if (last.jitProvisionedAt) {
-        nextCursor = encodeFromValues(last.jitProvisionedAt, last.id, "desc");
-      }
-    }
+    const last = data[data.length - 1];
+    nextCursor = isRecentFilter
+      ? last.jitProvisionedAt
+        ? encodeFromValues(last.jitProvisionedAt, last.id, "desc")
+        : null
+      : encodeNameCursor(last.displayName, last.id);
   }
 
   return NextResponse.json({

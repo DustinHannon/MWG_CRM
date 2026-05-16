@@ -1,14 +1,8 @@
-// consistency-exempt: list-page-pattern: admin-utility-table
-// Admin /users uses fixed-width row cells (w-56, w-32, etc.) rather
-// than the canonical 140px flex-basis pattern because the displayed
-// columns (avatar+name, email, role pills, status pill, source label,
-// lead count, last login) have intrinsically non-uniform widths and
-// no associated columnHeaderSlot to align against. No saved views,
-// no MODIFIED badge, no bulk selection — admin operational page.
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
   StandardEmptyState,
   StandardListPage,
@@ -43,6 +37,32 @@ interface UsersFilters {
 
 const EMPTY_FILTERS: UsersFilters = { q: "", recent: "all" };
 
+/**
+ * Single source of truth for the desktop table columns. Drives both the
+ * `columnHeaderSlot` header cells and the row cells so the two tiers can
+ * never drift out of alignment (canonical list pattern, STANDARDS §17).
+ */
+const USER_COLUMNS = [
+  { key: "user", label: "User" },
+  { key: "email", label: "Email" },
+  { key: "role", label: "Role" },
+  { key: "status", label: "Status" },
+  { key: "source", label: "Source" },
+  { key: "leads", label: "Leads" },
+  { key: "lastLogin", label: "Last login" },
+] as const;
+
+type UserColumnKey = (typeof USER_COLUMNS)[number]["key"];
+
+/**
+ * Shared header/row min-width: cols × 140px flex-basis. Matches the
+ * canonical leads geometry minus leads' `+40` — that constant reserves
+ * leads' trailing `w-10` row-actions gutter, which /admin/users has on
+ * neither tier (rows link to the detail page; no per-row action menu).
+ * Header and row reference this same constant so they stay aligned.
+ */
+const COL_MIN_WIDTH = USER_COLUMNS.length * 140;
+
 interface UsersListClientProps {
   timePrefs: TimePrefs;
   initialRecent: "all" | "jit-7d";
@@ -67,6 +87,7 @@ export function UsersListClient({
     async (
       cursor: string | null,
       f: UsersFilters,
+      signal?: AbortSignal,
     ): Promise<StandardListPagePage<UserRow>> => {
       const params = new URLSearchParams();
       if (cursor) params.set("cursor", cursor);
@@ -74,6 +95,7 @@ export function UsersListClient({
       if (f.recent === "jit-7d") params.set("recent", RECENT_JIT_FILTER);
       const res = await fetch(`/api/admin/users/list?${params.toString()}`, {
         headers: { Accept: "application/json" },
+        signal,
       });
       if (!res.ok) {
         throw new Error(`Could not load users (${res.status})`);
@@ -163,6 +185,34 @@ export function UsersListClient({
     </form>
   );
 
+  // Desktop column-header tier. Mirrors UsersDesktopRow's box model
+  // exactly — same USER_COLUMNS map, same `min-w-0 flex-1 px-5` cell
+  // with `flexBasis:140px`, same COL_MIN_WIDTH — so header cells stay
+  // pixel-aligned with row cells at every viewport width. Static
+  // labels: /admin/users is a non-P0 operational entity with no
+  // saved-views or sort allowlist, so no DnD/click-sort (STANDARDS
+  // §17: sortable headers are P0-only). Leads wraps its header in a
+  // `<table>` only to host dnd-kit sortable `<th>`; with static labels
+  // matching the row's flex box model is the robust choice (an
+  // auto-layout table would size headers to label text, not to the
+  // 140px row cells, and drift out of alignment).
+  const columnHeaderSlot = (
+    <div
+      className="flex items-stretch text-[11px] uppercase tracking-wide text-muted-foreground"
+      style={{ minWidth: `${COL_MIN_WIDTH}px` }}
+    >
+      {USER_COLUMNS.map((c) => (
+        <div
+          key={c.key}
+          className="min-w-0 flex-1 truncate px-5 py-3 font-medium select-none"
+          style={{ flexBasis: "140px" }}
+        >
+          {c.label}
+        </div>
+      ))}
+    </div>
+  );
+
   const headerActions = (
     <div className="flex shrink-0 items-center gap-2">
       <Link
@@ -203,6 +253,7 @@ export function UsersListClient({
         actions: headerActions,
       }}
       filtersSlot={filtersSlot}
+      columnHeaderSlot={columnHeaderSlot}
     />
   );
 }
@@ -233,45 +284,50 @@ function FilterChip({
   );
 }
 
-function UsersDesktopRow({
-  row,
-  timePrefs,
-}: {
-  row: UserRow;
-  timePrefs: TimePrefs;
-}) {
-  return (
-    <div
-      className="flex items-start gap-4 border-b border-border bg-card px-4 py-3 text-sm transition hover:bg-accent/20"
-      data-row-flash="new"
-    >
-      <Link
-        href={`/admin/users/${row.id}`}
-        aria-label={row.displayName}
-        className="shrink-0"
-      >
-        <UserAvatar
-          user={{
-            id: row.id,
-            displayName: row.displayName,
-            photoUrl: row.photoUrl,
-          }}
-          size="sm"
-        />
-      </Link>
-      <div className="min-w-0 flex-1">
-        <Link
-          href={`/admin/users/${row.id}`}
-          className="block font-medium text-foreground hover:underline"
-        >
-          {row.displayName}
-        </Link>
-        <span className="text-xs text-muted-foreground/80">{row.username}</span>
-      </div>
-      <div className="hidden w-56 shrink-0 truncate text-foreground/80 md:block">
-        {row.email}
-      </div>
-      <div className="hidden w-32 shrink-0 md:block">
+/**
+ * Renders one desktop table cell's content for the given column. Kept
+ * beside `USER_COLUMNS` so the header and body stay in lockstep.
+ */
+function renderUserCell(
+  row: UserRow,
+  key: UserColumnKey,
+  timePrefs: TimePrefs,
+): ReactNode {
+  switch (key) {
+    case "user":
+      return (
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            href={`/admin/users/${row.id}`}
+            aria-label={row.displayName}
+            className="shrink-0"
+          >
+            <UserAvatar
+              user={{
+                id: row.id,
+                displayName: row.displayName,
+                photoUrl: row.photoUrl,
+              }}
+              size="sm"
+            />
+          </Link>
+          <div className="min-w-0">
+            <Link
+              href={`/admin/users/${row.id}`}
+              className="block truncate font-medium text-foreground hover:underline"
+            >
+              {row.displayName}
+            </Link>
+            <span className="block truncate text-xs text-muted-foreground/80">
+              {row.username}
+            </span>
+          </div>
+        </div>
+      );
+    case "email":
+      return <span className="text-foreground/80">{row.email}</span>;
+    case "role":
+      return (
         <div className="flex flex-wrap gap-1.5">
           {row.isAdmin ? (
             <Pill tone="admin">Admin</Pill>
@@ -280,26 +336,67 @@ function UsersDesktopRow({
           )}
           {row.isBreakglass ? <Pill tone="warn">Breakglass</Pill> : null}
         </div>
-      </div>
-      <div className="hidden w-24 shrink-0 lg:block">
-        {row.isActive ? (
-          <Pill tone="ok">Active</Pill>
-        ) : (
-          <Pill tone="off">Disabled</Pill>
-        )}
-      </div>
-      <div className="hidden w-32 shrink-0 text-foreground/80 lg:block">
-        <SourceLabel
-          jit={row.jitProvisioned}
-          jitAt={row.jitProvisionedAt}
-        />
-      </div>
-      <div className="hidden w-16 shrink-0 text-right tabular-nums text-foreground/80 xl:block">
-        {row.leadCount}
-      </div>
-      <div className="hidden w-32 shrink-0 text-muted-foreground xl:block">
-        <UserTimeClient value={row.lastLoginAt} prefs={timePrefs} />
-      </div>
+      );
+    case "status":
+      return row.isActive ? (
+        <Pill tone="ok">Active</Pill>
+      ) : (
+        <Pill tone="off">Disabled</Pill>
+      );
+    case "source":
+      return (
+        <span className="text-foreground/80">
+          <SourceLabel jit={row.jitProvisioned} jitAt={row.jitProvisionedAt} />
+        </span>
+      );
+    case "leads":
+      return (
+        <span className="block text-right tabular-nums text-foreground/80">
+          {row.leadCount}
+        </span>
+      );
+    case "lastLogin":
+      return (
+        <span className="text-muted-foreground">
+          <UserTimeClient value={row.lastLoginAt} prefs={timePrefs} />
+        </span>
+      );
+    default: {
+      // Exhaustiveness guard: adding a column to USER_COLUMNS without a
+      // matching case here is a compile error, not a silently empty cell.
+      const _exhaustive: never = key;
+      return _exhaustive;
+    }
+  }
+}
+
+function UsersDesktopRow({
+  row,
+  timePrefs,
+}: {
+  row: UserRow;
+  timePrefs: TimePrefs;
+}) {
+  // Match the column-header tier's min-width so the row stays aligned
+  // with header cells when the table is wider than the viewport (the
+  // shell's outer wrapper provides horizontal scroll under that
+  // condition) — canonical list pattern (STANDARDS §17).
+  return (
+    <div
+      className="group flex items-stretch border-b border-border/60 bg-card text-sm transition hover:bg-muted/40"
+      data-row-flash="new"
+      style={{ minWidth: `${COL_MIN_WIDTH}px` }}
+    >
+      {USER_COLUMNS.map((c) => (
+        <div
+          key={c.key}
+          data-label={c.label}
+          className="min-w-0 flex-1 truncate px-5 py-3"
+          style={{ flexBasis: "140px" }}
+        >
+          {renderUserCell(row, c.key, timePrefs)}
+        </div>
+      ))}
     </div>
   );
 }
@@ -314,39 +411,45 @@ function UsersMobileCard({
   return (
     <Link
       href={`/admin/users/${row.id}`}
-      className="flex flex-col gap-2 rounded-md border border-border bg-card p-3"
+      className="flex items-center gap-3 rounded-md border border-border bg-card p-3"
       data-row-flash="new"
     >
-      <div className="flex items-start gap-3">
-        <UserAvatar
-          user={{
-            id: row.id,
-            displayName: row.displayName,
-            photoUrl: row.photoUrl,
-          }}
-          size="sm"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-medium text-foreground">
-            {row.displayName}
-          </div>
-          <div className="truncate text-xs text-muted-foreground">
-            {row.email}
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex items-start gap-3">
+          <UserAvatar
+            user={{
+              id: row.id,
+              displayName: row.displayName,
+              photoUrl: row.photoUrl,
+            }}
+            size="sm"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-medium text-foreground">
+              {row.displayName}
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              {row.email}
+            </div>
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {row.isAdmin ? <Pill tone="admin">Admin</Pill> : null}
+          {row.isBreakglass ? <Pill tone="warn">Breakglass</Pill> : null}
+          {row.isActive ? (
+            <Pill tone="ok">Active</Pill>
+          ) : (
+            <Pill tone="off">Disabled</Pill>
+          )}
+          <span className="ml-auto text-xs text-muted-foreground">
+            <UserTimeClient value={row.lastLoginAt} prefs={timePrefs} />
+          </span>
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {row.isAdmin ? <Pill tone="admin">Admin</Pill> : null}
-        {row.isBreakglass ? <Pill tone="warn">Breakglass</Pill> : null}
-        {row.isActive ? (
-          <Pill tone="ok">Active</Pill>
-        ) : (
-          <Pill tone="off">Disabled</Pill>
-        )}
-        <span className="ml-auto text-xs text-muted-foreground">
-          <UserTimeClient value={row.lastLoginAt} prefs={timePrefs} />
-        </span>
-      </div>
+      <ChevronRight
+        className="size-4 shrink-0 self-center text-muted-foreground"
+        aria-hidden="true"
+      />
     </Link>
   );
 }
