@@ -70,6 +70,13 @@ export interface NormalizedEntraProfile {
   lastName: string;
   displayName: string;
   /**
+   * Full sign-in UPN (userPrincipalName), recorded verbatim in the
+   * `user.create.jit` audit `after` payload. Kept distinct from
+   * `username` (the UPN local part) so the forensic audit row stays
+   * byte-identical to the legacy JIT behaviour.
+   */
+  upn: string;
+  /**
    * false → do not write any of the Entra profile columns (job_title,
    * department, office_location, business_phones, mobile_phone, country,
    * entra_synced_at). Mirrors the legacy `if (me)` guard: when the
@@ -107,6 +114,7 @@ export interface GraphDirectoryUser {
   jobTitle?: string | null;
   department?: string | null;
   officeLocation?: string | null;
+  country?: string | null;
   mobilePhone?: string | null;
   businessPhones?: string[] | null;
   accountEnabled?: boolean | null;
@@ -215,6 +223,7 @@ export async function provisionEntraUser(
   const profile: NormalizedEntraProfile = {
     entraOid: input.entraOid,
     username: naive.username,
+    upn: input.upn,
     email,
     firstName,
     lastName,
@@ -275,6 +284,9 @@ export function normalizeDirectoryUserToProfile(
   return {
     entraOid: u.id,
     username: naive.username,
+    // Full UPN preserved verbatim for the create audit (parity with the
+    // JIT path, which records the raw id_token UPN).
+    upn: u.userPrincipalName ?? u.mail ?? "",
     email,
     firstName,
     lastName,
@@ -286,7 +298,7 @@ export function normalizeDirectoryUserToProfile(
     officeLocation: u.officeLocation ?? null,
     businessPhones: u.businessPhones ?? [],
     mobilePhone: u.mobilePhone ?? null,
-    country: null,
+    country: u.country ?? null,
     managerTouched: false,
     managerEntraOid: null,
     managerDisplayName: null,
@@ -499,7 +511,7 @@ export async function createOrUpdateUserFromEntraProfile(
     action: "user.create.jit",
     targetType: "user",
     targetId: created.id,
-    after: { upn: profile.username, email: profile.email, source: opts.source },
+    after: { upn: profile.upn, email: profile.email, source: opts.source },
   });
   await notifyAdminsOfNewUser({
     userId: created.id,
