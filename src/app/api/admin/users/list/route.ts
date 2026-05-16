@@ -150,7 +150,18 @@ export const GET = withInternalListApi(
     jitProvisioned: users.jitProvisioned,
     jitProvisionedAt: users.jitProvisionedAt,
     photoUrl: users.photoBlobUrl,
-    leadCount: sql<number>`(SELECT count(*)::int FROM ${leads} WHERE owner_id = ${users.id})`,
+    // The Leads column rendered 0 for every user. Drizzle does not
+    // table-qualify column refs inside a `sql` template used as a select
+    // field, so in db.select(baseSelect).from(users) ${users.id} emits
+    // bare "id" — which binds to leads.id inside the subquery, making
+    // the predicate leads.owner_id = leads.id (never true) => 0 for
+    // everyone, including real owners. Correlate to the outer row via
+    // raw "users"."id" (both branches select FROM users, never aliased).
+    // .as("leadCount") just names the output column for SQL correctness
+    // (postgres-js maps result columns positionally, so the alias is not
+    // what fixed the count — the correlation is). Active (non-archived)
+    // leads only, matching the /leads list.
+    leadCount: sql<number>`(SELECT count(*)::int FROM ${leads} WHERE ${leads.ownerId} = "users"."id" AND ${leads.isDeleted} = false)`.as("leadCount"),
   };
 
   const [rowsRaw, totalRow] = await Promise.all([
