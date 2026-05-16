@@ -17,6 +17,13 @@ const BUNDLE_NAMES = Object.keys(ROLE_BUNDLES) as MarketingRoleBundle[];
 interface RoleBundleSelectorProps {
   userId: string;
   currentPermissions: Record<PermissionKey, boolean>;
+  /**
+   * The breakglass account always holds every permission and is
+   * reconciled to all-true on cold start (see lib/breakglass.ts), so a
+   * bundle (which would narrow it) is disabled — matching how the admin
+   * and active toggles are disabled for breakglass.
+   */
+  isBreakglass?: boolean;
 }
 
 /**
@@ -30,6 +37,7 @@ interface RoleBundleSelectorProps {
 export function RoleBundleSelector({
   userId,
   currentPermissions,
+  isBreakglass = false,
 }: RoleBundleSelectorProps) {
   const detected = useMemo(
     () => detectBundle(currentPermissions),
@@ -41,6 +49,7 @@ export function RoleBundleSelector({
   const [pending, startTransition] = useTransition();
 
   const canApply =
+    !isBreakglass &&
     selected !== "custom" &&
     !pending &&
     (detected === "custom" || selected !== detected);
@@ -82,12 +91,15 @@ export function RoleBundleSelector({
       <p className="mt-1 text-xs text-muted-foreground/80">
         Sets every marketing permission to the bundle preset. Non-marketing
         permissions stay as-is.
+        {isBreakglass
+          ? " Breakglass always holds every permission, so bundles are disabled."
+          : ""}
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <select
           aria-label="Role bundle"
           value={selected}
-          disabled={pending}
+          disabled={pending || isBreakglass}
           onChange={(e) =>
             setSelected(e.target.value as MarketingRoleBundle | "custom")
           }

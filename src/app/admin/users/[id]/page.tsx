@@ -64,10 +64,18 @@ export default async function UserDetailPage({
       />
 
       <div className="mt-8">
-        <RoleBundleSelector userId={u.id} currentPermissions={perms} />
+        <RoleBundleSelector
+          userId={u.id}
+          currentPermissions={perms}
+          isBreakglass={u.isBreakglass}
+        />
       </div>
 
-      <PermissionsEditor userId={u.id} initialPermissions={perms} />
+      <PermissionsEditor
+        userId={u.id}
+        initialPermissions={perms}
+        isBreakglass={u.isBreakglass}
+      />
 
       {!u.isBreakglass ? (
         <section className="mt-8 rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl">

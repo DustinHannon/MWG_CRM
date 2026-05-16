@@ -64,6 +64,13 @@ export const AUDIT_EVENTS = {
    * the emergency-access user + its permission grant). System actor.
    */
   USER_CREATE_BREAKGLASS: "user.create.breakglass",
+  /**
+   * The breakglass account's stored permission row was reconciled to
+   * grant every permission column (it must always hold all permissions,
+   * including any added after it was created). Emitted only when the
+   * reconcile actually flipped at least one column. System actor.
+   */
+  USER_BREAKGLASS_PERMISSIONS_SYNC: "user.breakglass.permissions_sync",
 
   // — Tags ————————————————————————————————————————————————————
   /** A new tag definition row was created (lib-level entity create). */

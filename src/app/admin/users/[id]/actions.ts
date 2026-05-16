@@ -83,11 +83,21 @@ export async function updateUserPermissions(
       }
 
       const target = await db
-        .select({ id: users.id })
+        .select({ id: users.id, isBreakglass: users.isBreakglass })
         .from(users)
         .where(eq(users.id, parsed.data.userId))
         .limit(1);
       if (!target[0]) throw new NotFoundError("user");
+      // The breakglass account must always hold every permission (it is
+      // reconciled to all-true on cold start — see lib/breakglass.ts).
+      // Reject the edit up front rather than let it appear to succeed
+      // then be silently reverted. Mirrors the breakglass guard on
+      // updateAdminFlag / updateActiveFlag.
+      if (target[0].isBreakglass) {
+        throw new ForbiddenError(
+          "Cannot edit permissions on the breakglass account; it always holds every permission.",
+        );
+      }
 
       const filtered = filterToKnownKeys(parsed.data.permissions);
 
@@ -148,11 +158,19 @@ export async function applyRoleBundleAction(
       }
 
       const target = await db
-        .select({ id: users.id })
+        .select({ id: users.id, isBreakglass: users.isBreakglass })
         .from(users)
         .where(eq(users.id, parsed.data.userId))
         .limit(1);
       if (!target[0]) throw new NotFoundError("user");
+      // Breakglass always holds every permission; a bundle would narrow
+      // it. Reject up front (and it would be reverted on cold start
+      // anyway — see lib/breakglass.ts). Mirrors updateAdminFlag.
+      if (target[0].isBreakglass) {
+        throw new ForbiddenError(
+          "Cannot apply a role bundle to the breakglass account; it always holds every permission.",
+        );
+      }
 
       const before = await getPermissions(parsed.data.userId);
       const bundlePerms = resolveBundle(parsed.data.bundleName);

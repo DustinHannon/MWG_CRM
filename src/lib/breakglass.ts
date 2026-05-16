@@ -1,6 +1,6 @@
 import "server-only";
 import { logger } from "@/lib/logger";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, getTableColumns } from "drizzle-orm";
 import { db } from "@/db";
 import { permissions, users } from "@/db/schema/users";
 import { userPreferences } from "@/db/schema/views";
@@ -42,6 +42,12 @@ export async function ensureBreakglass(): Promise<void> {
     .where(eq(users.isBreakglass, true))
     .limit(1);
   if (probe.length > 0) {
+    // The breakglass account is the emergency super-admin; its stored
+    // permission row must always grant every permission, including any
+    // added to the schema after the account was first created.
+    // ensureBreakglass is otherwise insert-only, so reconcile the
+    // existing row here (idempotent; audits only when it changes).
+    await reconcileBreakglassPermissions(probe[0].id);
     alreadyEnsured = true;
     return;
   }
@@ -79,15 +85,8 @@ export async function ensureBreakglass(): Promise<void> {
 
     await tx.insert(permissions).values({
       userId: id,
-      canViewAllRecords: true,
-      canCreateLeads: true,
-      canEditLeads: true,
-      canDeleteLeads: true,
-      canImport: true,
-      canExport: true,
-      canSendEmail: true,
-      canViewReports: true,
-    });
+      ...allPermissionsTrue(),
+    } as typeof permissions.$inferInsert);
 
     // every user (incl. breakglass) gets a preferences row. New
     // accounts default to dark theme.
@@ -125,6 +124,119 @@ export async function ensureBreakglass(): Promise<void> {
   }
 
   alreadyEnsured = true;
+}
+
+/**
+ * Every boolean permission column on the `permissions` table → `true`.
+ *
+ * Built from the Drizzle schema (`getTableColumns`) so that a permission
+ * column added to the schema later is granted automatically with no edit
+ * here — the breakglass account is the emergency super-admin and must
+ * hold every permission, current and future. The `userId` PK is uuid
+ * (not boolean) so the `dataType` guard excludes it; the explicit
+ * `userId` skip is belt-and-suspenders.
+ *
+ * Assumption: every boolean column on `permissions` is a grant the
+ * breakglass account should hold. That holds today (all 40 are `can*`
+ * flags). If a non-grant boolean is ever added to that table, switch
+ * this to an explicit allowlist rather than "all booleans".
+ *
+ * Invariant guard: if the Drizzle `getTableColumns`/`dataType` contract
+ * ever changes (e.g. a major-version bump) and this resolves to far
+ * fewer columns than the schema has, we must NOT silently seed/leave an
+ * under-privileged emergency account — fail loudly instead. A bare
+ * throw is correct here per the error policy: this is a true
+ * build/contract invariant, not an app-domain failure.
+ */
+function allPermissionsTrue(): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const [key, col] of Object.entries(getTableColumns(permissions))) {
+    if (key === "userId") continue;
+    if (col.dataType !== "boolean") continue;
+    out[key] = true;
+  }
+  if (Object.keys(out).length < 20) {
+    throw new Error(
+      `breakglass invariant violated: allPermissionsTrue() resolved only ` +
+        `${Object.keys(out).length} permission columns from the schema ` +
+        `(expected ~40). The Drizzle getTableColumns/dataType contract ` +
+        `changed — refusing to seed/reconcile an under-privileged ` +
+        `breakglass account.`,
+    );
+  }
+  return out;
+}
+
+/**
+ * Ensure the existing breakglass account's permission row grants every
+ * permission. `ensureBreakglass` is insert-only and memoised, so a
+ * permission column added after the account was created would otherwise
+ * stay `false` on it forever. Runs at most once per process (gated by
+ * the `alreadyEnsured` memo in the caller).
+ *
+ * Idempotent: no write and no audit when the row is already all-true.
+ * Best-effort: the emergency sign-in path must never fail because a
+ * reconcile errored — breakglass also has `isAdmin = true`, which
+ * bypasses every gate regardless of these columns — so failures are
+ * logged and swallowed, not rethrown.
+ */
+async function reconcileBreakglassPermissions(
+  userId: string,
+): Promise<void> {
+  try {
+    const desired = allPermissionsTrue();
+    const keys = Object.keys(desired);
+
+    const existing = await db
+      .select()
+      .from(permissions)
+      .where(eq(permissions.userId, userId))
+      .limit(1);
+
+    if (!existing[0]) {
+      // Defensive: breakglass user with no permissions row at all.
+      await db
+        .insert(permissions)
+        .values({ userId, ...desired } as typeof permissions.$inferInsert);
+      await writeSystemAudit({
+        actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.BOOTSTRAP,
+        action: AUDIT_EVENTS.USER_BREAKGLASS_PERMISSIONS_SYNC,
+        targetType: "user",
+        targetId: userId,
+        before: null,
+        after: desired,
+      });
+      return;
+    }
+
+    const row = existing[0] as Record<string, unknown>;
+    const flipped = keys.filter((k) => row[k] !== true);
+    if (flipped.length === 0) return; // already all-true — no-op
+
+    await db
+      .update(permissions)
+      .set(desired as Partial<typeof permissions.$inferInsert>)
+      .where(eq(permissions.userId, userId));
+
+    await writeSystemAudit({
+      actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.BOOTSTRAP,
+      action: AUDIT_EVENTS.USER_BREAKGLASS_PERMISSIONS_SYNC,
+      targetType: "user",
+      targetId: userId,
+      before: Object.fromEntries(flipped.map((k) => [k, row[k] ?? false])),
+      after: Object.fromEntries(flipped.map((k) => [k, true])),
+    });
+  } catch (err) {
+    // This try guards the reconcile's DB I/O (select/insert/update) so a
+    // failure can't break the emergency sign-in path — NOT the audit.
+    // `writeSystemAudit` already swallows its own write failures and
+    // never throws (see lib/audit.ts), so it is independently
+    // best-effort and this catch never actually catches an audit error;
+    // there is no try/catch *around the audit* in the §12 sense.
+    logger.error("breakglass.permissions_reconcile_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /**
