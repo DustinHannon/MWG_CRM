@@ -284,7 +284,10 @@ function AuditDesktopRow({
           <span className="text-xs text-muted-foreground/80">system</span>
         )}
       </div>
-      <div className="w-56 shrink-0 font-mono text-xs text-foreground/90">
+      <div
+        className="w-56 shrink-0 min-w-0 truncate font-mono text-xs text-foreground/90"
+        title={row.action}
+      >
         {row.action}
       </div>
       <div className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground lg:block">
