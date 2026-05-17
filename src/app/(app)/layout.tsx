@@ -79,10 +79,18 @@ export default async function AppLayout({
           layout-level notifications subscription so the topbar
           bell updates everywhere without each page re-mounting it. Filter
           scopes to the current user; RLS doubly enforces that.
+
+          skipSelf={false}: every event on this channel is, by the
+          `user_id=eq.${viewer}` filter, the viewer's OWN row — that is
+          exactly what must live-update the bell (the actor's own
+          activity emissions are the whole point of the feed). The
+          default skipSelf=true would suppress them and the badge would
+          only move on a poll/refresh.
         */}
         <PageRealtime
           entities={["notifications"]}
           filter={`user_id=eq.${user.id}`}
+          skipSelf={false}
         />
         <AppShell user={user} nav={nav}>
           {children}

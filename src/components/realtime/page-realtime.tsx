@@ -14,7 +14,11 @@ import type { RealtimeEntity } from "@/hooks/realtime/use-realtime-poll";
  * Behavior: on any INSERT / UPDATE / DELETE that the realtime broker
  * delivers to this client (RLS-scoped), we call `router.refresh()` so
  * the server component re-renders with fresh data. Skip-self is enforced
- * by the hook so the actor's own writes don't echo back.
+ * by the hook (default `true`) so the actor's own writes don't echo
+ * back — overridable per mount via `skipSelf`. The layout's
+ * user_id-filtered notifications subscription passes `skipSelf={false}`
+ * because every event on that channel is, by the filter, the viewer's
+ * own and SHOULD live-update the bell.
  *
  * The polling layer (PagePoll) stays as the documented fallback; Sub-A
  * will trim duplicates if a page mounts both. Sub-A may also drop
@@ -42,9 +46,22 @@ interface PageRealtimeProps {
    * <PageRealtime entities={["activities"]} filter={`lead_id=eq.${leadId}`} />.
    */
   filter?: string;
+  /**
+   * Forwarded to `useTableSubscription`. Defaults to `true` (the hook's
+   * default — the actor's own writes don't echo back). Pass `false`
+   * ONLY for a subscription whose `filter` already scopes every event
+   * to the viewer (e.g. the layout's `user_id=eq.${viewer}`
+   * notifications channel), where a self-event IS legitimately the
+   * viewer's and must live-update.
+   */
+  skipSelf?: boolean;
 }
 
-export function PageRealtime({ entities, filter }: PageRealtimeProps) {
+export function PageRealtime({
+  entities,
+  filter,
+  skipSelf,
+}: PageRealtimeProps) {
   const router = useRouter();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -63,6 +80,7 @@ export function PageRealtime({ entities, filter }: PageRealtimeProps) {
           key={`${entity}:${filter ?? ""}`}
           table={ENTITY_TO_TABLE[entity]}
           filter={filter}
+          skipSelf={skipSelf}
           onChange={handleChange}
         />
       ))}
@@ -73,6 +91,7 @@ export function PageRealtime({ entities, filter }: PageRealtimeProps) {
 interface TableSubscriberProps {
   table: string;
   filter?: string;
+  skipSelf?: boolean;
   onChange: () => void;
 }
 
@@ -81,7 +100,15 @@ interface TableSubscriberProps {
  * a stable hook count, so PageRealtime renders one of these per entity
  * rather than calling useTableSubscription in a loop.
  */
-function TableSubscriber({ table, filter, onChange }: TableSubscriberProps) {
-  useTableSubscription({ table, filter, onChange });
+function TableSubscriber({
+  table,
+  filter,
+  skipSelf,
+  onChange,
+}: TableSubscriberProps) {
+  // skipSelf undefined (the common case) ⇒ useTableSubscription's
+  // `skipSelf = true` destructuring default applies — behavior
+  // unchanged for every existing caller.
+  useTableSubscription({ table, filter, skipSelf, onChange });
   return null;
 }
