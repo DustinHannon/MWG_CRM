@@ -7,6 +7,7 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import { emitActivity } from "@/lib/notifications";
 import { cascadeMarker, cascadeMarkerSql } from "@/lib/cascade-archive";
 import {
   decodeCursor as decodeStandardCursor,
@@ -88,6 +89,15 @@ export async function createOpportunity(
       accountId: input.accountId,
       stage: input.stage,
     },
+  });
+
+  await emitActivity({
+    actorId,
+    verb: "Added",
+    entityType: "opportunity",
+    entityId: inserted[0].id,
+    entityDisplayName: input.name,
+    link: `/opportunities/${inserted[0].id}`,
   });
 
   return { id: inserted[0].id };

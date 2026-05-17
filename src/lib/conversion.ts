@@ -6,6 +6,7 @@ import { activities } from "@/db/schema/activities";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { leads } from "@/db/schema/leads";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
+import { emitActivities, type EmitActivityInput } from "@/lib/notifications";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 
 export const conversionSchema = z.object({
@@ -274,5 +275,47 @@ export async function convertLeadWithAudit(
     });
   }
   await writeAuditBatch({ actorId, events: createEvents });
+  // Mirror the per-entity create audit into the actor's own activity
+  // feed. Same gating as the audit events above — a reused existing
+  // account, or a skipped contact/opportunity, is excluded.
+  const activityEvents: EmitActivityInput[] = [];
+  // Gates are byte-identical to the writeAuditBatch gates above
+  // (accountCreated / contactId / opportunityId) so the audit row and
+  // the feed row can never diverge for the same created entity; the
+  // name accessors are independently null-safe (activityRow falls
+  // back to "(unnamed …)" just as the audit carries no name).
+  if (result.accountCreated) {
+    activityEvents.push({
+      actorId,
+      verb: "Added",
+      entityType: "account",
+      entityId: result.accountId,
+      entityDisplayName: input.newAccount?.name ?? "",
+      link: `/accounts/${result.accountId}`,
+    });
+  }
+  if (result.contactId) {
+    activityEvents.push({
+      actorId,
+      verb: "Added",
+      entityType: "contact",
+      entityId: result.contactId,
+      entityDisplayName: `${input.newContact?.firstName ?? ""} ${
+        input.newContact?.lastName ?? ""
+      }`.trim(),
+      link: `/contacts/${result.contactId}`,
+    });
+  }
+  if (result.opportunityId) {
+    activityEvents.push({
+      actorId,
+      verb: "Added",
+      entityType: "opportunity",
+      entityId: result.opportunityId,
+      entityDisplayName: input.newOpportunity?.name ?? "",
+      link: `/opportunities/${result.opportunityId}`,
+    });
+  }
+  await emitActivities(activityEvents);
   return result;
 }

@@ -7,6 +7,7 @@ import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import { emitActivity } from "@/lib/notifications";
 import { cascadeMarker, cascadeMarkerSql } from "@/lib/cascade-archive";
 import {
   decodeCursor as decodeStandardCursor,
@@ -106,6 +107,15 @@ export async function createContact(
       lastName: input.lastName ?? null,
       accountId: input.accountId ?? null,
     },
+  });
+
+  await emitActivity({
+    actorId,
+    verb: "Added",
+    entityType: "contact",
+    entityId: inserted[0].id,
+    entityDisplayName: `${input.firstName} ${input.lastName ?? ""}`.trim(),
+    link: `/contacts/${inserted[0].id}`,
   });
 
   return { id: inserted[0].id };

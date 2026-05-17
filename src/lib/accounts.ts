@@ -7,6 +7,7 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import { emitActivity } from "@/lib/notifications";
 import {
   cascadeMarker,
   cascadeMarkerSql,
@@ -101,6 +102,15 @@ export async function createAccount(
     targetType: "crm_accounts",
     targetId: inserted[0].id,
     after: { name: input.name },
+  });
+
+  await emitActivity({
+    actorId,
+    verb: "Added",
+    entityType: "account",
+    entityId: inserted[0].id,
+    entityDisplayName: input.name,
+    link: `/accounts/${inserted[0].id}`,
   });
 
   return { id: inserted[0].id };

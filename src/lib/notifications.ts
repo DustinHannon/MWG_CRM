@@ -106,6 +106,13 @@ function activityRow(i: EmitActivityInput) {
     userId: i.actorId,
     actorId: i.actorId,
     kind: "activity" as const,
+    // Born read: an activity row records the actor's OWN action —
+    // there is no "unread" semantics for something you just did. This
+    // keeps these rows out of the is_read-based bell badge
+    // (`countUnread`) which has no kind filter; the badge tracks
+    // unseen activity via `notifications_last_seen_at` instead, and
+    // the /notifications log shows every row regardless of is_read.
+    isRead: true as const,
     title: `${i.verb} ${name} — ${label}`,
     verb: i.verb,
     entityType: i.entityType,

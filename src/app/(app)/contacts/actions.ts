@@ -9,6 +9,11 @@ import { recentViews } from "@/db/schema/recent-views";
 import { requireSession } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
+import {
+  emitActivity,
+  emitActivities,
+  type EmitActivityInput,
+} from "@/lib/notifications";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
   archiveContactsById,
@@ -78,6 +83,15 @@ export async function softDeleteContactAction(input: {
         },
       });
 
+      await emitActivity({
+        actorId: user.id,
+        verb: "Archived",
+        entityType: "contact",
+        entityId: id,
+        entityDisplayName: `${row.firstName} ${row.lastName ?? ""}`.trim(),
+        link: `/contacts/${id}`,
+      });
+
       revalidatePath("/contacts");
       revalidatePath(`/contacts/${id}`);
       return {
@@ -95,7 +109,12 @@ export async function undoArchiveContactAction(input: {
     const payload = verifyUndoToken(input.undoToken);
     if (payload.entity !== "contact") throw new ForbiddenError("Token mismatch.");
     const [row] = await db
-      .select({ id: contacts.id, ownerId: contacts.ownerId })
+      .select({
+        id: contacts.id,
+        ownerId: contacts.ownerId,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+      })
       .from(contacts)
       .where(eq(contacts.id, payload.id))
       .limit(1);
@@ -118,6 +137,16 @@ export async function undoArchiveContactAction(input: {
         cascadedActivities: undoCascade.cascadedActivities,
       },
     });
+
+    await emitActivity({
+      actorId: user.id,
+      verb: "Restored",
+      entityType: "contact",
+      entityId: payload.id,
+      entityDisplayName: `${row.firstName} ${row.lastName ?? ""}`.trim(),
+      link: `/contacts/${payload.id}`,
+    });
+
     revalidatePath("/contacts");
     revalidatePath("/contacts/archived");
   });
@@ -131,6 +160,14 @@ export async function restoreContactAction(
     if (!canHardDelete(user)) throw new ForbiddenError("Admin only.");
     const id = z.string().uuid().parse(formData.get("id"));
     const cascade = await restoreContactsById([id], user.id);
+    const [restored] = await db
+      .select({
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+      })
+      .from(contacts)
+      .where(eq(contacts.id, id))
+      .limit(1);
     await writeAudit({
       actorId: user.id,
       action: "contact.restore",
@@ -141,6 +178,18 @@ export async function restoreContactAction(
         cascadedActivities: cascade.cascadedActivities,
       },
     });
+
+    await emitActivity({
+      actorId: user.id,
+      verb: "Restored",
+      entityType: "contact",
+      entityId: id,
+      entityDisplayName: `${restored?.firstName ?? ""} ${
+        restored?.lastName ?? ""
+      }`.trim(),
+      link: `/contacts/${id}`,
+    });
+
     revalidatePath("/contacts/archived");
     revalidatePath("/contacts");
   });
@@ -342,6 +391,17 @@ export async function updateContactAction(
         after: parsed as object,
       });
 
+      await emitActivity({
+        actorId: user.id,
+        verb: "Updated",
+        entityType: "contact",
+        entityId: parsed.id,
+        entityDisplayName: `${parsed.firstName ?? existing.firstName ?? ""} ${
+          parsed.lastName ?? existing.lastName ?? ""
+        }`.trim(),
+        link: `/contacts/${parsed.id}`,
+      });
+
       revalidatePath(`/contacts/${parsed.id}`);
       revalidatePath("/contacts");
     },
@@ -465,6 +525,23 @@ export async function bulkArchiveContactsAction(
           };
         }),
       });
+    }
+    if (result.updated.length > 0) {
+      await emitActivities(
+        result.updated.map((id): EmitActivityInput => {
+          const row = rowById.get(id);
+          return {
+            actorId: user.id,
+            verb: "Archived",
+            entityType: "contact",
+            entityId: id,
+            entityDisplayName: row
+              ? `${row.firstName} ${row.lastName ?? ""}`.trim()
+              : "",
+            link: `/contacts/${id}`,
+          };
+        }),
+      );
     }
     revalidatePath("/contacts");
     return {

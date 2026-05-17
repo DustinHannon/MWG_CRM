@@ -9,6 +9,11 @@ import { recentViews } from "@/db/schema/recent-views";
 import { requireSession } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
+import {
+  emitActivity,
+  emitActivities,
+  type EmitActivityInput,
+} from "@/lib/notifications";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
   archiveAccountsById,
@@ -78,6 +83,15 @@ export async function softDeleteAccountAction(input: {
         },
       });
 
+      await emitActivity({
+        actorId: user.id,
+        verb: "Archived",
+        entityType: "account",
+        entityId: id,
+        entityDisplayName: row.name,
+        link: `/accounts/${id}`,
+      });
+
       revalidatePath("/accounts");
       revalidatePath(`/accounts/${id}`);
       return {
@@ -95,7 +109,11 @@ export async function undoArchiveAccountAction(input: {
     const payload = verifyUndoToken(input.undoToken);
     if (payload.entity !== "account") throw new ForbiddenError("Token mismatch.");
     const [row] = await db
-      .select({ id: crmAccounts.id, ownerId: crmAccounts.ownerId })
+      .select({
+        id: crmAccounts.id,
+        ownerId: crmAccounts.ownerId,
+        name: crmAccounts.name,
+      })
       .from(crmAccounts)
       .where(eq(crmAccounts.id, payload.id))
       .limit(1);
@@ -123,6 +141,16 @@ export async function undoArchiveAccountAction(input: {
         cascadedActivities: undoCascade.cascadedActivities,
       },
     });
+
+    await emitActivity({
+      actorId: user.id,
+      verb: "Restored",
+      entityType: "account",
+      entityId: payload.id,
+      entityDisplayName: row.name,
+      link: `/accounts/${payload.id}`,
+    });
+
     revalidatePath("/accounts");
     revalidatePath("/accounts/archived");
   });
@@ -139,6 +167,11 @@ export async function restoreAccountAction(
     if (!canHardDelete(user)) throw new ForbiddenError("Admin only.");
     const id = z.string().uuid().parse(formData.get("id"));
     const cascade = await restoreAccountsById([id], user.id);
+    const [restored] = await db
+      .select({ name: crmAccounts.name })
+      .from(crmAccounts)
+      .where(eq(crmAccounts.id, id))
+      .limit(1);
     await writeAudit({
       actorId: user.id,
       action: "account.restore",
@@ -151,6 +184,16 @@ export async function restoreAccountAction(
         cascadedActivities: cascade.cascadedActivities,
       },
     });
+
+    await emitActivity({
+      actorId: user.id,
+      verb: "Restored",
+      entityType: "account",
+      entityId: id,
+      entityDisplayName: restored?.name ?? "",
+      link: `/accounts/${id}`,
+    });
+
     revalidatePath("/accounts/archived");
     revalidatePath("/accounts");
   });
@@ -369,6 +412,15 @@ export async function updateAccountAction(
         after: parsed as object,
       });
 
+      await emitActivity({
+        actorId: user.id,
+        verb: "Updated",
+        entityType: "account",
+        entityId: parsed.id,
+        entityDisplayName: parsed.name ?? existing.name,
+        link: `/accounts/${parsed.id}`,
+      });
+
       revalidatePath(`/accounts/${parsed.id}`);
       revalidatePath("/accounts");
     },
@@ -479,6 +531,21 @@ export async function bulkArchiveAccountsAction(
           };
         }),
       });
+    }
+    if (result.updated.length > 0) {
+      await emitActivities(
+        result.updated.map((id): EmitActivityInput => {
+          const row = rowById.get(id);
+          return {
+            actorId: user.id,
+            verb: "Archived",
+            entityType: "account",
+            entityId: id,
+            entityDisplayName: row?.name ?? "",
+            link: `/accounts/${id}`,
+          };
+        }),
+      );
     }
     revalidatePath("/accounts");
     return {

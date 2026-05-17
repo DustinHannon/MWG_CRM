@@ -9,6 +9,11 @@ import { recentViews } from "@/db/schema/recent-views";
 import { requireSession } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
+import {
+  emitActivity,
+  emitActivities,
+  type EmitActivityInput,
+} from "@/lib/notifications";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import {
   archiveOpportunitiesById,
@@ -73,6 +78,15 @@ export async function softDeleteOpportunityAction(input: {
         },
       });
 
+      await emitActivity({
+        actorId: user.id,
+        verb: "Archived",
+        entityType: "opportunity",
+        entityId: id,
+        entityDisplayName: row.name,
+        link: `/opportunities/${id}`,
+      });
+
       revalidatePath("/opportunities");
       revalidatePath("/opportunities/pipeline");
       revalidatePath(`/opportunities/${id}`);
@@ -91,7 +105,11 @@ export async function undoArchiveOpportunityAction(input: {
     const payload = verifyUndoToken(input.undoToken);
     if (payload.entity !== "opportunity") throw new ForbiddenError("Token mismatch.");
     const [row] = await db
-      .select({ id: opportunities.id, ownerId: opportunities.ownerId })
+      .select({
+        id: opportunities.id,
+        ownerId: opportunities.ownerId,
+        name: opportunities.name,
+      })
       .from(opportunities)
       .where(eq(opportunities.id, payload.id))
       .limit(1);
@@ -116,6 +134,16 @@ export async function undoArchiveOpportunityAction(input: {
         cascadedActivities: undoCascade.cascadedActivities,
       },
     });
+
+    await emitActivity({
+      actorId: user.id,
+      verb: "Restored",
+      entityType: "opportunity",
+      entityId: payload.id,
+      entityDisplayName: row.name,
+      link: `/opportunities/${payload.id}`,
+    });
+
     revalidatePath("/opportunities");
     revalidatePath("/opportunities/pipeline");
     revalidatePath("/opportunities/archived");
@@ -130,6 +158,11 @@ export async function restoreOpportunityAction(
     if (!canHardDelete(user)) throw new ForbiddenError("Admin only.");
     const id = z.string().uuid().parse(formData.get("id"));
     const cascade = await restoreOpportunitiesById([id], user.id);
+    const [restored] = await db
+      .select({ name: opportunities.name })
+      .from(opportunities)
+      .where(eq(opportunities.id, id))
+      .limit(1);
     await writeAudit({
       actorId: user.id,
       action: "opportunity.restore",
@@ -140,6 +173,16 @@ export async function restoreOpportunityAction(
         cascadedActivities: cascade.cascadedActivities,
       },
     });
+
+    await emitActivity({
+      actorId: user.id,
+      verb: "Restored",
+      entityType: "opportunity",
+      entityId: id,
+      entityDisplayName: restored?.name ?? "",
+      link: `/opportunities/${id}`,
+    });
+
     revalidatePath("/opportunities/archived");
     revalidatePath("/opportunities");
     revalidatePath("/opportunities/pipeline");
@@ -317,6 +360,15 @@ export async function updateOpportunityAction(
         after: parsed as object,
       });
 
+      await emitActivity({
+        actorId: user.id,
+        verb: "Updated",
+        entityType: "opportunity",
+        entityId: parsed.id,
+        entityDisplayName: parsed.name ?? existing.name,
+        link: `/opportunities/${parsed.id}`,
+      });
+
       revalidatePath(`/opportunities/${parsed.id}`);
       revalidatePath("/opportunities");
     },
@@ -442,6 +494,21 @@ export async function bulkArchiveOpportunitiesAction(
             };
           }),
         });
+      }
+      if (result.updated.length > 0) {
+        await emitActivities(
+          result.updated.map((id): EmitActivityInput => {
+            const row = rowById.get(id);
+            return {
+              actorId: user.id,
+              verb: "Archived",
+              entityType: "opportunity",
+              entityId: id,
+              entityDisplayName: row?.name ?? "",
+              link: `/opportunities/${id}`,
+            };
+          }),
+        );
       }
       revalidatePath("/opportunities");
       revalidatePath("/opportunities/pipeline");
