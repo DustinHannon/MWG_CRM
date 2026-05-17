@@ -8,7 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { markAllReadAction } from "./actions";
+import { markAllSeenAction } from "./actions";
 import { toast } from "sonner";
 import {
   formatUserTime,
@@ -26,17 +26,17 @@ interface NotificationItem {
 }
 
 interface BellProps {
-  unreadCount: number;
+  unseenCount: number;
   recent: NotificationItem[];
   prefs: TimePrefs;
 }
 
-export function NotificationsBell({ unreadCount, recent, prefs }: BellProps) {
+export function NotificationsBell({ unseenCount, recent, prefs }: BellProps) {
   const [pending, startTransition] = useTransition();
 
   function markAll() {
     startTransition(async () => {
-      const res = await markAllReadAction();
+      const res = await markAllSeenAction();
       if (!res.ok) toast.error(res.error);
     });
   }
@@ -46,13 +46,13 @@ export function NotificationsBell({ unreadCount, recent, prefs }: BellProps) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`Notifications (${unreadCount} unread)`}
+          aria-label={`Notifications (${unseenCount} unseen)`}
           className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Bell size={18} />
-          {unreadCount > 0 ? (
+          {unseenCount > 0 ? (
             <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
-              {unreadCount > 99 ? "99+" : unreadCount}
+              {unseenCount > 99 ? "99+" : unseenCount}
             </span>
           ) : null}
         </button>
@@ -67,10 +67,10 @@ export function NotificationsBell({ unreadCount, recent, prefs }: BellProps) {
           <button
             type="button"
             onClick={markAll}
-            disabled={pending || unreadCount === 0}
+            disabled={pending || unseenCount === 0}
             className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
           >
-            Mark all read
+            Mark all seen
           </button>
         </div>
 

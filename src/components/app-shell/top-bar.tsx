@@ -15,7 +15,7 @@ interface NotificationItem {
 }
 
 interface TopBarProps {
-  unreadCount: number;
+  unseenCount: number;
   recent: NotificationItem[];
   prefs: TimePrefs;
   /** mobile drawer trigger rendered before breadcrumbs at <1024px. */
@@ -38,7 +38,7 @@ interface TopBarProps {
  * pushing the right-side controls off-screen.
  */
 export function TopBar({
-  unreadCount,
+  unseenCount,
   recent,
   prefs,
   mobileNavTrigger,
@@ -51,7 +51,7 @@ export function TopBar({
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <SearchTrigger />
-        <NotificationsBell unreadCount={unreadCount} recent={recent} prefs={prefs} />
+        <NotificationsBell unseenCount={unseenCount} recent={recent} prefs={prefs} />
       </div>
     </header>
   );

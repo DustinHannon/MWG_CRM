@@ -1,7 +1,8 @@
 import "server-only";
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, gt } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications } from "@/db/schema/tasks";
+import { userPreferences } from "@/db/schema/views";
 import { users } from "@/db/schema/users";
 import { logger } from "@/lib/logger";
 
@@ -107,11 +108,12 @@ function activityRow(i: EmitActivityInput) {
     actorId: i.actorId,
     kind: "activity" as const,
     // Born read: an activity row records the actor's OWN action —
-    // there is no "unread" semantics for something you just did. This
-    // keeps these rows out of the is_read-based bell badge
-    // (`countUnread`) which has no kind filter; the badge tracks
-    // unseen activity via `notifications_last_seen_at` instead, and
-    // the /notifications log shows every row regardless of is_read.
+    // there is no "unread" semantics for something you just did. The
+    // bell badge does not use is_read at all (it is `countUnseen`,
+    // driven by `notifications_last_seen_at`); is_read is kept
+    // accurate here only for a possible future per-row read
+    // affordance. The /notifications log shows every row regardless
+    // of is_read or last-seen.
     isRead: true as const,
     title: `${i.verb} ${name} — ${label}`,
     verb: i.verb,
@@ -185,13 +187,12 @@ export async function listNotificationsForUser(
   userId: string,
   limit = 20,
 ) {
-  // verified cursor-friendly: queries the composite partial
-  // index `notifications_user_unread_idx (user_id, is_read, created_at DESC)`
-  // and is bounded by `limit`, so even a high-volume user (100k+
-  // notifications) seeks the leading rows by user_id and stops early.
-  // No cursor parameter is exposed because the bell + /notifications
-  // page UX is "show recent N"; pagination beyond the top N would
-  // need a redesign (mark-read-as-you-scroll behaviour, etc).
+  // Bell dropdown only (recent N). Served by
+  // `notifications_user_created_idx (user_id, created_at DESC)` (a
+  // plain composite, not partial): seeks the user's leading rows by
+  // user_id and stops at `limit`, cheap even for a 100k+ user. No
+  // cursor here — the bell UX is "show recent N"; the /notifications
+  // page does its own keyset pagination (listNotificationsCursor).
   return db
     .select()
     .from(notifications)
@@ -200,30 +201,54 @@ export async function listNotificationsForUser(
     .limit(limit);
 }
 
-export async function countUnread(userId: string): Promise<number> {
+/**
+ * Topbar bell badge count: the caller's notifications created AFTER
+ * their last-seen cursor (`user_preferences.notifications_last_seen_at`).
+ * Tracks UNSEEN activity, NOT per-row is_read — activity rows are born
+ * is_read=true (they would never move an is_read badge) so the badge
+ * had to decouple from is_read. NULL last-seen (never cleared) ⇒ epoch
+ * ⇒ counts everything. The notifications scan is index-served by
+ * `notifications_user_created_idx (user_id, created_at DESC)`; the
+ * last-seen read is a user_preferences PK lookup.
+ */
+export async function countUnseen(userId: string): Promise<number> {
+  const pref = await db
+    .select({ at: userPreferences.notificationsLastSeenAt })
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+  const since = pref[0]?.at ?? new Date(0);
   const r = await db
     .select({ n: count() })
     .from(notifications)
     .where(
-      and(eq(notifications.userId, userId), eq(notifications.isRead, false)),
+      and(
+        eq(notifications.userId, userId),
+        gt(notifications.createdAt, since),
+      ),
     );
   return r[0]?.n ?? 0;
 }
 
-export async function markAllRead(userId: string): Promise<void> {
+/**
+ * Clear the bell badge: advance the caller's last-seen cursor to now.
+ * Deliberately does NOT touch any notification row's is_read — the
+ * /notifications activity log persists in full regardless of
+ * seen/read state. UPSERTs the user_preferences row (a first-time user
+ * may not have one yet), mirroring `trackTaskViewSelection`. Single
+ * timestamp-cursor write — intentionally NOT version/OCC-guarded; a
+ * concurrent two-tab clear just sets the same `now` (last-write-wins,
+ * STANDARDS 19.5.3 documented-intent class).
+ */
+export async function markAllSeen(userId: string): Promise<void> {
+  const now = new Date();
   await db
-    .update(notifications)
-    .set({ isRead: true })
-    .where(
-      and(eq(notifications.userId, userId), eq(notifications.isRead, false)),
-    );
-}
-
-export async function markRead(id: string, userId: string): Promise<void> {
-  await db
-    .update(notifications)
-    .set({ isRead: true })
-    .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
+    .insert(userPreferences)
+    .values({ userId, notificationsLastSeenAt: now })
+    .onConflictDoUpdate({
+      target: userPreferences.userId,
+      set: { notificationsLastSeenAt: now, updatedAt: now },
+    });
 }
 
 /**

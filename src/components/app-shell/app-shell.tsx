@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { userPreferences } from "@/db/schema/views";
 import type { SessionUser } from "@/lib/auth-helpers";
 import {
-  countUnread,
+  countUnseen,
   listNotificationsForUser,
 } from "@/lib/notifications";
 import { listRecentForUser } from "@/lib/recent-views";
@@ -38,8 +38,8 @@ interface AppShellProps {
  * Density and theme come from `user_preferences`.
  */
 export async function AppShell({ user, brand, nav, children }: AppShellProps) {
-  const [unreadCount, recentNotifs, recentViews, prefsRow] = await Promise.all([
-    countUnread(user.id),
+  const [unseenCount, recentNotifs, recentViews, prefsRow] = await Promise.all([
+    countUnseen(user.id),
     listNotificationsForUser(user.id, 10),
     listRecentForUser(user.id, 5),
     db
@@ -97,7 +97,7 @@ export async function AppShell({ user, brand, nav, children }: AppShellProps) {
           />
           <div className="min-w-0 lg:ml-[var(--sidebar-width,240px)]">
             <TopBar
-              unreadCount={unreadCount}
+              unseenCount={unseenCount}
               recent={recentNotifs}
               prefs={timePrefs}
               mobileNavTrigger={
