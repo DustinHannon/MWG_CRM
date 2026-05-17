@@ -54,6 +54,21 @@ export default async function LeadDetailPage({
   // canDeleteLeads permission flag is no longer the gate.
   const canDelete = canDeleteLead(user, { ownerId: lead.ownerId });
 
+  // Proactive mailbox awareness: surface a non-Exchange-Online mailbox
+  // in the actions panel up front (with a Send-in-Outlook fallback)
+  // instead of letting the user compose an email the server will then
+  // fail closed. Reads only the cached users.mailbox_kind (no Graph on
+  // render); the 24h cache + sign-in refresh keep it current. NULL
+  // (never checked) is NOT treated as blocked — the server-side gate
+  // still protects on submit.
+  const [mbx] = await db
+    .select({ kind: users.mailboxKind })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .limit(1);
+  const mailboxBlocked =
+    mbx?.kind != null && mbx.kind !== "exchange_online";
+
   // Provenance — created-by display name + import job filename. Two
   // small lookups; the joins live here rather than on getLeadById so
   // the table-list path stays a single hot query.
@@ -243,6 +258,7 @@ export default async function LeadDetailPage({
             canSendEmail={
               (perms.canSendEmail || user.isAdmin) && !lead.doNotEmail
             }
+            mailboxBlocked={mailboxBlocked}
             defaultEmail={lead.email}
             defaultName={formatPersonName(lead)}
             defaultTimeZone={env.DEFAULT_TIMEZONE}
