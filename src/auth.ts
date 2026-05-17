@@ -17,6 +17,7 @@ import { entraConfigured, env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { refreshUserPhotoIfStale } from "@/lib/graph-photo";
+import { checkMailboxKind } from "@/lib/email";
 import { writeAudit, writeSystemAudit } from "@/lib/audit";
 import { AUDIT_EVENTS, AUDIT_SYSTEM_ACTORS } from "@/lib/audit/events";
 import { rateLimit } from "@/lib/security/rate-limit";
@@ -287,6 +288,70 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // tokens on the JWT — they're large and would push the session
           // cookie into chunked-cookie territory. The accounts table is
           // authoritative for token state; reads from there.
+          // Refresh the cached mailbox kind (Exchange Online vs
+          // on-premises) on every interactive sign-in so the lead
+          // actions panel can warn the user up front instead of
+          // after they compose an email. checkMailboxKind is itself
+          // 24h-cached (hits Graph only when stale) and best-effort;
+          // the extra guard ensures a Graph hiccup never blocks the
+          // mint. Placed after the token is built — mirrors the
+          // refreshUserPhotoIfStale belt-and-braces pattern above.
+          // Hard wall-clock cap. checkMailboxKind on a cold cache makes
+          // up to 2 sequential Graph calls (30s timeout each); a SLOW
+          // (not down) Graph would otherwise extend the sign-in mint
+          // toward the function wall and, under a login stampede, kill
+          // the invocation (a process kill is NOT catchable by the
+          // try/catch). So race it against a short deadline: if it
+          // doesn't resolve in time the cached mailbox_kind simply
+          // stays as-is for this login (the server-side fail-closed
+          // gate still enforces on send; next sign-in refreshes). The
+          // refresh promise is made non-rejecting so the abandoned
+          // (timed-out) run can settle in the background without an
+          // unhandled rejection. Best-effort, never blocks the mint > ~4s.
+          const MAILBOX_REFRESH_DEADLINE_MS = 4000;
+          try {
+            const [mbx] = await db
+              .select({
+                entraOid: users.entraOid,
+                mailboxKind: users.mailboxKind,
+                mailboxCheckedAt: users.mailboxCheckedAt,
+              })
+              .from(users)
+              .where(eq(users.id, provisioned.id))
+              .limit(1);
+            if (mbx) {
+              const refresh = checkMailboxKind({
+                userId: provisioned.id,
+                entraOid: mbx.entraOid,
+                mailboxKind: mbx.mailboxKind,
+                mailboxCheckedAt: mbx.mailboxCheckedAt,
+              }).then(
+                () => undefined,
+                (err: unknown) => {
+                  logger.warn("auth.mailbox_refresh_failed", {
+                    userId: provisioned.id,
+                    errorMessage:
+                      err instanceof Error ? err.message : String(err),
+                  });
+                },
+              );
+              await Promise.race([
+                refresh,
+                new Promise<void>((resolve) =>
+                  setTimeout(resolve, MAILBOX_REFRESH_DEADLINE_MS),
+                ),
+              ]);
+            }
+          } catch (err) {
+            // Only the users SELECT can reach here; checkMailboxKind
+            // is already non-rejecting. Sign-in still proceeds.
+            logger.warn("auth.mailbox_refresh_failed", {
+              userId: provisioned.id,
+              errorMessage:
+                err instanceof Error ? err.message : String(err),
+            });
+          }
+
           logger.info("auth.entra_signin_ok", {
             userId: provisioned.id,
             email,
