@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
@@ -198,66 +198,6 @@ export async function listNotificationsForUser(
     .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
-}
-
-/**
- * cursor-paginated variant for the /notifications page so
- * power users with 100k+ notifications can scroll past the top batch.
- * The /notifications page calls this; the bell popover keeps the
- * unbounded `listNotificationsForUser(userId, 10)` form because it's
- * always capped at 10.
- */
-export interface NotificationCursor {
-  ts: Date;
-  id: string;
-}
-export function parseNotificationCursor(raw: string | undefined): NotificationCursor | null {
-  if (!raw) return null;
-  const idx = raw.lastIndexOf(":");
-  if (idx === -1) return null;
-  const tsPart = raw.slice(0, idx);
-  const idPart = raw.slice(idx + 1);
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idPart)) {
-    return null;
-  }
-  const d = new Date(tsPart);
-  if (Number.isNaN(d.getTime())) return null;
-  return { ts: d, id: idPart };
-}
-export function encodeNotificationCursor(ts: Date, id: string): string {
-  return `${ts.toISOString()}:${id}`;
-}
-
-export async function listNotificationsPage(
-  userId: string,
-  cursor: string | undefined,
-  pageSize = 50,
-): Promise<{ rows: typeof notifications.$inferSelect[]; nextCursor: string | null }> {
-  const parsed = parseNotificationCursor(cursor);
-  const wheres = [eq(notifications.userId, userId)];
-  if (parsed) {
-    wheres.push(
-      sql`(
-        ${notifications.createdAt} < ${parsed.ts.toISOString()}::timestamptz
-        OR (${notifications.createdAt} = ${parsed.ts.toISOString()}::timestamptz AND ${notifications.id} < ${parsed.id}::uuid)
-      )`,
-    );
-  }
-  const rowsRaw = await db
-    .select()
-    .from(notifications)
-    .where(and(...wheres))
-    .orderBy(desc(notifications.createdAt), desc(notifications.id))
-    .limit(pageSize + 1);
-  if (rowsRaw.length <= pageSize) {
-    return { rows: rowsRaw, nextCursor: null };
-  }
-  const rows = rowsRaw.slice(0, pageSize);
-  const last = rows[rows.length - 1];
-  return {
-    rows,
-    nextCursor: encodeNotificationCursor(last.createdAt, last.id),
-  };
 }
 
 export async function countUnread(userId: string): Promise<number> {

@@ -1,102 +1,30 @@
-import Link from "next/link";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
-import { StandardPageHeader } from "@/components/standard";
-import { GlassCard } from "@/components/ui/glass-card";
-import { UserTime } from "@/components/ui/user-time";
+import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
-import { listNotificationsPage } from "@/lib/notifications";
+import { appCrumbs } from "@/lib/navigation/breadcrumbs";
+import { NotificationsListClient } from "./_components/notifications-list-client";
 
 export const dynamic = "force-dynamic";
 
-export default async function NotificationsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ cursor?: string }>;
-}) {
-  const session = await requireSession();
-  const sp = await searchParams;
-  // cursor pagination on (created_at DESC, id DESC) with
-  // page size 50. Backed by `notifications_user_unread_idx` for the
-  // user_id leading column; the (created_at, id) tail keeps cursor
-  // seeks deterministic at high volumes.
-  const { rows: list, nextCursor } = await listNotificationsPage(session.id, sp.cursor, 50);
+export default async function NotificationsPage() {
+  await requireSession();
+  const timePrefs = await getCurrentUserTimePrefs();
 
   return (
-    <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
-      <BreadcrumbsSetter crumbs={[{ label: "Notifications" }]} />
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
+      <BreadcrumbsSetter crumbs={appCrumbs.notifications()} />
       {/*
-        Realtime subscription for `notifications` is mounted at the
-        authenticated layout (so the topbar bell updates everywhere).
-        Re-subscribing here produces the same channel name and triggers
-        "cannot add postgres_changes callbacks after subscribe()".
-        Layout-level refresh propagates down to this segment.
+        The `notifications` realtime subscription is mounted once at the
+        authenticated layout (it drives the topbar bell). Re-subscribing
+        here would reuse the same channel name and throw "cannot add
+        postgres_changes callbacks after subscribe()", so this page does
+        NOT mount PageRealtime. The list itself is a client infinite
+        query; PagePoll is retained as the off-publication fallback,
+        matching the prior page (live list refresh is out of scope here).
       */}
       <PagePoll entities={["notifications"]} />
-      <StandardPageHeader
-        title="Notifications"
-        fontFamily="display"
-      />
-
-      <GlassCard className="mt-6 overflow-hidden p-0">
-        {list.length === 0 ? (
-          <p className="p-12 text-center text-sm text-muted-foreground">
-            No notifications.
-          </p>
-        ) : (
-          <ul className="divide-y divide-glass-border">
-            {list.map((n) => (
-              <li
-                key={n.id}
-                className={"p-4 " + (n.isRead ? "" : "bg-primary/5")}
-              >
-                {n.link ? (
-                  <Link href={n.link} className="block hover:underline">
-                    <p className="text-sm font-medium">{n.title}</p>
-                    {n.body ? (
-                      <p className="mt-1 text-xs text-muted-foreground">{n.body}</p>
-                    ) : null}
-                  </Link>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium">{n.title}</p>
-                    {n.body ? (
-                      <p className="mt-1 text-xs text-muted-foreground">{n.body}</p>
-                    ) : null}
-                  </>
-                )}
-                <p className="mt-2 text-[10px] text-muted-foreground">
-                  <UserTime value={n.createdAt} /> · {n.kind}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </GlassCard>
-
-      {nextCursor || sp.cursor ? (
-        <nav className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
-          <span>{sp.cursor ? "Showing more results" : "Showing first 50"}</span>
-          <div className="flex gap-2">
-            {sp.cursor ? (
-              <Link
-                href="/notifications"
-                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
-              >
-                ← Back to start
-              </Link>
-            ) : null}
-            {nextCursor ? (
-              <Link
-                href={`/notifications?cursor=${encodeURIComponent(nextCursor)}`}
-                className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
-              >
-                Load more →
-              </Link>
-            ) : null}
-          </div>
-        </nav>
-      ) : null}
+      <NotificationsListClient timePrefs={timePrefs} />
     </div>
   );
 }
