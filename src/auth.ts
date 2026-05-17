@@ -3,6 +3,7 @@ import NextAuth from "next-auth";
 import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
+import { after } from "next/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -264,20 +265,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             idToken: account.id_token,
           });
 
-          // refresh the cached Microsoft profile photo if it's
-          // older than 24h (or never set). The function swallows its own
-          // errors so a transient Graph hiccup never blocks sign-in; we
-          // wrap in another try/catch as a belt-and-braces guard against
-          // anything sneaking out.
-          try {
-            await refreshUserPhotoIfStale(provisioned.id);
-          } catch (err) {
-            logger.warn("auth.photo_refresh_failed", {
-              userId: provisioned.id,
-              errorMessage: err instanceof Error ? err.message : String(err),
-            });
-          }
-
           token.userId = provisioned.id;
           token.isAdmin = provisioned.isAdmin;
           token.sessionVersion = provisioned.sessionVersion;
@@ -288,64 +275,58 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // tokens on the JWT — they're large and would push the session
           // cookie into chunked-cookie territory. The accounts table is
           // authoritative for token state; reads from there.
-          // Refresh the cached mailbox kind (Exchange Online vs
-          // on-premises) on every interactive sign-in so the lead
-          // actions panel can warn the user up front instead of
-          // after they compose an email. checkMailboxKind is itself
-          // 24h-cached (hits Graph only when stale) and best-effort;
-          // the extra guard ensures a Graph hiccup never blocks the
-          // mint. Placed after the token is built — mirrors the
-          // refreshUserPhotoIfStale belt-and-braces pattern above.
-          // Hard wall-clock cap. checkMailboxKind on a cold cache makes
-          // up to 2 sequential Graph calls (30s timeout each); a SLOW
-          // (not down) Graph would otherwise extend the sign-in mint
-          // toward the function wall and, under a login stampede, kill
-          // the invocation (a process kill is NOT catchable by the
-          // try/catch). So race it against a short deadline: if it
-          // doesn't resolve in time the cached mailbox_kind simply
-          // stays as-is for this login (the server-side fail-closed
-          // gate still enforces on send; next sign-in refreshes). The
-          // refresh promise is made non-rejecting so the abandoned
-          // (timed-out) run can settle in the background without an
-          // unhandled rejection. Best-effort, never blocks the mint > ~4s.
-          const MAILBOX_REFRESH_DEADLINE_MS = 4000;
+          // Profile-enrichment side effects — the Microsoft photo
+          // and the Exchange Online vs on-premises mailbox kind —
+          // run AFTER the sign-in response via next/server after().
+          // They never delay or fail the login: each is
+          // independently guarded and a Graph hiccup is logged while
+          // the existing cached value is left as-is (the lead
+          // actions panel + the server-side fail-closed gate both
+          // tolerate a stale mailbox_kind). The after() registration
+          // itself is guarded so an unexpected out-of-scope error
+          // cannot affect the mint either.
           try {
-            const [mbx] = await db
-              .select({
-                entraOid: users.entraOid,
-                mailboxKind: users.mailboxKind,
-                mailboxCheckedAt: users.mailboxCheckedAt,
-              })
-              .from(users)
-              .where(eq(users.id, provisioned.id))
-              .limit(1);
-            if (mbx) {
-              const refresh = checkMailboxKind({
-                userId: provisioned.id,
-                entraOid: mbx.entraOid,
-                mailboxKind: mbx.mailboxKind,
-                mailboxCheckedAt: mbx.mailboxCheckedAt,
-              }).then(
-                () => undefined,
-                (err: unknown) => {
-                  logger.warn("auth.mailbox_refresh_failed", {
+            after(async () => {
+              try {
+                await refreshUserPhotoIfStale(provisioned.id);
+              } catch (err) {
+                logger.warn("auth.photo_refresh_failed", {
+                  userId: provisioned.id,
+                  errorMessage:
+                    err instanceof Error ? err.message : String(err),
+                });
+              }
+              try {
+                const [mbx] = await db
+                  .select({
+                    entraOid: users.entraOid,
+                    mailboxKind: users.mailboxKind,
+                    mailboxCheckedAt: users.mailboxCheckedAt,
+                  })
+                  .from(users)
+                  .where(eq(users.id, provisioned.id))
+                  .limit(1);
+                if (mbx) {
+                  await checkMailboxKind({
                     userId: provisioned.id,
-                    errorMessage:
-                      err instanceof Error ? err.message : String(err),
+                    entraOid: mbx.entraOid,
+                    mailboxKind: mbx.mailboxKind,
+                    mailboxCheckedAt: mbx.mailboxCheckedAt,
                   });
-                },
-              );
-              await Promise.race([
-                refresh,
-                new Promise<void>((resolve) =>
-                  setTimeout(resolve, MAILBOX_REFRESH_DEADLINE_MS),
-                ),
-              ]);
-            }
+                }
+              } catch (err) {
+                logger.warn("auth.mailbox_refresh_failed", {
+                  userId: provisioned.id,
+                  errorMessage:
+                    err instanceof Error ? err.message : String(err),
+                });
+              }
+            });
           } catch (err) {
-            // Only the users SELECT can reach here; checkMailboxKind
-            // is already non-rejecting. Sign-in still proceeds.
-            logger.warn("auth.mailbox_refresh_failed", {
+            // after() unavailable / called outside a request scope
+            // — skip enrichment rather than risk the mint. Login
+            // proceeds with whatever is already cached.
+            logger.warn("auth.after_unavailable", {
               userId: provisioned.id,
               errorMessage:
                 err instanceof Error ? err.message : String(err),
