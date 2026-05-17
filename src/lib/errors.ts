@@ -13,6 +13,7 @@ export type ErrorCode =
   | "CONFLICT"
   | "RATE_LIMIT"
   | "REAUTH_REQUIRED"
+  | "MAILBOX_UNSUPPORTED"
   | "INTERNAL";
 
 export class KnownError extends Error {
@@ -85,5 +86,22 @@ export class ReauthRequiredKnownError extends KnownError {
   ) {
     super("REAUTH_REQUIRED", publicMessage, "reauth_required");
     this.name = "ReauthRequiredKnownError";
+  }
+}
+
+/**
+ * Signals the actor cannot send mail / schedule via Microsoft Graph
+ * because their mailbox is not Exchange Online (on-premises, unlicensed,
+ * or unverifiable). Fail-closed gate for lead Send email / Schedule
+ * meeting; the UI surfaces a bottom-right toast when
+ * code === "MAILBOX_UNSUPPORTED" and a bell notification is written
+ * server-side. publicMessage carries the preflight explanation.
+ */
+export class MailboxUnsupportedError extends KnownError {
+  constructor(
+    publicMessage = "Your mailbox can't send email. Contact MWG IT.",
+  ) {
+    super("MAILBOX_UNSUPPORTED", publicMessage, "mailbox_unsupported");
+    this.name = "MailboxUnsupportedError";
   }
 }

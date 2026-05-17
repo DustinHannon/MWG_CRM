@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { signIn } from "next-auth/react";
+import { toast } from "sonner";
 import { scheduleMeetingAction, sendEmailAction } from "./actions";
 import type { ActionResult } from "@/lib/server-action";
 import { useShowPicker } from "@/hooks/use-show-picker";
@@ -19,6 +20,18 @@ export function EmailForm({
     async (_p: ActionResult, fd: FormData) => sendEmailAction(fd),
     initial,
   );
+
+  // Fail-closed mailbox block also surfaces as a bottom-right toast
+  // (the bell notification is written server-side). The inline
+  // ErrorBox below still renders for all errors. No `state === initial`
+  // guard (cf. the entity edit forms): this effect only fires on one
+  // specific failure code, and the initial { ok: true } state can never
+  // satisfy `!state.ok`, so it cannot fire on mount.
+  useEffect(() => {
+    if (!state.ok && state.code === "MAILBOX_UNSUPPORTED") {
+      toast.error(state.error);
+    }
+  }, [state]);
 
   return (
     <form action={action} className="flex flex-col gap-3" encType="multipart/form-data">
@@ -68,6 +81,18 @@ export function MeetingForm({
     async (_p: ActionResult, fd: FormData) => scheduleMeetingAction(fd),
     initial,
   );
+
+  // Fail-closed mailbox block also surfaces as a bottom-right toast
+  // (the bell notification is written server-side). The inline
+  // ErrorBox below still renders for all errors. No `state === initial`
+  // guard (cf. the entity edit forms): this effect only fires on one
+  // specific failure code, and the initial { ok: true } state can never
+  // satisfy `!state.ok`, so it cannot fire on mount.
+  useEffect(() => {
+    if (!state.ok && state.code === "MAILBOX_UNSUPPORTED") {
+      toast.error(state.error);
+    }
+  }, [state]);
 
   return (
     <form action={action} className="grid gap-3 md:grid-cols-2">

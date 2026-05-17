@@ -12,7 +12,8 @@ interface CreateNotificationInput {
     | "task_due"
     | "mention"
     | "saved_search"
-    | "new_user_jit";
+    | "new_user_jit"
+    | "mailbox_blocked";
   title: string;
   body?: string | null;
   link?: string | null;

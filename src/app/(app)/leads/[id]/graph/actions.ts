@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { emailSendLog } from "@/db/schema/email-send-log";
 import { leads } from "@/db/schema/leads";
+import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
 import {
   getPermissions,
@@ -14,11 +15,14 @@ import {
 } from "@/lib/auth-helpers";
 import {
   ForbiddenError,
+  MailboxUnsupportedError,
   NotFoundError,
   ReauthRequiredKnownError,
 } from "@/lib/errors";
+import { checkMailboxKind } from "@/lib/email/preflight";
 import { sendEmailAndTrack } from "@/lib/graph-email";
 import { scheduleMeetingAndTrack } from "@/lib/graph-meeting";
+import { createNotification } from "@/lib/notifications";
 import { ReauthRequiredError } from "@/lib/graph-token";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
@@ -29,6 +33,92 @@ import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 // export would require editing `send.ts`/`types.ts` (the canonical owner of
 // the regex); when those are touched next, hoist this to a single constant.
 const E2E_SENTINEL_PATTERN = /\[E2E-[^\]]+\]/;
+
+/**
+ * Fail-closed mailbox gate for the lead Send email / Schedule meeting
+ * actions. Reuses the canonical cached detection (checkMailboxKind ->
+ * users.mailbox_kind, 24h TTL, app-permission Graph fallback). On a
+ * non-Exchange-Online mailbox (on-premises / unlicensed / unverifiable)
+ * it audits the block, writes a bell notification to the actor, and
+ * throws MailboxUnsupportedError so the action never reaches Graph.
+ * Deliberately NOT gated on isGraphAppConfigured(): the requirement is
+ * to fail closed, so an unverifiable mailbox blocks rather than
+ * silently attempting a delegated send. The client surfaces a
+ * bottom-right toast on code === "MAILBOX_UNSUPPORTED"; the bell
+ * notification persists the same explanation.
+ */
+async function requireSendableMailbox(
+  userId: string,
+  leadId: string,
+  channel: "email" | "meeting",
+  emailCtx?: { to: string; subject: string },
+): Promise<void> {
+  const [u] = await db
+    .select({
+      email: users.email,
+      entraOid: users.entraOid,
+      mailboxKind: users.mailboxKind,
+      mailboxCheckedAt: users.mailboxCheckedAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!u) throw new NotFoundError("user");
+
+  const preflight = await checkMailboxKind({
+    userId,
+    entraOid: u.entraOid,
+    mailboxKind: u.mailboxKind,
+    mailboxCheckedAt: u.mailboxCheckedAt,
+  });
+  if (preflight.ok) return;
+
+  const message =
+    preflight.message ??
+    "Your mailbox can't send email. Contact MWG IT.";
+
+  // Preserve the per-attempt forensic row the admin Email failures
+  // surface reads (parity with graph-email.ts's blocked_preflight
+  // path, which this gate now short-circuits). Email channel only —
+  // a blocked meeting never wrote an email_send_log row.
+  if (channel === "email" && emailCtx) {
+    await db.insert(emailSendLog).values({
+      fromUserId: userId,
+      fromUserEmailSnapshot: u.email ?? "",
+      toEmail: emailCtx.to,
+      feature: "lead.email_activity",
+      featureRecordId: leadId,
+      subject: emailCtx.subject,
+      status: "blocked_preflight",
+      errorCode: "MAILBOX_NOT_EXCHANGE_ONLINE",
+      errorMessage: message,
+    });
+  }
+
+  await writeAudit({
+    actorId: userId,
+    action:
+      channel === "email"
+        ? "graph.email_blocked_mailbox"
+        : "graph.meeting_blocked_mailbox",
+    targetType: "lead",
+    targetId: leadId,
+    after: { mailboxKind: preflight.kind },
+  });
+
+  await createNotification({
+    userId,
+    kind: "mailbox_blocked",
+    title:
+      channel === "email"
+        ? "Email not sent — mailbox not supported"
+        : "Meeting not scheduled — mailbox not supported",
+    body: message,
+    link: `/leads/${leadId}`,
+  });
+
+  throw new MailboxUnsupportedError(message);
+}
 
 const sendEmailSchema = z.object({
   leadId: z.string().uuid(),
@@ -118,6 +208,12 @@ export async function sendEmailAction(
       );
     }
 
+    // Fail closed if the sender's mailbox is not Exchange Online.
+    await requireSendableMailbox(user.id, parsed.leadId, "email", {
+      to: parsed.to,
+      subject: parsed.subject,
+    });
+
     // Attachments: pull from formData (multiple <File>s under name "attachment").
     const files = formData
       .getAll("attachment")
@@ -198,6 +294,9 @@ export async function scheduleMeetingAction(
     });
 
     await requireLeadAccess(user, parsed.leadId);
+
+    // Fail closed if the organiser's mailbox is not Exchange Online.
+    await requireSendableMailbox(user.id, parsed.leadId, "meeting");
 
     try {
       const { activityId } = await scheduleMeetingAndTrack({
