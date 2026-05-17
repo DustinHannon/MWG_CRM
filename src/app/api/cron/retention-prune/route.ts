@@ -5,6 +5,7 @@ import { auditLog } from "@/db/schema/audit";
 import { apiUsageLog } from "@/db/schema/api-keys";
 import { emailSendLog } from "@/db/schema/email-send-log";
 import { rateLimitBuckets, webhookEventDedupe } from "@/db/schema/security";
+import { notifications } from "@/db/schema/tasks";
 import { writeSystemAudit } from "@/lib/audit";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
@@ -19,6 +20,7 @@ export const maxDuration = 300;
  * audit_log: 730 days
  * api_usage_log: 730 days
  * email_send_log: 730 days (added alongside foundation)
+ * notifications: 30 days (activity feed + bell alerts; NOT forensic)
  *
  * All windows are explicit constants below so future tuning is a
  * single-line edit. The cron writes its own audit entry recording how
@@ -38,6 +40,12 @@ const EMAIL_SEND_RETENTION_DAYS = 730;
 // outlive SendGrid's 24h retry window with cushion.
 const RATE_LIMIT_RETENTION_DAYS = 1;
 const WEBHOOK_DEDUPE_RETENTION_DAYS = 7;
+// notifications feed (activity log + bell alerts). NOT a forensic
+// table — 30 days is the activity-feed horizon; ship-by-default
+// (only REDUCING the 2yr forensic tables — audit_log / api_usage_log
+// / email_send_log — needs sign-off, never raising/adding a
+// non-forensic one).
+const NOTIFICATIONS_RETENTION_DAYS = 30;
 
 export async function GET(req: Request) {
   const unauth = requireCronAuth(req);
@@ -92,12 +100,25 @@ export async function GET(req: Request) {
       )
       SELECT count(*)::int AS n FROM d
     `);
+    // notifications activity feed + bell alerts. Bounded 30-day
+    // horizon; created_at is NOT NULL. Same DELETE-CTE shape as the
+    // forensic blocks above (this one is non-forensic, hence the
+    // short window).
+    const notificationsDeleted = await db.execute(sql`
+      WITH d AS (
+        DELETE FROM ${notifications}
+        WHERE created_at < now() - (${NOTIFICATIONS_RETENTION_DAYS} || ' days')::interval
+        RETURNING 1
+      )
+      SELECT count(*)::int AS n FROM d
+    `);
 
     const auditN = readCount(auditDeleted);
     const apiUsageN = readCount(apiUsageDeleted);
     const emailSendN = readCount(emailSendDeleted);
     const rateLimitN = readCount(rateLimitDeleted);
     const webhookDedupeN = readCount(webhookDedupeDeleted);
+    const notificationsN = readCount(notificationsDeleted);
 
     logger.info("cron.retention_prune.completed", {
       auditDeleted: auditN,
@@ -105,6 +126,7 @@ export async function GET(req: Request) {
       emailSendDeleted: emailSendN,
       rateLimitDeleted: rateLimitN,
       webhookDedupeDeleted: webhookDedupeN,
+      notificationsDeleted: notificationsN,
     });
 
     await writeSystemAudit({
@@ -117,11 +139,13 @@ export async function GET(req: Request) {
         email_send_deleted: emailSendN,
         rate_limit_deleted: rateLimitN,
         webhook_dedupe_deleted: webhookDedupeN,
+        notifications_deleted: notificationsN,
         audit_retention_days: AUDIT_RETENTION_DAYS,
         api_usage_retention_days: API_USAGE_RETENTION_DAYS,
         email_send_retention_days: EMAIL_SEND_RETENTION_DAYS,
         rate_limit_retention_days: RATE_LIMIT_RETENTION_DAYS,
         webhook_dedupe_retention_days: WEBHOOK_DEDUPE_RETENTION_DAYS,
+        notifications_retention_days: NOTIFICATIONS_RETENTION_DAYS,
       },
     });
 
@@ -132,6 +156,7 @@ export async function GET(req: Request) {
       emailSendDeleted: emailSendN,
       rateLimitDeleted: rateLimitN,
       webhookDedupeDeleted: webhookDedupeN,
+      notificationsDeleted: notificationsN,
     });
   } catch (err) {
     logger.error("cron.retention_prune.failed", {
