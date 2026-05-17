@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
+import { emitActivity } from "@/lib/notifications";
 import {
   createLead,
   archiveLeadsById,
@@ -142,6 +143,19 @@ export async function createLeadAction(
         after: { firstName: parsed.data.firstName, lastName: parsed.data.lastName },
       });
 
+      // awaited (not void): the row must be inserted before
+      // redirect() throws NEXT_REDIRECT and unwinds the request.
+      await emitActivity({
+        actorId: user.id,
+        verb: "Added",
+        entityType: "lead",
+        entityId: id,
+        entityDisplayName: `${parsed.data.firstName} ${
+          parsed.data.lastName ?? ""
+        }`.trim(),
+        link: `/leads/${id}`,
+      });
+
       revalidatePath("/leads");
       redirect(`/leads/${id}`);
     },
@@ -205,6 +219,19 @@ export async function updateLeadAction(
         after: parsed.data,
       });
 
+      // awaited (not void): the row must be inserted before
+      // redirect() throws NEXT_REDIRECT and unwinds the request.
+      await emitActivity({
+        actorId: user.id,
+        verb: "Updated",
+        entityType: "lead",
+        entityId: id,
+        entityDisplayName: `${
+          parsed.data.firstName ?? before[0]?.firstName ?? ""
+        } ${parsed.data.lastName ?? before[0]?.lastName ?? ""}`.trim(),
+        link: `/leads/${id}`,
+      });
+
       revalidatePath("/leads");
       revalidatePath(`/leads/${id}`);
       redirect(`/leads/${id}`);
@@ -266,6 +293,17 @@ export async function softDeleteLeadAction(input: {
         },
       });
 
+      await emitActivity({
+        actorId: user.id,
+        verb: "Archived",
+        entityType: "lead",
+        entityId: id,
+        entityDisplayName: `${row.firstName} ${
+          row.lastName ?? ""
+        }`.trim(),
+        link: `/leads/${id}`,
+      });
+
       const undoToken = signUndoToken({
         entity: "lead",
         id,
@@ -298,7 +336,12 @@ export async function undoArchiveLeadAction(input: {
         throw new ForbiddenError("Token mismatch.");
       }
       const [row] = await db
-        .select({ id: leads.id, ownerId: leads.ownerId })
+        .select({
+          id: leads.id,
+          ownerId: leads.ownerId,
+          firstName: leads.firstName,
+          lastName: leads.lastName,
+        })
         .from(leads)
         .where(eq(leads.id, payload.id))
         .limit(1);
@@ -323,6 +366,18 @@ export async function undoArchiveLeadAction(input: {
           cascadedActivities: undoCascade.cascadedActivities,
         },
       });
+
+      await emitActivity({
+        actorId: user.id,
+        verb: "Restored",
+        entityType: "lead",
+        entityId: payload.id,
+        entityDisplayName: `${row.firstName} ${
+          row.lastName ?? ""
+        }`.trim(),
+        link: `/leads/${payload.id}`,
+      });
+
       revalidatePath("/leads");
       revalidatePath("/leads/archived");
     },
@@ -344,6 +399,14 @@ export async function restoreLeadAction(
       if (!user.isAdmin) throw new ForbiddenError("Admin only.");
       const id = z.string().uuid().parse(formData.get("id"));
       const cascade = await restoreLeadsById([id], user.id);
+      const [restored] = await db
+        .select({
+          firstName: leads.firstName,
+          lastName: leads.lastName,
+        })
+        .from(leads)
+        .where(eq(leads.id, id))
+        .limit(1);
       await writeAudit({
         actorId: user.id,
         action: "lead.restore",
@@ -354,6 +417,18 @@ export async function restoreLeadAction(
           cascadedActivities: cascade.cascadedActivities,
         },
       });
+
+      await emitActivity({
+        actorId: user.id,
+        verb: "Restored",
+        entityType: "lead",
+        entityId: id,
+        entityDisplayName: `${restored?.firstName ?? ""} ${
+          restored?.lastName ?? ""
+        }`.trim(),
+        link: `/leads/${id}`,
+      });
+
       revalidatePath("/leads/archived");
       revalidatePath("/leads");
     },
