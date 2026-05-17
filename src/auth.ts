@@ -307,12 +307,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                   .where(eq(users.id, provisioned.id))
                   .limit(1);
                 if (mbx) {
-                  await checkMailboxKind({
-                    userId: provisioned.id,
-                    entraOid: mbx.entraOid,
-                    mailboxKind: mbx.mailboxKind,
-                    mailboxCheckedAt: mbx.mailboxCheckedAt,
-                  });
+                  // force: re-probe Graph every login (bypass the 24h
+                  // cache) so a mailbox migration is reflected at the
+                  // next sign-in and the admin "last checked" stamp
+                  // tracks the last login. Safe to force here because
+                  // this runs post-response in after() — it never
+                  // affects login latency. The 24h cache still
+                  // throttles the OTHER callers (the send fail-closed
+                  // gate, sendEmailAs) which pass no force.
+                  await checkMailboxKind(
+                    {
+                      userId: provisioned.id,
+                      entraOid: mbx.entraOid,
+                      mailboxKind: mbx.mailboxKind,
+                      mailboxCheckedAt: mbx.mailboxCheckedAt,
+                    },
+                    { force: true },
+                  );
                 }
               } catch (err) {
                 logger.warn("auth.mailbox_refresh_failed", {
