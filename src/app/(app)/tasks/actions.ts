@@ -14,7 +14,7 @@ import {
   type TaskCreateInput,
   type TaskUpdateInput,
 } from "@/lib/tasks";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, emitActivity } from "@/lib/notifications";
 import { db } from "@/db";
 import { tasks } from "@/db/schema/tasks";
 import { userPreferences } from "@/db/schema/views";
@@ -156,6 +156,7 @@ export async function deleteTaskAction(
           createdById: tasks.createdById,
           assignedToId: tasks.assignedToId,
           title: tasks.title,
+          leadId: tasks.leadId,
         })
         .from(tasks)
         .where(eq(tasks.id, taskId))
@@ -178,6 +179,15 @@ export async function deleteTaskAction(
         targetType: "task",
         targetId: taskId,
         before: { title: row.title, createdById: row.createdById, assignedToId: row.assignedToId },
+      });
+
+      await emitActivity({
+        actorId: session.id,
+        verb: "Archived",
+        entityType: "task",
+        entityId: taskId,
+        entityDisplayName: row.title,
+        link: row.leadId ? `/leads/${row.leadId}` : "/tasks",
       });
 
       revalidatePath("/tasks");
@@ -204,6 +214,8 @@ export async function undoArchiveTaskAction(input: {
         id: tasks.id,
         createdById: tasks.createdById,
         assignedToId: tasks.assignedToId,
+        title: tasks.title,
+        leadId: tasks.leadId,
       })
       .from(tasks)
       .where(eq(tasks.id, payload.id))
@@ -219,6 +231,16 @@ export async function undoArchiveTaskAction(input: {
       targetType: "task",
       targetId: payload.id,
     });
+
+    await emitActivity({
+      actorId: session.id,
+      verb: "Restored",
+      entityType: "task",
+      entityId: payload.id,
+      entityDisplayName: row.title,
+      link: row.leadId ? `/leads/${row.leadId}` : "/tasks",
+    });
+
     revalidatePath("/tasks");
     revalidatePath("/tasks/archived");
   });
@@ -232,12 +254,27 @@ export async function restoreTaskAction(
     if (!canHardDelete(session)) throw new ForbiddenError("Admin only.");
     const id = z.string().uuid().parse(formData.get("id"));
     await restoreTasksById([id], session.id);
+    const [restored] = await db
+      .select({ title: tasks.title, leadId: tasks.leadId })
+      .from(tasks)
+      .where(eq(tasks.id, id))
+      .limit(1);
     await writeAudit({
       actorId: session.id,
       action: "task.restore",
       targetType: "task",
       targetId: id,
     });
+
+    await emitActivity({
+      actorId: session.id,
+      verb: "Restored",
+      entityType: "task",
+      entityId: id,
+      entityDisplayName: restored?.title ?? "",
+      link: restored?.leadId ? `/leads/${restored.leadId}` : "/tasks",
+    });
+
     revalidatePath("/tasks/archived");
     revalidatePath("/tasks");
   });

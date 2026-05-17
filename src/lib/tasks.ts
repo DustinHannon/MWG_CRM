@@ -8,6 +8,11 @@ import { tasks } from "@/db/schema/tasks";
 import { users } from "@/db/schema/users";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
+  emitActivity,
+  emitActivities,
+  type EmitActivityInput,
+} from "@/lib/notifications";
+import {
   decodeCursor as decodeStandardCursor,
   encodeFromValues as encodeStandardCursor,
 } from "@/lib/cursors";
@@ -506,9 +511,10 @@ export async function bulkCompleteTasks(
 ): Promise<BulkTaskResult> {
   if (items.length === 0) return { updated: [], conflicts: [] };
   const completedAt = new Date();
-  const { updated, conflicts } = await db.transaction(async (tx) => {
+  const { updated, conflicts, updatedRows } = await db.transaction(async (tx) => {
     const updated: string[] = [];
     const conflicts: string[] = [];
+    const updatedRows: EmitActivityInput[] = [];
     for (const item of items) {
       const claimed = await tx
         .update(tasks)
@@ -527,9 +533,23 @@ export async function bulkCompleteTasks(
             sql`${tasks.status} <> 'completed'`,
           ),
         )
-        .returning({ id: tasks.id });
+        .returning({
+          id: tasks.id,
+          title: tasks.title,
+          leadId: tasks.leadId,
+        });
       if (claimed.length === 1) {
         updated.push(item.id);
+        updatedRows.push({
+          actorId,
+          verb: "Updated",
+          entityType: "task",
+          entityId: claimed[0].id,
+          entityDisplayName: claimed[0].title,
+          link: claimed[0].leadId
+            ? `/leads/${claimed[0].leadId}`
+            : "/tasks",
+        });
         continue;
       }
       // 0 rows: distinguish a stale version (conflict) from an
@@ -544,7 +564,7 @@ export async function bulkCompleteTasks(
       // else: already completed at the same version, or archived —
       // intentional no-op (not a conflict).
     }
-    return { updated, conflicts };
+    return { updated, conflicts, updatedRows };
   });
   await writeAuditBatch({
     actorId,
@@ -555,6 +575,10 @@ export async function bulkCompleteTasks(
       after: { completedAt: completedAt.toISOString() },
     })),
   });
+  // Aggregated activity-feed rows (one INSERT), only ids actually
+  // completed; title/leadId came back on the claim RETURNING so no
+  // extra query (STANDARDS 19.6.3). Best-effort, after the tx + audit.
+  await emitActivities(updatedRows);
   return { updated, conflicts };
 }
 
@@ -571,9 +595,10 @@ export async function bulkReassignTasks(
 ): Promise<BulkTaskResult> {
   if (items.length === 0) return { updated: [], conflicts: [] };
   const updatedAt = new Date();
-  const { updated, conflicts } = await db.transaction(async (tx) => {
+  const { updated, conflicts, updatedRows } = await db.transaction(async (tx) => {
     const updated: string[] = [];
     const conflicts: string[] = [];
+    const updatedRows: EmitActivityInput[] = [];
     for (const item of items) {
       const claimed = await tx
         .update(tasks)
@@ -590,9 +615,23 @@ export async function bulkReassignTasks(
             eq(tasks.isDeleted, false),
           ),
         )
-        .returning({ id: tasks.id });
+        .returning({
+          id: tasks.id,
+          title: tasks.title,
+          leadId: tasks.leadId,
+        });
       if (claimed.length === 1) {
         updated.push(item.id);
+        updatedRows.push({
+          actorId,
+          verb: "Updated",
+          entityType: "task",
+          entityId: claimed[0].id,
+          entityDisplayName: claimed[0].title,
+          link: claimed[0].leadId
+            ? `/leads/${claimed[0].leadId}`
+            : "/tasks",
+        });
         continue;
       }
       // 0 rows: distinguish a stale version (conflict) from an
@@ -608,7 +647,7 @@ export async function bulkReassignTasks(
       // else: archived (no longer reassignable) at the same version —
       // intentional no-op (not a conflict).
     }
-    return { updated, conflicts };
+    return { updated, conflicts, updatedRows };
   });
   await writeAuditBatch({
     actorId,
@@ -619,6 +658,10 @@ export async function bulkReassignTasks(
       after: { newAssigneeId },
     })),
   });
+  // Aggregated activity-feed rows (one INSERT), only ids actually
+  // reassigned; title/leadId from the claim RETURNING (STANDARDS
+  // 19.6.3). Best-effort, after the tx + audit.
+  await emitActivities(updatedRows);
   return { updated, conflicts };
 }
 
@@ -635,9 +678,10 @@ export async function bulkDeleteTasks(
 ): Promise<BulkTaskResult> {
   if (items.length === 0) return { updated: [], conflicts: [] };
   const deletedAt = new Date();
-  const { updated, conflicts } = await db.transaction(async (tx) => {
+  const { updated, conflicts, updatedRows } = await db.transaction(async (tx) => {
     const updated: string[] = [];
     const conflicts: string[] = [];
+    const updatedRows: EmitActivityInput[] = [];
     for (const item of items) {
       const claimed = await tx
         .update(tasks)
@@ -656,9 +700,23 @@ export async function bulkDeleteTasks(
             eq(tasks.isDeleted, false),
           ),
         )
-        .returning({ id: tasks.id });
+        .returning({
+          id: tasks.id,
+          title: tasks.title,
+          leadId: tasks.leadId,
+        });
       if (claimed.length === 1) {
         updated.push(item.id);
+        updatedRows.push({
+          actorId,
+          verb: "Archived",
+          entityType: "task",
+          entityId: claimed[0].id,
+          entityDisplayName: claimed[0].title,
+          link: claimed[0].leadId
+            ? `/leads/${claimed[0].leadId}`
+            : "/tasks",
+        });
         continue;
       }
       const [live] = await tx
@@ -669,7 +727,7 @@ export async function bulkDeleteTasks(
       if (live && live.version !== item.version) conflicts.push(item.id);
       // else: already archived at the same version — idempotent no-op.
     }
-    return { updated, conflicts };
+    return { updated, conflicts, updatedRows };
   });
   await writeAuditBatch({
     actorId,
@@ -679,6 +737,10 @@ export async function bulkDeleteTasks(
       targetId: id,
     })),
   });
+  // Aggregated activity-feed rows (one INSERT), only ids actually
+  // archived; title/leadId from the claim RETURNING (STANDARDS
+  // 19.6.3). Best-effort, after the tx + audit.
+  await emitActivities(updatedRows);
   return { updated, conflicts };
 }
 
@@ -736,6 +798,15 @@ export async function createTask(
     after: input as Record<string, unknown>,
   });
 
+  await emitActivity({
+    actorId,
+    verb: "Added",
+    entityType: "task",
+    entityId: row.id,
+    entityDisplayName: input.title,
+    link: input.leadId ? `/leads/${input.leadId}` : "/tasks",
+  });
+
   return { id: row.id };
 }
 
@@ -779,6 +850,18 @@ export async function updateTask(
     before: beforeRows[0] ?? null,
     after: patch as Record<string, unknown>,
   });
+
+  await emitActivity({
+    actorId,
+    verb: "Updated",
+    entityType: "task",
+    entityId: id,
+    entityDisplayName: patch.title ?? beforeRows[0]?.title ?? "",
+    link: beforeRows[0]?.leadId
+      ? `/leads/${beforeRows[0].leadId}`
+      : "/tasks",
+  });
+
   return rows[0];
 }
 

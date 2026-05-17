@@ -142,18 +142,42 @@ export async function emitActivity(input: EmitActivityInput): Promise<void> {
   }
 }
 
-/** Batch variant for bulk actions (one insert, one row per entity). */
+/**
+ * Chunk size for {@link emitActivities}. Mirrors
+ * `AUDIT_BATCH_CHUNK_SIZE` (src/lib/audit.ts): a bulk task/entity
+ * action can reach `BULK_SCOPE_EXPANSION_CAP` (5000) rows, so a single
+ * INSERT would be one oversized statement and let one bad row
+ * (jsonb/length/constraint) poison all N. 500 caps the blast radius
+ * to its chunk and bounds params/round-trips (§19.6.3 / §19.7.2
+ * parity with writeAuditBatch).
+ */
+const ACTIVITY_BATCH_CHUNK_SIZE = 500;
+
+/**
+ * Batch variant for bulk actions — one row per entity, chunked at
+ * {@link ACTIVITY_BATCH_CHUNK_SIZE}. Same best-effort contract as
+ * {@link emitActivity}: a chunk-INSERT failure NEVER blocks the
+ * parent mutation; it logs the chunk and continues so a single bad
+ * row only loses its chunk, not the whole feed batch.
+ */
 export async function emitActivities(
   list: EmitActivityInput[],
 ): Promise<void> {
   if (list.length === 0) return;
-  try {
-    await db.insert(notifications).values(list.map(activityRow));
-  } catch (err) {
-    logger.error("notifications.emit_activities_failed", {
-      count: list.length,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
+  for (let i = 0; i < list.length; i += ACTIVITY_BATCH_CHUNK_SIZE) {
+    const chunk = list.slice(i, i + ACTIVITY_BATCH_CHUNK_SIZE);
+    try {
+      await db.insert(notifications).values(chunk.map(activityRow));
+    } catch (err) {
+      logger.error("notifications.emit_activities_failed", {
+        actorId: chunk[0]?.actorId ?? null,
+        sampleEntityType: chunk[0]?.entityType ?? null,
+        chunkIndex: i / ACTIVITY_BATCH_CHUNK_SIZE,
+        chunkSize: chunk.length,
+        totalEvents: list.length,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
 
