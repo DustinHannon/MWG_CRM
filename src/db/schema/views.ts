@@ -124,6 +124,14 @@ export const userPreferences = pgTable("user_preferences", {
   emailDigestFrequency: text("email_digest_frequency").notNull().default("off"),
   // pipeline/table view-mode preference.
   leadsDefaultMode: text("leads_default_mode").notNull().default("table"),
+  // Bell badge "last seen" cursor, distinct from per-row is_read.
+  // The badge counts notifications created after this; opening or
+  // clearing the bell sets it to now() (badge -> 0) WITHOUT
+  // mutating any notification row, so the activity log persists
+  // in full. NULL = never cleared (badge counts all).
+  notificationsLastSeenAt: timestamp("notifications_last_seen_at", {
+    withTimezone: true,
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),

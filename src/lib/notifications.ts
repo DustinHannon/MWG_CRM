@@ -13,7 +13,8 @@ interface CreateNotificationInput {
     | "mention"
     | "saved_search"
     | "new_user_jit"
-    | "mailbox_blocked";
+    | "mailbox_blocked"
+    | "activity";
   title: string;
   body?: string | null;
   link?: string | null;
@@ -60,6 +61,89 @@ export async function createNotifications(
     );
   } catch (err) {
     logger.error("notifications.bulk_create_failed", {
+      count: list.length,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** Verbs surfaced in the activity feed. Past tense, sentence case. */
+export type ActivityVerb = "Added" | "Updated" | "Archived" | "Restored";
+export type ActivityEntityType =
+  | "lead"
+  | "contact"
+  | "account"
+  | "opportunity"
+  | "task";
+
+const ACTIVITY_ENTITY_LABEL: Record<ActivityEntityType, string> = {
+  lead: "Lead",
+  contact: "Contact",
+  account: "Account",
+  opportunity: "Opportunity",
+  task: "Task",
+};
+
+export interface EmitActivityInput {
+  /** The user who performed the action — their own activity feed. */
+  actorId: string;
+  verb: ActivityVerb;
+  entityType: ActivityEntityType;
+  entityId: string;
+  /**
+   * Human label resolved at emit time ("Dustin Hannon"); snapshotted
+   * because the entity may be archived/renamed/hard-deleted later.
+   */
+  entityDisplayName: string;
+  /** In-app jump target, e.g. `/leads/{id}`. */
+  link: string;
+}
+
+function activityRow(i: EmitActivityInput) {
+  const label = ACTIVITY_ENTITY_LABEL[i.entityType];
+  const name = i.entityDisplayName.trim() || `(unnamed ${i.entityType})`;
+  return {
+    userId: i.actorId,
+    actorId: i.actorId,
+    kind: "activity" as const,
+    title: `${i.verb} ${name} — ${label}`,
+    verb: i.verb,
+    entityType: i.entityType,
+    entityId: i.entityId,
+    entityDisplayName: name,
+    link: i.link,
+  };
+}
+
+/**
+ * Record a state-changing action in the actor's OWN activity feed
+ * (bell + /notifications). Best-effort — mirrors writeAudit's
+ * contract: a failure here NEVER fails the parent mutation (swallow
+ * + logger.error). Call it next to writeAudit at create / archive /
+ * restore / key-field-update sites.
+ */
+export async function emitActivity(input: EmitActivityInput): Promise<void> {
+  try {
+    await db.insert(notifications).values(activityRow(input));
+  } catch (err) {
+    logger.error("notifications.emit_activity_failed", {
+      actorId: input.actorId,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** Batch variant for bulk actions (one insert, one row per entity). */
+export async function emitActivities(
+  list: EmitActivityInput[],
+): Promise<void> {
+  if (list.length === 0) return;
+  try {
+    await db.insert(notifications).values(list.map(activityRow));
+  } catch (err) {
+    logger.error("notifications.emit_activities_failed", {
       count: list.length,
       errorMessage: err instanceof Error ? err.message : String(err),
     });

@@ -117,9 +117,33 @@ export const notifications = pgTable(
     body: text("body"),
     link: text("link"),
     isRead: boolean("is_read").notNull().default(false),
+    // Structured activity-log fields (kind = 'activity'). All
+    // nullable so pre-existing rows and the other kinds
+    // (task_assigned, mailbox_blocked, …) are unaffected — no
+    // backfill. actorId = the user whose action this records; in
+    // the actor's-own-activity model actorId === userId (recipient).
+    actorId: uuid("actor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    verb: text("verb"),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    entityDisplayName: text("entity_display_name"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index("notifications_user_unread_idx").on(t.userId, t.isRead, t.createdAt.desc())],
+  (t) => [
+    index("notifications_user_unread_idx").on(
+      t.userId,
+      t.isRead,
+      t.createdAt.desc(),
+    ),
+    // activity-log keyset (user's own feed, newest first) + the
+    // badge "created_at > last_seen" count.
+    index("notifications_user_created_idx").on(
+      t.userId,
+      t.createdAt.desc(),
+    ),
+  ],
 );
