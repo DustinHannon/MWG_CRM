@@ -5,6 +5,8 @@ import { useCallback, useState, useTransition } from "react";
 import { Loader2, Send } from "lucide-react";
 import { LockedTemplateBanner } from "@/components/marketing/locked-template-banner";
 import { UnlayerEditor } from "@/components/marketing/unlayer-editor";
+import { TemplateStatusPill } from "@/components/ui/template-status-pill";
+import type { MarketingTemplateStatus } from "@/db/schema/marketing-templates";
 import { useTemplateLock } from "@/hooks/marketing/use-template-lock";
 import {
   archiveTemplateAction,
@@ -13,7 +15,6 @@ import {
   updateTemplateAction,
 } from "../../../actions";
 
-type TemplateStatus = "draft" | "ready" | "archived";
 type TemplateScope = "global" | "personal";
 
 interface InitialHolder {
@@ -32,7 +33,7 @@ interface TemplateEditorProps {
   // expects an opaque object; we narrow at the mount call below and
   // skip `loadDesign` when the column is empty/null.
   initialDesign: unknown;
-  initialStatus: TemplateStatus;
+  initialStatus: MarketingTemplateStatus;
   /** current visibility for the inline scope toggle. */
   initialScope: TemplateScope;
   /** OCC version for the scope-change action. */
@@ -62,7 +63,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
   const [subject, setSubject] = useState(props.initialSubject);
   const [preheader, setPreheader] = useState(props.initialPreheader);
   const [description, setDescription] = useState(props.initialDescription);
-  const [status, setStatus] = useState<TemplateStatus>(props.initialStatus);
+  const [status, setStatus] = useState<MarketingTemplateStatus>(props.initialStatus);
   // visibility radio state. `currentScope` is
   // what's persisted; `pendingScope` is what the user has selected
   // but not yet saved via the "Save visibility" button.
@@ -355,7 +356,7 @@ interface ToolbarProps {
   setPreheader: (v: string) => void;
   description: string;
   setDescription: (v: string) => void;
-  status: TemplateStatus;
+  status: MarketingTemplateStatus;
   savePending: boolean;
   archivePending: boolean;
   onArchive: () => void;
@@ -408,7 +409,7 @@ function Toolbar(props: ToolbarProps) {
         </Field>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <StatusPillLocal status={props.status} />
+        <TemplateStatusPill status={props.status} />
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -446,24 +447,6 @@ function Field({
       </span>
       {children}
     </label>
-  );
-}
-
-function StatusPillLocal({ status }: { status: TemplateStatus }) {
-  const className =
-    status === "ready"
-      ? "bg-[var(--status-won-bg)] text-[var(--status-won-fg)]"
-      : status === "archived"
-        ? "bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]"
-        : "bg-[var(--status-default-bg)] text-[var(--status-default-fg)]";
-  const label =
-    status === "ready" ? "Ready" : status === "archived" ? "Archived" : "Draft";
-  return (
-    <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${className}`}
-    >
-      {label}
-    </span>
   );
 }
 

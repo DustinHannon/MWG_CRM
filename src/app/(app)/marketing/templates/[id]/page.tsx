@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { SafeHtmlPreview } from "@/components/security/safe-html-preview";
 import { UserTime } from "@/components/ui/user-time";
+import { TemplateStatusPill } from "@/components/ui/template-status-pill";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { users } from "@/db/schema/users";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -160,7 +161,7 @@ export default async function TemplateDetailPage({
 
         <aside className="flex flex-col gap-4">
           <SidebarBlock title="Status">
-            <StatusPillLocal status={row.status} />
+            <TemplateStatusPill status={row.status} />
           </SidebarBlock>
           <SidebarBlock title="Visibility">
             <ScopePillLocal scope={row.scope} />
@@ -244,28 +245,6 @@ function SidebarBlock({
       </h3>
       <div className="mt-2">{children}</div>
     </section>
-  );
-}
-
-function StatusPillLocal({
-  status,
-}: {
-  status: "draft" | "ready" | "archived";
-}) {
-  const className =
-    status === "ready"
-      ? "bg-[var(--status-won-bg)] text-[var(--status-won-fg)]"
-      : status === "archived"
-        ? "bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]"
-        : "bg-[var(--status-default-bg)] text-[var(--status-default-fg)]";
-  const label =
-    status === "ready" ? "Ready" : status === "archived" ? "Archived" : "Draft";
-  return (
-    <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${className}`}
-    >
-      {label}
-    </span>
   );
 }
 
