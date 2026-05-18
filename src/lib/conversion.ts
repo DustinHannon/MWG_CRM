@@ -8,6 +8,7 @@ import { leads } from "@/db/schema/leads";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import { emitActivities, type EmitActivityInput } from "@/lib/notifications";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { optionalMoneyField } from "@/lib/validation/primitives";
 
 export const conversionSchema = z.object({
   leadId: z.string().uuid(),
@@ -38,7 +39,7 @@ export const conversionSchema = z.object({
   newOpportunity: z
     .object({
       name: z.string().trim().min(1).max(200),
-      amount: z.coerce.number().nullable().optional(),
+      amount: optionalMoneyField,
       expectedCloseDate: z.string().optional().nullable(),
       description: z.string().trim().max(2000).optional().nullable(),
     })
@@ -191,10 +192,9 @@ export async function convertLead(
           primaryContactId: contactId,
           name: input.newOpportunity.name,
           stage: "prospecting",
-          amount:
-            input.newOpportunity.amount != null
-              ? String(input.newOpportunity.amount)
-              : lead.estimatedValue,
+          // optionalMoneyField already yields a normalized 2-decimal
+          // string (or null); fall back to the lead's estimate.
+          amount: input.newOpportunity.amount ?? lead.estimatedValue,
           expectedCloseDate:
             input.newOpportunity.expectedCloseDate ?? lead.estimatedCloseDate,
           description:

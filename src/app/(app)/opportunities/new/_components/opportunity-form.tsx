@@ -4,7 +4,14 @@ import { useActionState } from "react";
 import { createOpportunityAction } from "../actions";
 import type { ActionResult } from "@/lib/server-action";
 import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
-import { useShowPicker } from "@/hooks/use-show-picker";
+import {
+  StandardFormField,
+  StandardFormTextarea,
+  StandardFormSelect,
+  StandardFormSection,
+  StandardFormRow,
+  StandardFormErrorBanner,
+} from "@/components/standard";
 
 interface AccountOption {
   id: string;
@@ -32,16 +39,24 @@ export function OpportunityForm({
     FormData
   >(async (_prev, fd) => createOpportunityAction(fd), initial);
 
+  const fe: Record<string, string> = !state.ok
+    ? state.fieldErrors ?? {}
+    : {};
+  // Echo submitted values so React 19's post-action form reset
+  // restores them instead of blanking the form on a validation error.
+  const sv: Record<string, string> = !state.ok ? state.values ?? {} : {};
+  const dv = (name: string) => sv[name] ?? "";
+
   return (
     <form action={formAction} className="mt-8 grid gap-6 lg:grid-cols-2">
-      <Section title="Identity">
-        <Input name="name" label="Opportunity name *" required />
+      <StandardFormSection title="Identity">
+        <StandardFormField name="name" label="Opportunity name *" required defaultValue={dv("name")} error={fe.name} />
         <label className="block text-xs uppercase tracking-wide text-muted-foreground">
           Account *
           <select
             name="accountId"
             required
-            defaultValue={defaultAccountId ?? ""}
+            defaultValue={sv.accountId ?? defaultAccountId ?? ""}
             className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           >
             <option value="" disabled>
@@ -53,13 +68,18 @@ export function OpportunityForm({
               </option>
             ))}
           </select>
+          {fe.accountId ? (
+            <p role="alert" className="mt-1 text-xs text-[var(--status-lost-fg)]">
+              {fe.accountId}
+            </p>
+          ) : null}
         </label>
         {contacts.length > 0 ? (
           <label className="block text-xs uppercase tracking-wide text-muted-foreground">
             Primary contact
             <select
               name="primaryContactId"
-              defaultValue=""
+              defaultValue={sv.primaryContactId ?? ""}
               className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
             >
               <option value="">— No primary contact —</option>
@@ -71,57 +91,46 @@ export function OpportunityForm({
             </select>
           </label>
         ) : null}
-      </Section>
+      </StandardFormSection>
 
-      <Section title="Pipeline">
-        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-          Stage
-          <select
-            name="stage"
-            defaultValue="prospecting"
-            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          >
-            {OPPORTUNITY_STAGES.map((s) => (
-              <option key={s} value={s}>
-                {s.replaceAll("_", " ")}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Row>
-          <Input
+      <StandardFormSection title="Pipeline">
+        <StandardFormSelect
+          name="stage"
+          label="Stage"
+          options={OPPORTUNITY_STAGES}
+          defaultValue={sv.stage ?? "prospecting"}
+          error={fe.stage}
+        />
+        <StandardFormRow>
+          {/* text + inputMode="decimal" (not type="number") so a
+              mistyped amount round-trips and surfaces an inline error
+              instead of being silently dropped. */}
+          <StandardFormField
             name="amount"
             label="Amount (USD)"
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
+            defaultValue={dv("amount")}
+            error={fe.amount}
           />
-          <Input
+          <StandardFormField
             name="expectedCloseDate"
             label="Expected close date"
             type="date"
+            defaultValue={dv("expectedCloseDate")}
+            error={fe.expectedCloseDate}
           />
-        </Row>
-      </Section>
+        </StandardFormRow>
+      </StandardFormSection>
 
-      <Section title="Notes" wide>
-        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-          Description
-          <textarea
-            name="description"
-            rows={5}
-            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </label>
-      </Section>
+      <StandardFormSection title="Notes" wide>
+        <StandardFormTextarea name="description" label="Description" rows={5} defaultValue={dv("description")} error={fe.description} />
+      </StandardFormSection>
 
-      {!state.ok ? (
-        <div
-          role="alert"
-          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-2 text-sm text-[var(--status-lost-fg)] lg:col-span-2"
-        >
-          {state.error}
-        </div>
-      ) : null}
+      <StandardFormErrorBanner
+        message={!state.ok ? state.error : undefined}
+        className="lg:col-span-2"
+      />
 
       <div className="flex justify-end gap-3 lg:col-span-2">
         <button
@@ -133,60 +142,5 @@ export function OpportunityForm({
         </button>
       </div>
     </form>
-  );
-}
-
-function Section({
-  title,
-  children,
-  wide,
-}: {
-  title: string;
-  children: React.ReactNode;
-  wide?: boolean;
-}) {
-  return (
-    <section
-      className={`rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl ${wide ? "lg:col-span-2" : ""}`}
-    >
-      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h2>
-      <div className="mt-4 flex flex-col gap-4">{children}</div>
-    </section>
-  );
-}
-
-function Row({ children }: { children: React.ReactNode }) {
-  return <div className="grid gap-4 md:grid-cols-2">{children}</div>;
-}
-
-function Input({
-  name,
-  label,
-  type = "text",
-  step,
-  required,
-}: {
-  name: string;
-  label: string;
-  type?: string;
-  step?: string;
-  required?: boolean;
-}) {
-  const datePicker = useShowPicker();
-  const isDateLike = type === "date" || type === "datetime-local";
-  return (
-    <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-      {label}
-      <input
-        name={name}
-        type={type}
-        step={step}
-        required={required}
-        onClick={isDateLike ? datePicker : undefined}
-        className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-      />
-    </label>
   );
 }

@@ -11,16 +11,104 @@ import { parsePhoneNumber } from "libphonenumber-js";
  * Need nullable? `nameField.nullable()`.
  */
 
-/** Letters (any unicode), spaces, hyphens, apostrophes, periods. 1–100 chars. */
+/**
+ * Person name. Required, 1–100 chars, trimmed. Deliberately NOT
+ * character-class restricted: real names contain digits, punctuation,
+ * and non-Latin scripts, and a "letters only" regex silently rejects
+ * legitimate people (and pasted reference tags) for no integrity gain
+ * — name is free text, not a key. Output encoding (React escaping) is
+ * the XSS control, not input charset. Only emptiness and length are
+ * enforced so the error is always actionable ("Required" / length).
+ */
 export const nameField = z
   .string()
   .trim()
   .min(1, "Required")
-  .max(100, "Must be 100 characters or fewer")
-  .regex(
-    /^[\p{L}\p{M}'.\-\s]+$/u,
-    "Letters, spaces, hyphens, apostrophes and periods only",
-  );
+  .max(100, "Must be 100 characters or fewer");
+
+/**
+ * Optional money / decimal from a form. Empty → null. A non-empty value
+ * that is not a non-negative finite number is REJECTED with a clear
+ * message — it is NEVER silently coerced to null, because the create
+ * forms post raw text (inputMode="decimal", not type="number") so the
+ * user's typed value round-trips and a mistake surfaces as an inline
+ * field error instead of a vanished amount. Accepts a leading "$" and
+ * thousands separators ("$25,000"). Output: a 2-decimal string that
+ * drops straight into numeric(.,2) columns (matches the prior
+ * estimatedValue/amount contract), or null.
+ */
+export const optionalMoneyField = z
+  .union([z.string(), z.number()])
+  .optional()
+  .nullable()
+  .transform((v, ctx) => {
+    if (v === null || v === undefined || v === "") return null;
+    const n =
+      typeof v === "number"
+        ? v
+        : Number(String(v).trim().replace(/[$,]/g, ""));
+    if (!Number.isFinite(n)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter a number, e.g. 25000",
+      });
+      return z.NEVER;
+    }
+    if (n < 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Must be zero or positive",
+      });
+      return z.NEVER;
+    }
+    // Ceiling sits just under the numeric(14,2) column max used by
+    // estimatedValue/amount so an absurd/typo value gets a clean field
+    // message instead of a Postgres overflow; still far above any
+    // realistic deal or enterprise annual-revenue figure.
+    if (n > 999_999_999_999) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Value is too large",
+      });
+      return z.NEVER;
+    }
+    return n.toFixed(2);
+  });
+
+/**
+ * Optional non-negative integer count from a form (e.g. employees).
+ * Same no-silent-drop contract as {@link optionalMoneyField}: empty →
+ * null; a non-empty value that is not a whole number ≥ 0 is rejected
+ * with a clear message rather than dropped. Output: number | null.
+ */
+export const optionalCountField = z
+  .union([z.string(), z.number()])
+  .optional()
+  .nullable()
+  .transform((v, ctx) => {
+    if (v === null || v === undefined || v === "") return null;
+    const n =
+      typeof v === "number"
+        ? v
+        : Number(String(v).trim().replace(/,/g, ""));
+    if (!Number.isInteger(n) || n < 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter a whole number, e.g. 50",
+      });
+      return z.NEVER;
+    }
+    // Stay within int4 (the column type) so an oversized value is a
+    // clean field error, not a driver overflow.
+    if (n > 2_000_000_000) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Value is too large",
+      });
+      return z.NEVER;
+    }
+    return n;
+  });
 
 /** Email — RFC-ish format + max length the Postgres UNIQUE index can hold. */
 export const emailField = z

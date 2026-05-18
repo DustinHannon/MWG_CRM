@@ -23,6 +23,22 @@ export type ActionFailure = {
   error: string;
   code: string;
   requestId: string;
+  /**
+   * Per-field validation messages, keyed by the field name (Zod issue
+   * path joined with "."). Present only on `code === "VALIDATION"` when
+   * the failure carried Zod issues. Optional and additive — consumers
+   * that only read `error` are unaffected; forms opt in to render an
+   * inline message under the offending field instead of (or alongside)
+   * the single banner.
+   */
+  fieldErrors?: Record<string, string>;
+  /**
+   * Raw submitted string values, keyed by field name. Present on a
+   * validation failure raised via `parseFormOrThrow`. Forms feed these
+   * back as `defaultValue` so React 19's post-action uncontrolled-form
+   * reset restores the user's input instead of blanking the form.
+   */
+  values?: Record<string, string>;
 };
 
 export type ActionResult<T = void> = [T] extends [void]
@@ -97,6 +113,30 @@ function translatePgError(err: unknown): unknown {
     );
   }
   return err;
+}
+
+/**
+ * Build the `fieldErrors` map from Zod issues carried on a
+ * `ValidationError`'s `meta.issues` (populated by the ZodError
+ * translation below). First message wins per field path so the inline
+ * message is stable; an empty-path issue (e.g. a form-level refine)
+ * keys under "form". Returns undefined when there are no usable issues
+ * so the failure object stays minimal.
+ */
+function fieldErrorsFromIssues(
+  issues: unknown,
+): Record<string, string> | undefined {
+  if (!Array.isArray(issues) || issues.length === 0) return undefined;
+  const out: Record<string, string> = {};
+  for (const issue of issues) {
+    if (!issue || typeof issue !== "object") continue;
+    const path = (issue as { path?: unknown }).path;
+    const message = (issue as { message?: unknown }).message;
+    if (typeof message !== "string") continue;
+    const key = Array.isArray(path) ? path.join(".") || "form" : "form";
+    if (!(key in out)) out[key] = message;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**
@@ -176,6 +216,18 @@ export async function withErrorBoundary<T>(
         : {}),
     });
 
+    const isValidation =
+      isKnown && (err as KnownError).code === "VALIDATION";
+    const fieldErrors = isValidation
+      ? fieldErrorsFromIssues((err as KnownError).meta?.issues)
+      : undefined;
+    const submittedValues =
+      isValidation &&
+      (err as KnownError).meta?.values &&
+      typeof (err as KnownError).meta?.values === "object"
+        ? ((err as KnownError).meta?.values as Record<string, string>)
+        : undefined;
+
     return {
       ok: false,
       error: isKnown
@@ -183,6 +235,8 @@ export async function withErrorBoundary<T>(
         : "Something went wrong. Please try again.",
       code: isKnown ? (err as KnownError).code : "INTERNAL",
       requestId,
+      ...(fieldErrors ? { fieldErrors } : {}),
+      ...(submittedValues ? { values: submittedValues } : {}),
     };
   }
   });

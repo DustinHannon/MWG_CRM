@@ -24,11 +24,11 @@ export function ContactDetailDelete({
       onConfirm={async (reason) => {
         const res = await softDeleteContactAction({ id: contactId, reason });
         if (res.ok) {
-          router.push("/contacts");
           return { ok: true, undoToken: res.data.undoToken };
         }
         return { ok: false, error: res.error };
       }}
+      onNavigate={() => router.push("/contacts")}
       onUndo={async (undoToken) => {
         const res = await undoArchiveContactAction({ undoToken });
         if (res.ok) {

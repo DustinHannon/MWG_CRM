@@ -5,7 +5,7 @@ import { ValidationError } from "@/lib/errors";
 
 /**
  * undo token. HMAC-SHA256 over the canonical
- * "<entity>:<id>:<deletedAtIso>" payload, with a 5-second expiry built
+ * "<entity>:<id>:<deletedAtIso>" payload, with a short expiry built
  * into the issuance window. Used by the toast Undo button to restore a
  * just-archived record. The token is tiny and round-trippable through
  * a button onClick → server action.
@@ -13,9 +13,13 @@ import { ValidationError } from "@/lib/errors";
  * Format: <base64url-payload>.<base64url-signature>
  * payload = JSON.stringify({ entity, id, deletedAt, exp })
  *
- * Why HMAC and not a DB row? The undo window is 5 seconds and the only
- * payload is "what to restore." A signed token avoids a DB roundtrip
- * for issuance/verification and self-expires.
+ * Why HMAC and not a DB row? The only payload is "what to restore." A
+ * signed token avoids a DB roundtrip for issuance/verification and
+ * self-expires. The security control is the HMAC signature plus the
+ * full ownership/admin re-check performed at undo time — NOT the
+ * window length; the TTL only bounds how long the legitimate actor can
+ * click Undo, so it is sized to outlive a route transition plus a
+ * readable toast (see TTL_MS).
  */
 
 export type EntityKind =
@@ -33,11 +37,20 @@ export interface UndoTokenPayload {
   exp: number; // ms epoch
 }
 
-const TTL_MS = 5_000;
+/**
+ * 45s. Must exceed the undo toast duration (30s, see undo-toast.ts) by
+ * a margin so that whenever the toast is still visible the token is
+ * still valid — the old 5s value expired mid-navigation, so even when
+ * the toast rendered the Undo click often failed "window expired". Not
+ * a security parameter (HMAC + ownership re-check at undo are); just
+ * the click window.
+ */
+const TTL_MS = 45_000;
 
 function getSecret(): string {
-  // Reuse AUTH_SECRET — it's already required, we don't add a new env var
-  // surface for one feature with a 5-second blast radius.
+  // Reuse AUTH_SECRET — it's already required; no new env var surface
+  // for a feature whose blast radius is "undo your own just-archived
+  // record, re-authorized server-side".
   const s = env.AUTH_SECRET ?? process.env.AUTH_SECRET ?? "";
   // invariant: AUTH_SECRET is required by Auth.js v5 itself — the app
   // can't boot without it. Reaching here means a runtime mutation of

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { apiUsageLog } from "@/db/schema/api-keys";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { writeAudit } from "@/lib/audit";
+import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -189,7 +190,10 @@ function parseList(raw: string | null | undefined): string[] {
 
 function csvEscape(value: string): string {
   if (value === "" || value === null || value === undefined) return "";
-  const needsQuotes = /[",\r\n]/.test(value);
-  const escaped = value.replace(/"/g, '""');
+  // API key names, user agents, error messages and request/response
+  // summaries are user-derived — neutralize formula injection.
+  const guarded = neutralizeSpreadsheetFormula(value);
+  const needsQuotes = /[",\r\n]/.test(guarded);
+  const escaped = guarded.replace(/"/g, '""');
   return needsQuotes ? `"${escaped}"` : escaped;
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { useTransition } from "react";
 import { ConfirmDeleteDialog, type EntityKind } from "./confirm-delete-dialog";
 import { showUndoToast } from "./undo-toast";
 import { toast } from "sonner";
@@ -35,10 +34,18 @@ export interface DeleteIconButtonProps {
   onUndo?: (
     undoToken: string,
   ) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Navigation to run AFTER the undo toast is enqueued. Detail pages
+   * pass `() => router.push("/leads")`; list pages pass
+   * `() => router.refresh()`. Kept separate from `onConfirm` so the
+   * toast is always added to the (persistent) Toaster store before the
+   * route transition starts — otherwise a detail-page `router.push`
+   * races and the undo toast is never seen (the original bug).
+   */
+  onNavigate?: () => void;
 }
 
 export function DeleteIconButton(props: DeleteIconButtonProps) {
-  const [, startTransition] = useTransition();
   if (!props.canDelete) return null;
 
   return (
@@ -52,19 +59,21 @@ export function DeleteIconButton(props: DeleteIconButtonProps) {
           toast.error(res.error ?? "Archive failed.");
           return;
         }
+        // Enqueue the toast BEFORE navigating. <Toaster> lives in the
+        // persistent (app) layout so a queued toast survives a
+        // push/refresh — but only if it is queued first.
         if (res.undoToken && props.onUndo) {
           const undoToken = res.undoToken;
           const onUndo = props.onUndo;
-          startTransition(() => {
-            showUndoToast({
-              entityKind: props.entityKind,
-              entityName: props.entityName,
-              onUndo: () => onUndo(undoToken),
-            });
+          showUndoToast({
+            entityKind: props.entityKind,
+            entityName: props.entityName,
+            onUndo: () => onUndo(undoToken),
           });
         } else {
           toast.success("Archived.");
         }
+        props.onNavigate?.();
       }}
       trigger={
         <button
@@ -89,7 +98,6 @@ export interface DeleteButtonProps extends DeleteIconButtonProps {
 }
 
 export function DeleteButton(props: DeleteButtonProps) {
-  const [, startTransition] = useTransition();
   if (!props.canDelete) return null;
 
   return (
@@ -103,19 +111,21 @@ export function DeleteButton(props: DeleteButtonProps) {
           toast.error(res.error ?? "Archive failed.");
           return;
         }
+        // Enqueue the toast BEFORE navigating. <Toaster> lives in the
+        // persistent (app) layout so a queued toast survives a
+        // push/refresh — but only if it is queued first.
         if (res.undoToken && props.onUndo) {
           const undoToken = res.undoToken;
           const onUndo = props.onUndo;
-          startTransition(() => {
-            showUndoToast({
-              entityKind: props.entityKind,
-              entityName: props.entityName,
-              onUndo: () => onUndo(undoToken),
-            });
+          showUndoToast({
+            entityKind: props.entityKind,
+            entityName: props.entityName,
+            onUndo: () => onUndo(undoToken),
           });
         } else {
           toast.success("Archived.");
         }
+        props.onNavigate?.();
       }}
       trigger={
         <button

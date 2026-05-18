@@ -27,11 +27,11 @@ export function OpportunityDetailDelete({
           reason,
         });
         if (res.ok) {
-          router.push("/opportunities");
           return { ok: true, undoToken: res.data.undoToken };
         }
         return { ok: false, error: res.error };
       }}
+      onNavigate={() => router.push("/opportunities")}
       onUndo={async (undoToken) => {
         const res = await undoArchiveOpportunityAction({ undoToken });
         if (res.ok) {

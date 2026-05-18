@@ -14,6 +14,7 @@
  */
 
 import type { ExportColumn } from "./stream-excel";
+import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 
 export type { ExportColumn };
 
@@ -43,6 +44,8 @@ function formatCell(value: unknown): string {
   } else {
     s = String(value);
   }
+  // Stop a cell like `=HYPERLINK(...)` executing in a spreadsheet.
+  s = neutralizeSpreadsheetFormula(s);
   if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
     return `"${s.replace(/"/g, '""')}"`;
   }

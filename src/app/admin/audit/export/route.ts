@@ -6,6 +6,7 @@ import { users } from "@/db/schema/users";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { writeAudit } from "@/lib/audit";
 import { auditCategorySql } from "@/lib/audit-cursor";
+import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -177,7 +178,10 @@ function buildWhereClauses(f: AuditFilterInput) {
 
 function csvEscape(value: string): string {
   if (value === "" || value === null || value === undefined) return "";
-  const needsQuotes = /[",\r\n]/.test(value);
-  const escaped = value.replace(/"/g, '""');
+  // Neutralize spreadsheet formula injection: actor display
+  // names / email snapshots are user-derived free text.
+  const guarded = neutralizeSpreadsheetFormula(value);
+  const needsQuotes = /[",\r\n]/.test(guarded);
+  const escaped = guarded.replace(/"/g, '""');
   return needsQuotes ? `"${escaped}"` : escaped;
 }

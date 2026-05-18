@@ -6,7 +6,14 @@ import type { ActionResult } from "@/lib/server-action";
 import { DuplicateWarning } from "@/components/leads/duplicate-warning";
 import { TagInput } from "@/components/tags/tag-input";
 import { TagSectionClient } from "@/components/tags/tag-section-client";
-import { useShowPicker } from "@/hooks/use-show-picker";
+import {
+  StandardFormField,
+  StandardFormTextarea,
+  StandardFormSelect,
+  StandardFormSection,
+  StandardFormRow,
+  StandardFormErrorBanner,
+} from "@/components/standard";
 import {
   LEAD_RATINGS,
   LEAD_SOURCES,
@@ -37,7 +44,6 @@ type LeadFormValues = {
   country?: string | null;
   description?: string | null;
   // `subject` is the legacy "Topic:" line.
-  // The column shipped; Wave 6 finally exposes it on the form.
   subject?: string | null;
   status: (typeof LEAD_STATUSES)[number];
   rating: (typeof LEAD_RATINGS)[number];
@@ -63,6 +69,8 @@ const empty: LeadFormValues = {
   doNotCall: false,
 };
 
+type StrMap = Record<string, string>;
+
 export function LeadForm({
   mode,
   lead,
@@ -83,6 +91,14 @@ export function LeadForm({
   >(async (_prev, fd) => action(fd), initial);
 
   const v = lead ?? empty;
+  // Per-field validation messages, and the raw values the user
+  // submitted. React 19 resets uncontrolled fields once the action
+  // settles (even on error); feeding the submitted value back as
+  // `defaultValue` makes that reset restore the input instead of
+  // blanking it. Never blank a form on a validation error.
+  const fe: StrMap = !state.ok ? state.fieldErrors ?? {} : {};
+  const sv: StrMap = !state.ok ? state.values ?? {} : {};
+  const dv = (name: string, fallback: string) => sv[name] ?? fallback;
   // TagInput is controlled; selectedTags
   // round-trips into a hidden `tagIds` input the server action reads.
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>(
@@ -100,47 +116,55 @@ export function LeadForm({
         </>
       ) : null}
 
-      <Section title="Contact">
-        <Row>
-          <Input name="firstName" label="First name *" defaultValue={v.firstName} required />
-          <Input name="lastName" label="Last name" defaultValue={v.lastName ?? ""} />
-        </Row>
-        <Input name="jobTitle" label="Job title" defaultValue={v.jobTitle ?? ""} />
-        <Row>
-          <Input name="companyName" label="Company" defaultValue={v.companyName ?? ""} />
-          <Input name="industry" label="Industry" defaultValue={v.industry ?? ""} />
-        </Row>
+      <StandardFormSection title="Contact">
+        <StandardFormRow>
+          <StandardFormField name="firstName" label="First name *" defaultValue={dv("firstName", v.firstName)} required error={fe.firstName} />
+          <StandardFormField name="lastName" label="Last name" defaultValue={dv("lastName", v.lastName ?? "")} error={fe.lastName} />
+        </StandardFormRow>
+        <StandardFormField name="jobTitle" label="Job title" defaultValue={dv("jobTitle", v.jobTitle ?? "")} error={fe.jobTitle} />
+        <StandardFormRow>
+          <StandardFormField name="companyName" label="Company" defaultValue={dv("companyName", v.companyName ?? "")} error={fe.companyName} />
+          <StandardFormField name="industry" label="Industry" defaultValue={dv("industry", v.industry ?? "")} error={fe.industry} />
+        </StandardFormRow>
         <DuplicateAwareContact
           isCreate={v.id == null}
-          defaultEmail={v.email ?? ""}
-          defaultPhone={v.phone ?? ""}
-          defaultMobilePhone={v.mobilePhone ?? ""}
+          defaultEmail={dv("email", v.email ?? "")}
+          defaultPhone={dv("phone", v.phone ?? "")}
+          defaultMobilePhone={dv("mobilePhone", v.mobilePhone ?? "")}
+          fe={fe}
         />
-        <Input name="website" label="Website" defaultValue={v.website ?? ""} />
-        <Input name="linkedinUrl" label="LinkedIn URL" defaultValue={v.linkedinUrl ?? ""} />
-      </Section>
+        <StandardFormField name="website" label="Website" defaultValue={dv("website", v.website ?? "")} error={fe.website} />
+        <StandardFormField name="linkedinUrl" label="LinkedIn URL" defaultValue={dv("linkedinUrl", v.linkedinUrl ?? "")} error={fe.linkedinUrl} />
+      </StandardFormSection>
 
-      <Section title="Pipeline">
-        <Row>
-          <Select name="status" label="Status" defaultValue={v.status} options={LEAD_STATUSES} />
-          <Select name="rating" label="Rating" defaultValue={v.rating} options={LEAD_RATINGS} />
-        </Row>
-        <Select name="source" label="Source" defaultValue={v.source} options={LEAD_SOURCES} />
-        <Row>
-          <Input
+      <StandardFormSection title="Pipeline">
+        <StandardFormRow>
+          <StandardFormSelect name="status" label="Status" defaultValue={dv("status", v.status)} options={LEAD_STATUSES} error={fe.status} />
+          <StandardFormSelect name="rating" label="Rating" defaultValue={dv("rating", v.rating)} options={LEAD_RATINGS} error={fe.rating} />
+        </StandardFormRow>
+        <StandardFormSelect name="source" label="Source" defaultValue={dv("source", v.source)} options={LEAD_SOURCES} error={fe.source} />
+        <StandardFormRow>
+          {/* Money is text + inputMode="decimal", NOT type="number":
+              a native number input blanks content the browser deems
+              invalid, so a mistyped amount used to vanish silently.
+              Now the value round-trips and a bad entry surfaces an
+              inline error instead of saving an empty field. */}
+          <StandardFormField
             name="estimatedValue"
             label="Estimated value (USD)"
-            type="number"
-            step="0.01"
-            defaultValue={v.estimatedValue ?? ""}
+            type="text"
+            inputMode="decimal"
+            defaultValue={dv("estimatedValue", v.estimatedValue ?? "")}
+            error={fe.estimatedValue}
           />
-          <Input
+          <StandardFormField
             name="estimatedCloseDate"
             label="Estimated close date"
             type="date"
-            defaultValue={v.estimatedCloseDate ?? ""}
+            defaultValue={dv("estimatedCloseDate", v.estimatedCloseDate ?? "")}
+            error={fe.estimatedCloseDate}
           />
-        </Row>
+        </StandardFormRow>
         <div>
           <h3 className="text-sm font-medium text-muted-foreground">Tags</h3>
           <div className="mt-2">
@@ -170,52 +194,44 @@ export function LeadForm({
           initialDoNotEmail={v.doNotEmail}
           initialDoNotCall={v.doNotCall}
         />
-      </Section>
+      </StandardFormSection>
 
-      <Section title="Address" wide>
-        <Row>
-          <Input name="street1" label="Street 1" defaultValue={v.street1 ?? ""} />
-          <Input name="street2" label="Street 2" defaultValue={v.street2 ?? ""} />
-        </Row>
-        <Row>
-          <Input name="city" label="City" defaultValue={v.city ?? ""} />
-          <Input name="state" label="State" defaultValue={v.state ?? ""} />
-          <Input name="postalCode" label="Postal code" defaultValue={v.postalCode ?? ""} />
-        </Row>
-        <Input name="country" label="Country" defaultValue={v.country ?? ""} />
-      </Section>
+      <StandardFormSection title="Address" wide>
+        <StandardFormRow>
+          <StandardFormField name="street1" label="Street 1" defaultValue={dv("street1", v.street1 ?? "")} error={fe.street1} />
+          <StandardFormField name="street2" label="Street 2" defaultValue={dv("street2", v.street2 ?? "")} error={fe.street2} />
+        </StandardFormRow>
+        <StandardFormRow>
+          <StandardFormField name="city" label="City" defaultValue={dv("city", v.city ?? "")} error={fe.city} />
+          <StandardFormField name="state" label="State" defaultValue={dv("state", v.state ?? "")} error={fe.state} />
+          <StandardFormField name="postalCode" label="Postal code" defaultValue={dv("postalCode", v.postalCode ?? "")} error={fe.postalCode} />
+        </StandardFormRow>
+        <StandardFormField name="country" label="Country" defaultValue={dv("country", v.country ?? "")} error={fe.country} />
+      </StandardFormSection>
 
-      <Section title="Notes" wide>
-        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-          Subject
-          <textarea
-            name="subject"
-            defaultValue={v.subject ?? ""}
-            rows={2}
-            maxLength={1000}
-            placeholder="Brief one-line summary"
-            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </label>
-        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-          Description
-          <textarea
-            name="description"
-            defaultValue={v.description ?? ""}
-            rows={6}
-            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </label>
-      </Section>
+      <StandardFormSection title="Notes" wide>
+        <StandardFormTextarea
+          name="subject"
+          label="Subject"
+          defaultValue={dv("subject", v.subject ?? "")}
+          rows={2}
+          maxLength={1000}
+          placeholder="Brief one-line summary"
+          error={fe.subject}
+        />
+        <StandardFormTextarea
+          name="description"
+          label="Description"
+          defaultValue={dv("description", v.description ?? "")}
+          rows={6}
+          error={fe.description}
+        />
+      </StandardFormSection>
 
-      {!state.ok ? (
-        <div
-          role="alert"
-          className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-2 text-sm text-[var(--status-lost-fg)] lg:col-span-2"
-        >
-          {state.error}
-        </div>
-      ) : null}
+      <StandardFormErrorBanner
+        message={!state.ok ? state.error : undefined}
+        className="lg:col-span-2"
+      />
 
       <div className="flex justify-end gap-3 lg:col-span-2">
         <button
@@ -227,96 +243,6 @@ export function LeadForm({
         </button>
       </div>
     </form>
-  );
-}
-
-function Section({
-  title,
-  children,
-  wide,
-}: {
-  title: string;
-  children: React.ReactNode;
-  wide?: boolean;
-}) {
-  return (
-    <section
-      className={`rounded-2xl border border-border bg-muted/40 p-6 backdrop-blur-xl ${wide ? "lg:col-span-2" : ""}`}
-    >
-      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h2>
-      <div className="mt-4 flex flex-col gap-4">{children}</div>
-    </section>
-  );
-}
-
-function Row({ children }: { children: React.ReactNode }) {
-  return <div className="grid gap-4 md:grid-cols-2">{children}</div>;
-}
-
-function Input({
-  name,
-  label,
-  defaultValue,
-  type = "text",
-  required,
-  step,
-  onChange,
-}: {
-  name: string;
-  label: string;
-  defaultValue?: string;
-  type?: string;
-  required?: boolean;
-  step?: string;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) {
-  const datePicker = useShowPicker();
-  const isDateLike = type === "date" || type === "datetime-local";
-  return (
-    <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-      {label}
-      <input
-        name={name}
-        type={type}
-        onChange={onChange}
-        onClick={isDateLike ? datePicker : undefined}
-        step={step}
-        defaultValue={defaultValue}
-        required={required}
-        className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-      />
-    </label>
-  );
-}
-
-function Select({
-  name,
-  label,
-  defaultValue,
-  options,
-}: {
-  name: string;
-  label: string;
-  defaultValue: string;
-  options: readonly string[];
-}) {
-  return (
-    <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-      {label}
-      <select
-        name={name}
-        defaultValue={defaultValue}
-        className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-      >
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o.replaceAll("_", " ")}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
@@ -412,11 +338,13 @@ function DuplicateAwareContact({
   defaultEmail,
   defaultPhone,
   defaultMobilePhone,
+  fe,
 }: {
   isCreate: boolean;
   defaultEmail: string;
   defaultPhone: string;
   defaultMobilePhone: string;
+  fe: StrMap;
 }) {
   const [email, setEmail] = useState(defaultEmail);
   const [phone, setPhone] = useState(defaultPhone);
@@ -424,29 +352,32 @@ function DuplicateAwareContact({
 
   return (
     <>
-      <Input
+      <StandardFormField
         name="email"
         label="Email"
         type="email"
         defaultValue={defaultEmail}
+        error={fe.email}
         onChange={(e) => setEmail((e.target as HTMLInputElement).value)}
       />
-      <Row>
-        <Input
+      <StandardFormRow>
+        <StandardFormField
           name="phone"
           label="Phone"
           defaultValue={defaultPhone}
+          error={fe.phone}
           onChange={(e) => setPhone((e.target as HTMLInputElement).value)}
         />
-        <Input
+        <StandardFormField
           name="mobilePhone"
           label="Mobile"
           defaultValue={defaultMobilePhone}
+          error={fe.mobilePhone}
           onChange={(e) =>
             setMobilePhone((e.target as HTMLInputElement).value)
           }
         />
-      </Row>
+      </StandardFormRow>
       {isCreate ? (
         <DuplicateWarning email={email} phone={phone || mobilePhone} />
       ) : null}

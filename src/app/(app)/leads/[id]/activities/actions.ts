@@ -24,14 +24,23 @@ import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { eq } from "drizzle-orm";
 import { canDeleteActivity } from "@/lib/access/can-delete";
+import { parseFormOrThrow } from "@/lib/forms/form-data";
 
-function fdToObj(formData: FormData): Record<string, unknown> {
-  const obj: Record<string, unknown> = {};
-  for (const [k, v] of formData.entries()) {
-    if (v === "") continue;
-    obj[k] = v;
-  }
-  return obj;
+/**
+ * A `YYYY-MM-DD` date-only value parsed by `new Date()` is treated as
+ * UTC midnight, which renders as the previous calendar day in negative
+ * offsets. Anchor it to local midnight (mirrors entity-tasks-quick-add)
+ * so a task due "May 21" is stored as May 21 local, not May 20.
+ */
+function parseOccurredAt(value: string | undefined): Date | null {
+  if (!value) return null;
+  const d = new Date(
+    /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value,
+  );
+  // occurredAt is only z.string() (no format check); an unparseable
+  // value must become null, not an Invalid Date that the timestamp
+  // column rejects with an opaque 500.
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 export async function addNoteAction(
@@ -39,7 +48,9 @@ export async function addNoteAction(
 ): Promise<ActionResult> {
   return withErrorBoundary({ action: "activity.note_create" }, async () => {
     const user = await requireSession();
-    const parsed = noteSchema.parse(fdToObj(formData));
+    const parsed = parseFormOrThrow(noteSchema, formData, {
+      emptyMode: "exact",
+    });
     // Lead access gate — actor must own the lead OR have canViewAllRecords.
     await requireLeadAccess(user, parsed.leadId);
     const { id } = await createNote({
@@ -63,7 +74,9 @@ export async function addCallAction(
 ): Promise<ActionResult> {
   return withErrorBoundary({ action: "activity.call_create" }, async () => {
     const user = await requireSession();
-    const parsed = callSchema.parse(fdToObj(formData));
+    const parsed = parseFormOrThrow(callSchema, formData, {
+      emptyMode: "exact",
+    });
     await requireLeadAccess(user, parsed.leadId);
     const { id } = await createCall({
       leadId: parsed.leadId,
@@ -72,7 +85,7 @@ export async function addCallAction(
       body: parsed.body ?? null,
       outcome: parsed.outcome ?? null,
       durationMinutes: parsed.durationMinutes ?? null,
-      occurredAt: parsed.occurredAt ? new Date(parsed.occurredAt) : null,
+      occurredAt: parseOccurredAt(parsed.occurredAt),
     });
     await writeAudit({
       actorId: user.id,
@@ -94,14 +107,16 @@ export async function addTaskAction(
 ): Promise<ActionResult> {
   return withErrorBoundary({ action: "activity.task_create" }, async () => {
     const user = await requireSession();
-    const parsed = taskSchema.parse(fdToObj(formData));
+    const parsed = parseFormOrThrow(taskSchema, formData, {
+      emptyMode: "exact",
+    });
     await requireLeadAccess(user, parsed.leadId);
     const { id } = await createTask({
       leadId: parsed.leadId,
       userId: user.id,
       subject: parsed.subject,
       body: parsed.body ?? null,
-      occurredAt: parsed.occurredAt ? new Date(parsed.occurredAt) : null,
+      occurredAt: parseOccurredAt(parsed.occurredAt),
     });
     await writeAudit({
       actorId: user.id,

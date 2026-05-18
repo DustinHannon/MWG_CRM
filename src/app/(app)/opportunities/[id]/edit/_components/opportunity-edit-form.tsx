@@ -71,11 +71,13 @@ export function OpportunityEditForm({
           </select>
         </Field>
         <Field label="Amount (USD)">
+          {/* text + inputMode="decimal" (not type="number"): a number
+              input blanks content the browser deems invalid, so a
+              mistyped amount was silently dropped to null on save. */}
           <input
             name="amount"
-            type="number"
+            type="text"
             inputMode="decimal"
-            step="0.01"
             defaultValue={opportunity.amount ?? ""}
             className="h-9 rounded-md border border-border bg-input/60 px-3 text-sm"
           />

@@ -8,6 +8,10 @@ import { crmAccounts } from "@/db/schema/crm-records";
 import { recentViews } from "@/db/schema/recent-views";
 import { requireSession } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import {
+  optionalCountField,
+  optionalMoneyField,
+} from "@/lib/validation/primitives";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   emitActivity,
@@ -309,24 +313,8 @@ const accountUpdateSchema = z.object({
     .nullable()
     .transform((v) => (v && v.length > 0 ? v : null)),
   accountNumber: z.string().trim().max(100).optional().nullable(),
-  numberOfEmployees: z
-    .union([z.string(), z.number()])
-    .optional()
-    .nullable()
-    .transform((v): number | null => {
-      if (v === null || v === undefined || v === "") return null;
-      const n = typeof v === "number" ? v : Number(v);
-      return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
-    }),
-  annualRevenue: z
-    .union([z.string(), z.number()])
-    .optional()
-    .nullable()
-    .transform((v): string | null => {
-      if (v === null || v === undefined || v === "") return null;
-      const n = typeof v === "number" ? v : Number(v);
-      return Number.isFinite(n) && n >= 0 ? n.toFixed(2) : null;
-    }),
+  numberOfEmployees: optionalCountField,
+  annualRevenue: optionalMoneyField,
   street1: z.string().trim().max(200).optional().nullable(),
   street2: z.string().trim().max(200).optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),

@@ -94,22 +94,23 @@ export function AccountEditForm({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Employees">
+            {/* text + inputMode (not type="number"): a number input
+                blanks content the browser deems invalid, so a mistyped
+                value was silently dropped to null on save. */}
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               name="numberOfEmployees"
               defaultValue={account.numberOfEmployees ?? ""}
-              min={0}
-              step={1}
               className={inputClass}
             />
           </Field>
           <Field label="Annual revenue ($)">
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               name="annualRevenue"
               defaultValue={account.annualRevenue ?? ""}
-              min={0}
-              step="0.01"
               className={inputClass}
             />
           </Field>

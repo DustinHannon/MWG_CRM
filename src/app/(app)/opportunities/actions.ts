@@ -28,6 +28,7 @@ import {
 } from "@/lib/cascade-archive";
 import { canDeleteOpportunity, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
+import { optionalMoneyField } from "@/lib/validation/primitives";
 import { gatherBlobsForActivityParent } from "@/lib/blob-cleanup";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { logger } from "@/lib/logger";
@@ -294,13 +295,7 @@ const opportunityUpdateSchema = z.object({
       "closed_lost",
     ])
     .optional(),
-  amount: z
-    .union([z.string(), z.number()])
-    .optional()
-    .nullable()
-    .transform((v) =>
-      v === null || v === undefined || v === "" ? null : String(v),
-    ),
+  amount: optionalMoneyField,
   expectedCloseDate: z
     .string()
     .optional()

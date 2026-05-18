@@ -35,11 +35,11 @@ export function LeadDetailDelete({
       onConfirm={async (reason) => {
         const res = await softDeleteLeadAction({ id: leadId, reason });
         if (res.ok) {
-          router.push("/leads");
           return { ok: true, undoToken: res.data.undoToken };
         }
         return { ok: false, error: res.error };
       }}
+      onNavigate={() => router.push("/leads")}
       onUndo={async (undoToken) => {
         const res = await undoArchiveLeadAction({ undoToken });
         if (res.ok) {

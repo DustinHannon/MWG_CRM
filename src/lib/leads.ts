@@ -29,7 +29,11 @@ import {
   LEAD_SOURCES,
   LEAD_STATUSES,
 } from "@/lib/lead-constants";
-import { nameField, urlField } from "@/lib/validation/primitives";
+import {
+  nameField,
+  optionalMoneyField,
+  urlField,
+} from "@/lib/validation/primitives";
 
 export { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES };
 
@@ -135,15 +139,7 @@ const leadCreateSchemaBase = z.object({
   status: z.enum(LEAD_STATUSES).default("new"),
   rating: z.enum(LEAD_RATINGS).default("warm"),
   source: z.enum(LEAD_SOURCES).default("other"),
-  estimatedValue: z
-    .union([z.string(), z.number()])
-    .optional()
-    .nullable()
-    .transform((v) => {
-      if (v === null || v === undefined || v === "") return null;
-      const n = typeof v === "number" ? v : Number(v);
-      return Number.isFinite(n) ? n.toFixed(2) : null;
-    }),
+  estimatedValue: optionalMoneyField,
   estimatedCloseDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/u)

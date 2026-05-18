@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 import {
   bulkUpdateStaticListMembersAction,
   removeStaticListMembersAction,
@@ -285,11 +286,14 @@ function StaticListMembersPanelInner(props: Props) {
       toast.error("Select at least one recipient to export.");
       return;
     }
+    // Neutralize formula injection (member name/email are free text)
+    // then RFC-4180 quote.
+    const cell = (v: string) =>
+      `"${neutralizeSpreadsheetFormula(v).replace(/"/g, '""')}"`;
     const lines = [
       "name,email",
       ...selectedRows.map(
-        (r) =>
-          `"${(r.name ?? "").replace(/"/g, '""')}","${r.email.replace(/"/g, '""')}"`,
+        (r) => `${cell(r.name ?? "")},${cell(r.email)}`,
       ),
     ];
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });

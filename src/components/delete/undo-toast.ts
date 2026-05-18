@@ -17,8 +17,12 @@ const LABEL: Record<EntityKind, string> = {
  * The action runs `onUndo()` which the caller wires to its
  * `restore<Entity>Action({ undoToken })` server action.
  *
- * The toast lives 5 seconds — after which the undo token also expires
- * server-side (HMAC `exp`), so a late click would fail validation.
+ * The toast lives 30 seconds. It is enqueued by the shared delete
+ * component BEFORE the caller navigates (the <Toaster> is mounted in
+ * the persistent app layout, so the queued toast survives a
+ * push/refresh). The server undo token TTL (45s, soft-delete.ts) is
+ * deliberately longer than this duration so a click while the toast is
+ * still visible always validates.
  */
 export function showUndoToast(args: {
   entityKind: EntityKind;
@@ -27,7 +31,7 @@ export function showUndoToast(args: {
 }) {
   const label = LABEL[args.entityKind];
   toast.success(`${label} "${args.entityName}" archived.`, {
-    duration: 5000,
+    duration: 30000,
     action: {
       label: "Undo",
       onClick: async () => {

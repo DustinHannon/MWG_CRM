@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import type { ReportVisualization } from "@/db/schema/saved-reports";
+import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 import { ReportChart, type ChartDatum } from "./report-charts";
 
 /**
@@ -190,7 +191,9 @@ function downloadCsv(
 ) {
   const escape = (val: unknown): string => {
     if (val === null || val === undefined) return "";
-    const s = val instanceof Date ? val.toISOString() : String(val);
+    const raw = val instanceof Date ? val.toISOString() : String(val);
+    // Stop a cell like `=cmd|...` executing when the CSV is opened.
+    const s = neutralizeSpreadsheetFormula(raw);
     if (s.includes(",") || s.includes('"') || s.includes("\n")) {
       return `"${s.replaceAll('"', '""')}"`;
     }

@@ -32,11 +32,11 @@ export function AccountRowActions({
       onConfirm={async (reason) => {
         const res = await softDeleteAccountAction({ id: accountId, reason });
         if (res.ok) {
-          router.refresh();
           return { ok: true, undoToken: res.data.undoToken };
         }
         return { ok: false, error: res.error };
       }}
+      onNavigate={() => router.refresh()}
       onUndo={async (undoToken) => {
         const res = await undoArchiveAccountAction({ undoToken });
         if (res.ok) {

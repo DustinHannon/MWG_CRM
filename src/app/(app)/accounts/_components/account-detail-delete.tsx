@@ -30,11 +30,11 @@ export function AccountDetailDelete({
       onConfirm={async (reason) => {
         const res = await softDeleteAccountAction({ id: accountId, reason });
         if (res.ok) {
-          router.push("/accounts");
           return { ok: true, undoToken: res.data.undoToken };
         }
         return { ok: false, error: res.error };
       }}
+      onNavigate={() => router.push("/accounts")}
       onUndo={async (undoToken) => {
         const res = await undoArchiveAccountAction({ undoToken });
         if (res.ok) {

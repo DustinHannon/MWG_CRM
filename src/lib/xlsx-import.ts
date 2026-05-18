@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { users } from "@/db/schema/users";
+import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 import {
   LEAD_RATINGS,
   LEAD_SOURCES,
@@ -414,7 +415,14 @@ export async function buildErrorReport(
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet("Errors");
   sheet.addRow(["Row", "Field", "Error"]);
-  for (const e of errors) sheet.addRow([String(e.row), e.field, e.message]);
+  // field/message can echo uploaded cell content — guard the sink
+  // (sibling of buildLeadsExport above).
+  for (const e of errors)
+    sheet.addRow([
+      String(e.row),
+      neutralizeSpreadsheetFormula(e.field),
+      neutralizeSpreadsheetFormula(e.message),
+    ]);
   sheet.columns = [{ width: 8 }, { width: 24 }, { width: 60 }];
   const buf = await wb.xlsx.writeBuffer();
   return new Uint8Array(buf as ArrayBuffer);
@@ -443,7 +451,12 @@ export async function buildLeadsExport(
   }
   sheet.addRow(headers);
   for (const r of rows) {
-    sheet.addRow(headers.map((h) => r[h] ?? ""));
+    // Names/companies are permissive free text (nameField); neutralize
+    // formula-injection at the sink so a value like `=cmd|...` exported
+    // here can't execute when the .xlsx is opened.
+    sheet.addRow(
+      headers.map((h) => neutralizeSpreadsheetFormula(r[h] ?? "")),
+    );
   }
   const buf = await wb.xlsx.writeBuffer();
   return new Uint8Array(buf as ArrayBuffer);

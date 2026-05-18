@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { PassThrough, Readable } from "node:stream";
+import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 
 /**
  * Streaming .xlsx export.
@@ -99,8 +100,16 @@ export function streamExcel<T>(
     try {
       for await (const batch of rows) {
         for (const row of batch) {
-          const shaped = mapRow ? mapRow(row) : (row as unknown as Record<string, unknown>);
-          ws.addRow(shaped).commit();
+          const shaped = mapRow
+            ? mapRow(row)
+            : (row as unknown as Record<string, unknown>);
+          // Neutralize formula-injection per cell at the sink (names
+          // and free text are intentionally permissive on input).
+          const safe: Record<string, unknown> = {};
+          for (const k in shaped) {
+            safe[k] = neutralizeSpreadsheetFormula(shaped[k]);
+          }
+          ws.addRow(safe).commit();
         }
       }
       await ws.commit();

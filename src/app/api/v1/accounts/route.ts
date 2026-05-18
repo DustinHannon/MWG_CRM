@@ -120,7 +120,10 @@ export const POST = withApi(
         email: m.email ?? null,
         accountNumber: m.account_number ?? null,
         numberOfEmployees: m.number_of_employees ?? null,
-        annualRevenue: m.annual_revenue ?? null,
+        // createAccount's money contract is a 2-decimal string (shared
+        // optionalMoneyField); the REST schema accepts a number.
+        annualRevenue:
+          m.annual_revenue != null ? m.annual_revenue.toFixed(2) : null,
         street1: m.street1 ?? null,
         street2: m.street2 ?? null,
         city: m.city ?? null,

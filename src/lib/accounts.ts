@@ -19,7 +19,11 @@ import {
 } from "@/lib/cursors";
 import { expectAffected } from "@/lib/db/concurrent-update";
 import { ConflictError } from "@/lib/errors";
-import { urlField } from "@/lib/validation/primitives";
+import {
+  optionalCountField,
+  optionalMoneyField,
+  urlField,
+} from "@/lib/validation/primitives";
 
 /**
  * direct Account creation from `/accounts/new`,
@@ -46,8 +50,8 @@ export const accountCreateSchema = z.object({
     .optional()
     .nullable(),
   accountNumber: z.string().trim().max(100).optional().nullable(),
-  numberOfEmployees: z.coerce.number().int().min(0).max(10_000_000).optional().nullable(),
-  annualRevenue: z.coerce.number().min(0).optional().nullable(),
+  numberOfEmployees: optionalCountField,
+  annualRevenue: optionalMoneyField,
   street1: z.string().trim().max(200).optional().nullable(),
   street2: z.string().trim().max(200).optional().nullable(),
   city: z.string().trim().max(100).optional().nullable(),
@@ -80,8 +84,9 @@ export async function createAccount(
       email: input.email ? input.email : null,
       accountNumber: input.accountNumber ?? null,
       numberOfEmployees: input.numberOfEmployees ?? null,
-      annualRevenue:
-        input.annualRevenue != null ? input.annualRevenue.toFixed(2) : null,
+      // optionalMoneyField already yields a 2-decimal string (or null);
+      // do not re-format (it is no longer a number).
+      annualRevenue: input.annualRevenue ?? null,
       street1: input.street1 ?? null,
       street2: input.street2 ?? null,
       city: input.city ?? null,

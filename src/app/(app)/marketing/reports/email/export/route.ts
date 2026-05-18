@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { logger } from "@/lib/logger";
+import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -82,7 +83,7 @@ export async function GET(req: Request) {
   for (const r of rows) {
     const safe = (n: number, d: number): number => (d === 0 ? 0 : n / d);
     ws.addRow({
-      name: r.name,
+      name: neutralizeSpreadsheetFormula(r.name),
       status: r.status,
       sentAt: r.sentAt,
       totalRecipients: r.totalRecipients,

@@ -26,11 +26,11 @@ export function ContactRowActions({
       onConfirm={async (reason) => {
         const res = await softDeleteContactAction({ id: contactId, reason });
         if (res.ok) {
-          router.refresh();
           return { ok: true, undoToken: res.data.undoToken };
         }
         return { ok: false, error: res.error };
       }}
+      onNavigate={() => router.refresh()}
       onUndo={async (undoToken) => {
         const res = await undoArchiveContactAction({ undoToken });
         if (res.ok) {

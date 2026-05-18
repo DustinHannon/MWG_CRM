@@ -33,24 +33,19 @@ import { logger } from "@/lib/logger";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { canDeleteLead } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
+import { parseFormOrThrow } from "@/lib/forms/form-data";
 
-function formToObject(formData: FormData): Record<string, unknown> {
-  const obj: Record<string, unknown> = {};
-  for (const [k, v] of formData.entries()) {
-    if (k === "id") continue;
-    // `tagIds` (combobox) and the legacy
-    // `tags` key are extracted separately by parseTagIds; skip them
-    // here so they don't reach the leadCreate / leadPartial schema.
-    if (k === "tagIds" || k === "tags") continue;
-    if (v === "") continue;
-    if (k === "doNotContact" || k === "doNotEmail" || k === "doNotCall") {
-      obj[k] = v === "on" || v === "true";
-      continue;
-    }
-    obj[k] = v;
-  }
-  return obj;
-}
+/**
+ * `id` is read separately for OCC; `tagIds`/`tags` are extracted by
+ * parseTagIds so they never reach the lead schema; the three DNC
+ * checkboxes need an explicit boolean (the schema refinement asserts
+ * false, not just absent). Exact-empty so a single-space field is kept.
+ */
+const LEAD_FORM_OPTS = {
+  omitKeys: ["id", "tagIds", "tags"],
+  booleanKeys: ["doNotContact", "doNotEmail", "doNotCall"],
+  emptyMode: "exact",
+} as const;
 
 /**
  * TagInput emits a single hidden input
@@ -83,17 +78,17 @@ export async function createLeadAction(
         throw new ForbiddenError("You don't have permission to create leads.");
       }
 
-      const parsed = leadCreateSchema.safeParse(formToObject(formData));
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Validation failed.",
-        );
-      }
+      // Shared parse: on failure throws a ValidationError carrying the
+      // Zod issues (→ per-field errors) AND the raw submitted values
+      // (→ form re-populates instead of blanking). No per-action
+      // safeParse boilerplate.
+      const data = parseFormOrThrow(
+        leadCreateSchema,
+        formData,
+        LEAD_FORM_OPTS,
+      );
 
-      const { id } = await createLead(user, parsed.data);
+      const { id } = await createLead(user, data);
       // persist tag selections from the
       // combobox into the relational lead_tags table. setLeadTags is
       // idempotent (full-replace inside a tx); empty list is a no-op.
@@ -140,7 +135,7 @@ export async function createLeadAction(
         action: "lead.create",
         targetType: "lead",
         targetId: id,
-        after: { firstName: parsed.data.firstName, lastName: parsed.data.lastName },
+        after: { firstName: data.firstName, lastName: data.lastName },
       });
 
       // awaited (not void): the row must be inserted before
@@ -150,8 +145,8 @@ export async function createLeadAction(
         verb: "Added",
         entityType: "lead",
         entityId: id,
-        entityDisplayName: `${parsed.data.firstName} ${
-          parsed.data.lastName ?? ""
+        entityDisplayName: `${data.firstName} ${
+          data.lastName ?? ""
         }`.trim(),
         link: `/leads/${id}`,
       });
@@ -184,15 +179,11 @@ export async function updateLeadAction(
       // lead id.
       await requireLeadEditAccess(user, id);
 
-      const parsed = leadPartialSchema.safeParse(formToObject(formData));
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Validation failed.",
-        );
-      }
+      const data = parseFormOrThrow(
+        leadPartialSchema,
+        formData,
+        LEAD_FORM_OPTS,
+      );
 
       const before = await db
         .select({
@@ -204,7 +195,7 @@ export async function updateLeadAction(
         .where(eq(leads.id, id))
         .limit(1);
 
-      await updateLead(user, id, version, parsed.data);
+      await updateLead(user, id, version, data);
 
       // Tag changes flow through the inline applyTagAction /
       // removeTagAction actions on the edit page (TagSectionClient),
@@ -216,7 +207,7 @@ export async function updateLeadAction(
         targetType: "lead",
         targetId: id,
         before: before[0] ?? null,
-        after: parsed.data,
+        after: data,
       });
 
       // awaited (not void): the row must be inserted before
@@ -227,8 +218,8 @@ export async function updateLeadAction(
         entityType: "lead",
         entityId: id,
         entityDisplayName: `${
-          parsed.data.firstName ?? before[0]?.firstName ?? ""
-        } ${parsed.data.lastName ?? before[0]?.lastName ?? ""}`.trim(),
+          data.firstName ?? before[0]?.firstName ?? ""
+        } ${data.lastName ?? before[0]?.lastName ?? ""}`.trim(),
         link: `/leads/${id}`,
       });
 

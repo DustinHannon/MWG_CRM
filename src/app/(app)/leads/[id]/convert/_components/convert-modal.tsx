@@ -59,7 +59,11 @@ export function ConvertModal(props: ConvertModalProps) {
         newOpportunity: createOpp
           ? {
               name: oppName.trim(),
-              amount: oppAmount ? Number(oppAmount) : null,
+              // Post raw text; optionalMoneyField parses/validates it
+              // (a mistyped amount surfaces an error, never a silent
+              // null — the field is type="text", not a number input
+              // the browser would blank).
+              amount: oppAmount.trim() || null,
             }
           : null,
       });
@@ -169,7 +173,8 @@ export function ConvertModal(props: ConvertModalProps) {
                     className="h-9 rounded-md border border-glass-border bg-input/60 px-3 text-sm"
                   />
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={oppAmount}
                     onChange={(e) => setOppAmount(e.target.value)}
                     placeholder="Amount (optional)"
