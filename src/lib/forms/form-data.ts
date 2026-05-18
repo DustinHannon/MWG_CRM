@@ -21,13 +21,15 @@ export interface FormDataToObjectOptions {
   booleanKeys?: readonly string[];
   /**
    * Empty-string handling:
-   *  - "trim" (default): skip when `value.trim()` is empty (so a field
-   *    of only spaces is treated as omitted — what the create forms
-   *    want, since Zod `.optional()` then yields undefined → null).
-   *  - "exact": skip only when the value is exactly "" (preserves
-   *    whitespace-only values for callers that intentionally allow them).
+   *  - "trim" (default): skip when value.trim()==="" (create-form intent
+   *    — Zod .optional() then yields undefined → null).
+   *  - "exact": skip only when value==="".
+   *  - "keep": never skip on emptiness — every entry passes through,
+   *    equivalent to Object.fromEntries for strings. REQUIRED by the
+   *    entity UPDATE actions so a present-but-empty field reaches the
+   *    schema and clears the column ("clear a field by emptying it").
    */
-  emptyMode?: "trim" | "exact";
+  emptyMode?: "trim" | "exact" | "keep";
 }
 
 export function formDataToObject(
@@ -44,7 +46,7 @@ export function formDataToObject(
       obj[key] = value === "on" || value === "true";
       continue;
     }
-    if (typeof value === "string") {
+    if (typeof value === "string" && emptyMode !== "keep") {
       const isEmpty = emptyMode === "trim" ? value.trim() === "" : value === "";
       if (isEmpty) continue;
     }
@@ -87,5 +89,27 @@ export function parseFormOrThrow<S extends z.ZodTypeAny>(
       ? `${first.path.join(".") || "input"}: ${first.message}`
       : "Validation failed.",
     { issues: result.error.issues, values: rawStringValues(formData) },
+  );
+}
+
+/**
+ * JSON-body / object-arg sibling of parseFormOrThrow for server actions
+ * whose input is `await req.json()` or a typed object arg (not FormData).
+ * Same first-issue ValidationError shape so withErrorBoundary yields the
+ * identical banner + fieldErrors. No `values` echo — there is no raw
+ * form to repopulate.
+ */
+export function parseJsonOrThrow<S extends z.ZodTypeAny>(
+  schema: S,
+  body: unknown,
+): z.output<S> {
+  const result = schema.safeParse(body);
+  if (result.success) return result.data;
+  const first = result.error.issues[0];
+  throw new ValidationError(
+    first
+      ? `${first.path.join(".") || "input"}: ${first.message}`
+      : "Validation failed.",
+    { issues: result.error.issues },
   );
 }
