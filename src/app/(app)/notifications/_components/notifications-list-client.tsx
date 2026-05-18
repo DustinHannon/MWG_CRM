@@ -7,6 +7,7 @@ import {
   StandardListPage,
   type StandardListPagePage,
 } from "@/components/standard";
+import { ActivityPill } from "@/components/ui/activity-pill";
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import { type TimePrefs } from "@/lib/format-time";
 
@@ -21,6 +22,8 @@ export interface NotificationRow {
   title: string;
   body: string | null;
   link: string | null;
+  /** ActivityVerb for kind="activity" rows; null for other kinds. */
+  verb: string | null;
   isRead: boolean;
   createdAt: string;
 }
@@ -112,9 +115,24 @@ function NotificationContent({
   row: NotificationRow;
   timePrefs: TimePrefs;
 }) {
+  // Activity rows carry a verb; render it as a colored pill (same
+  // look as the status/priority pills on the other list pages) and
+  // strip the leading verb word from the composed title so it isn't
+  // repeated. Non-activity kinds (verb null) render unchanged.
+  const titleText =
+    row.verb && row.title.startsWith(`${row.verb} `)
+      ? row.title.slice(row.verb.length + 1)
+      : row.title;
   return (
     <>
-      <p className="text-sm font-medium text-foreground">{row.title}</p>
+      {row.verb ? (
+        <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <ActivityPill verb={row.verb} className="shrink-0" />
+          <span className="min-w-0 truncate">{titleText}</span>
+        </p>
+      ) : (
+        <p className="text-sm font-medium text-foreground">{titleText}</p>
+      )}
       {row.body ? (
         <p className="mt-1 text-xs text-muted-foreground">{row.body}</p>
       ) : null}

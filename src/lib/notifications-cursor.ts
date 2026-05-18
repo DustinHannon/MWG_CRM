@@ -21,6 +21,8 @@ export interface NotificationListRow {
   title: string;
   body: string | null;
   link: string | null;
+  /** ActivityVerb for kind="activity" rows; null for other kinds. */
+  verb: string | null;
   isRead: boolean;
   createdAt: Date;
 }
@@ -72,6 +74,7 @@ export async function listNotificationsCursor(args: {
         title: notifications.title,
         body: notifications.body,
         link: notifications.link,
+        verb: notifications.verb,
         isRead: notifications.isRead,
         createdAt: notifications.createdAt,
       })
