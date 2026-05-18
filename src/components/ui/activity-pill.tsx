@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { Pill } from "./pill";
 
 /**
  * colored activity-verb pill for the /notifications activity feed.
@@ -41,14 +41,8 @@ export function ActivityPill({ verb, className }: ActivityPillProps) {
     console.warn(`ActivityPill: unknown verb "${verb}", using default`);
   }
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium leading-tight whitespace-nowrap",
-        variant,
-        className,
-      )}
-    >
+    <Pill variant={variant} className={className}>
       {verb}
-    </span>
+    </Pill>
   );
 }

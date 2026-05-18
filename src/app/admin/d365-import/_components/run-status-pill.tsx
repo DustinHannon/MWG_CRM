@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Pill } from "@/components/ui/pill";
 
 /**
  * status pill for D365 import runs. Mirrors the
@@ -44,15 +45,9 @@ export function RunStatusPill({
     "bg-[var(--status-default-bg)] text-[var(--status-default-fg)]";
   const label = STATUS_LABEL[status] ?? status;
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium leading-tight whitespace-nowrap",
-        variant,
-        className,
-      )}
-    >
+    <Pill variant={variant} className={className}>
       {label}
-    </span>
+    </Pill>
   );
 }
 
