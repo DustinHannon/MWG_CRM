@@ -175,8 +175,8 @@ export default async function DashboardPage() {
     return (
       <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
         <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
-        <PageRealtime entities={["leads", "tasks", "notifications"]} />
-        <PagePoll entities={["leads", "tasks", "notifications"]} />
+        <PageRealtime entities={["leads", "tasks"]} />
+        <PagePoll entities={["leads", "tasks"]} />
         <StandardPageHeader kicker="Dashboard" title={user.displayName} />
         <section className="mt-10 rounded-2xl border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)]/40 p-10 text-center">
           <h2 className="text-lg font-semibold text-[var(--status-lost-fg)]">
@@ -205,8 +205,8 @@ export default async function DashboardPage() {
     return (
       <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
         <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
-        <PageRealtime entities={["leads", "tasks", "notifications"]} />
-        <PagePoll entities={["leads", "tasks", "notifications"]} />
+        <PageRealtime entities={["leads", "tasks"]} />
+        <PagePoll entities={["leads", "tasks"]} />
         <StandardPageHeader kicker="Dashboard" title={user.displayName} />
 
         <GlassCard className="mt-10 p-10 text-center">
@@ -263,8 +263,8 @@ export default async function DashboardPage() {
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
-      <PageRealtime entities={["leads", "tasks", "notifications"]} />
-      <PagePoll entities={["leads", "tasks", "notifications"]} />
+      <PageRealtime entities={["leads", "tasks"]} />
+      <PagePoll entities={["leads", "tasks"]} />
       <StandardPageHeader kicker="Dashboard" title={user.displayName} />
 
       <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
