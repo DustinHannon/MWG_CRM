@@ -5,6 +5,7 @@ import { notifications } from "@/db/schema/tasks";
 import { userPreferences } from "@/db/schema/views";
 import { users } from "@/db/schema/users";
 import { logger } from "@/lib/logger";
+import { nullifyUnreachableEntityLinks } from "@/lib/notifications-links";
 
 interface CreateNotificationInput {
   userId: string;
@@ -193,12 +194,15 @@ export async function listNotificationsForUser(
   // user_id and stops at `limit`, cheap even for a 100k+ user. No
   // cursor here — the bell UX is "show recent N"; the /notifications
   // page does its own keyset pagination (listNotificationsCursor).
-  return db
+  const rows = await db
     .select()
     .from(notifications)
     .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
+  // Same dead-link guard as the /notifications page: a bell row whose
+  // target was archived/deleted renders as plain text, not a 404 link.
+  return nullifyUnreachableEntityLinks(rows);
 }
 
 /**

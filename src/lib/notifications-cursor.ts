@@ -6,6 +6,7 @@ import {
   decodeCursor as decodeStandardCursor,
   encodeFromValues as encodeStandardCursor,
 } from "@/lib/cursors";
+import { nullifyUnreachableEntityLinks } from "@/lib/notifications-links";
 
 /**
  * Row shape returned by `listNotificationsCursor`. The /notifications
@@ -91,6 +92,11 @@ export async function listNotificationsCursor(args: {
     const last = data[data.length - 1];
     nextCursor = encodeStandardCursor(last.createdAt, last.id, "desc");
   }
+
+  // Suppress links whose target entity was since archived/deleted so a
+  // row never dead-ends on a 404 (entity detail routes notFound() a
+  // soft-deleted entity). Best-effort; never blocks the list.
+  data = await nullifyUnreachableEntityLinks(data);
 
   return {
     data,
