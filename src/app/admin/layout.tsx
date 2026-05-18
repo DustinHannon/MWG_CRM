@@ -22,7 +22,12 @@ export default async function AdminLayout({
   const user = await requireAdmin();
   return (
     <QueryProvider>
-      <AppShell user={user} brand={{ subtitle: "Admin" }} nav={ADMIN_NAV}>
+      <AppShell
+        user={user}
+        brand={{ subtitle: "Admin" }}
+        nav={ADMIN_NAV}
+        canViewAll={user.isAdmin}
+      >
         {children}
       </AppShell>
     </QueryProvider>

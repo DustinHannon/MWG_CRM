@@ -46,6 +46,8 @@ export interface NotificationListRow {
  */
 export async function listNotificationsCursor(args: {
   userId: string;
+  /** isAdmin || canViewAllRecords — skips the dead-link owner gate. */
+  canViewAll: boolean;
   cursor: string | null;
   pageSize?: number;
 }): Promise<{
@@ -96,10 +98,14 @@ export async function listNotificationsCursor(args: {
     nextCursor = encodeStandardCursor(last.createdAt, last.id, "desc");
   }
 
-  // Suppress links whose target entity was since archived/deleted so a
-  // row never dead-ends on a 404 (entity detail routes notFound() a
-  // soft-deleted entity). Best-effort; never blocks the list.
-  data = await nullifyUnreachableEntityLinks(data);
+  // Suppress links whose target entity is unreachable for this viewer
+  // — archived/deleted, or not owner-visible — so a row never
+  // dead-ends on the detail route's 404. Best-effort; never blocks
+  // the list.
+  data = await nullifyUnreachableEntityLinks(data, {
+    id: args.userId,
+    canViewAll: args.canViewAll,
+  });
 
   return {
     data,

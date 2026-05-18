@@ -38,6 +38,7 @@ export default async function AppLayout({
 }) {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
+  const canViewAll = user.isAdmin || perms.canViewAllRecords;
 
   // hide Dashboard for users without canViewReports. Admin
   // always sees it. Keeps nav in sync with the page-level gate so users
@@ -92,7 +93,7 @@ export default async function AppLayout({
           filter={`user_id=eq.${user.id}`}
           skipSelf={false}
         />
-        <AppShell user={user} nav={nav}>
+        <AppShell user={user} nav={nav} canViewAll={canViewAll}>
           {children}
         </AppShell>
       </RealtimeProvider>

@@ -24,6 +24,13 @@ interface AppShellProps {
   brand?: { subtitle?: string };
   /** Sidebar nav, including dividers. */
   nav: NavItem[];
+  /**
+   * isAdmin || canViewAllRecords — passed to the bell's
+   * listNotificationsForUser so a dead link to a record this user
+   * can't see is suppressed (mirrors the detail-route owner gate).
+   * Resolved by the layout (which already fetches permissions).
+   */
+  canViewAll: boolean;
   children: React.ReactNode;
 }
 
@@ -37,10 +44,16 @@ interface AppShellProps {
  * Renders glass sidebar + bell + Cmd+K palette + toaster + theme sync.
  * Density and theme come from `user_preferences`.
  */
-export async function AppShell({ user, brand, nav, children }: AppShellProps) {
+export async function AppShell({
+  user,
+  brand,
+  nav,
+  canViewAll,
+  children,
+}: AppShellProps) {
   const [unseenCount, recentNotifs, recentViews, prefsRow] = await Promise.all([
     countUnseen(user.id),
-    listNotificationsForUser(user.id, 10),
+    listNotificationsForUser(user.id, 10, canViewAll),
     listRecentForUser(user.id, 5),
     db
       .select({

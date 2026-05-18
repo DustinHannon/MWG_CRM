@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
@@ -7,35 +7,36 @@ import { logger } from "@/lib/logger";
 
 /**
  * Activity-feed / notification links deep-link entity DETAIL pages
- * (`/contacts/{id}`, `/leads/{id}`, …). When the target entity is gone,
- * the detail route serves a full-page 404 and the notification row
- * dead-ends — most visibly the "Archived X" rows. This resolves
- * reachability in a batch (one indexed PK lookup per referenced table)
+ * (`/contacts/{id}`, `/leads/{id}`, …). When the target entity is gone
+ * — or the viewer isn't allowed to see it — the detail route serves a
+ * full-page 404 and the notification row dead-ends. This resolves
+ * reachability in a batch (one indexed lookup per referenced table)
  * and NULLs the `link` of any row whose target is unreachable; the UI
- * already renders a null link as plain (non-clickable) text, and the
+ * already renders a null link as plain (non-clickable) text and the
  * snapshot `title` still records what happened, so history stays
  * intact — it just stops offering a dead link.
  *
- * The 404 trigger differs per entity, so the reachability rule is
- * per-segment (verified against the live detail routes):
- *  - contacts / accounts / opportunities — `[id]/page.tsx` filters
- *    `is_deleted = false` then `notFound()`, so an ARCHIVED entity
- *    404s: reachable ⇔ row exists AND is not soft-deleted.
- *  - leads — `getLeadById` has NO `is_deleted` filter, so an ARCHIVED
- *    lead still renders: reachable ⇔ row merely EXISTS (only a
- *    hard-deleted / never-existed lead 404s). Applying the
- *    soft-delete filter here would wrongly strip working links to
- *    archived leads.
+ * The reachability rule replicates each detail route's two `notFound()`
+ * triggers (verified against the live routes). NULL `ownerId`
+ * (owner-user deleted → `set null`) converges, not diverges: the
+ * route's JS `ownerId !== viewer` 404s it and the helper's SQL
+ * `owner_id = viewer` excludes it — both suppress.
+ *  1. Existence / archived:
+ *     - contacts / accounts / opportunities — `[id]/page.tsx` filters
+ *       `is_deleted = false`, so an ARCHIVED entity 404s.
+ *     - leads — `getLeadById` has NO `is_deleted` filter, so an
+ *       ARCHIVED lead still renders; only a hard-deleted / never-
+ *       existed lead 404s (applying the soft-delete filter here would
+ *       wrongly strip working links to archived leads).
+ *  2. Owner/permission visibility — every route also `notFound()`s
+ *     when `!canViewAll && ownerId !== viewer` (`canViewAll =
+ *     isAdmin || canViewAllRecords`). So a cross-user notification
+ *     (task_assigned / mention) linking to a record the recipient
+ *     can't see is suppressed too. When the viewer has `canViewAll`
+ *     the owner predicate is omitted (they see every row).
  *
- * Residual NOT handled here (documented, out of this fix's scope —
- * the reported bug + intent is the archived/deleted case): every
- * detail route ALSO `notFound()`s when the viewer lacks
- * owner/permission visibility (`!canViewAll && ownerId !== viewer`).
- * Cross-user notification kinds (task_assigned / mention) can link to
- * an entity the recipient cannot see and would still 404. The
- * actor's-own activity feed (userId === actorId) is unaffected by
- * that residual. Threading viewer id + per-route permission logic is
- * a separate, larger change tracked in the decision log.
+ * Both triggers are pushed into the per-segment existence query, so a
+ * row is reachable iff its id is in the returned set.
  *
  * Best-effort: a reachability-query failure logs and returns the rows
  * unchanged (degrades to the prior behavior — a possible 404 on click
@@ -58,9 +59,16 @@ const SEGMENTS = {
 
 type DetailSegment = keyof typeof SEGMENTS;
 
+export interface LinkReachabilityViewer {
+  /** The user the notifications belong to (the rows' recipient). */
+  id: string;
+  /** isAdmin || canViewAllRecords — when true the owner gate is skipped. */
+  canViewAll: boolean;
+}
+
 export async function nullifyUnreachableEntityLinks<
   T extends { link: string | null },
->(rows: T[]): Promise<T[]> {
+>(rows: T[], viewer: LinkReachabilityViewer): Promise<T[]> {
   const idsBySegment = new Map<DetailSegment, Set<string>>();
   for (const row of rows) {
     if (!row.link) continue;
@@ -82,10 +90,16 @@ export async function nullifyUnreachableEntityLinks<
     await Promise.all(
       [...idsBySegment.entries()].map(async ([seg, ids]) => {
         const { table, archivedStill404 } = SEGMENTS[seg];
-        const idList = [...ids];
-        const where = archivedStill404
-          ? and(inArray(table.id, idList), eq(table.isDeleted, false))
-          : inArray(table.id, idList);
+        const conds: SQL[] = [inArray(table.id, [...ids])];
+        // Trigger 1: archived 404s for everything except leads.
+        if (archivedStill404) conds.push(eq(table.isDeleted, false));
+        // Trigger 2: owner/permission gate — replicates the route's
+        // `!canViewAll && ownerId !== viewer` notFound().
+        // NULL owner_id (owner-user deleted → set null) is excluded
+        // here (SQL `= viewer` is unknown), and the route's JS
+        // `ownerId !== viewer` likewise 404s it — convergent.
+        if (!viewer.canViewAll) conds.push(eq(table.ownerId, viewer.id));
+        const where = conds.length === 1 ? conds[0] : and(...conds);
         const found = await db
           .select({ id: table.id })
           .from(table)

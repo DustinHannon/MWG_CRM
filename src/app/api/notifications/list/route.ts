@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { withInternalListApi } from "@/lib/api/internal-list";
+import { getPermissions } from "@/lib/auth-helpers";
 import { listNotificationsCursor } from "@/lib/notifications-cursor";
 
 export const dynamic = "force-dynamic";
@@ -20,9 +21,12 @@ export const GET = withInternalListApi(
   { action: "notifications.list", auth: "session" },
   async (req: NextRequest, ctx) => {
     const cursor = req.nextUrl.searchParams.get("cursor");
+    const perms = await getPermissions(ctx.user.id);
+    const canViewAll = ctx.user.isAdmin || perms.canViewAllRecords;
 
     const result = await listNotificationsCursor({
       userId: ctx.user.id,
+      canViewAll,
       cursor,
     });
 

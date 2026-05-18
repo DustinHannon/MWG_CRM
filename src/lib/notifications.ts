@@ -187,6 +187,7 @@ export async function emitActivities(
 export async function listNotificationsForUser(
   userId: string,
   limit = 20,
+  canViewAll: boolean,
 ) {
   // Bell dropdown only (recent N). Served by
   // `notifications_user_created_idx (user_id, created_at DESC)` (a
@@ -201,8 +202,9 @@ export async function listNotificationsForUser(
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
   // Same dead-link guard as the /notifications page: a bell row whose
-  // target was archived/deleted renders as plain text, not a 404 link.
-  return nullifyUnreachableEntityLinks(rows);
+  // target is unreachable for this user (archived/deleted, or not
+  // owner-visible) renders as plain text, not a 404 link.
+  return nullifyUnreachableEntityLinks(rows, { id: userId, canViewAll });
 }
 
 /**
