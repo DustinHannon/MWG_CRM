@@ -9,6 +9,7 @@ import {
 } from "react";
 import { X } from "lucide-react";
 import {
+  SortableColumnHeaders,
   StandardEmptyState,
   StandardListPage,
   type StandardListPagePage,
@@ -40,7 +41,7 @@ import {
   BulkArchiveProvider,
   RowCheckbox,
 } from "./bulk-archive";
-import { SortableContactsHeaders } from "./sortable-headers";
+import { updateContactViewAction } from "../view-actions";
 import {
   ContactViewToolbar,
   type ContactViewSummary,
@@ -378,7 +379,7 @@ function ContactsListInner({
       className="data-table w-full divide-y divide-border/60 text-sm"
       style={{ minWidth: `${activeColumns.length * 140 + 80}px` }}
     >
-      <SortableContactsHeaders
+      <SortableColumnHeaders<ContactColumnKey>
         // Remount when the resolved column set changes (view
         // switch, picker toggle, persisted reorder) so the
         // header never drags a stale set into a saved view.
@@ -390,6 +391,9 @@ function ContactsListInner({
             ? views.find((v) => v.id === activeViewParam)?.version
             : undefined
         }
+        columnDefs={AVAILABLE_CONTACT_COLUMNS}
+        updateViewAction={updateContactViewAction}
+        leadingSelectCell={true}
       />
     </table>
   );
@@ -508,7 +512,7 @@ function BulkTagToolbarButton({
 /**
  * Desktop row. Flex layout matching the column-header layout above —
  * each column is a flex-1 cell so widths align with the header row
- * driven by SortableContactsHeaders. Leading selection-checkbox cell
+ * driven by SortableColumnHeaders. Leading selection-checkbox cell
  * + trailing actions cell stay fixed-width.
  */
 function ContactDesktopRow({

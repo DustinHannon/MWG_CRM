@@ -30,3 +30,7 @@ export {
   type StandardConfirmDialogProps,
 } from "./standard-confirm-dialog";
 export { StandardCollapsibleSection } from "./standard-collapsible-section";
+export {
+  SortableColumnHeaders,
+  type SortableColumnHeadersProps,
+} from "./sortable-column-headers";

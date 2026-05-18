@@ -14,6 +14,7 @@ import {
 } from "react";
 import { X } from "lucide-react";
 import {
+  SortableColumnHeaders,
   StandardEmptyState,
   StandardListPage,
   type StandardListPagePage,
@@ -46,7 +47,7 @@ import {
   BulkArchiveProvider,
   RowCheckbox,
 } from "./bulk-archive";
-import { SortableOpportunitiesHeaders } from "./sortable-headers";
+import { updateOpportunityViewAction } from "../view-actions";
 import {
   OpportunityViewToolbar,
   type OpportunityViewSummary,
@@ -387,7 +388,7 @@ function OpportunitiesListInner({
       className="data-table w-full divide-y divide-border/60 text-sm"
       style={{ minWidth: `${activeColumns.length * 140 + 80}px` }}
     >
-      <SortableOpportunitiesHeaders
+      <SortableColumnHeaders<OpportunityColumnKey>
         // Remount when the resolved column set changes (view
         // switch, picker toggle, persisted reorder) so the
         // header never drags a stale set into a saved view.
@@ -399,6 +400,9 @@ function OpportunitiesListInner({
             ? views.find((v) => v.id === activeViewParam)?.version
             : undefined
         }
+        columnDefs={AVAILABLE_OPPORTUNITY_COLUMNS}
+        updateViewAction={updateOpportunityViewAction}
+        leadingSelectCell={true}
       />
     </table>
   );
@@ -534,7 +538,7 @@ function BulkTagToolbarButton({
 /**
  * Desktop row. Flex layout matching the column-header layout above —
  * each column is a flex-1 cell so widths align with the header row
- * driven by SortableOpportunitiesHeaders. Leading selection-checkbox
+ * driven by SortableColumnHeaders. Leading selection-checkbox
  * cell + trailing actions cell stay fixed-width.
  */
 function OpportunityDesktopRow({

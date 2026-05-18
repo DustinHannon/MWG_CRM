@@ -121,11 +121,17 @@ export function AccountViewToolbar({
     router.push(`/accounts?${params.toString()}`);
 
     if (activeViewId.startsWith("builtin:")) {
+      // Persist only the SELECTION here, in canonical column order.
+      // A built-in drag-reorder lives only in ?cols= (session) and
+      // must never be laundered into prefs.adhoc_columns.
+      const adhocCols = AVAILABLE_ACCOUNT_COLUMNS.map((c) => c.key).filter((k) =>
+        next.includes(k),
+      );
       const fd = new FormData();
       fd.set(
         "payload",
         JSON.stringify({
-          columns: next.length === baseColumns.length ? null : next,
+          columns: adhocCols.length === baseColumns.length ? null : adhocCols,
         }),
       );
       void setAccountAdhocColumnsAction(fd);
