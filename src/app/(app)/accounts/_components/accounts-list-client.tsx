@@ -348,8 +348,17 @@ function AccountsListInner({
       style={{ minWidth: `${activeColumns.length * 140 + 80}px` }}
     >
       <SortableAccountsHeaders
+        // Remount when the resolved column set changes (view
+        // switch, picker toggle, persisted reorder) so the
+        // header never drags a stale set into a saved view.
+        key={activeColumns.join(",")}
         initialColumns={activeColumns}
         activeViewId={activeViewParam}
+        activeViewVersion={
+          activeViewParam.startsWith("saved:")
+            ? views.find((v) => v.id === activeViewParam)?.version
+            : undefined
+        }
       />
     </table>
   );

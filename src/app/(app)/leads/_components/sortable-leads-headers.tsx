@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   PointerSensor,
@@ -17,34 +18,37 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
-import { setAdhocColumnsAction } from "../view-actions";
+import { updateViewAction } from "../view-actions";
 import { AVAILABLE_COLUMNS, type ColumnKey } from "@/lib/view-constants";
 
 /**
- * DnD column reorder on /leads. Wraps the existing
- * server-rendered table header row in a @dnd-kit SortableContext so
- * each header can be dragged horizontally. On drop, the new column
- * order is persisted via `setAdhocColumnsAction` (existing backend);
- * revalidatePath inside that action triggers the server page to
- * re-render with the new order applied to the body rows too.
+ * DnD column reorder for this list. Wraps the server-rendered header
+ * row in a @dnd-kit SortableContext so each header can be dragged
+ * horizontally.
  *
- * Optimistic: the header order flips immediately on drop; if the
- * server action errors, the toast surfaces and the next page render
- * snaps back to the persisted state.
+ * Persistence rule: the new order is remembered ONLY when the active
+ * view is a saved view — the drop writes it into that view via the
+ * shared OCC update action (the same path the toolbar "Save changes"
+ * button uses) and then router.refresh()es so the server re-renders
+ * with the body rows in the new order too. On built-in / default
+ * views a drag is a no-op: they keep their default column order and
+ * never persist a reorder.
  */
 export function SortableLeadsHeaders({
   initialColumns,
   activeViewId,
+  activeViewVersion,
 }: {
   initialColumns: ColumnKey[];
-  /** "saved:<uuid>" or "builtin:<key>" — passed through to the
-   * persistence action so it can decide between saving on the
-   * user_preferences.adhoc_columns slot vs the saved-view's own
-   * columns array. The action already handles this routing. */
+  /** Active view id: "saved:<uuid>" or "builtin:<key>". Column order
+   * is remembered only on saved views. */
   activeViewId: string;
+  /** OCC version of the active saved view; absent for built-ins. */
+  activeViewVersion?: number;
 }) {
   const [columns, setColumns] = useState<ColumnKey[]>(initialColumns);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -58,20 +62,33 @@ export function SortableLeadsHeaders({
     const oldIndex = columns.indexOf(active.id as ColumnKey);
     const newIndex = columns.indexOf(over.id as ColumnKey);
     if (oldIndex < 0 || newIndex < 0) return;
+    // Ignore a drop while a prior reorder is still persisting so
+    // back-to-back saves can't race the saved-view OCC version.
+    if (pending) return;
+    // Reorder is remembered only on saved views. On built-in/default
+    // views the body rows stay server-driven, so reordering only the
+    // header would desync the two — keep the default order instead.
+    if (!activeViewId.startsWith("saved:")) return;
     const next = arrayMove(columns, oldIndex, newIndex);
+    const prev = columns;
     setColumns(next);
-    // Persist via the existing setAdhocColumnsAction; payload is a
-    // JSON string per its schema (FormData.payload = JSON-stringified
-    // `{ columns: ColumnKey[] | null }`).
+    // Persist into the saved view itself (same OCC path the toolbar
+    // "Save changes" uses); activeViewVersion is the server-fresh OCC
+    // token. Then refresh so the server re-renders the body rows in
+    // the new order too (revalidatePath alone won't re-render a
+    // mounted client route).
     const fd = new FormData();
+    fd.set("id", activeViewId.slice("saved:".length));
+    fd.set("version", String(activeViewVersion ?? 1));
     fd.set("payload", JSON.stringify({ columns: next }));
-    void activeViewId; // reserved — passed for future saved-view persistence
     startTransition(async () => {
-      const res = await setAdhocColumnsAction(fd);
+      const res = await updateViewAction(fd);
       if (!res.ok) {
-        setColumns(columns); // revert
+        setColumns(prev);
         toast.error(res.error, { duration: Infinity, dismissible: true });
+        return;
       }
+      router.refresh();
     });
   }
 

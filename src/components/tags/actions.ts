@@ -38,7 +38,6 @@ import { logger } from "@/lib/logger";
 import { tagName } from "@/lib/validation/primitives";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { isHexColor, isPaletteColor, nextDefaultPaletteColor } from "./helpers";
-import type { BulkScope } from "@/lib/bulk-actions/scope";
 import {
   BULK_SCOPE_EXPANSION_CAP,
   expandAccountFilteredScope,
@@ -781,9 +780,3 @@ export async function bulkTagAction(
     },
   );
 }
-
-/**
- * Re-export of the {@link BulkScope} contract used by callers that
- * import the new `scope`-shaped action input.
- */
-export type { BulkScope };

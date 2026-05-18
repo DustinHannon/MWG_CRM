@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   PointerSensor,
@@ -17,29 +18,40 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
-import { setContactAdhocColumnsAction } from "../view-actions";
+import { updateContactViewAction } from "../view-actions";
 import {
   AVAILABLE_CONTACT_COLUMNS,
   type ContactColumnKey,
 } from "@/lib/contact-view-constants";
 
 /**
- * DnD column reorder on /contacts. Wraps the server-rendered
- * table header row in a @dnd-kit SortableContext so each header can
- * be dragged horizontally. On drop, the new column order is persisted
- * via `setContactAdhocColumnsAction`.
+ * DnD column reorder for this list. Wraps the server-rendered header
+ * row in a @dnd-kit SortableContext so each header can be dragged
+ * horizontally.
+ *
+ * Persistence rule: the new order is remembered ONLY when the active
+ * view is a saved view — the drop writes it into that view via the
+ * shared OCC update action (the same path the toolbar "Save changes"
+ * button uses) and then router.refresh()es so the server re-renders
+ * with the body rows in the new order too. On built-in / default
+ * views a drag is a no-op: they keep their default column order and
+ * never persist a reorder.
  */
 export function SortableContactsHeaders({
   initialColumns,
   activeViewId,
+  activeViewVersion,
 }: {
   initialColumns: ContactColumnKey[];
-  /** "saved:<uuid>" or "builtin:<key>" — passed through for future
-   * saved-view persistence. */
+  /** Active view id: "saved:<uuid>" or "builtin:<key>". Column order
+   * is remembered only on saved views. */
   activeViewId: string;
+  /** OCC version of the active saved view; absent for built-ins. */
+  activeViewVersion?: number;
 }) {
   const [columns, setColumns] = useState<ContactColumnKey[]>(initialColumns);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -53,17 +65,33 @@ export function SortableContactsHeaders({
     const oldIndex = columns.indexOf(active.id as ContactColumnKey);
     const newIndex = columns.indexOf(over.id as ContactColumnKey);
     if (oldIndex < 0 || newIndex < 0) return;
+    // Ignore a drop while a prior reorder is still persisting so
+    // back-to-back saves can't race the saved-view OCC version.
+    if (pending) return;
+    // Reorder is remembered only on saved views. On built-in/default
+    // views the body rows stay server-driven, so reordering only the
+    // header would desync the two — keep the default order instead.
+    if (!activeViewId.startsWith("saved:")) return;
     const next = arrayMove(columns, oldIndex, newIndex);
+    const prev = columns;
     setColumns(next);
+    // Persist into the saved view itself (same OCC path the toolbar
+    // "Save changes" uses); activeViewVersion is the server-fresh OCC
+    // token. Then refresh so the server re-renders the body rows in
+    // the new order too (revalidatePath alone won't re-render a
+    // mounted client route).
     const fd = new FormData();
+    fd.set("id", activeViewId.slice("saved:".length));
+    fd.set("version", String(activeViewVersion ?? 1));
     fd.set("payload", JSON.stringify({ columns: next }));
-    void activeViewId;
     startTransition(async () => {
-      const res = await setContactAdhocColumnsAction(fd);
+      const res = await updateContactViewAction(fd);
       if (!res.ok) {
-        setColumns(columns);
+        setColumns(prev);
         toast.error(res.error, { duration: Infinity, dismissible: true });
+        return;
       }
+      router.refresh();
     });
   }
 
