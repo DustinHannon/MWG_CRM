@@ -134,13 +134,12 @@ export const notifications = pgTable(
       .default(sql`now()`),
   },
   (t) => [
-    index("notifications_user_unread_idx").on(
-      t.userId,
-      t.isRead,
-      t.createdAt.desc(),
-    ),
     // activity-log keyset (user's own feed, newest first) + the
-    // badge "created_at > last_seen" count.
+    // unseen-badge (created_at > last_seen) count. The former
+    // notifications_user_unread_idx (user_id, is_read, created_at)
+    // was dropped (migration 0018): post-Task-4 the bell badge is
+    // last-seen-based (countUnseen) and no query filters or sorts by
+    // is_read (its only use is a display projection in the cursor).
     index("notifications_user_created_idx").on(
       t.userId,
       t.createdAt.desc(),

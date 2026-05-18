@@ -127,6 +127,13 @@
       "when": 1778980121893,
       "tag": "0017_military_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779110926765,
+      "tag": "0018_unusual_warpath",
+      "breakpoints": true
     }
   ]
 }
