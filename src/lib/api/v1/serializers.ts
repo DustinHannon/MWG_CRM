@@ -181,6 +181,7 @@ export function serializeActivity(row: Record<string, unknown>) {
     outcome: (row.outcome ?? null) as string | null,
     created_at: iso(row.createdAt as Date) ?? new Date(0).toISOString(),
     updated_at: iso(row.updatedAt as Date) ?? new Date(0).toISOString(),
+    version: (row.version ?? 1) as number,
   };
 }
 

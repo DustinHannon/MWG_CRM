@@ -63,6 +63,15 @@ export const ActivitySchema = registry.register(
       .string()
       .datetime()
       .openapi({ example: "2026-01-15T10:30:00Z" }),
+    version: z
+      .number()
+      .int()
+      .openapi({
+        description:
+          "Optimistic-concurrency version. Pass back unchanged in the " +
+          "next PATCH to detect concurrent edits.",
+        example: 1,
+      }),
   }),
 );
 
@@ -135,6 +144,19 @@ export const ActivityUpdateSchema = registry.register(
     duration_minutes: z.number().int().min(0).max(1440).nullable().optional(),
     direction: z.enum(ACTIVITY_DIRECTIONS).nullable().optional(),
     occurred_at: z.string().datetime().optional(),
+    version: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .openapi({
+        description:
+          "Optimistic-concurrency version. Send the value returned by " +
+          "the last GET; the update is rejected with 409 if another " +
+          "writer changed the activity since. Omit to skip the check " +
+          "(updates against the current version).",
+        example: 1,
+      }),
   }),
 );
 

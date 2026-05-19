@@ -1,8 +1,9 @@
 import {
   getActivityForApi,
   softDeleteActivity,
-  updateActivityForApi,
+  updateActivity,
 } from "@/lib/activities";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { eq } from "drizzle-orm";
@@ -49,8 +50,10 @@ registry.registerPath({
   summary: "Update activity",
   description:
     "Partial update on a small set of mutable fields (subject, body, " +
-    "outcome, duration_minutes, direction, occurred_at). Activities " +
-    "do not currently carry a `version` column; updates are last-write-wins.",
+    "outcome, duration_minutes, direction, occurred_at). Optimistic " +
+    "concurrency: pass the `version` from the last GET to be rejected " +
+    "with 409 if another writer changed the activity first; omit it to " +
+    "update against the current version.",
   tags: ["Activities"],
   security: [{ BearerAuth: [] }],
   request: {
@@ -62,6 +65,7 @@ registry.registerPath({
     401: { description: "Unauthorized", content: { "application/json": { schema: ErrorBodySchema } } },
     403: { description: "Forbidden", content: { "application/json": { schema: ErrorBodySchema } } },
     404: { description: "Not found", content: { "application/json": { schema: ErrorBodySchema } } },
+    409: { description: "Version conflict", content: { "application/json": { schema: ErrorBodySchema } } },
     422: { description: "Validation error", content: { "application/json": { schema: ErrorBodySchema } } },
     429: { description: "Rate limited", content: { "application/json": { schema: ErrorBodySchema } } },
   },
@@ -121,7 +125,14 @@ export const PATCH = withApi<{ id: string }>(
     });
     if (!existing) return errorResponse(404, "NOT_FOUND", "Activity not found");
     const m = parsed.data;
-    const patch: Record<string, unknown> = {};
+    const patch: {
+      subject?: string | null;
+      body?: string | null;
+      outcome?: string | null;
+      durationMinutes?: number | null;
+      direction?: "inbound" | "outbound" | "internal" | null;
+      occurredAt?: Date;
+    } = {};
     if (m.subject !== undefined) patch.subject = m.subject ?? null;
     if (m.body !== undefined) patch.body = m.body ?? null;
     if (m.outcome !== undefined) patch.outcome = m.outcome ?? null;
@@ -132,24 +143,54 @@ export const PATCH = withApi<{ id: string }>(
     if (m.occurred_at !== undefined) {
       patch.occurredAt = new Date(m.occurred_at);
     }
-    await updateActivityForApi(params.id, patch);
-    // `updateActivityForApi` lib helper does NOT emit audit.
-    // Mirror the (app) action's behaviour so API-key driven updates land
-    // in audit_log with the same `activity.update` event taxonomy.
+    // OCC: `version` is optional on this endpoint (it was last-write-
+    // wins before activities gained the column; requiring it would
+    // break existing integrators). When omitted we fall back to the
+    // just-read version, so the shared `updateActivity` path is still
+    // atomic; when supplied, a concurrent edit yields 409.
+    const expectedVersion = m.version ?? existing.version;
+    let result: Awaited<ReturnType<typeof updateActivity>>;
+    try {
+      result = await updateActivity({
+        id: params.id,
+        patch,
+        expectedVersion,
+        actorId: key.createdById,
+      });
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        return errorResponse(
+          409,
+          "CONFLICT",
+          "Activity was modified by someone else; refresh and retry.",
+          {
+            details: [
+              {
+                field: "version",
+                issue: `Expected ${expectedVersion}, it has since changed`,
+              },
+            ],
+          },
+        );
+      }
+      if (err instanceof NotFoundError) {
+        return errorResponse(404, "NOT_FOUND", "Activity not found");
+      }
+      throw err;
+    }
+    // The shared `updateActivity` lib helper does NOT emit audit (it is
+    // also called by the (app) action, which audits). Mirror the (app)
+    // action here so API-key driven updates land in audit_log with the
+    // same `activity.update` taxonomy — now with before AND after.
     await writeAudit({
       actorId: key.createdById,
       action: "activity.update",
       targetType: "activities",
       targetId: params.id,
-      after: { ...patch, source: "api" },
+      before: result.before,
+      after: { ...result.after, source: "api" },
     });
-    const fresh = await getActivityForApi(params.id, {
-      actorId: key.createdById,
-      canViewAll: true,
-    });
-    return Response.json(
-      fresh ? serializeActivity(fresh) : { id: params.id },
-    );
+    return Response.json(serializeActivity(result.after));
   },
 );
 
