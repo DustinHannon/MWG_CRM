@@ -24,6 +24,23 @@ export const callSchema = z.object({
   occurredAt: z.string().optional(), // ISO; defaults to now
 });
 
+// Inline-edit form schemas for the lead timeline. Derived from the
+// create schemas above (single source of truth for field rules) by
+// dropping `leadId` (the action re-fetches the activity and trusts the
+// DB parent, never a client claim) and adding the edit identity:
+// `activityId` + the OCC `version` the client loaded. `version` is
+// coerced because it arrives as a hidden form string.
+const editIdentity = {
+  activityId: z.string().uuid(),
+  version: z.coerce.number().int().min(1),
+};
+export const noteEditSchema = noteSchema
+  .omit({ leadId: true })
+  .extend(editIdentity);
+export const callEditSchema = callSchema
+  .omit({ leadId: true })
+  .extend(editIdentity);
+
 // Lead Add-task tab form schema. Limits MUST match the canonical
 // `taskCreateSchema` (@/lib/tasks: title ≤200, description ≤2000) so
 // this layer-1 parse rejects an over-length value first — if a value

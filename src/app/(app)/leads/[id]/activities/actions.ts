@@ -3,13 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
+  callEditSchema,
   callSchema,
   createCall,
   createNote,
+  noteEditSchema,
   noteSchema,
   restoreActivity,
   softDeleteActivity,
   taskSchema,
+  updateActivity,
 } from "@/lib/activities";
 import { createTask, taskCreateSchema } from "@/lib/tasks";
 import { createNotification } from "@/lib/notifications";
@@ -20,12 +23,12 @@ import {
   requireSession,
 } from "@/lib/auth-helpers";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
-import { ForbiddenError } from "@/lib/errors";
+import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { eq } from "drizzle-orm";
-import { canDeleteActivity } from "@/lib/access/can-delete";
+import { canDeleteActivity, canEditActivity } from "@/lib/access/can-delete";
 import { parseFormOrThrow } from "@/lib/forms/form-data";
 
 /**
@@ -101,6 +104,122 @@ export async function addCallAction(
       },
     });
     revalidatePath(`/leads/${parsed.leadId}`);
+  });
+}
+
+/**
+ * Inline-edit a note or call timeline entry with full optimistic
+ * concurrency. Author OR admin only (re-fetched, never trusts the
+ * client). Strictly gated to `kind in ('note','call')` — email,
+ * meeting, task, and any Graph-/import-provenanced row (a synced or
+ * imported activity) are rejected: those bodies are system-owned, not
+ * free-form user prose, and editing them would desync the source. The
+ * submitted `version` is the OCC token; a concurrent edit surfaces as
+ * a ConflictError envelope the form turns into the conflict dialog.
+ */
+export async function updateActivityAction(
+  formData: FormData,
+): Promise<ActionResult> {
+  return withErrorBoundary({ action: "activity.update" }, async () => {
+    const user = await requireSession();
+    const activityId = z.string().uuid().parse(formData.get("activityId"));
+
+    // Re-fetch — never trust the client's claimed kind/parent/author.
+    const [row] = await db
+      .select({
+        id: activities.id,
+        leadId: activities.leadId,
+        userId: activities.userId,
+        kind: activities.kind,
+        version: activities.version,
+        isDeleted: activities.isDeleted,
+        graphMessageId: activities.graphMessageId,
+        graphEventId: activities.graphEventId,
+        importDedupKey: activities.importDedupKey,
+      })
+      .from(activities)
+      .where(eq(activities.id, activityId))
+      .limit(1);
+    if (!row || row.isDeleted) {
+      throw new ForbiddenError("Activity not found.");
+    }
+    // This action only edits lead-attached note/call entries; the
+    // timeline edit affordance is only rendered there.
+    if (!row.leadId) {
+      throw new ValidationError("This activity can't be edited here.");
+    }
+    await requireLeadAccess(user, row.leadId);
+    if (!canEditActivity(user, row)) {
+      await writeAudit({
+        actorId: user.id,
+        action: "access.denied.activity.update",
+        targetType: "activity",
+        targetId: activityId,
+      });
+      throw new ForbiddenError("You can't edit this activity.");
+    }
+
+    // Strict kind gate — only free-form note/call prose is editable.
+    if (row.kind !== "note" && row.kind !== "call") {
+      throw new ValidationError(
+        "Only notes and calls can be edited.",
+      );
+    }
+    // Provenance gate — a Graph-synced or D365-imported row is owned by
+    // its source; editing it would silently diverge from that source.
+    if (row.graphMessageId || row.graphEventId || row.importDedupKey) {
+      throw new ValidationError(
+        "Synced or imported activities can't be edited.",
+      );
+    }
+
+    // Reuse the create-form field rules (single source of truth) via
+    // the derived edit schemas; pick by the DB-confirmed kind.
+    if (row.kind === "note") {
+      const parsed = parseFormOrThrow(noteEditSchema, formData, {
+        emptyMode: "exact",
+      });
+      const { before, after } = await updateActivity({
+        id: activityId,
+        patch: { body: parsed.body },
+        expectedVersion: parsed.version,
+        actorId: user.id,
+      });
+      await writeAudit({
+        actorId: user.id,
+        action: "activity.update",
+        targetType: "activity",
+        targetId: activityId,
+        before,
+        after,
+      });
+    } else {
+      const parsed = parseFormOrThrow(callEditSchema, formData, {
+        emptyMode: "exact",
+      });
+      const { before, after } = await updateActivity({
+        id: activityId,
+        patch: {
+          subject: parsed.subject ?? null,
+          body: parsed.body ?? null,
+          outcome: parsed.outcome ?? null,
+          durationMinutes: parsed.durationMinutes ?? null,
+          occurredAt: parseOccurredAt(parsed.occurredAt) ?? undefined,
+        },
+        expectedVersion: parsed.version,
+        actorId: user.id,
+      });
+      await writeAudit({
+        actorId: user.id,
+        action: "activity.update",
+        targetType: "activity",
+        targetId: activityId,
+        before,
+        after,
+      });
+    }
+
+    revalidatePath(`/leads/${row.leadId}`);
   });
 }
 

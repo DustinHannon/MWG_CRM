@@ -9,7 +9,8 @@ import "server-only";
  * Rules per the matrix:
  * Lead/Account/Contact/Opportunity: owner OR admin can soft-delete
  * Task: creator OR assignee OR admin
- * Activity: author (user_id) OR admin
+ * Activity: author (user_id) OR admin — same rule for soft-delete
+ *   (canDeleteActivity) and inline edit (canEditActivity)
  * Hard delete (any entity): admin only, from archive view
  *
  * `canViewAllRecords` deliberately does NOT grant delete. View ≠ delete.
@@ -63,6 +64,22 @@ export function canDeleteTask(user: ActorLite, task: TaskLite): boolean {
 }
 
 export function canDeleteActivity(
+  user: ActorLite,
+  activity: ActivityLite,
+): boolean {
+  if (user.isAdmin) return true;
+  return activity.userId === user.id;
+}
+
+/**
+ * Inline-edit gate for a note/call timeline entry. Same author-or-admin
+ * rule as delete (an activity's author may correct their own note/call;
+ * admins may correct anyone's). Behavior-named rather than reusing the
+ * delete-named helper so the call site reads as an edit check, not a
+ * delete check — the predicate body is identical today but the two
+ * concerns are allowed to diverge.
+ */
+export function canEditActivity(
   user: ActorLite,
   activity: ActivityLite,
 ): boolean {
