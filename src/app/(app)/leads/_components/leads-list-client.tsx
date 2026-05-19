@@ -981,7 +981,7 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
     case "estimatedCloseDate":
       return (
         <span className="text-muted-foreground">
-          {lead.estimatedCloseDate ?? "—"}
+          {formatUserTime(lead.estimatedCloseDate, prefs, "date")}
         </span>
       );
     case "createdBy":
