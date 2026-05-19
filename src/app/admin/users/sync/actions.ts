@@ -9,6 +9,7 @@ import { crmAccounts, contacts, opportunities } from "@/db/schema/crm-records";
 import { tasks } from "@/db/schema/tasks";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
+import { parseJsonOrThrow } from "@/lib/forms/form-data";
 import { ValidationError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { AUDIT_EVENTS } from "@/lib/audit/events";
@@ -272,16 +273,8 @@ export async function commitEntraUserImport(
   return withErrorBoundary({ action: "admin.users.sync.commit" }, async () => {
     const admin = await requireAdmin();
 
-    const parsed = commitImportSchema.safeParse(input);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      throw new ValidationError(
-        first
-          ? `${first.path.join(".") || "input"}: ${first.message}`
-          : "Validation failed.",
-      );
-    }
-    const requested = Array.from(new Set(parsed.data.entraOids));
+    const data = parseJsonOrThrow(commitImportSchema, input);
+    const requested = Array.from(new Set(data.entraOids));
 
     const dir = await fetchEntraDirectoryUsers();
     if (!dir.ok) {
@@ -454,15 +447,7 @@ export async function offboardMissingUsers(
     async () => {
       const admin = await requireAdmin();
 
-      const parsed = offboardSchema.safeParse(input);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Validation failed.",
-        );
-      }
+      const data = parseJsonOrThrow(offboardSchema, input);
 
       let deactivated = 0;
       let reassigned = 0;
@@ -471,10 +456,10 @@ export async function offboardMissingUsers(
       // The full set being offboarded in this batch — a reassign target
       // that is itself being deactivated would orphan the records again.
       const batchUserIds = new Set(
-        parsed.data.items.map((i) => i.userId),
+        data.items.map((i) => i.userId),
       );
 
-      for (const item of parsed.data.items) {
+      for (const item of data.items) {
         if (item.userId === admin.id) {
           failed.push({
             userId: item.userId,

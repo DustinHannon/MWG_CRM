@@ -11,11 +11,11 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
-  ValidationError,
 } from "@/lib/errors";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { removeSuppressionFromSendGrid } from "@/lib/marketing/sendgrid/suppressions";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
+import { parseJsonOrThrow } from "@/lib/forms/form-data";
 
 /**
  * Manual suppression add / remove from the admin UI.
@@ -52,17 +52,9 @@ export async function addSuppressionAction(
         }
       }
 
-      const parsed = addSchema.safeParse(input);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Invalid input.",
-        );
-      }
+      const data = parseJsonOrThrow(addSchema, input);
 
-      const email = parsed.data.email.toLowerCase();
+      const email = data.email.toLowerCase();
 
       // Dedup: refuse if any existing row (any source) already
       // suppresses this address. Surface a friendly error instead of
@@ -76,7 +68,7 @@ export async function addSuppressionAction(
         .values({
           email,
           suppressionType: "manual",
-          reason: parsed.data.reason,
+          reason: data.reason,
           addedByUserId: user.id,
         })
         .onConflictDoNothing({ target: marketingSuppressions.email })
@@ -92,7 +84,7 @@ export async function addSuppressionAction(
         targetId: email,
         after: {
           email,
-          reason: parsed.data.reason,
+          reason: data.reason,
         },
       });
 
@@ -117,17 +109,9 @@ export async function removeSuppressionAction(
         }
       }
 
-      const parsed = removeSchema.safeParse(input);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Invalid input.",
-        );
-      }
+      const data = parseJsonOrThrow(removeSchema, input);
 
-      const email = parsed.data.email.toLowerCase();
+      const email = data.email.toLowerCase();
 
       // Snapshot the row before delete so the audit row carries the
       // original source + when it was added.
@@ -182,7 +166,7 @@ export async function removeSuppressionAction(
           originalAddedAt: existing.suppressedAt.toISOString(),
         },
         after: {
-          reason: parsed.data.reason,
+          reason: data.reason,
           sendgridResult: sendgridResult.status,
         },
       });

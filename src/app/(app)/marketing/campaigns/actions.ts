@@ -28,6 +28,7 @@ import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
+import { parseJsonOrThrow } from "@/lib/forms/form-data";
 import { sendTestEmail } from "@/lib/marketing/sendgrid/send";
 import { resolveListRecipients } from "@/lib/marketing/lists/resolution";
 
@@ -142,24 +143,16 @@ export async function createCampaignDraftAction(input: {
     { action: MARKETING_AUDIT_EVENTS.CAMPAIGN_CREATE },
     async () => {
       const user = await requireCampaignPermission("canMarketingCampaignsCreate");
-      const parsed = campaignDraftCreateSchema.safeParse(input);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Validation failed.",
-        );
-      }
+      const data = parseJsonOrThrow(campaignDraftCreateSchema, input);
 
       // The DB requires a non-null template/list for a draft row to
       // satisfy NOT NULL constraints. The wizard's first step picks a
       // template before it ever calls this; if the wizard ever wants
       // to persist before that, it has to pick placeholder ids first.
-      if (!parsed.data.templateId) {
+      if (!data.templateId) {
         throw new ValidationError("Pick a template before saving the draft.");
       }
-      if (!parsed.data.listId) {
+      if (!data.listId) {
         // Allow listId to be deferred — we use a sentinel "unselected"
         // by reusing the very first list the user has access to. But
         // schema requires non-null. Decision: require it at this layer
@@ -173,7 +166,7 @@ export async function createCampaignDraftAction(input: {
         .from(marketingTemplates)
         .where(
           and(
-            eq(marketingTemplates.id, parsed.data.templateId),
+            eq(marketingTemplates.id, data.templateId),
             eq(marketingTemplates.isDeleted, false),
           ),
         )
@@ -185,7 +178,7 @@ export async function createCampaignDraftAction(input: {
         .from(marketingLists)
         .where(
           and(
-            eq(marketingLists.id, parsed.data.listId),
+            eq(marketingLists.id, data.listId),
             eq(marketingLists.isDeleted, false),
           ),
         )
@@ -193,15 +186,15 @@ export async function createCampaignDraftAction(input: {
       if (!list) throw new NotFoundError("list");
 
       const name =
-        parsed.data.name?.trim() ||
+        data.name?.trim() ||
         `Campaign — ${new Date().toISOString().slice(0, 10)}`;
 
       const [created] = await db
         .insert(marketingCampaigns)
         .values({
           name,
-          templateId: parsed.data.templateId,
-          listId: parsed.data.listId,
+          templateId: data.templateId,
+          listId: data.listId,
           fromEmail: `noreply@${env.SENDGRID_FROM_DOMAIN}`,
           fromName: env.SENDGRID_FROM_NAME_DEFAULT,
           status: "draft",
@@ -217,8 +210,8 @@ export async function createCampaignDraftAction(input: {
         targetId: created.id,
         after: {
           name,
-          templateId: parsed.data.templateId,
-          listId: parsed.data.listId,
+          templateId: data.templateId,
+          listId: data.listId,
         },
       });
 
@@ -251,17 +244,9 @@ export async function updateCampaignDraftAction(input: {
     },
     async () => {
       const user = await requireCampaignPermission("canMarketingCampaignsEdit");
-      const parsed = campaignDraftUpdateSchema.safeParse(input);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Validation failed.",
-        );
-      }
+      const data = parseJsonOrThrow(campaignDraftUpdateSchema, input);
 
-      const campaign = await loadCampaign(parsed.data.id);
+      const campaign = await loadCampaign(data.id);
       if (campaign.isDeleted) throw new NotFoundError("campaign");
       if (campaign.status !== "draft") {
         throw new ConflictError(
@@ -272,35 +257,35 @@ export async function updateCampaignDraftAction(input: {
       const patch: Record<string, unknown> = { updatedById: user.id };
       const before: Record<string, unknown> = {};
       const after: Record<string, unknown> = {};
-      if (parsed.data.name !== undefined) {
+      if (data.name !== undefined) {
         before.name = campaign.name;
-        patch.name = parsed.data.name;
-        after.name = parsed.data.name;
+        patch.name = data.name;
+        after.name = data.name;
       }
-      if (parsed.data.templateId !== undefined) {
+      if (data.templateId !== undefined) {
         before.templateId = campaign.templateId;
-        patch.templateId = parsed.data.templateId;
-        after.templateId = parsed.data.templateId;
+        patch.templateId = data.templateId;
+        after.templateId = data.templateId;
       }
-      if (parsed.data.listId !== undefined) {
+      if (data.listId !== undefined) {
         before.listId = campaign.listId;
-        patch.listId = parsed.data.listId;
-        after.listId = parsed.data.listId;
+        patch.listId = data.listId;
+        after.listId = data.listId;
       }
-      if (parsed.data.fromEmail !== undefined) {
+      if (data.fromEmail !== undefined) {
         before.fromEmail = campaign.fromEmail;
-        patch.fromEmail = parsed.data.fromEmail;
-        after.fromEmail = parsed.data.fromEmail;
+        patch.fromEmail = data.fromEmail;
+        after.fromEmail = data.fromEmail;
       }
-      if (parsed.data.fromName !== undefined) {
+      if (data.fromName !== undefined) {
         before.fromName = campaign.fromName;
-        patch.fromName = parsed.data.fromName;
-        after.fromName = parsed.data.fromName;
+        patch.fromName = data.fromName;
+        after.fromName = data.fromName;
       }
-      if (parsed.data.replyToEmail !== undefined) {
+      if (data.replyToEmail !== undefined) {
         before.replyToEmail = campaign.replyToEmail;
         patch.replyToEmail =
-          parsed.data.replyToEmail === "" ? null : parsed.data.replyToEmail;
+          data.replyToEmail === "" ? null : data.replyToEmail;
         after.replyToEmail = patch.replyToEmail;
       }
 
@@ -310,13 +295,13 @@ export async function updateCampaignDraftAction(input: {
       // UPDATE atomically requires `version = expectedVersion` AND bumps
       // it. 0 rows affected ⇒ another writer beat us → ConflictError.
       const whereClauses = [
-        eq(marketingCampaigns.id, parsed.data.id),
+        eq(marketingCampaigns.id, data.id),
         eq(marketingCampaigns.status, "draft"),
         eq(marketingCampaigns.isDeleted, false),
       ];
-      if (parsed.data.expectedVersion !== undefined) {
+      if (data.expectedVersion !== undefined) {
         whereClauses.push(
-          eq(marketingCampaigns.version, parsed.data.expectedVersion),
+          eq(marketingCampaigns.version, data.expectedVersion),
         );
       }
       const updated = await db
@@ -329,7 +314,7 @@ export async function updateCampaignDraftAction(input: {
         .where(and(...whereClauses))
         .returning({ id: marketingCampaigns.id });
       if (updated.length === 0) {
-        if (parsed.data.expectedVersion !== undefined) {
+        if (data.expectedVersion !== undefined) {
           throw new ConflictError(
             "Another user has updated this campaign. Reload to see the latest changes.",
           );
@@ -343,13 +328,13 @@ export async function updateCampaignDraftAction(input: {
         actorId: user.id,
         action: MARKETING_AUDIT_EVENTS.CAMPAIGN_UPDATE,
         targetType: "marketing_campaign",
-        targetId: parsed.data.id,
+        targetId: data.id,
         before,
         after,
       });
 
       revalidatePath("/marketing/campaigns");
-      revalidatePath(`/marketing/campaigns/${parsed.data.id}`);
+      revalidatePath(`/marketing/campaigns/${data.id}`);
     },
   );
 }
@@ -371,6 +356,7 @@ export async function scheduleCampaignAction(input: {
     },
     async () => {
       const user = await requireCampaignPermission("canMarketingCampaignsSchedule");
+      // Fixed message intentional (not the field-path format) — keep safeParse here; do NOT migrate to parseJsonOrThrow.
       const parsed = campaignScheduleSchema.safeParse(input);
       if (!parsed.success) {
         throw new ValidationError(
@@ -765,6 +751,7 @@ export async function sendCampaignTestAction(input: {
           "SendGrid is not configured for this environment.",
         );
       }
+      // Intentional: bare first-issue message, no path prefix — keep safeParse; do NOT migrate to parseJsonOrThrow.
       const parsed = campaignTestSchema.safeParse(input);
       if (!parsed.success) {
         const first = parsed.error.issues[0];

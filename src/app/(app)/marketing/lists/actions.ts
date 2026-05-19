@@ -42,6 +42,7 @@ import {
   type ActionResult,
   withErrorBoundary,
 } from "@/lib/server-action";
+import { parseJsonOrThrow } from "@/lib/forms/form-data";
 
 /**
  * Marketing list server actions.
@@ -145,26 +146,18 @@ export async function createListAction(input: {
 }): Promise<ActionResult<{ id: string }>> {
   return withErrorBoundary({ action: "marketing.list.create" }, async () => {
     const user = await requireListPermission("canMarketingListsCreate");
-    const parsed = listCreateSchema.safeParse(input);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      throw new ValidationError(
-        first
-          ? `${first.path.join(".") || "input"}: ${first.message}`
-          : "Invalid input.",
-      );
-    }
+    const data = parseJsonOrThrow(listCreateSchema, input);
 
     const [row] = await db
       .insert(marketingLists)
       .values({
-        name: parsed.data.name,
-        description: parsed.data.description,
-        filterDsl: parsed.data.filterDsl,
+        name: data.name,
+        description: data.description,
+        filterDsl: data.filterDsl,
         // explicit type tagging. Existing rows
         // back-filled to 'dynamic' by the migration.
         listType: "dynamic",
-        sourceEntity: parsed.data.sourceEntity,
+        sourceEntity: data.sourceEntity,
         createdById: user.id,
         updatedById: user.id,
       })
@@ -196,8 +189,8 @@ export async function createListAction(input: {
       targetType: "marketing_list",
       targetId: row.id,
       after: {
-        name: parsed.data.name,
-        filterDsl: parsed.data.filterDsl,
+        name: data.name,
+        filterDsl: data.filterDsl,
       },
     });
 
@@ -215,15 +208,7 @@ export async function updateListAction(input: {
 }): Promise<ActionResult<never>> {
   return withErrorBoundary({ action: "marketing.list.update" }, async () => {
     const user = await requireListPermission("canMarketingListsEdit");
-    const parsed = listUpdateSchema.safeParse(input);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      throw new ValidationError(
-        first
-          ? `${first.path.join(".") || "input"}: ${first.message}`
-          : "Invalid input.",
-      );
-    }
+    const data = parseJsonOrThrow(listUpdateSchema, input);
 
     const [existing] = await db
       .select({
@@ -234,7 +219,7 @@ export async function updateListAction(input: {
         isDeleted: marketingLists.isDeleted,
       })
       .from(marketingLists)
-      .where(eq(marketingLists.id, parsed.data.id))
+      .where(eq(marketingLists.id, data.id))
       .limit(1);
     if (!existing || existing.isDeleted) {
       throw new NotFoundError("marketing list");
@@ -247,20 +232,20 @@ export async function updateListAction(input: {
     // overwriting a row that was archived between load and submit
     // (matches the leads.ts pattern at lines 498-502).
     const whereClauses = [
-      eq(marketingLists.id, parsed.data.id),
+      eq(marketingLists.id, data.id),
       eq(marketingLists.isDeleted, false),
     ];
-    if (parsed.data.expectedVersion !== undefined) {
+    if (data.expectedVersion !== undefined) {
       whereClauses.push(
-        eq(marketingLists.version, parsed.data.expectedVersion),
+        eq(marketingLists.version, data.expectedVersion),
       );
     }
     const updated = await db
       .update(marketingLists)
       .set({
-        name: parsed.data.name,
-        description: parsed.data.description,
-        filterDsl: parsed.data.filterDsl,
+        name: data.name,
+        description: data.description,
+        filterDsl: data.filterDsl,
         updatedById: user.id,
         updatedAt: sql`now()`,
         version: sql`${marketingLists.version} + 1`,
@@ -269,7 +254,7 @@ export async function updateListAction(input: {
       .returning({ id: marketingLists.id });
     if (
       updated.length === 0 &&
-      parsed.data.expectedVersion !== undefined
+      data.expectedVersion !== undefined
     ) {
       throw new ConflictError(
         "Another user has updated this list. Reload to see the latest changes.",
@@ -283,11 +268,11 @@ export async function updateListAction(input: {
     // list update itself already landed. Membership stays stale until
     // the next manual refresh or list-refresh cron run.
     try {
-      await refreshList(parsed.data.id, user.id);
+      await refreshList(data.id, user.id);
     } catch (err) {
       if (err instanceof ValidationError) throw err;
       logger.warn("marketing.list.refresh_after_update_failed", {
-        listId: parsed.data.id,
+        listId: data.id,
         userId: user.id,
         errorMessage: err instanceof Error ? err.message : String(err),
       });
@@ -297,21 +282,21 @@ export async function updateListAction(input: {
       actorId: user.id,
       action: MARKETING_AUDIT_EVENTS.LIST_UPDATE,
       targetType: "marketing_list",
-      targetId: parsed.data.id,
+      targetId: data.id,
       before: {
         name: existing.name,
         description: existing.description,
         filterDsl: existing.filterDsl,
       },
       after: {
-        name: parsed.data.name,
-        description: parsed.data.description,
-        filterDsl: parsed.data.filterDsl,
+        name: data.name,
+        description: data.description,
+        filterDsl: data.filterDsl,
       },
     });
 
     revalidatePath("/marketing/lists");
-    revalidatePath(`/marketing/lists/${parsed.data.id}`);
+    revalidatePath(`/marketing/lists/${data.id}`);
   });
 }
 
@@ -419,15 +404,7 @@ export async function bulkAddLeadsToListAction(input: {
     { action: "marketing.list.member_bulk_add" },
     async () => {
       const user = await requireListPermission("canMarketingListsBulkAdd");
-      const parsed = bulkAddSchema.safeParse(input);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Invalid input.",
-        );
-      }
+      const data = parseJsonOrThrow(bulkAddSchema, input);
 
       // Confirm the list exists and is active.
       const [list] = await db
@@ -436,7 +413,7 @@ export async function bulkAddLeadsToListAction(input: {
           isDeleted: marketingLists.isDeleted,
         })
         .from(marketingLists)
-        .where(eq(marketingLists.id, parsed.data.listId))
+        .where(eq(marketingLists.id, data.listId))
         .limit(1);
       if (!list || list.isDeleted) {
         throw new NotFoundError("marketing list");
@@ -448,7 +425,7 @@ export async function bulkAddLeadsToListAction(input: {
         .from(leads)
         .where(
           and(
-            inArray(leads.id, parsed.data.leadIds),
+            inArray(leads.id, data.leadIds),
             eq(leads.isDeleted, false),
             eq(leads.doNotEmail, false),
           ),
@@ -472,7 +449,7 @@ export async function bulkAddLeadsToListAction(input: {
               .insert(marketingListMembers)
               .values(
                 slice.map((c) => ({
-                  listId: parsed.data.listId,
+                  listId: data.listId,
                   leadId: c.id,
                   email: c.email,
                 })),
@@ -489,7 +466,7 @@ export async function bulkAddLeadsToListAction(input: {
               .select({ n: sql<number>`count(*)::int` })
               .from(marketingListMembers)
               .where(
-                eq(marketingListMembers.listId, parsed.data.listId),
+                eq(marketingListMembers.listId, data.listId),
               );
             await tx
               .update(marketingLists)
@@ -497,7 +474,7 @@ export async function bulkAddLeadsToListAction(input: {
                 memberCount: n ?? 0,
                 updatedAt: sql`now()`,
               })
-              .where(eq(marketingLists.id, parsed.data.listId));
+              .where(eq(marketingLists.id, data.listId));
           }
         });
       }
@@ -506,15 +483,15 @@ export async function bulkAddLeadsToListAction(input: {
         actorId: user.id,
         action: MARKETING_AUDIT_EVENTS.LIST_MEMBER_BULK_ADD,
         targetType: "marketing_list",
-        targetId: parsed.data.listId,
+        targetId: data.listId,
         after: {
-          requestedCount: parsed.data.leadIds.length,
+          requestedCount: data.leadIds.length,
           eligibleCount: eligible.length,
           addedCount: added,
         },
       });
 
-      revalidatePath(`/marketing/lists/${parsed.data.listId}`);
+      revalidatePath(`/marketing/lists/${data.listId}`);
       revalidatePath("/marketing/lists");
       return { added };
     },
@@ -594,21 +571,13 @@ export async function createStaticListAction(input: {
           );
         }
       }
-      const parsed = staticListCreateSchema.safeParse(input);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Invalid input.",
-        );
-      }
+      const data = parseJsonOrThrow(staticListCreateSchema, input);
 
       const [row] = await db
         .insert(marketingLists)
         .values({
-          name: parsed.data.name,
-          description: parsed.data.description,
+          name: data.name,
+          description: data.description,
           // Placeholder DSL — never evaluated for static lists.
           filterDsl: { combinator: "AND", rules: [] },
           listType: "static_imported",
@@ -626,7 +595,7 @@ export async function createStaticListAction(input: {
         targetType: "marketing_list",
         targetId: row.id,
         after: {
-          name: parsed.data.name,
+          name: data.name,
           listType: "static_imported",
         },
       });
@@ -651,27 +620,19 @@ export async function updateStaticListMemberAction(input: {
     { action: "marketing.list.member_edit" },
     async () => {
       const user = await requireSession();
-      const parsed = staticMemberUpdateSchema.safeParse(input);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Invalid input.",
-        );
-      }
+      const data = parseJsonOrThrow(staticMemberUpdateSchema, input);
 
-      const existing = await getStaticListMemberById(parsed.data.memberId);
+      const existing = await getStaticListMemberById(data.memberId);
       if (!existing) throw new NotFoundError("static list member");
 
       const list = await requireStaticListEditAccess(user, existing.listId);
 
       const patch =
-        parsed.data.field === "email"
-          ? { email: parsed.data.value }
-          : { name: parsed.data.value };
+        data.field === "email"
+          ? { email: data.value }
+          : { name: data.value };
       const updated = await updateStaticListMember({
-        memberId: parsed.data.memberId,
+        memberId: data.memberId,
         patch,
         actorId: user.id,
       });
@@ -688,8 +649,8 @@ export async function updateStaticListMemberAction(input: {
         },
         after: {
           listId: list.id,
-          field: parsed.data.field,
-          value: parsed.data.value,
+          field: data.field,
+          value: data.value,
         },
       });
 
@@ -715,25 +676,17 @@ export async function bulkUpdateStaticListMembersAction(input: {
     { action: "marketing.list.bulk_edit" },
     async () => {
       const user = await requireSession();
-      const parsed = staticMemberBulkUpdateSchema.safeParse({
+      const data = parseJsonOrThrow(staticMemberBulkUpdateSchema, {
         memberIds: input.memberIds,
         field: input.field,
         value: input.value ?? undefined,
       });
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Invalid input.",
-        );
-      }
       const list = await requireStaticListEditAccess(user, input.listId);
 
       const { updated } = await bulkUpdateStaticListMembers({
-        memberIds: parsed.data.memberIds,
+        memberIds: data.memberIds,
         field: "name",
-        value: parsed.data.value ?? null,
+        value: data.value ?? null,
         actorId: user.id,
       });
 
@@ -768,16 +721,8 @@ export async function removeStaticListMembersAction(input: {
     { action: "marketing.list.member_remove" },
     async () => {
       const user = await requireSession();
-      const parsed = staticMemberRemoveSchema.safeParse(input);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Invalid input.",
-        );
-      }
-      const list = await requireStaticListEditAccess(user, parsed.data.listId);
+      const data = parseJsonOrThrow(staticMemberRemoveSchema, input);
+      const list = await requireStaticListEditAccess(user, data.listId);
 
       // Fetch the rows up-front so the audit trail carries the email
       // values that are about to disappear.
@@ -790,14 +735,14 @@ export async function removeStaticListMembersAction(input: {
         .from(marketingStaticListMembers)
         .where(
           and(
-            eq(marketingStaticListMembers.listId, parsed.data.listId),
-            inArray(marketingStaticListMembers.id, parsed.data.memberIds),
+            eq(marketingStaticListMembers.listId, data.listId),
+            inArray(marketingStaticListMembers.id, data.memberIds),
           ),
         );
 
       const { removed } = await deleteStaticListMembersById({
-        listId: parsed.data.listId,
-        memberIds: parsed.data.memberIds,
+        listId: data.listId,
+        memberIds: data.memberIds,
       });
 
       // Audit per row so bulk removes still produce forensic-grade
