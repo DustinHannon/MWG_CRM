@@ -73,6 +73,14 @@ export const activities = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    // actor stamp for realtime skip-self (mirrors tasks.updated_by_id).
+    updatedById: uuid("updated_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Optimistic concurrency stamp. Bumped by every inline edit through
+    // updateActivity(); a stale `version` causes ConflictError. Existing
+    // rows backfill to 1 via the column default.
+    version: integer("version").notNull().default(1),
   },
   (t) => [
     index("activities_lead_occurred_idx").on(t.leadId, t.occurredAt.desc()),

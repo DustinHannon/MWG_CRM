@@ -134,6 +134,13 @@
       "when": 1779110926765,
       "tag": "0018_unusual_warpath",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779220193167,
+      "tag": "0019_fuzzy_doomsday",
+      "breakpoints": true
     }
   ]
 }
