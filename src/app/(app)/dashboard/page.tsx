@@ -242,6 +242,13 @@ export default async function DashboardPage() {
       ? Math.round((k.converted_90d / k.closed_90d) * 100)
       : null;
 
+  // Every KPI query above is filtered by the same owner-scope predicate
+  // (`ownerScope` / `ownerScopeForActivities`), which resolves to all
+  // records when `canViewAll`, or only this user's leads otherwise.
+  // Surface that scope so a headline like "Open leads 93" reconciles
+  // with the owner-scoped default leads list ("My Open Leads").
+  const kpiScope = canViewAll ? "All owners" : "Yours";
+
   const statusData: StatusSlice[] = statusRows.map((r) => ({
     status: r.status,
     count: r.count,
@@ -268,12 +275,21 @@ export default async function DashboardPage() {
       <StandardPageHeader kicker="Dashboard" title={user.displayName} />
 
       <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Kpi label="Open leads" value={k?.open_leads ?? 0} />
-        <Kpi label="New this week" value={k?.new_this_week ?? 0} />
-        <Kpi label="Activities (7d)" value={k?.activities_this_week ?? 0} />
+        <Kpi label="Open leads" value={k?.open_leads ?? 0} scope={kpiScope} />
+        <Kpi
+          label="New this week"
+          value={k?.new_this_week ?? 0}
+          scope={kpiScope}
+        />
+        <Kpi
+          label="Activities (7d)"
+          value={k?.activities_this_week ?? 0}
+          scope={kpiScope}
+        />
         <Kpi
           label="Conversion (90d)"
           value={conversionRate === null ? "—" : `${conversionRate}%`}
+          scope={kpiScope}
         />
       </div>
 
@@ -309,13 +325,24 @@ export default async function DashboardPage() {
   );
 }
 
-function Kpi({ label, value }: { label: string; value: number | string }) {
+function Kpi({
+  label,
+  value,
+  scope,
+}: {
+  label: string;
+  value: number | string;
+  scope?: string;
+}) {
   return (
     <GlassCard className="p-5">
       <p className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
       <p className="mt-3 text-3xl font-semibold tabular-nums">{value}</p>
+      {scope ? (
+        <p className="mt-1 text-xs text-muted-foreground/80">{scope}</p>
+      ) : null}
     </GlassCard>
   );
 }
