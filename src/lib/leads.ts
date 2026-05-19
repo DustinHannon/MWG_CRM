@@ -511,7 +511,7 @@ export async function updateLead(
       ),
     )
     .returning({ id: leads.id, version: leads.version });
-  expectAffected(rows, { table: leads, id, entityLabel: "lead" });
+  await expectAffected(rows, { table: leads, id, entityLabel: "lead" });
   return rows[0];
 }
 

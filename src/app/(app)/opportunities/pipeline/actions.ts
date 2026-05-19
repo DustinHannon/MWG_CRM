@@ -83,7 +83,7 @@ export async function updateOpportunityStageAction(
           id: opportunities.id,
           version: opportunities.version,
         });
-      expectAffected(rows, {
+      await expectAffected(rows, {
         table: opportunities,
         id,
         entityLabel: "opportunity",

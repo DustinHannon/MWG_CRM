@@ -20,7 +20,7 @@ import { tasks } from "@/db/schema/tasks";
 import { userPreferences } from "@/db/schema/views";
 import { eq } from "drizzle-orm";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
-import { ForbiddenError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { canDeleteTask, canHardDelete } from "@/lib/access/can-delete";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
@@ -319,6 +319,17 @@ export async function toggleTaskCompleteAction(
         { status: completed ? "completed" : "open" },
         session.id,
       );
+      // Belt-and-suspenders: updateTask should now always throw on
+      // empty-rows (post-await-expectAffected fix); if it ever returns
+      // undefined despite that, surface a ConflictError instead of
+      // crashing on `result.version`. The lib's contract is "real row
+      // or thrown" — this guard keeps the action's contract intact.
+      if (!result) {
+        throw new ConflictError(
+          "Task changed elsewhere — refresh.",
+          { id },
+        );
+      }
       revalidatePath("/tasks");
       return { version: result.version };
     },

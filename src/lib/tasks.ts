@@ -841,7 +841,7 @@ export async function updateTask(
     .set(set)
     .where(and(eq(tasks.id, id), eq(tasks.version, expectedVersion)))
     .returning({ id: tasks.id, version: tasks.version });
-  expectAffected(rows, { table: tasks, id, entityLabel: "task" });
+  await expectAffected(rows, { table: tasks, id, entityLabel: "task" });
   await writeAudit({
     actorId,
     action: "task.update",

@@ -495,7 +495,7 @@ export async function updateOpportunityForApi(
       id: opportunities.id,
       version: opportunities.version,
     });
-  expectAffected(rows, {
+  await expectAffected(rows, {
     table: opportunities,
     id,
     entityLabel: "opportunity",

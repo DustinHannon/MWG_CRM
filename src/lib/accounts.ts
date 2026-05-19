@@ -716,7 +716,7 @@ export async function updateAccountForApi(
     .set(set)
     .where(and(...wheres))
     .returning({ id: crmAccounts.id, version: crmAccounts.version });
-  expectAffected(rows, { table: crmAccounts, id, entityLabel: "account" });
+  await expectAffected(rows, { table: crmAccounts, id, entityLabel: "account" });
   return rows[0];
 }
 

@@ -499,7 +499,7 @@ export async function updateContactForApi(
     .set(set)
     .where(and(...wheres))
     .returning({ id: contacts.id, version: contacts.version });
-  expectAffected(rows, { table: contacts, id, entityLabel: "contact" });
+  await expectAffected(rows, { table: contacts, id, entityLabel: "contact" });
   return rows[0];
 }
 

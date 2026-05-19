@@ -333,7 +333,7 @@ export async function updateSavedTaskView(
       ),
     )
     .returning({ id: savedViews.id, version: savedViews.version });
-  expectAffected(rows, { table: savedViews, id, entityLabel: "task view" });
+  await expectAffected(rows, { table: savedViews, id, entityLabel: "task view" });
   return rows[0]!;
 }
 

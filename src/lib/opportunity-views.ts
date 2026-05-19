@@ -285,7 +285,7 @@ export async function updateSavedOpportunityView(
       ),
     )
     .returning({ id: savedViews.id, version: savedViews.version });
-  expectAffected(rows, { table: savedViews, id, entityLabel: "view" });
+  await expectAffected(rows, { table: savedViews, id, entityLabel: "view" });
   return rows[0];
 }
 

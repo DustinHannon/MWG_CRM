@@ -304,7 +304,7 @@ async function processChunk(args: {
             ),
           )
           .returning({ id: leads.id, version: leads.version });
-        expectAffected(updateRows, {
+        await expectAffected(updateRows, {
           table: leads,
           id: existing.id,
           entityLabel: "lead",
