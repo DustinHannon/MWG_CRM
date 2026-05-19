@@ -24,22 +24,61 @@ export const callSchema = z.object({
   occurredAt: z.string().optional(), // ISO; defaults to now
 });
 
-// Inline-edit form schemas for the lead timeline. Derived from the
-// create schemas above (single source of truth for field rules) by
-// dropping `leadId` (the action re-fetches the activity and trusts the
-// DB parent, never a client claim) and adding the edit identity:
-// `activityId` + the OCC `version` the client loaded. `version` is
-// coerced because it arrives as a hidden form string.
+// Inline-edit form schemas for the lead timeline. Field rules mirror
+// the create schemas above (same trim/length limits — single source of
+// truth for what's valid) minus `leadId` (the action re-fetches the
+// activity and trusts the DB parent, never a client claim) plus the
+// edit identity: `activityId` + the OCC `version` the client loaded.
+// `version` is coerced because it arrives as a hidden form string.
+//
+// These are parsed with `parseFormOrThrow(..., { emptyMode: "keep" })`
+// to match the canonical entity-update actions (account/contact/
+// opportunity) — a present-but-empty field reaches the schema so the
+// schema, not ad-hoc `?? null` in the action, decides clearing. The
+// call-edit optional fields therefore carry the same clear-on-empty
+// `.transform()` the sibling update schemas use for nullable columns
+// (`""` → `null`), so emptying a field persists `NULL` exactly as the
+// prior `"exact"` + `?? null` path did. Note `body` keeps `.min(1)`:
+// under `"keep"` a blank body still reaches the schema and is rejected
+// (never silently nulled) — clearing a note's body is not allowed.
 const editIdentity = {
   activityId: z.string().uuid(),
   version: z.coerce.number().int().min(1),
 };
-export const noteEditSchema = noteSchema
-  .omit({ leadId: true })
-  .extend(editIdentity);
-export const callEditSchema = callSchema
-  .omit({ leadId: true })
-  .extend(editIdentity);
+// `""` (or whitespace-only) → null; otherwise the trimmed value. Mirrors
+// the canonical entity-update schemas' nullable-field transform so the
+// column is cleared by the schema, not by the action.
+const clearableText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.length > 0 ? v : null));
+export const noteEditSchema = z.object({
+  ...editIdentity,
+  // Same rule as `noteSchema.body`: required, blank rejected (not nulled).
+  body: z.string().trim().min(1, "Note body is required").max(20_000),
+});
+export const callEditSchema = z.object({
+  ...editIdentity,
+  subject: clearableText(240),
+  body: clearableText(20_000),
+  outcome: clearableText(120),
+  // Empty duration clears the column; a present value is the same
+  // coerced non-negative int the create schema enforces.
+  durationMinutes: z
+    .union([z.literal(""), z.coerce.number().int().min(0).max(60 * 24)])
+    .optional()
+    .nullable()
+    .transform((v) => (v === "" || v === undefined || v === null ? null : v)),
+  occurredAt: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.length > 0 ? v : null)), // ISO; null clears
+});
 
 // Lead Add-task tab form schema. Limits MUST match the canonical
 // `taskCreateSchema` (@/lib/tasks: title ≤200, description ≤2000) so

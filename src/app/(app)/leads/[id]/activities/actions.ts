@@ -173,11 +173,15 @@ export async function updateActivityAction(
       );
     }
 
-    // Reuse the create-form field rules (single source of truth) via
-    // the derived edit schemas; pick by the DB-confirmed kind.
+    // Parse with the kind-specific edit schema (field rules mirror the
+    // create schemas; see noteEditSchema/callEditSchema in @/lib/
+    // activities); pick by the DB-confirmed kind.
     if (row.kind === "note") {
+      // emptyMode:"keep" — canonical entity-update parse mode. A blank
+      // body still reaches `noteEditSchema.body` (.min(1)) and is
+      // rejected, never silently nulled.
       const parsed = parseFormOrThrow(noteEditSchema, formData, {
-        emptyMode: "exact",
+        emptyMode: "keep",
       });
       const { before, after } = await updateActivity({
         id: activityId,
@@ -194,17 +198,26 @@ export async function updateActivityAction(
         after,
       });
     } else {
+      // emptyMode:"keep" — canonical entity-update parse mode. The
+      // call-edit schema's clear-on-empty transforms already yield
+      // `null` for an emptied subject/body/outcome/duration (column
+      // cleared by the schema, not by ad-hoc `?? null` here), so the
+      // patch passes the parsed values through unchanged. `occurredAt`
+      // is null when empty; `parseOccurredAt(... ?? undefined)` then
+      // returns null, and `?? undefined` omits it from the patch so an
+      // empty date leaves the column unchanged — identical to the
+      // prior "exact" behavior (empty was skipped → field unchanged).
       const parsed = parseFormOrThrow(callEditSchema, formData, {
-        emptyMode: "exact",
+        emptyMode: "keep",
       });
       const { before, after } = await updateActivity({
         id: activityId,
         patch: {
-          subject: parsed.subject ?? null,
-          body: parsed.body ?? null,
-          outcome: parsed.outcome ?? null,
-          durationMinutes: parsed.durationMinutes ?? null,
-          occurredAt: parseOccurredAt(parsed.occurredAt) ?? undefined,
+          subject: parsed.subject,
+          body: parsed.body,
+          outcome: parsed.outcome,
+          durationMinutes: parsed.durationMinutes,
+          occurredAt: parseOccurredAt(parsed.occurredAt ?? undefined) ?? undefined,
         },
         expectedVersion: parsed.version,
         actorId: user.id,
