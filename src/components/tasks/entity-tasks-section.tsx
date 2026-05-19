@@ -2,6 +2,7 @@ import Link from "next/link";
 import { UserTime } from "@/components/ui/user-time";
 import { type TaskRow } from "@/lib/tasks";
 import { EntityTasksQuickAdd } from "./entity-tasks-quick-add";
+import { TaskCompleteToggle } from "./task-complete-toggle";
 
 /**
  * Tasks section for entity-detail pages.
@@ -112,7 +113,14 @@ function TaskRowItem({ task, muted }: { task: TaskRow; muted: boolean }) {
         muted ? "opacity-60" : ""
       }`}
     >
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-start gap-2 sm:items-center">
+        {/* Shared TaskCompleteToggle — RSC mode (no onSuccess, falls
+            back to router.refresh()). Restores the complete-toggle on
+            entity-detail pages (WS3 surfaced this gap). */}
+        <div className="shrink-0">
+          <TaskCompleteToggle task={task} />
+        </div>
+        <div className="min-w-0">
         <p
           className={`truncate text-sm font-medium ${
             task.status === "completed" ? "line-through" : ""
@@ -143,6 +151,7 @@ function TaskRowItem({ task, muted }: { task: TaskRow; muted: boolean }) {
             </>
           ) : null}
         </p>
+        </div>
       </div>
     </li>
   );

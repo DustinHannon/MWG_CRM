@@ -12,7 +12,6 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Circle, CheckCircle2 } from "lucide-react";
 import {
   useCallback,
   useMemo,
@@ -53,12 +52,12 @@ import type {
   TaskViewFilters,
   TaskViewSort,
 } from "@/lib/task-views";
-import { toggleTaskCompleteAction } from "../actions";
 import {
   bulkCompleteTasksAction,
   bulkDeleteTasksAction,
   bulkReassignTasksAction,
 } from "../view-actions";
+import { TaskCompleteToggle } from "@/components/tasks/task-complete-toggle";
 import { TaskColumnsMenu } from "./task-columns-menu";
 import { TaskEditDialog } from "./task-edit-dialog";
 import { TaskViewSelector } from "./task-view-selector";
@@ -364,24 +363,23 @@ function TasksListInner({
     setSelected(new Set());
   }
 
-  function toggleComplete(task: TaskRow) {
-    const next = task.status !== "completed";
-    startTransition(async () => {
-      const res = await toggleTaskCompleteAction(task.id, task.version, next);
-      if (!res.ok) {
-        toast.error(res.error, { duration: Infinity, dismissible: true });
-      } else {
-        // Update the loaded-versions ref optimistically so a second
-        // click before the refetch lands still sends the fresh OCC
-        // token — prevents the stale-version CONFLICT loop.
-        versionById.current.set(task.id, res.data.version);
-        // Invalidate the TanStack infinite-query cache so the row's
-        // status/version reflect server truth across all pages.
-        // Prefix-match on "tasks" catches every active view variant.
-        await queryClient.invalidateQueries({ queryKey: ["tasks"] });
-        router.refresh();
-      }
-    });
+  /**
+   * Cache-invalidation callback fired by TaskCompleteToggle after a
+   * successful task.toggle_complete action. The toggle itself owns
+   * the action call + error toast; we only need to refresh state.
+   *
+   * - versionById ref: optimistic update so a second click before the
+   *   refetch lands still sends the fresh OCC token (prevents the
+   *   stale-version CONFLICT loop).
+   * - queryClient invalidate: refetch all task list pages on the same
+   *   queryKey prefix so status/version reflect server truth.
+   * - router.refresh(): refresh the RSC tree (server-rendered chips,
+   *   header counts, etc.).
+   */
+  function handleToggleSuccess(taskId: string, newVersion: number) {
+    versionById.current.set(taskId, newVersion);
+    void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    router.refresh();
   }
 
   // Build per-row OCC tokens for the current selection. A selected id
@@ -600,12 +598,14 @@ function TasksListInner({
         }
         isSelected={selected.has(task.id)}
         onToggleSelect={() => toggleRowSelection(task.id)}
-        onToggleComplete={() => toggleComplete(task)}
+        onToggleSuccess={(newVersion) =>
+          handleToggleSuccess(task.id, newVersion)
+        }
         onEdit={() => setEditingTask(task)}
         disabled={pending}
       />
     ),
-    // toggleComplete + toggleRowSelection + setEditingTask omitted —
+    // handleToggleSuccess + toggleRowSelection + setEditingTask omitted —
     // they're stable closures over startTransition / setSelected /
     // setEditingTask which React guarantees stable across renders.
     // Including them would force a renderRow rebuild every render
@@ -629,15 +629,16 @@ function TasksListInner({
         task={task}
         prefs={timePrefs}
         viewerId={user.id}
-        onToggleComplete={() => toggleComplete(task)}
+        onToggleSuccess={(newVersion) =>
+          handleToggleSuccess(task.id, newVersion)
+        }
         disabled={pending}
       />
     ),
-    // toggleComplete uses startTransition (stable) + the action import
-    // + router.refresh() — all stable for the lifetime of the
-    // component. Including it here would force a renderCard rebuild
-    // every render because toggleComplete is a fresh function
-    // identity each call. The lint rule is silenced via
+    // handleToggleSuccess is a stable closure over the ref + the
+    // query client + router — including it here would force a
+    // renderCard rebuild every render because the arrow identity is
+    // fresh each call. The lint rule is silenced via
     // eslint-disable-next-line; the dependency intent is documented.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [timePrefs, user.id, pending],
@@ -991,7 +992,7 @@ function TaskDesktopRow({
   canEdit,
   isSelected,
   onToggleSelect,
-  onToggleComplete,
+  onToggleSuccess,
   onEdit,
   disabled,
 }: {
@@ -1003,7 +1004,7 @@ function TaskDesktopRow({
   canEdit: boolean;
   isSelected: boolean;
   onToggleSelect: () => void;
-  onToggleComplete: () => void;
+  onToggleSuccess: (newVersion: number) => void;
   onEdit: () => void;
   disabled: boolean;
 }) {
@@ -1049,24 +1050,14 @@ function TaskDesktopRow({
         {/* Status toggle: distinct from the selection checkbox above.
             Renders as a circle icon (open) or filled check (completed)
             so sighted users can tell the two controls apart at a glance;
-            aria-label keeps it accessible. */}
-        <button
-          type="button"
-          onClick={onToggleComplete}
+            aria-label keeps it accessible. Extracted to the shared
+            TaskCompleteToggle so entity-detail pages render the same
+            affordance (CLAUDE.md §1.8, §18 rule of 3). */}
+        <TaskCompleteToggle
+          task={task}
           disabled={disabled}
-          aria-pressed={isCompleted}
-          aria-label={`Mark ${task.title} ${isCompleted ? "open" : "complete"}`}
-          className="inline-flex items-center justify-center rounded-full text-muted-foreground transition hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isCompleted ? (
-            <CheckCircle2
-              className="h-5 w-5 text-[var(--status-won-fg)]"
-              aria-hidden
-            />
-          ) : (
-            <Circle className="h-5 w-5" aria-hidden />
-          )}
-        </button>
+          onSuccess={onToggleSuccess}
+        />
       </div>
       {columns.map((c) => {
         const colLabel =
@@ -1119,13 +1110,13 @@ function TaskMobileCard({
   task,
   prefs,
   viewerId,
-  onToggleComplete,
+  onToggleSuccess,
   disabled,
 }: {
   task: TaskRow;
   prefs: TimePrefs;
   viewerId: string;
-  onToggleComplete: () => void;
+  onToggleSuccess: (newVersion: number) => void;
   disabled: boolean;
 }) {
   const overdue =
@@ -1141,14 +1132,15 @@ function TaskMobileCard({
       )}
       data-row-flash="new"
     >
-      <input
-        type="checkbox"
-        checked={isCompleted}
-        onChange={onToggleComplete}
-        disabled={disabled}
-        aria-label={`Mark ${task.title} ${isCompleted ? "open" : "complete"}`}
-        className="mt-1 h-4 w-4 cursor-pointer"
-      />
+      {/* Same TaskCompleteToggle as the desktop row — visual coherence
+          between viewports, single source of truth. */}
+      <div className="mt-1 shrink-0">
+        <TaskCompleteToggle
+          task={task}
+          disabled={disabled}
+          onSuccess={onToggleSuccess}
+        />
+      </div>
       <div className="min-w-0 flex-1 space-y-1">
         <p
           className={cn(
