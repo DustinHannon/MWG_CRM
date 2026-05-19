@@ -27,6 +27,7 @@ import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { forceReleaseLock, getLock } from "@/lib/marketing/template-lock";
 import { canEditTemplate, canViewTemplate } from "@/lib/marketing/templates";
 import { rateLimit } from "@/lib/security/rate-limit";
+import { formDataToObject, parseFormOrThrow } from "@/lib/forms/form-data";
 import {
   withErrorBoundary,
   type ActionResult,
@@ -100,16 +101,6 @@ const sendTestSchema = z.object({
   recipientEmail: z.string().email("Recipient must be a valid email address."),
 });
 
-function formToObject(formData: FormData): Record<string, unknown> {
-  const obj: Record<string, unknown> = {};
-  for (const [k, v] of formData.entries()) {
-    if (typeof v !== "string") continue;
-    if (v === "") continue;
-    obj[k] = v;
-  }
-  return obj;
-}
-
 async function requireTemplatePermission(
   userId: string,
   perm: MarketingPermissionKey,
@@ -134,27 +125,19 @@ export async function createTemplateAction(
     if (!user.isAdmin)
       await requireTemplatePermission(user.id, "canMarketingTemplatesCreate");
 
-    const parsed = createTemplateSchema.safeParse(formToObject(formData));
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      throw new ValidationError(
-        first
-          ? `${first.path.join(".") || "input"}: ${first.message}`
-          : "Validation failed.",
-      );
-    }
+    const data = parseFormOrThrow(createTemplateSchema, formData, { emptyMode: "exact" });
 
     const [row] = await db
       .insert(marketingTemplates)
       .values({
-        name: parsed.data.name,
-        description: parsed.data.description,
-        subject: parsed.data.subject,
-        preheader: parsed.data.preheader,
+        name: data.name,
+        description: data.description,
+        subject: data.subject,
+        preheader: data.preheader,
         unlayerDesignJson: {},
         renderedHtml: "",
         status: "draft",
-        scope: parsed.data.scope,
+        scope: data.scope,
         source: "manual",
         createdById: user.id,
         updatedById: user.id,
@@ -171,9 +154,9 @@ export async function createTemplateAction(
       targetType: "marketing_template",
       targetId: row.id,
       after: {
-        name: parsed.data.name,
-        subject: parsed.data.subject,
-        scope: parsed.data.scope,
+        name: data.name,
+        subject: data.subject,
+        scope: data.scope,
         source: "manual",
       },
     });
@@ -651,7 +634,10 @@ export async function cloneTemplateAction(
         );
       }
 
-      const parsed = cloneTemplateSchema.safeParse(formToObject(formData));
+      // Bespoke (not parseFormOrThrow): any failure here is a bad/missing
+      // template id, not a correctable field-level error — keep the single
+      // fixed "Invalid template id." message; do NOT migrate to parseFormOrThrow.
+      const parsed = cloneTemplateSchema.safeParse(formDataToObject(formData, { emptyMode: "exact" }));
       if (!parsed.success) {
         throw new ValidationError("Invalid template id.");
       }
@@ -755,16 +741,7 @@ export async function changeTemplateScopeAction(
       if (!user.isAdmin)
         await requireTemplatePermission(user.id, "canMarketingTemplatesEdit");
 
-      const parsed = changeScopeSchema.safeParse(formToObject(formData));
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new ValidationError(
-          first
-            ? `${first.path.join(".") || "input"}: ${first.message}`
-            : "Validation failed.",
-        );
-      }
-      const data = parsed.data;
+      const data = parseFormOrThrow(changeScopeSchema, formData, { emptyMode: "exact" });
 
       const [existing] = await db
         .select()
