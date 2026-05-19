@@ -42,6 +42,30 @@ export function formatUserTime(
   mode: TimeMode = "date+time",
 ): string {
   if (!value) return "—";
+
+  // Date-only branch: Postgres `date` columns (estimatedCloseDate /
+  // expectedCloseDate, etc.) arrive as bare "yyyy-mm-dd" strings with no
+  // time and no zone. Parsing them via `new Date(...)` yields UTC midnight,
+  // and formatting that instant in the user's (US) timezone shifts the
+  // calendar day back by one (and can roll the year). Reorder the literal
+  // y/m/d components per the user's date pref instead — no Date, no
+  // `formatInTimeZone`, no timezone math. The strict `^\d{4}-\d{2}-\d{2}$`
+  // gate guarantees every instant/timestamptz value (Date objects, ISO
+  // strings containing `T`/`Z`/time) still hits the existing path below
+  // with byte-identical output.
+  if (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    (mode === "date" || mode === "date+time")
+  ) {
+    const [y, m, day] = value.split("-");
+    const datePattern = DATE_PATTERNS[prefs.dateFormat] ?? "MM/dd/yyyy";
+    return datePattern
+      .replace("yyyy", y)
+      .replace("MM", m)
+      .replace("dd", day);
+  }
+
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
 
