@@ -28,6 +28,7 @@ import { UserTimeClient } from "@/components/ui/user-time-client";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import { cn } from "@/lib/utils";
 import { type TimePrefs } from "@/lib/format-time";
+import { formatCurrency } from "@/lib/format/currency";
 import {
   AVAILABLE_ACCOUNT_COLUMNS,
   type AccountColumnKey,
@@ -958,9 +959,7 @@ function renderCell(
     case "annualRevenue":
       return (
         <span className="tabular-nums text-muted-foreground">
-          {row.annualRevenue != null
-            ? `$${Number(row.annualRevenue).toLocaleString()}`
-            : "—"}
+          {formatCurrency(row.annualRevenue)}
         </span>
       );
     case "primaryContact":

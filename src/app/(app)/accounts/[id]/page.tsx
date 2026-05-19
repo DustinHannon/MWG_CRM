@@ -13,6 +13,7 @@ import { UserTime } from "@/components/ui/user-time";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
+import { formatCurrency } from "@/lib/format/currency";
 import { canDeleteAccount } from "@/lib/access/can-delete";
 import { listTasksForAccount } from "@/lib/tasks";
 import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
@@ -210,9 +211,7 @@ export default async function AccountDetailPage({
             <Row
               label="Annual revenue"
               value={
-                account.annualRevenue != null
-                  ? `$${Number(account.annualRevenue).toLocaleString()}`
-                  : null
+                formatCurrency(account.annualRevenue)
               }
             />
             <Row
@@ -265,7 +264,7 @@ export default async function AccountDetailPage({
                     {o.name}
                   </Link>
                   <span className="text-xs text-muted-foreground">
-                    {o.stage} · ${Number(o.amount ?? 0).toLocaleString()}
+                    {o.stage} · {formatCurrency(o.amount ?? 0)}
                   </span>
                 </li>
               ))}
