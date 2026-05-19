@@ -10,6 +10,7 @@ import { ForbiddenError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { getPermissions } from "@/lib/auth-helpers";
 import {
+  escapeIdent,
   isTagBearingEntity,
   isValidField,
   isVirtualField,
@@ -57,9 +58,9 @@ const PREVIEW_ROWS = 100;
 /* Identifier safety */
 /* ---------------------------------------------------------------------- */
 
-function escapeIdent(s: string): string {
-  return s.replace(/[^A-Za-z0-9_]/g, "");
-}
+// `escapeIdent` is the canonical single source in ./schemas (imported
+// above) so the SQL result-column name derived here and the
+// column-kind map key in `buildReportColumnKinds` cannot drift.
 
 function quote(ident: string): string {
   return `"${escapeIdent(ident)}"`;

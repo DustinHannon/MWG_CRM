@@ -43,6 +43,26 @@ export function isNumericKind(kind: FieldKind): boolean {
   return kind === "number" || kind === "currency";
 }
 
+/* ---------------------------------------------------------------------- */
+/* Identifier safety */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Strip every character outside `[A-Za-z0-9_]` from an identifier.
+ *
+ * Canonical single source for both SQL-identifier escaping in
+ * `access.ts` (column/alias interpolation) and the metric-alias key
+ * derivation in `buildReportColumnKinds` below. Both must run the
+ * *same* function so an executed report's result-column name and the
+ * column-kind map key are byte-identical even when a user-authored
+ * metric alias contains punctuation. Lives here (the leaf schema
+ * module) because `access.ts` already imports from this file —
+ * defining it the other way around would be a circular import.
+ */
+export function escapeIdent(s: string): string {
+  return s.replace(/[^A-Za-z0-9_]/g, "");
+}
+
 export interface FieldMeta {
   /** SQL column name on the entity table. */
   column: string;
@@ -501,8 +521,10 @@ export function tagJunctionFor(
  *  - **Aggregate query** — output columns are the group-by fields
  *    (raw field kind) plus metric aliases. A `sum`/`avg`/`min`/`max`
  *    over a `currency` field stays money; `count` is a plain integer.
- *    The alias derivation mirrors access.ts exactly
- *    (`m.alias || \`${m.fn}_${m.field || "all"}\``) so the keys line up.
+ *    The alias key is derived exactly as access.ts derives the SQL
+ *    result-column name: `escapeIdent(m.alias || \`${m.fn}_${m.field
+ *    || "all"}\`)`, sharing the one `escapeIdent` exported above so
+ *    the keys line up byte-for-byte even for punctuated user aliases.
  *
  * Columns with no mapping (unknown alias, virtual `tags`, etc.) are
  * simply absent — the formatter falls back to its default rendering.
@@ -522,7 +544,7 @@ export function buildReportColumnKinds(
   // currency, number stays number); count is always a bare integer.
   const aliasKind = new Map<string, FieldKind>();
   for (const m of metrics) {
-    const alias = m.alias || `${m.fn}_${m.field || "all"}`;
+    const alias = escapeIdent(m.alias || `${m.fn}_${m.field || "all"}`);
     if (m.fn === "count") {
       aliasKind.set(alias, "number");
       continue;
