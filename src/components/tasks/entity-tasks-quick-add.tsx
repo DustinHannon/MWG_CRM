@@ -1,3 +1,4 @@
+// consistency-exempt: controlled-quick-add: inline controlled inputs required for live useTransition quick-add; shared StandardForm* primitives are uncontrolled (useActionState pattern) and a controlled passthrough for one caller would over-extend the shared API.
 "use client";
 
 import { useState, useTransition } from "react";

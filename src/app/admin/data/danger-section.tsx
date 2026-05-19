@@ -1,3 +1,4 @@
+// consistency-exempt: destructive-confirm-input: the bulk-delete confirm field keeps hardened affordances (autoComplete=off, monospace, code-highlighted phrase, destructive focus ring) as a deliberate last-line guard; shared StandardFormField intentionally omits these and adding single-caller passthroughs would over-extend the shared primitive.
 "use client";
 
 import { useActionState } from "react";
@@ -8,6 +9,7 @@ import {
   type DangerSuccessData,
 } from "./actions";
 import type { ActionResult } from "@/lib/server-action";
+import { StandardFormErrorBanner } from "@/components/standard";
 
 const initial: ActionResult<DangerSuccessData> = {
   ok: true,
@@ -64,9 +66,12 @@ export function DangerSection({
         </button>
       </form>
 
-      {!state.ok ? (
-        <p className="mt-3 text-sm text-[var(--status-lost-fg)]">{state.error}</p>
-      ) : state.data.affected >= 0 ? (
+      <StandardFormErrorBanner
+        message={!state.ok ? state.error : undefined}
+        className="mt-3"
+      />
+
+      {state.ok && state.data.affected >= 0 ? (
         <p className="mt-3 text-sm text-[var(--status-won-fg)]">
           Deleted {state.data.affected} row
           {state.data.affected === 1 ? "" : "s"}.
