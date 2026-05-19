@@ -111,9 +111,12 @@ export const POST = withApi(
       });
     }
     const m = parsed.data;
-    // Insert directly to support all four optional parent FKs. The
-    // existing `createTask` helper only handles leadId; tasks can also
-    // attach to account/contact/opportunity via the v1 contract.
+    // Direct insert rather than `@/lib/tasks.createTask` (which also
+    // handles all four parent FKs): the v1 contract has its own audit
+    // and response shape. The canonical helper writes the full input as
+    // the audit `after` and emits an activity-feed entry; this route
+    // writes a minimal `source:"api"` audit and intentionally does not
+    // emit an activity, then returns the documented serialized task.
     const inserted = await db
       .insert(tasks)
       .values({
