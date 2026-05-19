@@ -185,7 +185,12 @@ export const PATCH = withApi<{ id: string }>(
     await writeAudit({
       actorId: key.createdById,
       action: "activity.update",
-      targetType: "activities",
+      // Canonical activity-audit targetType is singular "activity"
+      // (every app action + /api/v1/activities POST use it). Plural
+      // here was an inconsistency; no consumer keys off target_type
+      // for this taxonomy (events.ts groups by the action prefix
+      // "activity.", audit list filter is free-text exact-match).
+      targetType: "activity",
       targetId: params.id,
       before: result.before,
       after: { ...result.after, source: "api" },
@@ -216,7 +221,8 @@ export const DELETE = withApi<{ id: string }>(
       await writeAudit({
         actorId: key.createdById,
         action: "activity.hard_delete",
-        targetType: "activities",
+        // Canonical singular "activity" (see PATCH note above).
+        targetType: "activity",
         targetId: params.id,
         before: { source: "api" },
       });
@@ -229,7 +235,8 @@ export const DELETE = withApi<{ id: string }>(
       await writeAudit({
         actorId: key.createdById,
         action: "activity.archive",
-        targetType: "activities",
+        // Canonical singular "activity" (see PATCH note above).
+        targetType: "activity",
         targetId: params.id,
         after: { source: "api" },
       });
