@@ -152,13 +152,39 @@ export async function undoArchiveOpportunityAction(input: {
   });
 }
 
+/**
+ * Restore an archived opportunity. Owner-or-admin (parity with
+ * archive). Hard delete is still admin-only. Re-fetches the archived
+ * row to verify ownership — never trusts the client's claim.
+ *
+ * @actor owner or admin
+ */
 export async function restoreOpportunityAction(
   formData: FormData,
 ): Promise<ActionResult> {
   return withErrorBoundary({ action: "opportunity.restore" }, async () => {
     const user = await requireSession();
-    if (!canHardDelete(user)) throw new ForbiddenError("Admin only.");
     const id = z.string().uuid().parse(formData.get("id"));
+
+    // Re-fetch the archived row (no isDeleted filter — we are
+    // explicitly restoring a soft-deleted row). canDeleteOpportunity
+    // is the same predicate the archive path uses.
+    const [archivedRow] = await db
+      .select({ id: opportunities.id, ownerId: opportunities.ownerId })
+      .from(opportunities)
+      .where(eq(opportunities.id, id))
+      .limit(1);
+    if (!archivedRow) throw new NotFoundError("Opportunity not found.");
+    if (!canDeleteOpportunity(user, archivedRow)) {
+      await writeAudit({
+        actorId: user.id,
+        action: "access.denied.opportunity.restore",
+        targetType: "opportunity",
+        targetId: id,
+      });
+      throw new ForbiddenError("You can't restore this opportunity.");
+    }
+
     const cascade = await restoreOpportunitiesById([id], user.id);
     const [restored] = await db
       .select({ name: opportunities.name })

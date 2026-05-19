@@ -376,9 +376,11 @@ export async function undoArchiveLeadAction(input: {
 }
 
 /**
- * admin-only restore from the archive view.
+ * Restore an archived lead. Owner-or-admin (parity with archive).
+ * Hard delete is still admin-only. Re-fetches the archived row to
+ * verify ownership — never trusts the client's claim.
  *
- * @actor admin
+ * @actor owner or admin
  */
 export async function restoreLeadAction(
   formData: FormData,
@@ -387,8 +389,27 @@ export async function restoreLeadAction(
     { action: "lead.restore" },
     async () => {
       const user = await requireSession();
-      if (!user.isAdmin) throw new ForbiddenError("Admin only.");
       const id = z.string().uuid().parse(formData.get("id"));
+
+      // Re-fetch the archived row (no isDeleted filter — we are
+      // explicitly restoring a soft-deleted row). canDeleteLead is the
+      // same predicate the archive path uses.
+      const [archivedRow] = await db
+        .select({ id: leads.id, ownerId: leads.ownerId })
+        .from(leads)
+        .where(eq(leads.id, id))
+        .limit(1);
+      if (!archivedRow) throw new NotFoundError("Lead not found.");
+      if (!canDeleteLead(user, archivedRow)) {
+        await writeAudit({
+          actorId: user.id,
+          action: "access.denied.lead.restore",
+          targetType: "lead",
+          targetId: id,
+        });
+        throw new ForbiddenError("You can't restore this lead.");
+      }
+
       const cascade = await restoreLeadsById([id], user.id);
       const [restored] = await db
         .select({

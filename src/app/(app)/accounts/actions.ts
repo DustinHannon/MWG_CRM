@@ -166,13 +166,39 @@ export async function undoArchiveAccountAction(input: {
 /**
  * admin restore from archive view.
  */
+/**
+ * Restore an archived account. Owner-or-admin (parity with archive).
+ * Hard delete is still admin-only. Re-fetches the archived row to
+ * verify ownership — never trusts the client's claim.
+ *
+ * @actor owner or admin
+ */
 export async function restoreAccountAction(
   formData: FormData,
 ): Promise<ActionResult> {
   return withErrorBoundary({ action: "account.restore" }, async () => {
     const user = await requireSession();
-    if (!canHardDelete(user)) throw new ForbiddenError("Admin only.");
     const id = z.string().uuid().parse(formData.get("id"));
+
+    // Re-fetch the archived row (no isDeleted filter — we are
+    // explicitly restoring a soft-deleted row). canDeleteAccount is
+    // the same predicate the archive path uses.
+    const [archivedRow] = await db
+      .select({ id: crmAccounts.id, ownerId: crmAccounts.ownerId })
+      .from(crmAccounts)
+      .where(eq(crmAccounts.id, id))
+      .limit(1);
+    if (!archivedRow) throw new NotFoundError("Account not found.");
+    if (!canDeleteAccount(user, archivedRow)) {
+      await writeAudit({
+        actorId: user.id,
+        action: "access.denied.account.restore",
+        targetType: "account",
+        targetId: id,
+      });
+      throw new ForbiddenError("You can't restore this account.");
+    }
+
     const cascade = await restoreAccountsById([id], user.id);
     const [restored] = await db
       .select({ name: crmAccounts.name })

@@ -246,13 +246,45 @@ export async function undoArchiveTaskAction(input: {
   });
 }
 
+/**
+ * Restore an archived task. Creator-or-assignee-or-admin (parity with
+ * archive — canDeleteTask). Hard delete is still admin-only.
+ * Re-fetches the archived row to verify ownership — never trusts the
+ * client's claim.
+ *
+ * @actor creator, assignee, or admin
+ */
 export async function restoreTaskAction(
   formData: FormData,
 ): Promise<ActionResult> {
   return withErrorBoundary({ action: "task.restore" }, async () => {
     const session = await requireSession();
-    if (!canHardDelete(session)) throw new ForbiddenError("Admin only.");
     const id = z.string().uuid().parse(formData.get("id"));
+
+    // Re-fetch the archived row (no isDeleted filter — we are
+    // explicitly restoring a soft-deleted row). canDeleteTask is the
+    // same predicate the archive path uses (creator OR assignee OR
+    // admin).
+    const [archivedRow] = await db
+      .select({
+        id: tasks.id,
+        createdById: tasks.createdById,
+        assignedToId: tasks.assignedToId,
+      })
+      .from(tasks)
+      .where(eq(tasks.id, id))
+      .limit(1);
+    if (!archivedRow) throw new NotFoundError("Task not found.");
+    if (!canDeleteTask(session, archivedRow)) {
+      await writeAudit({
+        actorId: session.id,
+        action: "access.denied.task.restore",
+        targetType: "task",
+        targetId: id,
+      });
+      throw new ForbiddenError("You can't restore this task.");
+    }
+
     await restoreTasksById([id], session.id);
     const [restored] = await db
       .select({ title: tasks.title, leadId: tasks.leadId })

@@ -153,13 +153,39 @@ export async function undoArchiveContactAction(input: {
   });
 }
 
+/**
+ * Restore an archived contact. Owner-or-admin (parity with archive).
+ * Hard delete is still admin-only. Re-fetches the archived row to
+ * verify ownership — never trusts the client's claim.
+ *
+ * @actor owner or admin
+ */
 export async function restoreContactAction(
   formData: FormData,
 ): Promise<ActionResult> {
   return withErrorBoundary({ action: "contact.restore" }, async () => {
     const user = await requireSession();
-    if (!canHardDelete(user)) throw new ForbiddenError("Admin only.");
     const id = z.string().uuid().parse(formData.get("id"));
+
+    // Re-fetch the archived row (no isDeleted filter — we are
+    // explicitly restoring a soft-deleted row). canDeleteContact is
+    // the same predicate the archive path uses.
+    const [archivedRow] = await db
+      .select({ id: contacts.id, ownerId: contacts.ownerId })
+      .from(contacts)
+      .where(eq(contacts.id, id))
+      .limit(1);
+    if (!archivedRow) throw new NotFoundError("Contact not found.");
+    if (!canDeleteContact(user, archivedRow)) {
+      await writeAudit({
+        actorId: user.id,
+        action: "access.denied.contact.restore",
+        targetType: "contact",
+        targetId: id,
+      });
+      throw new ForbiddenError("You can't restore this contact.");
+    }
+
     const cascade = await restoreContactsById([id], user.id);
     const [restored] = await db
       .select({
