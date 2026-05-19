@@ -34,6 +34,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import { cn } from "@/lib/utils";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
+import { formatCurrency } from "@/lib/format/currency";
 import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 import {
   AVAILABLE_OPPORTUNITY_COLUMNS,
@@ -977,17 +978,6 @@ function ControlledTagFilter({
   );
 }
 
-function formatAmount(a: string | null): string {
-  if (a === null || a === undefined || a === "") return "—";
-  const n = Number(a);
-  if (!Number.isFinite(n)) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
-
 function formatExpectedCloseDate(
   d: string | null,
   prefs: TimePrefs,
@@ -1042,7 +1032,7 @@ function renderCell(
     case "amount":
       return (
         <span className="tabular-nums text-foreground/80">
-          {formatAmount(row.amount)}
+          {formatCurrency(row.amount)}
         </span>
       );
     case "probability":

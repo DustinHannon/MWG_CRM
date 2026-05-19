@@ -7,6 +7,7 @@ import { UserTime } from "@/components/ui/user-time";
 import { UserAvatar } from "@/components/user-display";
 import { requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
+import { formatCurrency } from "@/lib/format/currency";
 import {
   getUserProfilePage,
   listOwnedLeads,
@@ -359,7 +360,7 @@ function OpportunitiesList({
                 {r.stage}
               </td>
               <td className="px-4 py-2.5 tabular-nums text-foreground/80">
-                {r.amount ? `$${Number(r.amount).toLocaleString()}` : "—"}
+                {formatCurrency(r.amount)}
               </td>
               <td className="px-4 py-2.5 text-muted-foreground">
                 <UserTime value={r.expectedCloseDate} mode="date" />

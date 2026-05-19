@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusPill } from "@/components/ui/status-pill";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
+import { formatCurrency } from "@/lib/format/currency";
 
 /**
  * dense single-line mobile list for /opportunities (and the
@@ -31,15 +32,6 @@ function shortDate(
   return formatted === "—" ? null : formatted;
 }
 
-function shortAmount(a: number | string | null): string | null {
-  if (a === null || a === undefined || a === "") return null;
-  const n = typeof a === "number" ? a : Number(a);
-  if (Number.isNaN(n)) return null;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}k`;
-  return `$${Math.round(n).toLocaleString()}`;
-}
-
 export function OpportunityListMobile({
   rows,
   emptyMessage,
@@ -63,8 +55,10 @@ export function OpportunityListMobile({
     >
       {rows.map((r) => {
         const meta: string[] = [];
-        const amt = shortAmount(r.amount);
-        if (amt) meta.push(amt);
+        const amt = formatCurrency(r.amount);
+        // formatCurrency returns an em-dash for null/unparseable input;
+        // mobile meta omits the field entirely in that case.
+        if (amt !== "—") meta.push(amt);
         if (r.accountName) meta.push(r.accountName);
         const close = shortDate(r.expectedCloseDate, timePrefs);
         if (close) meta.push(`close ${close}`);

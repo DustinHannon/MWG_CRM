@@ -14,6 +14,7 @@ import { UserTime } from "@/components/ui/user-time";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { canDeleteOpportunity } from "@/lib/access/can-delete";
+import { formatCurrency } from "@/lib/format/currency";
 import { listTasksForOpportunity } from "@/lib/tasks";
 import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
 import { OpportunityDetailDelete } from "../_components/opportunity-detail-delete";
@@ -92,7 +93,7 @@ export default async function OpportunityDetailPage({
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <StatusPill status={opp.stage} />
             <span>
-              {opp.amount ? `$${Number(opp.amount).toLocaleString()}` : "—"}
+              {formatCurrency(opp.amount)}
             </span>
             <span aria-hidden>·</span>
             <span>
