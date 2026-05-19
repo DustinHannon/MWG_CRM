@@ -16,7 +16,8 @@ interface CreateNotificationInput {
     | "saved_search"
     | "new_user_jit"
     | "mailbox_blocked"
-    | "activity";
+    | "activity"
+    | "archive_pending";
   title: string;
   body?: string | null;
   link?: string | null;
@@ -181,6 +182,85 @@ export async function emitActivities(
         errorMessage: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+}
+
+/**
+ * Shared input for the actionable "archive pending — Restore" prompt
+ * surfaced in the bell and on /notifications. Distinct from the
+ * activity-feed "Archived" emit (which records the actor's own
+ * action): this row is OWNER-targeted and renders a Restore button
+ * within the 30-day window before the purge cron hard-deletes.
+ */
+export interface EmitArchiveNotificationInput {
+  entityType: ActivityEntityType;
+  entityId: string;
+  /**
+   * Human display name resolved at emit time and snapshotted; the
+   * entity may be renamed/hard-deleted later (the title persists).
+   */
+  entityDisplayName: string;
+  /**
+   * Recipient — the entity's owner (the user whose record vanished
+   * from their active view). Skipped when null (e.g. owner-user
+   * deleted → set null).
+   */
+  ownerId: string | null;
+  /** Who archived the entity. */
+  actorId: string;
+  /** In-app jump target, e.g. `/leads/{id}` (NULLed if unreachable). */
+  link: string;
+}
+
+const ARCHIVE_LABEL: Record<ActivityEntityType, string> = ACTIVITY_ENTITY_LABEL;
+
+/**
+ * Insert an actionable archive notification for the entity owner.
+ * Best-effort like {@link emitActivity} — a failure here NEVER fails
+ * the parent archive mutation (swallow + logger.error). Call it next
+ * to {@link emitActivity} after a successful archive + audit.
+ *
+ * Reuses existing schema columns: `kind = "archive_pending"`,
+ * `entity_type`, `entity_id`, `actor_id`, and `entity_display_name`
+ * (snapshotted name). No schema change needed. The UI dispatches on
+ * `kind` + `entity_type` to invoke the matching restore action.
+ *
+ * Skipped when `ownerId` is null (orphaned owner) or when the owner
+ * IS the actor (admin archiving their own record already saw the
+ * undo-toast and would not benefit from a self-prompt — the activity
+ * feed still records it).
+ */
+export async function emitArchiveNotification(
+  input: EmitArchiveNotificationInput,
+): Promise<void> {
+  if (!input.ownerId) return;
+  if (input.ownerId === input.actorId) return;
+  const label = ARCHIVE_LABEL[input.entityType];
+  const name =
+    input.entityDisplayName.trim() || `(unnamed ${input.entityType})`;
+  try {
+    await db.insert(notifications).values({
+      userId: input.ownerId,
+      actorId: input.actorId,
+      kind: "archive_pending" as const,
+      // born unread — the owner has not seen it yet.
+      isRead: false,
+      title: `${label} archived: ${name}`,
+      body: "You can restore it within 30 days.",
+      verb: "Archived",
+      entityType: input.entityType,
+      entityId: input.entityId,
+      entityDisplayName: name,
+      link: input.link,
+    });
+  } catch (err) {
+    logger.error("notifications.emit_archive_failed", {
+      actorId: input.actorId,
+      ownerId: input.ownerId,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

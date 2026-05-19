@@ -12,6 +12,7 @@ import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   emitActivity,
   emitActivities,
+  emitArchiveNotification,
   type EmitActivityInput,
 } from "@/lib/notifications";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
@@ -90,6 +91,18 @@ export async function softDeleteContactAction(input: {
         entityType: "contact",
         entityId: id,
         entityDisplayName: `${row.firstName} ${row.lastName ?? ""}`.trim(),
+        link: `/contacts/${id}`,
+      });
+
+      // Persistent owner-side prompt so a non-admin owner can
+      // self-restore for the full 30-day window after the 30s undo
+      // toast expires. No-op when actor is the owner.
+      await emitArchiveNotification({
+        entityType: "contact",
+        entityId: id,
+        entityDisplayName: `${row.firstName} ${row.lastName ?? ""}`.trim(),
+        ownerId: row.ownerId,
+        actorId: user.id,
         link: `/contacts/${id}`,
       });
 

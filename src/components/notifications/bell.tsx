@@ -21,6 +21,10 @@ interface NotificationItem {
   title: string;
   body: string | null;
   link: string | null;
+  /** Entity discriminator for actionable rows (archive_pending). */
+  entityType: string | null;
+  /** Entity id for actionable rows (archive_pending). */
+  entityId: string | null;
   isRead: boolean;
   createdAt: Date;
 }

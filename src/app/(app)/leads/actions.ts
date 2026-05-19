@@ -10,7 +10,7 @@ import {
 } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
-import { emitActivity } from "@/lib/notifications";
+import { emitActivity, emitArchiveNotification } from "@/lib/notifications";
 import {
   createLead,
   archiveLeadsById,
@@ -292,6 +292,18 @@ export async function softDeleteLeadAction(input: {
         entityDisplayName: `${row.firstName} ${
           row.lastName ?? ""
         }`.trim(),
+        link: `/leads/${id}`,
+      });
+
+      // Persistent owner-side prompt so a non-admin owner can
+      // self-restore for the full 30-day window after the 30s undo
+      // toast expires. No-op when actor is the owner.
+      await emitArchiveNotification({
+        entityType: "lead",
+        entityId: id,
+        entityDisplayName: `${row.firstName} ${row.lastName ?? ""}`.trim(),
+        ownerId: row.ownerId,
+        actorId: user.id,
         link: `/leads/${id}`,
       });
 

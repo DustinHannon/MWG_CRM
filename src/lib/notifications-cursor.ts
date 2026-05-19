@@ -18,11 +18,24 @@ import { nullifyUnreachableEntityLinks } from "@/lib/notifications-links";
  */
 export interface NotificationListRow {
   id: string;
+  /**
+   * Internal discriminator — `"activity" | "archive_pending" | …`.
+   * NOT shown as raw copy; the client uses it to dispatch the
+   * actionable Restore button for kind="archive_pending" rows.
+   */
+  kind: string;
   title: string;
   body: string | null;
   link: string | null;
   /** ActivityVerb for kind="activity" rows; null for other kinds. */
   verb: string | null;
+  /**
+   * Entity discriminator for actionable rows (archive_pending) — the
+   * UI dispatches the per-entity restore action by this value.
+   */
+  entityType: string | null;
+  /** Entity id for actionable rows (archive_pending). */
+  entityId: string | null;
   isRead: boolean;
   createdAt: Date;
 }
@@ -73,10 +86,13 @@ export async function listNotificationsCursor(args: {
     db
       .select({
         id: notifications.id,
+        kind: notifications.kind,
         title: notifications.title,
         body: notifications.body,
         link: notifications.link,
         verb: notifications.verb,
+        entityType: notifications.entityType,
+        entityId: notifications.entityId,
         isRead: notifications.isRead,
         createdAt: notifications.createdAt,
       })

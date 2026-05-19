@@ -14,7 +14,11 @@ import {
   type TaskCreateInput,
   type TaskUpdateInput,
 } from "@/lib/tasks";
-import { createNotification, emitActivity } from "@/lib/notifications";
+import {
+  createNotification,
+  emitActivity,
+  emitArchiveNotification,
+} from "@/lib/notifications";
 import { db } from "@/db";
 import { tasks } from "@/db/schema/tasks";
 import { userPreferences } from "@/db/schema/views";
@@ -189,6 +193,27 @@ export async function deleteTaskAction(
         entityDisplayName: row.title,
         link: row.leadId ? `/leads/${row.leadId}` : "/tasks",
       });
+
+      // Persistent stakeholder-side prompt so a non-admin creator or
+      // assignee can self-restore for the full 30-day window after
+      // the 30s undo toast expires. Emit to BOTH stakeholders (the
+      // canDeleteTask predicate grants restore to either), de-duped:
+      // skip when the recipient IS the actor, and skip creator when
+      // creator === assignee.
+      const taskLink = row.leadId ? `/leads/${row.leadId}` : "/tasks";
+      const stakeholders = new Set<string>();
+      if (row.createdById) stakeholders.add(row.createdById);
+      if (row.assignedToId) stakeholders.add(row.assignedToId);
+      for (const ownerId of stakeholders) {
+        await emitArchiveNotification({
+          entityType: "task",
+          entityId: taskId,
+          entityDisplayName: row.title,
+          ownerId,
+          actorId: session.id,
+          link: taskLink,
+        });
+      }
 
       revalidatePath("/tasks");
       return {
