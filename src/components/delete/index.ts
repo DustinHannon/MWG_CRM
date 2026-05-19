@@ -1,6 +1,7 @@
 export {
   ConfirmDeleteDialog,
   type EntityKind,
+  type RestorePath,
   type ConfirmDeleteDialogProps,
 } from "./confirm-delete-dialog";
 export {

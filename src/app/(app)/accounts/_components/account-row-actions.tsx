@@ -11,10 +11,13 @@ export function AccountRowActions({
   accountId,
   accountName,
   canDelete,
+  isAdmin,
 }: {
   accountId: string;
   accountName: string;
   canDelete: boolean;
+  /** Drives the confirm-dialog restore-hint copy. */
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   return (
@@ -23,6 +26,7 @@ export function AccountRowActions({
       entityId={accountId}
       entityName={accountName}
       canDelete={canDelete}
+      restorePath={isAdmin ? "archive" : "notifications"}
       extraBody={
         <p>
           Linked Contacts and Opportunities remain visible but show an

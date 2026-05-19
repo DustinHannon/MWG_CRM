@@ -15,9 +15,16 @@ import {
 export function LeadDetailDelete({
   leadId,
   leadName,
+  isAdmin,
 }: {
   leadId: string;
   leadName: string;
+  /**
+   * Drives the confirm-dialog restore-hint copy: admins are sent to
+   * the archive page; non-admin owners are sent to the notifications
+   * bell + /notifications page (the path they can actually reach).
+   */
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   return (
@@ -26,6 +33,7 @@ export function LeadDetailDelete({
       entityId={leadId}
       entityName={leadName}
       canDelete
+      restorePath={isAdmin ? "archive" : "notifications"}
       extraBody={
         <p>
           Linked activities and tasks will be hidden along with it.

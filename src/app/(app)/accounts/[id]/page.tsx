@@ -184,6 +184,7 @@ export default async function AccountDetailPage({
             <AccountDetailDelete
               accountId={account.id}
               accountName={account.name}
+              isAdmin={session.isAdmin}
             />
           ) : null}
         </div>

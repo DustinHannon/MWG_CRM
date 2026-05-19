@@ -1,7 +1,11 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { ConfirmDeleteDialog, type EntityKind } from "./confirm-delete-dialog";
+import {
+  ConfirmDeleteDialog,
+  type EntityKind,
+  type RestorePath,
+} from "./confirm-delete-dialog";
 import { showUndoToast } from "./undo-toast";
 import { toast } from "sonner";
 
@@ -18,6 +22,13 @@ export interface DeleteIconButtonProps {
   entityId: string;
   entityName: string;
   canDelete: boolean;
+  /**
+   * Restore path the actor will use to recover the record. Threaded
+   * to the confirm dialog so the copy is accurate: non-admin owners
+   * see "from your notifications"; admins see "from the <e> archive".
+   * Defaults to "notifications" — the universally-reachable path.
+   */
+  restorePath?: RestorePath;
   /** Optional cascade hint for the modal body. */
   extraBody?: React.ReactNode;
   /**
@@ -53,6 +64,7 @@ export function DeleteIconButton(props: DeleteIconButtonProps) {
       entityKind={props.entityKind}
       entityName={props.entityName}
       extraBody={props.extraBody}
+      restorePath={props.restorePath}
       onConfirm={async (reason) => {
         const res = await props.onConfirm(reason);
         if (!res.ok) {
@@ -105,6 +117,7 @@ export function DeleteButton(props: DeleteButtonProps) {
       entityKind={props.entityKind}
       entityName={props.entityName}
       extraBody={props.extraBody}
+      restorePath={props.restorePath}
       onConfirm={async (reason) => {
         const res = await props.onConfirm(reason);
         if (!res.ok) {

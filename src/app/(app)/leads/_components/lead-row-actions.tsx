@@ -15,10 +15,18 @@ export function LeadRowActions({
   leadId,
   leadName,
   canDelete,
+  isAdmin,
 }: {
   leadId: string;
   leadName: string;
   canDelete: boolean;
+  /**
+   * Drives the confirm-dialog restore-hint copy: admins are sent to
+   * the /<e>/archived page; non-admin owners are sent to the
+   * notifications bell + /notifications page (the path they can
+   * actually reach).
+   */
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   return (
@@ -27,6 +35,7 @@ export function LeadRowActions({
       entityId={leadId}
       entityName={leadName}
       canDelete={canDelete}
+      restorePath={isAdmin ? "archive" : "notifications"}
       onConfirm={async (reason) => {
         const res = await softDeleteLeadAction({ id: leadId, reason });
         if (res.ok) {

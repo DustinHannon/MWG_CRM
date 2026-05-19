@@ -10,9 +10,12 @@ import {
 export function OpportunityDetailDelete({
   opportunityId,
   opportunityName,
+  isAdmin,
 }: {
   opportunityId: string;
   opportunityName: string;
+  /** Drives the confirm-dialog restore-hint copy. */
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   return (
@@ -21,6 +24,7 @@ export function OpportunityDetailDelete({
       entityId={opportunityId}
       entityName={opportunityName}
       canDelete
+      restorePath={isAdmin ? "archive" : "notifications"}
       onConfirm={async (reason) => {
         const res = await softDeleteOpportunityAction({
           id: opportunityId,

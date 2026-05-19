@@ -261,6 +261,7 @@ function OpportunitiesListInner({
         columns={activeColumns}
         timePrefs={timePrefs}
         canDelete={user.isAdmin || opportunity.ownerId === user.id}
+        isAdmin={user.isAdmin}
       />
     ),
     [activeColumns, timePrefs, user.id, user.isAdmin],
@@ -548,11 +549,13 @@ function OpportunityDesktopRow({
   columns,
   timePrefs,
   canDelete,
+  isAdmin,
 }: {
   opportunity: OpportunityRow;
   columns: OpportunityColumnKey[];
   timePrefs: TimePrefs;
   canDelete: boolean;
+  isAdmin: boolean;
 }) {
   // Match the column-header tier's min-width so the row stays aligned
   // with header cells when the table is wider than the viewport.
@@ -587,6 +590,7 @@ function OpportunityDesktopRow({
           opportunityId={opportunity.id}
           opportunityName={opportunity.name}
           canDelete={canDelete}
+          isAdmin={isAdmin}
         />
       </div>
     </div>

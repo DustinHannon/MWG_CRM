@@ -221,6 +221,7 @@ function AccountsListInner({
         columns={activeColumns}
         timePrefs={timePrefs}
         canDelete={user.isAdmin || account.ownerId === user.id}
+        isAdmin={user.isAdmin}
       />
     ),
     [activeColumns, timePrefs, user.id, user.isAdmin],
@@ -490,11 +491,13 @@ function AccountDesktopRow({
   columns,
   timePrefs,
   canDelete,
+  isAdmin,
 }: {
   account: AccountRow;
   columns: AccountColumnKey[];
   timePrefs: TimePrefs;
   canDelete: boolean;
+  isAdmin: boolean;
 }) {
   // Match the column-header tier's min-width so the row stays aligned
   // with header cells when the table is wider than the viewport.
@@ -528,6 +531,7 @@ function AccountDesktopRow({
           accountId={account.id}
           accountName={account.name}
           canDelete={canDelete}
+          isAdmin={isAdmin}
         />
       </div>
     </div>

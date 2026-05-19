@@ -116,6 +116,7 @@ export default async function OpportunityDetailPage({
             <OpportunityDetailDelete
               opportunityId={opp.id}
               opportunityName={opp.name}
+              isAdmin={session.isAdmin}
             />
           ) : null}
         </div>

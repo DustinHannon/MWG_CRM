@@ -153,6 +153,7 @@ export function OppPipelineBoard({
             label={s.label}
             cards={columns[s.id] ?? []}
             canDelete={canDelete}
+            isAdmin={isAdmin}
             onArchive={async (card) => {
               const original = card;
               removeCard(card.id, card.stage);
@@ -189,12 +190,15 @@ function Column({
   label,
   cards,
   canDelete,
+  isAdmin,
   onArchive,
 }: {
   id: StageId;
   label: string;
   cards: Card[];
   canDelete: (c: Card) => boolean;
+  /** Drives the confirm-dialog restore-hint copy on each Card. */
+  isAdmin: boolean;
   onArchive: (c: Card) => Promise<void>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -229,6 +233,7 @@ function Column({
             key={c.id}
             card={c}
             canDelete={canDelete(c)}
+            isAdmin={isAdmin}
             onArchive={onArchive}
           />
         ))}
@@ -240,10 +245,13 @@ function Column({
 function Card({
   card,
   canDelete,
+  isAdmin,
   onArchive,
 }: {
   card: Card;
   canDelete: boolean;
+  /** Drives the confirm-dialog restore-hint copy. */
+  isAdmin: boolean;
   onArchive: (c: Card) => Promise<void>;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -271,6 +279,7 @@ function Card({
           <ConfirmDeleteDialog
             entityKind="opportunity"
             entityName={card.name}
+            restorePath={isAdmin ? "archive" : "notifications"}
             onConfirm={async () => {
               await onArchive(card);
             }}

@@ -218,6 +218,7 @@ function LeadsListInner({
         columns={activeColumns}
         timePrefs={timePrefs}
         canDelete={user.isAdmin || lead.ownerId === user.id}
+        isAdmin={user.isAdmin}
       />
     ),
     [activeColumns, timePrefs, user.id, user.isAdmin],
@@ -494,11 +495,13 @@ function LeadDesktopRow({
   columns,
   timePrefs,
   canDelete,
+  isAdmin,
 }: {
   lead: LeadRow;
   columns: ColumnKey[];
   timePrefs: TimePrefs;
   canDelete: boolean;
+  isAdmin: boolean;
 }) {
   // Match the column-header tier's min-width so the row stays aligned
   // with header cells when the table is wider than the viewport (the
@@ -529,6 +532,7 @@ function LeadDesktopRow({
           leadId={lead.id}
           leadName={leadDisplayName(lead)}
           canDelete={canDelete}
+          isAdmin={isAdmin}
         />
       </div>
     </div>

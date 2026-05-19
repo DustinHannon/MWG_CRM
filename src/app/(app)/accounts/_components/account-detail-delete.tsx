@@ -10,9 +10,12 @@ import {
 export function AccountDetailDelete({
   accountId,
   accountName,
+  isAdmin,
 }: {
   accountId: string;
   accountName: string;
+  /** Drives the confirm-dialog restore-hint copy. */
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   return (
@@ -21,6 +24,7 @@ export function AccountDetailDelete({
       entityId={accountId}
       entityName={accountName}
       canDelete
+      restorePath={isAdmin ? "archive" : "notifications"}
       extraBody={
         <p>
           Linked Contacts and Opportunities are not cascaded — they remain

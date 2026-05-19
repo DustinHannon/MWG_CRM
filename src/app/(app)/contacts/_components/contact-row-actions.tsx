@@ -11,10 +11,13 @@ export function ContactRowActions({
   contactId,
   contactName,
   canDelete,
+  isAdmin,
 }: {
   contactId: string;
   contactName: string;
   canDelete: boolean;
+  /** Drives the confirm-dialog restore-hint copy. */
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   return (
@@ -23,6 +26,7 @@ export function ContactRowActions({
       entityId={contactId}
       entityName={contactName}
       canDelete={canDelete}
+      restorePath={isAdmin ? "archive" : "notifications"}
       onConfirm={async (reason) => {
         const res = await softDeleteContactAction({ id: contactId, reason });
         if (res.ok) {

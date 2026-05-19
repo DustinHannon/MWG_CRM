@@ -208,6 +208,7 @@ export default async function LeadDetailPage({
             <LeadDetailDelete
               leadId={lead.id}
               leadName={formatPersonName(lead)}
+              isAdmin={user.isAdmin}
             />
           ) : null}
         </div>

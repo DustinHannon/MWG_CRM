@@ -21,6 +21,15 @@ const ENTITY_LABEL: Record<EntityKind, string> = {
 };
 
 /**
+ * Where the user can find this entity to restore it. Drives the
+ * restore-hint copy in the dialog body. Defaults to "notifications"
+ * — the path every authenticated user can reach. Callers explicitly
+ * pass "archive" only when the user is an admin (the /<e>/archived
+ * page is admin-only).
+ */
+export type RestorePath = "notifications" | "archive";
+
+/**
  * canonical archive confirmation dialog. Wraps Radix
  * AlertDialog so the focus trap, ESC handling, and portal placement
  * come for free. Body copy is derived from `entityKind`; pass
@@ -35,6 +44,13 @@ export interface ConfirmDeleteDialogProps {
   extraBody?: ReactNode;
   /** Whether to show the optional reason textarea. Defaults true. */
   showReason?: boolean;
+  /**
+   * Where the actor can self-restore: "notifications" for non-admin
+   * owners (the persistent archive prompt in the bell + /notifications
+   * page), or "archive" for admins (the /<e>/archived page).
+   * Defaults to "notifications" — the universally-reachable path.
+   */
+  restorePath?: RestorePath;
   /** Called with the reason string (or undefined) on Archive click. */
   onConfirm: (reason: string | undefined) => Promise<void>;
 }
@@ -45,12 +61,17 @@ export function ConfirmDeleteDialog({
   entityName,
   extraBody,
   showReason = true,
+  restorePath = "notifications",
   onConfirm,
 }: ConfirmDeleteDialogProps) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [pending, startTransition] = useTransition();
   const label = ENTITY_LABEL[entityKind];
+  const restoreHint =
+    restorePath === "archive"
+      ? `You can restore it from the ${label} archive within 30 days, or click Undo on the toast that appears next.`
+      : "You can restore it from your notifications within 30 days, or click Undo on the toast that appears next.";
 
   function handleConfirm() {
     startTransition(async () => {
@@ -82,10 +103,7 @@ export function ConfirmDeleteDialog({
                 will be hidden from active views.
               </p>
               {extraBody ? <div className="text-sm">{extraBody}</div> : null}
-              <p className="text-xs text-muted-foreground/80">
-                You can restore it from the {label} archive within 30 days, or
-                click Undo on the toast that appears next.
-              </p>
+              <p className="text-xs text-muted-foreground/80">{restoreHint}</p>
             </div>
           </AlertDialog.Description>
 

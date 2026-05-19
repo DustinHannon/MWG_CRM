@@ -122,6 +122,7 @@ export default async function ContactDetailPage({
             <ContactDetailDelete
               contactId={contact.id}
               contactName={formatPersonName(contact)}
+              isAdmin={session.isAdmin}
             />
           ) : null}
         </div>

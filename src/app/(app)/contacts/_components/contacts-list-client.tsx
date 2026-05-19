@@ -243,6 +243,7 @@ function ContactsListInner({
         columns={activeColumns}
         timePrefs={timePrefs}
         canDelete={user.isAdmin || contact.ownerId === user.id}
+        isAdmin={user.isAdmin}
       />
     ),
     [activeColumns, timePrefs, user.id, user.isAdmin],
@@ -520,11 +521,13 @@ function ContactDesktopRow({
   columns,
   timePrefs,
   canDelete,
+  isAdmin,
 }: {
   contact: ContactRow;
   columns: ContactColumnKey[];
   timePrefs: TimePrefs;
   canDelete: boolean;
+  isAdmin: boolean;
 }) {
   // Match the column-header tier's min-width so the row stays aligned
   // with header cells when the table is wider than the viewport.
@@ -558,6 +561,7 @@ function ContactDesktopRow({
           contactId={contact.id}
           contactName={formatPersonName(contact)}
           canDelete={canDelete}
+          isAdmin={isAdmin}
         />
       </div>
     </div>
