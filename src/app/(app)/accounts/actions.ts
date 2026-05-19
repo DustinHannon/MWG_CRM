@@ -19,6 +19,7 @@ import {
   type EmitActivityInput,
 } from "@/lib/notifications";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
+import { parseFormOrThrow } from "@/lib/forms/form-data";
 import {
   archiveAccountsById,
   bulkArchiveAccounts,
@@ -341,9 +342,7 @@ export async function updateAccountAction(
     { action: "account.update", entityType: "account" },
     async () => {
       const user = await requireSession();
-      const parsed = accountUpdateSchema.parse(
-        Object.fromEntries(fd.entries()),
-      );
+      const parsed = parseFormOrThrow(accountUpdateSchema, fd, { emptyMode: "keep" });
       // Access gate + full-row snapshot for audit. Selecting `*`
       // captures every column (including the new D365-parity fields)
       // so the audit_log `before` payload is complete.

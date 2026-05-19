@@ -15,6 +15,7 @@ import {
   type EmitActivityInput,
 } from "@/lib/notifications";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
+import { parseFormOrThrow } from "@/lib/forms/form-data";
 import {
   archiveContactsById,
   bulkArchiveContacts,
@@ -338,9 +339,7 @@ export async function updateContactAction(
     { action: "contact.update", entityType: "contact" },
     async () => {
       const user = await requireSession();
-      const parsed = contactUpdateSchema.parse(
-        Object.fromEntries(fd.entries()),
-      );
+      const parsed = parseFormOrThrow(contactUpdateSchema, fd, { emptyMode: "keep" });
       // Full-row snapshot for audit `before` — captures every column
       // that the update action may modify, so the audit trail shows
       // the complete pre-change state including new D365-parity fields.

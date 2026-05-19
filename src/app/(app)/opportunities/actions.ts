@@ -15,6 +15,7 @@ import {
   type EmitActivityInput,
 } from "@/lib/notifications";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
+import { parseFormOrThrow } from "@/lib/forms/form-data";
 import {
   archiveOpportunitiesById,
   bulkArchiveOpportunities,
@@ -311,9 +312,7 @@ export async function updateOpportunityAction(
     { action: "opportunity.update", entityType: "opportunity" },
     async () => {
       const user = await requireSession();
-      const parsed = opportunityUpdateSchema.parse(
-        Object.fromEntries(fd.entries()),
-      );
+      const parsed = parseFormOrThrow(opportunityUpdateSchema, fd, { emptyMode: "keep" });
       const [existing] = await db
         .select({
           id: opportunities.id,
