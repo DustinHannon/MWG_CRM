@@ -33,7 +33,7 @@ import { UserTimeClient } from "@/components/ui/user-time-client";
 import { StatusPill } from "@/components/ui/status-pill";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import { cn } from "@/lib/utils";
-import { type TimePrefs } from "@/lib/format-time";
+import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 import {
   AVAILABLE_OPPORTUNITY_COLUMNS,
@@ -278,9 +278,10 @@ function OpportunitiesListInner({
             expectedCloseDate: opportunity.expectedCloseDate ?? null,
           },
         ]}
+        timePrefs={timePrefs}
       />
     ),
-    [],
+    [timePrefs],
   );
 
   const applyDraft = () => {
@@ -987,14 +988,14 @@ function formatAmount(a: string | null): string {
   }).format(n);
 }
 
-function formatExpectedCloseDate(d: string | null): React.ReactNode {
+function formatExpectedCloseDate(
+  d: string | null,
+  prefs: TimePrefs,
+): React.ReactNode {
   if (!d) return <span className="text-muted-foreground/80">—</span>;
-  // d is a yyyy-mm-dd string from the date column; render as MM/DD/YYYY.
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
-  if (!m) return <span className="text-muted-foreground">{d}</span>;
   return (
     <span className="text-muted-foreground tabular-nums">
-      {m[2]}/{m[3]}/{m[1]}
+      {formatUserTime(d, prefs, "date")}
     </span>
   );
 }
@@ -1051,7 +1052,7 @@ function renderCell(
         </span>
       );
     case "expectedCloseDate":
-      return formatExpectedCloseDate(row.expectedCloseDate);
+      return formatExpectedCloseDate(row.expectedCloseDate, prefs);
     case "owner":
       return row.ownerId ? (
         <UserChip

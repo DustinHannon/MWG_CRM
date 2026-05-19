@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusPill } from "@/components/ui/status-pill";
+import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 
 /**
  * dense single-line mobile list for /opportunities (and the
@@ -19,13 +20,15 @@ export interface OpportunityListMobileRow {
   expectedCloseDate: Date | string | null;
 }
 
-function shortDate(d: Date | string | null | undefined): string | null {
+function shortDate(
+  d: Date | string | null | undefined,
+  prefs: TimePrefs,
+): string | null {
   if (!d) return null;
-  const ts = new Date(d).getTime();
-  if (Number.isNaN(ts)) return null;
-  // M/D format — concise for mobile.
-  const date = new Date(ts);
-  return `${date.getMonth() + 1}/${date.getDate()}`;
+  const formatted = formatUserTime(d, prefs, "date");
+  // formatUserTime returns an em-dash for null/unparseable input;
+  // mobile meta omits the field entirely in that case.
+  return formatted === "—" ? null : formatted;
 }
 
 function shortAmount(a: number | string | null): string | null {
@@ -40,9 +43,11 @@ function shortAmount(a: number | string | null): string | null {
 export function OpportunityListMobile({
   rows,
   emptyMessage,
+  timePrefs,
 }: {
   rows: OpportunityListMobileRow[];
   emptyMessage?: React.ReactNode;
+  timePrefs: TimePrefs;
 }) {
   if (rows.length === 0) {
     return (
@@ -61,7 +66,7 @@ export function OpportunityListMobile({
         const amt = shortAmount(r.amount);
         if (amt) meta.push(amt);
         if (r.accountName) meta.push(r.accountName);
-        const close = shortDate(r.expectedCloseDate);
+        const close = shortDate(r.expectedCloseDate, timePrefs);
         if (close) meta.push(`close ${close}`);
         return (
           <li key={r.id}>
