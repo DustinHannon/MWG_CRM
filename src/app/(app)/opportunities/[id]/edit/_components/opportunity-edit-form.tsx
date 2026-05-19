@@ -1,13 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
-import { toast } from "sonner";
+import { useActionState } from "react";
 import { updateOpportunityAction } from "../../../actions";
 import type { ActionResult } from "@/lib/server-action";
-import { useShowPicker } from "@/hooks/use-show-picker";
+import {
+  StandardFormField,
+  StandardFormTextarea,
+  StandardFormSelect,
+  StandardFormSection,
+  StandardFormRow,
+  useEditFormResult,
+} from "@/components/standard";
+import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 
-/** Opportunity edit form. */
+/**
+ * Opportunity edit form. OCC via hidden `version`.
+ *
+ * Visual note: input backgrounds are now `bg-muted/40` (shared
+ * CONTROL_CLASS in standard-form) rather than the previous local
+ * `bg-input/60`. Intentional unification — one token per CLAUDE.md §8.
+ */
 export function OpportunityEditForm({
   opportunity,
 }: {
@@ -27,82 +40,72 @@ export function OpportunityEditForm({
     ActionResult<never>,
     FormData
   >(async (_prev, fd) => updateOpportunityAction(fd), initial);
-  const closeDatePicker = useShowPicker();
 
-  useEffect(() => {
-    if (state === initial) return;
-    if (state.ok) {
-      toast.success("Opportunity updated");
-      router.push(`/opportunities/${opportunity.id}`);
-    } else {
-      toast.error(state.error, { duration: Infinity, dismissible: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
+  // React 19 resets uncontrolled fields on action settle (even on error).
+  // Feed the submitted raw strings back as defaultValue so the user's
+  // edits survive a validation failure instead of reverting to DB values.
+  const fe = !state.ok ? (state.fieldErrors ?? {}) : {};
+  const sv = !state.ok ? (state.values ?? {}) : {};
+  const dv = (name: string, fallback: string) => sv[name] ?? fallback;
+
+  // Toast on failure; navigate to detail view on success (the action
+  // only revalidates — it does not redirect server-side).
+  useEditFormResult(state, () => router.push(`/opportunities/${opportunity.id}`), "Opportunity updated");
 
   return (
-    <form action={formAction} className="mt-6 grid gap-4 max-w-2xl">
+    <form action={formAction} className="mt-6 grid gap-6 max-w-2xl">
       <input type="hidden" name="id" value={opportunity.id} />
       <input type="hidden" name="version" value={opportunity.version} />
 
-      <Field label="Name *">
-        <input
+      <StandardFormSection title="Details">
+        <StandardFormField
           name="name"
-          defaultValue={opportunity.name}
+          label="Name *"
           required
           maxLength={200}
-          className="h-9 rounded-md border border-border bg-input/60 px-3 text-sm"
+          defaultValue={dv("name", opportunity.name)}
+          error={fe.name}
         />
-      </Field>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Stage">
-          <select
+        <StandardFormRow>
+          <StandardFormSelect
             name="stage"
-            defaultValue={opportunity.stage}
-            className="h-9 rounded-md border border-border bg-input/60 px-3 text-sm"
-          >
-            <option value="prospecting">Prospecting</option>
-            <option value="qualification">Qualification</option>
-            <option value="proposal">Proposal</option>
-            <option value="negotiation">Negotiation</option>
-            <option value="closed_won">Closed — won</option>
-            <option value="closed_lost">Closed — lost</option>
-          </select>
-        </Field>
-        <Field label="Amount (USD)">
+            label="Stage"
+            options={OPPORTUNITY_STAGES}
+            defaultValue={dv("stage", opportunity.stage)}
+            error={fe.stage}
+          />
           {/* text + inputMode="decimal" (not type="number"): a number
               input blanks content the browser deems invalid, so a
               mistyped amount was silently dropped to null on save. */}
-          <input
+          <StandardFormField
             name="amount"
+            label="Amount (USD)"
             type="text"
             inputMode="decimal"
-            defaultValue={opportunity.amount ?? ""}
-            className="h-9 rounded-md border border-border bg-input/60 px-3 text-sm"
+            defaultValue={dv("amount", opportunity.amount ?? "")}
+            error={fe.amount}
           />
-        </Field>
-      </div>
-
-      <Field label="Expected close date">
-        <input
+        </StandardFormRow>
+        {/* StandardFormField handles date picker internally for type="date" */}
+        <StandardFormField
           name="expectedCloseDate"
+          label="Expected close date"
           type="date"
-          defaultValue={opportunity.expectedCloseDate ?? ""}
-          onClick={closeDatePicker}
-          className="h-9 rounded-md border border-border bg-input/60 px-3 text-sm"
+          defaultValue={dv("expectedCloseDate", opportunity.expectedCloseDate ?? "")}
+          error={fe.expectedCloseDate}
         />
-      </Field>
+      </StandardFormSection>
 
-      <Field label="Description">
-        <textarea
+      <StandardFormSection title="Notes">
+        <StandardFormTextarea
           name="description"
-          defaultValue={opportunity.description ?? ""}
+          label="Description"
           maxLength={4000}
           rows={5}
-          className="rounded-md border border-border bg-input/60 px-3 py-2 text-sm"
+          defaultValue={dv("description", opportunity.description ?? "")}
+          error={fe.description}
         />
-      </Field>
+      </StandardFormSection>
 
       <div className="flex gap-3 pt-2">
         <button
@@ -122,22 +125,5 @@ export function OpportunityEditForm({
         </button>
       </div>
     </form>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </label>
   );
 }

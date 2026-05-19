@@ -1,16 +1,27 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
-import { toast } from "sonner";
+import { useActionState } from "react";
 import { updateAccountAction } from "../../../actions";
 import type { ActionResult } from "@/lib/server-action";
+import {
+  StandardFormField,
+  StandardFormTextarea,
+  StandardFormSelect,
+  StandardFormSection,
+  StandardFormRow,
+  useEditFormResult,
+} from "@/components/standard";
 
 /**
  * Account edit form. OCC via hidden `version`. Sectioned layout
  * matches the contact edit form for consistency. D365-parity fields
  * (account number, email, employees, annual revenue, full address,
  * parent account FK, primary contact FK) are editable here.
+ *
+ * Visual note: input backgrounds are now `bg-muted/40` (shared
+ * CONTROL_CLASS in standard-form) rather than the previous local
+ * `bg-input/60`. Intentional unification — one token per CLAUDE.md §8.
  */
 export function AccountEditForm({
   account,
@@ -48,200 +59,175 @@ export function AccountEditForm({
     FormData
   >(async (_prev, fd) => updateAccountAction(fd), initial);
 
-  useEffect(() => {
-    if (state === initial) return;
-    if (state.ok) {
-      toast.success("Account updated");
-      router.push(`/accounts/${account.id}`);
-    } else {
-      toast.error(state.error, { duration: Infinity, dismissible: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
+  // React 19 resets uncontrolled fields on action settle (even on error).
+  // Feed the submitted raw strings back as defaultValue so the user's
+  // edits survive a validation failure instead of reverting to DB values.
+  const fe = !state.ok ? (state.fieldErrors ?? {}) : {};
+  const sv = !state.ok ? (state.values ?? {}) : {};
+  const dv = (name: string, fallback: string) => sv[name] ?? fallback;
+
+  // Toast on failure; navigate to detail view on success (the action
+  // only revalidates — it does not redirect server-side).
+  useEditFormResult(state, () => router.push(`/accounts/${account.id}`), "Account updated");
 
   return (
     <form action={formAction} className="mt-6 grid gap-6 max-w-3xl">
       <input type="hidden" name="id" value={account.id} />
       <input type="hidden" name="version" value={account.version} />
 
-      <Section title="Identity">
-        <Field label="Name *">
-          <input
-            name="name"
-            defaultValue={account.name}
-            required
-            maxLength={200}
-            className={inputClass}
+      <StandardFormSection title="Identity">
+        <StandardFormField
+          name="name"
+          label="Name *"
+          required
+          maxLength={200}
+          defaultValue={dv("name", account.name)}
+          error={fe.name}
+        />
+        <StandardFormRow>
+          <StandardFormField
+            name="accountNumber"
+            label="Account number"
+            maxLength={100}
+            defaultValue={dv("accountNumber", account.accountNumber ?? "")}
+            error={fe.accountNumber}
           />
-        </Field>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Account number">
-            <input
-              name="accountNumber"
-              defaultValue={account.accountNumber ?? ""}
-              maxLength={100}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Industry">
-            <input
-              name="industry"
-              defaultValue={account.industry ?? ""}
-              maxLength={120}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Employees">
-            {/* text + inputMode (not type="number"): a number input
-                blanks content the browser deems invalid, so a mistyped
-                value was silently dropped to null on save. */}
-            <input
-              type="text"
-              inputMode="numeric"
-              name="numberOfEmployees"
-              defaultValue={account.numberOfEmployees ?? ""}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Annual revenue ($)">
-            <input
-              type="text"
-              inputMode="decimal"
-              name="annualRevenue"
-              defaultValue={account.annualRevenue ?? ""}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-      </Section>
+          <StandardFormField
+            name="industry"
+            label="Industry"
+            maxLength={120}
+            defaultValue={dv("industry", account.industry ?? "")}
+            error={fe.industry}
+          />
+        </StandardFormRow>
+        <StandardFormRow>
+          {/* text + inputMode (not type="number"): a number input
+              blanks content the browser deems invalid, so a mistyped
+              value was silently dropped to null on save. */}
+          <StandardFormField
+            name="numberOfEmployees"
+            label="Employees"
+            type="text"
+            inputMode="numeric"
+            defaultValue={dv("numberOfEmployees", account.numberOfEmployees != null ? String(account.numberOfEmployees) : "")}
+            error={fe.numberOfEmployees}
+          />
+          <StandardFormField
+            name="annualRevenue"
+            label="Annual revenue ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={dv("annualRevenue", account.annualRevenue ?? "")}
+            error={fe.annualRevenue}
+          />
+        </StandardFormRow>
+      </StandardFormSection>
 
-      <Section title="Contact info">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Email">
-            <input
-              type="email"
-              name="email"
-              defaultValue={account.email ?? ""}
-              maxLength={254}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Phone">
-            <input
-              name="phone"
-              defaultValue={account.phone ?? ""}
-              maxLength={40}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-        <Field label="Website">
-          <input
-            name="website"
-            defaultValue={account.website ?? ""}
-            maxLength={200}
-            className={inputClass}
+      <StandardFormSection title="Contact info">
+        <StandardFormRow>
+          <StandardFormField
+            name="email"
+            label="Email"
+            type="email"
+            maxLength={254}
+            defaultValue={dv("email", account.email ?? "")}
+            error={fe.email}
           />
-        </Field>
-      </Section>
+          <StandardFormField
+            name="phone"
+            label="Phone"
+            maxLength={40}
+            defaultValue={dv("phone", account.phone ?? "")}
+            error={fe.phone}
+          />
+        </StandardFormRow>
+        <StandardFormField
+          name="website"
+          label="Website"
+          maxLength={200}
+          defaultValue={dv("website", account.website ?? "")}
+          error={fe.website}
+        />
+      </StandardFormSection>
 
-      <Section title="Address">
-        <Field label="Street 1">
-          <input
-            name="street1"
-            defaultValue={account.street1 ?? ""}
-            maxLength={200}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="Street 2">
-          <input
-            name="street2"
-            defaultValue={account.street2 ?? ""}
-            maxLength={200}
-            className={inputClass}
-          />
-        </Field>
+      <StandardFormSection title="Address">
+        <StandardFormField
+          name="street1"
+          label="Street 1"
+          maxLength={200}
+          defaultValue={dv("street1", account.street1 ?? "")}
+          error={fe.street1}
+        />
+        <StandardFormField
+          name="street2"
+          label="Street 2"
+          maxLength={200}
+          defaultValue={dv("street2", account.street2 ?? "")}
+          error={fe.street2}
+        />
         <div className="grid grid-cols-3 gap-4">
-          <Field label="City">
-            <input
-              name="city"
-              defaultValue={account.city ?? ""}
-              maxLength={120}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="State">
-            <input
-              name="state"
-              defaultValue={account.state ?? ""}
-              maxLength={120}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Postal code">
-            <input
-              name="postalCode"
-              defaultValue={account.postalCode ?? ""}
-              maxLength={20}
-              className={inputClass}
-            />
-          </Field>
+          <StandardFormField
+            name="city"
+            label="City"
+            maxLength={120}
+            defaultValue={dv("city", account.city ?? "")}
+            error={fe.city}
+          />
+          <StandardFormField
+            name="state"
+            label="State"
+            maxLength={120}
+            defaultValue={dv("state", account.state ?? "")}
+            error={fe.state}
+          />
+          <StandardFormField
+            name="postalCode"
+            label="Postal code"
+            maxLength={20}
+            defaultValue={dv("postalCode", account.postalCode ?? "")}
+            error={fe.postalCode}
+          />
         </div>
-        <Field label="Country">
-          <input
-            name="country"
-            defaultValue={account.country ?? ""}
-            maxLength={80}
-            className={inputClass}
-          />
-        </Field>
-      </Section>
+        <StandardFormField
+          name="country"
+          label="Country"
+          maxLength={80}
+          defaultValue={dv("country", account.country ?? "")}
+          error={fe.country}
+        />
+      </StandardFormSection>
 
-      <Section title="Relationships">
-        <Field label="Parent account">
-          <select
-            name="parentAccountId"
-            defaultValue={account.parentAccountId ?? ""}
-            className={inputClass}
-          >
-            <option value="">— No parent —</option>
-            {parentOptions.map((a) => (
-              <option key={a.id} value={a.id} disabled={a.id === account.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Primary contact">
-          <select
-            name="primaryContactId"
-            defaultValue={account.primaryContactId ?? ""}
-            className={inputClass}
-          >
-            <option value="">— Not set —</option>
-            {contactOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </Section>
+      <StandardFormSection title="Relationships">
+        <StandardFormSelect
+          name="parentAccountId"
+          label="Parent account"
+          options={parentOptions
+            .filter((a) => a.id !== account.id)
+            .map((a) => ({ value: a.id, label: a.name }))}
+          placeholderOption="— No parent —"
+          defaultValue={dv("parentAccountId", account.parentAccountId ?? "")}
+          error={fe.parentAccountId}
+        />
+        <StandardFormSelect
+          name="primaryContactId"
+          label="Primary contact"
+          options={contactOptions.map((c) => ({ value: c.id, label: c.name }))}
+          placeholderOption="— Not set —"
+          defaultValue={dv("primaryContactId", account.primaryContactId ?? "")}
+          error={fe.primaryContactId}
+        />
+      </StandardFormSection>
 
-      <Section title="Notes">
-        <Field label="Description">
-          <textarea
-            name="description"
-            defaultValue={account.description ?? ""}
-            maxLength={4000}
-            rows={5}
-            className="rounded-md border border-border bg-input/60 px-3 py-2 text-sm"
-          />
-        </Field>
-      </Section>
+      <StandardFormSection title="Notes">
+        <StandardFormTextarea
+          name="description"
+          label="Description"
+          maxLength={4000}
+          rows={5}
+          defaultValue={dv("description", account.description ?? "")}
+          error={fe.description}
+        />
+      </StandardFormSection>
 
       <div className="flex gap-3 pt-2">
         <button
@@ -261,36 +247,5 @@ export function AccountEditForm({
         </button>
       </div>
     </form>
-  );
-}
-
-const inputClass =
-  "h-9 rounded-md border border-border bg-input/60 px-3 text-sm";
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-        {title}
-      </h2>
-      <div className="space-y-3">{children}</div>
-    </section>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </label>
   );
 }

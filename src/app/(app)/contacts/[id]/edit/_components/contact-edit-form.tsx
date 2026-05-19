@@ -1,12 +1,25 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
-import { toast } from "sonner";
+import { useActionState } from "react";
 import { updateContactAction } from "../../../actions";
 import type { ActionResult } from "@/lib/server-action";
-import { useShowPicker } from "@/hooks/use-show-picker";
+import {
+  StandardFormField,
+  StandardFormTextarea,
+  StandardFormSection,
+  StandardFormRow,
+  StandardFormCheckbox,
+  useEditFormResult,
+} from "@/components/standard";
 
+/**
+ * Contact edit form. OCC via hidden `version`.
+ *
+ * Visual note: input backgrounds are now `bg-muted/40` (shared
+ * CONTROL_CLASS in standard-form) rather than the previous local
+ * `bg-input/60`. Intentional unification — one token per CLAUDE.md §8.
+ */
 export function ContactEditForm({
   contact,
 }: {
@@ -38,167 +51,164 @@ export function ContactEditForm({
     ActionResult<never>,
     FormData
   >(async (_prev, fd) => updateContactAction(fd), initial);
-  const birthdatePicker = useShowPicker();
 
-  useEffect(() => {
-    if (state === initial) return;
-    if (state.ok) {
-      toast.success("Contact updated");
-      router.push(`/contacts/${contact.id}`);
-    } else {
-      toast.error(state.error, { duration: Infinity, dismissible: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
+  // React 19 resets uncontrolled fields on action settle (even on error).
+  // Feed the submitted raw strings back as defaultValue so the user's
+  // edits survive a validation failure instead of reverting to DB values.
+  const fe = !state.ok ? (state.fieldErrors ?? {}) : {};
+  const sv = !state.ok ? (state.values ?? {}) : {};
+  const dv = (name: string, fallback: string) => sv[name] ?? fallback;
+
+  // Toast on failure; navigate to detail view on success (the action
+  // only revalidates — it does not redirect server-side).
+  useEditFormResult(state, () => router.push(`/contacts/${contact.id}`), "Contact updated");
 
   return (
     <form action={formAction} className="mt-6 grid gap-6 max-w-3xl">
       <input type="hidden" name="id" value={contact.id} />
       <input type="hidden" name="version" value={contact.version} />
 
-      <Section title="Identity">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="First name *">
-            <input
-              name="firstName"
-              defaultValue={contact.firstName}
-              required
-              maxLength={100}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Last name">
-            <input
-              name="lastName"
-              defaultValue={contact.lastName ?? ""}
-              maxLength={100}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Job title">
-            <input
-              name="jobTitle"
-              defaultValue={contact.jobTitle ?? ""}
-              maxLength={120}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Birthdate">
-            <input
-              type="date"
-              name="birthdate"
-              defaultValue={contact.birthdate ?? ""}
-              onClick={birthdatePicker}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-      </Section>
+      <StandardFormSection title="Identity">
+        <StandardFormRow>
+          <StandardFormField
+            name="firstName"
+            label="First name *"
+            required
+            maxLength={100}
+            defaultValue={dv("firstName", contact.firstName)}
+            error={fe.firstName}
+          />
+          <StandardFormField
+            name="lastName"
+            label="Last name"
+            maxLength={100}
+            defaultValue={dv("lastName", contact.lastName ?? "")}
+            error={fe.lastName}
+          />
+        </StandardFormRow>
+        <StandardFormRow>
+          <StandardFormField
+            name="jobTitle"
+            label="Job title"
+            maxLength={120}
+            defaultValue={dv("jobTitle", contact.jobTitle ?? "")}
+            error={fe.jobTitle}
+          />
+          {/* StandardFormField handles date picker internally for type="date" */}
+          <StandardFormField
+            name="birthdate"
+            label="Birthdate"
+            type="date"
+            defaultValue={dv("birthdate", contact.birthdate ?? "")}
+            error={fe.birthdate}
+          />
+        </StandardFormRow>
+      </StandardFormSection>
 
-      <Section title="Contact info">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Email">
-            <input
-              type="email"
-              name="email"
-              defaultValue={contact.email ?? ""}
-              maxLength={254}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Phone">
-            <input
-              name="phone"
-              defaultValue={contact.phone ?? ""}
-              maxLength={40}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-        <Field label="Mobile">
-          <input
-            name="mobilePhone"
-            defaultValue={contact.mobilePhone ?? ""}
+      <StandardFormSection title="Contact info">
+        <StandardFormRow>
+          <StandardFormField
+            name="email"
+            label="Email"
+            type="email"
+            maxLength={254}
+            defaultValue={dv("email", contact.email ?? "")}
+            error={fe.email}
+          />
+          <StandardFormField
+            name="phone"
+            label="Phone"
             maxLength={40}
-            className={inputClass}
+            defaultValue={dv("phone", contact.phone ?? "")}
+            error={fe.phone}
           />
-        </Field>
-      </Section>
+        </StandardFormRow>
+        <StandardFormField
+          name="mobilePhone"
+          label="Mobile"
+          maxLength={40}
+          defaultValue={dv("mobilePhone", contact.mobilePhone ?? "")}
+          error={fe.mobilePhone}
+        />
+      </StandardFormSection>
 
-      <Section title="Address">
-        <Field label="Street 1">
-          <input
-            name="street1"
-            defaultValue={contact.street1 ?? ""}
-            maxLength={200}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="Street 2">
-          <input
-            name="street2"
-            defaultValue={contact.street2 ?? ""}
-            maxLength={200}
-            className={inputClass}
-          />
-        </Field>
+      <StandardFormSection title="Address">
+        <StandardFormField
+          name="street1"
+          label="Street 1"
+          maxLength={200}
+          defaultValue={dv("street1", contact.street1 ?? "")}
+          error={fe.street1}
+        />
+        <StandardFormField
+          name="street2"
+          label="Street 2"
+          maxLength={200}
+          defaultValue={dv("street2", contact.street2 ?? "")}
+          error={fe.street2}
+        />
         <div className="grid grid-cols-3 gap-4">
-          <Field label="City">
-            <input
-              name="city"
-              defaultValue={contact.city ?? ""}
-              maxLength={120}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="State">
-            <input
-              name="state"
-              defaultValue={contact.state ?? ""}
-              maxLength={120}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Postal code">
-            <input
-              name="postalCode"
-              defaultValue={contact.postalCode ?? ""}
-              maxLength={20}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-        <Field label="Country">
-          <input
-            name="country"
-            defaultValue={contact.country ?? ""}
-            maxLength={80}
-            className={inputClass}
+          <StandardFormField
+            name="city"
+            label="City"
+            maxLength={120}
+            defaultValue={dv("city", contact.city ?? "")}
+            error={fe.city}
           />
-        </Field>
-      </Section>
+          <StandardFormField
+            name="state"
+            label="State"
+            maxLength={120}
+            defaultValue={dv("state", contact.state ?? "")}
+            error={fe.state}
+          />
+          <StandardFormField
+            name="postalCode"
+            label="Postal code"
+            maxLength={20}
+            defaultValue={dv("postalCode", contact.postalCode ?? "")}
+            error={fe.postalCode}
+          />
+        </div>
+        <StandardFormField
+          name="country"
+          label="Country"
+          maxLength={80}
+          defaultValue={dv("country", contact.country ?? "")}
+          error={fe.country}
+        />
+      </StandardFormSection>
 
-      <Section title="Preferences">
+      <StandardFormSection title="Preferences">
         <div className="flex flex-wrap gap-4 text-sm">
-          <Toggle name="doNotEmail" label="Do not email" defaultChecked={contact.doNotEmail} />
-          <Toggle name="doNotCall" label="Do not call" defaultChecked={contact.doNotCall} />
-          <Toggle name="doNotMail" label="Do not postal mail" defaultChecked={contact.doNotMail} />
-        </div>
-      </Section>
-
-      <Section title="Notes">
-        <Field label="Description">
-          <textarea
-            name="description"
-            defaultValue={contact.description ?? ""}
-            maxLength={4000}
-            rows={5}
-            className="rounded-md border border-border bg-input/60 px-3 py-2 text-sm"
+          <StandardFormCheckbox
+            name="doNotEmail"
+            label="Do not email"
+            defaultChecked={contact.doNotEmail}
           />
-        </Field>
-      </Section>
+          <StandardFormCheckbox
+            name="doNotCall"
+            label="Do not call"
+            defaultChecked={contact.doNotCall}
+          />
+          <StandardFormCheckbox
+            name="doNotMail"
+            label="Do not postal mail"
+            defaultChecked={contact.doNotMail}
+          />
+        </div>
+      </StandardFormSection>
+
+      <StandardFormSection title="Notes">
+        <StandardFormTextarea
+          name="description"
+          label="Description"
+          maxLength={4000}
+          rows={5}
+          defaultValue={dv("description", contact.description ?? "")}
+          error={fe.description}
+        />
+      </StandardFormSection>
 
       <div className="flex gap-3 pt-2">
         <button
@@ -218,58 +228,5 @@ export function ContactEditForm({
         </button>
       </div>
     </form>
-  );
-}
-
-const inputClass =
-  "h-9 rounded-md border border-border bg-input/60 px-3 text-sm";
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-        {title}
-      </h2>
-      <div className="space-y-3">{children}</div>
-    </section>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function Toggle({
-  name,
-  label,
-  defaultChecked,
-}: {
-  name: string;
-  label: string;
-  defaultChecked: boolean;
-}) {
-  return (
-    <label className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm">
-      <input
-        type="checkbox"
-        name={name}
-        defaultChecked={defaultChecked}
-        className="h-4 w-4"
-      />
-      {label}
-    </label>
   );
 }
