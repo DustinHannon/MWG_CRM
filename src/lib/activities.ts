@@ -3,6 +3,8 @@ import { logger } from "@/lib/logger";
 import { and, count, desc, eq, max, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
+import { NotFoundError } from "@/lib/errors";
+import { expectAffected } from "@/lib/db/concurrent-update";
 import { activities, attachments } from "@/db/schema/activities";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { leads } from "@/db/schema/leads";
@@ -506,28 +508,76 @@ export async function getActivityForApi(
   return row ?? null;
 }
 
+/** Mutable fields a note/call inline edit (app action) or the API
+ *  PATCH may change. `kind`/parent/graph-link columns are intentionally
+ *  not here — identity and provenance are immutable post-create. */
+export type ActivityUpdatePatch = Partial<{
+  subject: string | null;
+  body: string | null;
+  outcome: string | null;
+  durationMinutes: number | null;
+  direction: "inbound" | "outbound" | "internal" | null;
+  occurredAt: Date;
+}>;
+
+export type ActivitySelect = typeof activities.$inferSelect;
+
 /**
- * partial update for /api/v1/activities/:id.
- * activities don't have a version column today, so the OCC `version`
- * field is accepted in the schema for forward-compat but always
- * treated as last-write-wins.
+ * Single canonical OCC update for an activity, used by BOTH the (app)
+ * `updateActivityAction` and the public `PATCH /api/v1/activities/:id`
+ * route — no fork. Activities now carry a `version` column (STANDARDS
+ * §19.5), so this is genuine optimistic concurrency, not the prior
+ * last-write-wins `updateActivityForApi`.
+ *
+ * OCC is enforced atomically by the `version = expectedVersion`
+ * predicate on the UPDATE itself (no read-then-write race — same shape
+ * as `updateTask`). The pre-update row is read only to give the caller
+ * a `before` for the audit. `expectAffected` turns an empty result
+ * into a typed `ConflictError` (row exists, version moved) or
+ * `NotFoundError` (row absent / already archived).
+ *
+ * Returns `{ before, after }` so the caller writes a complete audit
+ * (before AND after) — the prior API path audited `after` only.
  */
-export async function updateActivityForApi(
-  id: string,
-  patch: Partial<{
-    subject: string | null;
-    body: string | null;
-    outcome: string | null;
-    durationMinutes: number | null;
-    direction: "inbound" | "outbound" | "internal" | null;
-    occurredAt: Date;
-  }>,
-): Promise<void> {
-  await db
+export async function updateActivity(args: {
+  id: string;
+  patch: ActivityUpdatePatch;
+  expectedVersion: number;
+  actorId: string;
+}): Promise<{ before: ActivitySelect; after: ActivitySelect }> {
+  const { id, patch, expectedVersion, actorId } = args;
+
+  const [before] = await db
+    .select()
+    .from(activities)
+    .where(and(eq(activities.id, id), eq(activities.isDeleted, false)))
+    .limit(1);
+  if (!before) throw new NotFoundError("activity");
+
+  const rows = await db
     .update(activities)
     .set({
       ...patch,
+      // actor stamp for realtime skip-self.
+      updatedById: actorId,
       updatedAt: sql`now()`,
+      version: sql`${activities.version} + 1`,
     })
-    .where(and(eq(activities.id, id), eq(activities.isDeleted, false)));
+    .where(
+      and(
+        eq(activities.id, id),
+        eq(activities.isDeleted, false),
+        eq(activities.version, expectedVersion),
+      ),
+    )
+    .returning();
+  // empty rows + row exists -> ConflictError (stale version);
+  // empty rows + row absent -> NotFoundError. Non-empty -> no-op.
+  await expectAffected(rows, {
+    table: activities,
+    id,
+    entityLabel: "activity",
+  });
+
+  return { before, after: rows[0] };
 }
