@@ -165,6 +165,7 @@ function formatCell(v: unknown): string {
     }
     return v;
   }
+  // currency-aware report formatting: follow-up — column money-semantics not modeled in report schema
   if (typeof v === "number") return Number.isInteger(v) ? v.toString() : v.toFixed(2);
   if (typeof v === "boolean") return v ? "Yes" : "No";
   try {
