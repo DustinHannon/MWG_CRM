@@ -45,3 +45,7 @@ export {
   type StandardFormTextareaProps,
   type StandardFormSelectProps,
 } from "./standard-form";
+export {
+  StandardFormCheckbox,
+  type StandardFormCheckboxProps,
+} from "./standard-form-checkbox";

@@ -52,6 +52,8 @@ export interface StandardFormFieldProps {
   maxLength?: number;
   /** Per-field validation message (from `ActionFailure.fieldErrors`). */
   error?: string;
+  /** Supplementary hint shown below the input when there is no error. */
+  helperText?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
@@ -67,11 +69,13 @@ export function StandardFormField({
   inputMode,
   maxLength,
   error,
+  helperText,
   onChange,
 }: StandardFormFieldProps) {
   const datePicker = useShowPicker();
   const isDateLike = type === "date" || type === "datetime-local";
   const errorId = `${name}-error`;
+  const helperId = `${name}-helper`;
   return (
     <label className={LABEL_CLASS}>
       {label}
@@ -87,10 +91,15 @@ export function StandardFormField({
         onChange={onChange}
         onClick={isDateLike ? datePicker : undefined}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={error ? errorId : helperText ? helperId : undefined}
         className={CONTROL_CLASS}
       />
       <FieldError id={errorId} message={error} />
+      {helperText && !error ? (
+        <span id={helperId} className="mt-1 block text-[11px] text-muted-foreground/70">
+          {helperText}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -140,7 +149,7 @@ export function StandardFormTextarea({
 export interface StandardFormSelectProps {
   name: string;
   label: string;
-  options: readonly string[];
+  options: readonly string[] | readonly { value: string; label: string }[];
   defaultValue?: string;
   required?: boolean;
   error?: string;
@@ -177,11 +186,15 @@ export function StandardFormSelect({
         {placeholderOption != null ? (
           <option value="">{placeholderOption}</option>
         ) : null}
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o.replaceAll("_", " ")}
-          </option>
-        ))}
+        {options.map((o) => {
+          const value = typeof o === "string" ? o : o.value;
+          const label = typeof o === "string" ? o.replaceAll("_", " ") : o.label;
+          return (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          );
+        })}
       </select>
       <FieldError id={errorId} message={error} />
     </label>
