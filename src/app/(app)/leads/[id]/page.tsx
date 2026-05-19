@@ -20,6 +20,7 @@ import { env } from "@/lib/env";
 import { getLeadById } from "@/lib/leads";
 import { listTasksForLead } from "@/lib/tasks";
 import { formatPersonName } from "@/lib/format/person-name";
+import { formatCurrency } from "@/lib/format/currency";
 import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
 import { LeadDetailDelete } from "./_components/lead-detail-delete";
 import { canDeleteLead } from "@/lib/access/can-delete";
@@ -234,7 +235,9 @@ export default async function LeadDetailPage({
           <Field label="Industry" value={lead.industry} />
           <Field
             label="Estimated value"
-            value={lead.estimatedValue ? `$${lead.estimatedValue}` : null}
+            value={
+              lead.estimatedValue ? formatCurrency(lead.estimatedValue) : null
+            }
           />
           <Field
             label="Estimated close"

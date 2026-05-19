@@ -13,6 +13,7 @@ import { formatUserTime } from "@/lib/format-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
 import { formatPersonName } from "@/lib/format/person-name";
+import { formatCurrency } from "@/lib/format/currency";
 import { AutoPrint } from "./auto-print";
 import "./print.css";
 
@@ -126,7 +127,7 @@ export default async function LeadPrintPage({
           <dt>Job title</dt>
           <dd>{lead.jobTitle ?? "—"}</dd>
           <dt>Estimated value</dt>
-          <dd>{lead.estimatedValue ?? "—"}</dd>
+          <dd>{formatCurrency(lead.estimatedValue)}</dd>
           <dt>Estimated close</dt>
           <dd>
             <UserTime value={lead.estimatedCloseDate} mode="date" />

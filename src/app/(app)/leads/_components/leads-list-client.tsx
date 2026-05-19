@@ -35,6 +35,7 @@ import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserChip } from "@/components/user-display/user-chip";
 import { cn } from "@/lib/utils";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
+import { formatCurrency } from "@/lib/format/currency";
 import {
   AVAILABLE_COLUMNS,
   type ColumnKey,
@@ -973,9 +974,7 @@ function renderCell(lead: LeadRow, col: ColumnKey, prefs: TimePrefs) {
     case "estimatedValue":
       return (
         <span className="tabular-nums text-muted-foreground">
-          {lead.estimatedValue
-            ? `$${Number(lead.estimatedValue).toLocaleString()}`
-            : "—"}
+          {formatCurrency(lead.estimatedValue)}
         </span>
       );
     case "estimatedCloseDate":

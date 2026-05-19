@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { formatPersonName } from "@/lib/format/person-name";
+import { formatCurrency } from "@/lib/format/currency";
 // direct import (not the barrel) keeps the server-only
 // UserHoverCard out of the client bundle.
 import { UserAvatar } from "@/components/user-display/user-avatar";
@@ -171,7 +172,7 @@ function Column({
         </p>
         {totalValue > 0 ? (
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            ${totalValue.toLocaleString()}
+            {formatCurrency(totalValue)}
           </p>
         ) : null}
       </div>
@@ -256,7 +257,7 @@ function Card({ card }: { card: Card }) {
         ) : null}
         {card.estimatedValue ? (
           <span className="ml-auto tabular-nums text-foreground/80">
-            ${Number(card.estimatedValue).toLocaleString()}
+            {formatCurrency(card.estimatedValue)}
           </span>
         ) : null}
       </div>
