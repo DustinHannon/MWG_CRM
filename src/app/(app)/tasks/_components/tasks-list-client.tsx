@@ -12,6 +12,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Circle, CheckCircle2 } from "lucide-react";
 import {
   useCallback,
   useMemo,
@@ -1007,24 +1008,42 @@ function TaskDesktopRow({
       style={{ minWidth: `${minRowWidth}px` }}
     >
       <div className="flex w-10 shrink-0 items-center justify-center px-2 py-3">
+        {/* Selection checkbox (drives the Complete/Delete/Reassign bulk
+            toolbar). Visual className matches the canonical RowCheckbox
+            used by accounts/contacts/opportunities; tasks keeps a local
+            `Set<string>` selection model rather than the per-entity
+            archive context those entities use (see file header). */}
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelect}
           disabled={disabled}
           aria-label={`Select ${task.title}`}
-          className="h-4 w-4 cursor-pointer"
+          className="h-4 w-4 cursor-pointer rounded border-border bg-muted/40 text-primary focus:ring-ring"
         />
       </div>
       <div className="flex w-8 shrink-0 items-center justify-center px-2 py-3">
-        <input
-          type="checkbox"
-          checked={isCompleted}
-          onChange={onToggleComplete}
+        {/* Status toggle: distinct from the selection checkbox above.
+            Renders as a circle icon (open) or filled check (completed)
+            so sighted users can tell the two controls apart at a glance;
+            aria-label keeps it accessible. */}
+        <button
+          type="button"
+          onClick={onToggleComplete}
           disabled={disabled}
+          aria-pressed={isCompleted}
           aria-label={`Mark ${task.title} ${isCompleted ? "open" : "complete"}`}
-          className="h-4 w-4 cursor-pointer"
-        />
+          className="inline-flex items-center justify-center rounded-full text-muted-foreground transition hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isCompleted ? (
+            <CheckCircle2
+              className="h-5 w-5 text-[var(--status-won-fg)]"
+              aria-hidden
+            />
+          ) : (
+            <Circle className="h-5 w-5" aria-hidden />
+          )}
+        </button>
       </div>
       {columns.map((c) => {
         const colLabel =
