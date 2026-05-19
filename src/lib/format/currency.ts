@@ -14,6 +14,9 @@ const USD = new Intl.NumberFormat("en-US", {
  */
 export function formatCurrency(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
+  // `Number("  ")` is 0, so a whitespace-only string would otherwise
+  // render `$0.00`. Treat trimmed-empty as blank to match the contract.
+  if (typeof value === "string" && value.trim() === "") return "—";
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return "—";
   return USD.format(n);
