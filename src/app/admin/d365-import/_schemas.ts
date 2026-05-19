@@ -5,34 +5,14 @@ import { D365_HALT_REASONS } from "@/lib/d365/audit-events";
 
 /**
  * Zod schemas for every server-action FormData input on
- * the D365 import surface. Each schema parses the raw `Record<string,
- * string>` produced by `formToObject` (entries that come in as `""`
- * are normalised to `undefined`).
- *
- * Server actions in `actions.ts` use `safeParse` and translate failures
- * via `ValidationError` so the UI surfaces a clean public message.
+ * the D365 import surface. Each schema parses the `Record<string,
+ * unknown>` produced by `formDataToObject` inside `parseFormOrThrow`
+ * (`@/lib/forms/form-data`), which translates parse failures into the
+ * standard `ValidationError` envelope; actions.ts does not call
+ * `safeParse` directly.
  */
 
 const uuid = z.string().uuid();
-
-/**
- * Helper: Next.js form `FormData` always emits string values. We
- * normalise empty strings to `undefined` before parse so optional
- * fields don't have to special-case `""`.
- */
-export function formDataToObject(formData: FormData): Record<string, unknown> {
-  const obj: Record<string, unknown> = {};
-  for (const [k, v] of formData.entries()) {
-    if (typeof v === "string") {
-      const trimmed = v.trim();
-      if (trimmed.length === 0) continue;
-      obj[k] = trimmed;
-      continue;
-    }
-    obj[k] = v;
-  }
-  return obj;
-}
 
 const entityTypeSchema = z.enum(D365_ENTITY_TYPES);
 

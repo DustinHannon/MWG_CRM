@@ -24,13 +24,13 @@ import { mapBatch } from "@/lib/d365/map-batch";
 import { commitBatch } from "@/lib/d365/commit-batch";
 import { resumeRun, type ResumeResolution } from "@/lib/d365/resume-run";
 import { backfillOpportunityFks } from "@/lib/d365/backfill-opportunity-fks";
+import { parseFormOrThrow } from "@/lib/forms/form-data";
 import {
   abortRunSchema,
   approveRecordSchema,
   commitBatchSchema,
   createRunSchema,
   editRecordFieldsSchema,
-  formDataToObject,
   markCompleteSchema,
   pullNextBatchSchema,
   quickPullSchema,
@@ -57,22 +57,6 @@ import {
 /* -------------------------------------------------------------------------- *
  * Helpers *
  * -------------------------------------------------------------------------- */
-
-function parse<T>(
-  schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ path: (string | number)[]; message: string }> } } },
-  formData: FormData,
-): T {
-  const result = schema.safeParse(formDataToObject(formData));
-  if (!result.success) {
-    const first = result.error.issues[0];
-    throw new ValidationError(
-      first
-        ? `${first.path.join(".") || "input"}: ${first.message}`
-        : "Validation failed.",
-    );
-  }
-  return result.data;
-}
 
 /**
  * Build a default scope for a quick-pull. Per user instruction
@@ -146,7 +130,7 @@ export async function createRunAction(
     { action: "d365.import.run.create" },
     async () => {
       const user = await requireAdmin();
-      const input = parse(createRunSchema, formData);
+      const input = parseFormOrThrow(createRunSchema, formData);
 
       const supportsActiveOnly =
         input.entityType === "lead" ||
@@ -211,7 +195,7 @@ export async function quickPullAction(
     { action: "d365.import.run.quick_pull" },
     async () => {
       const user = await requireAdmin();
-      const input = parse(quickPullSchema, formData);
+      const input = parseFormOrThrow(quickPullSchema, formData);
 
       // Find a reusable run for this admin + entity type. Acceptable
       // statuses: created, fetching, mapping, reviewing. paused_for_review
@@ -289,7 +273,7 @@ export async function pullNextBatchAction(
     { action: "d365.import.batch.pull_next" },
     async () => {
       const user = await requireAdmin();
-      const { runId } = parse(pullNextBatchSchema, formData);
+      const { runId } = parseFormOrThrow(pullNextBatchSchema, formData);
 
       const [run] = await db
         .select({ id: importRuns.id, status: importRuns.status })
@@ -354,7 +338,7 @@ export async function abortRunAction(
     { action: "d365.import.run.abort" },
     async () => {
       const user = await requireAdmin();
-      const { runId } = parse(abortRunSchema, formData);
+      const { runId } = parseFormOrThrow(abortRunSchema, formData);
 
       const [run] = await db
         .select({ id: importRuns.id, status: importRuns.status })
@@ -393,7 +377,7 @@ export async function markRunCompleteAction(
     { action: "d365.import.run.mark_complete" },
     async () => {
       const user = await requireAdmin();
-      const { runId } = parse(markCompleteSchema, formData);
+      const { runId } = parseFormOrThrow(markCompleteSchema, formData);
 
       const [run] = await db
         .select({ id: importRuns.id, status: importRuns.status })
@@ -483,7 +467,7 @@ export async function resetStuckBatchAction(
     { action: "d365.import.batch.reset_stuck" },
     async () => {
       const user = await requireAdmin();
-      const { batchId } = parse(resetStuckBatchSchema, formData);
+      const { batchId } = parseFormOrThrow(resetStuckBatchSchema, formData);
 
       const [batch] = await db
         .select({
@@ -550,7 +534,7 @@ export async function resumeRunAction(
     { action: "d365.import.run.resume" },
     async () => {
       const user = await requireAdmin();
-      const input = parse(resumeRunSchema, formData);
+      const input = parseFormOrThrow(resumeRunSchema, formData);
 
       const [run] = await db
         .select({
@@ -626,7 +610,7 @@ export async function approveRecordAction(
     { action: "d365.import.record.approve" },
     async () => {
       const user = await requireAdmin();
-      const { recordId } = parse(approveRecordSchema, formData);
+      const { recordId } = parseFormOrThrow(approveRecordSchema, formData);
       const rec = await loadRecord(recordId);
       if (rec.status === "committed" || rec.status === "skipped") {
         throw new ValidationError(
@@ -662,7 +646,7 @@ export async function rejectRecordAction(
     { action: "d365.import.record.reject" },
     async () => {
       const user = await requireAdmin();
-      const { recordId, reason } = parse(rejectRecordSchema, formData);
+      const { recordId, reason } = parseFormOrThrow(rejectRecordSchema, formData);
       const rec = await loadRecord(recordId);
       if (rec.status === "committed" || rec.status === "skipped") {
         throw new ValidationError(
@@ -699,7 +683,7 @@ export async function editRecordFieldsAction(
     { action: "d365.import.record.edit_fields" },
     async () => {
       const user = await requireAdmin();
-      const { recordId, mappedPayloadJson } = parse(
+      const { recordId, mappedPayloadJson } = parseFormOrThrow(
         editRecordFieldsSchema,
         formData,
       );
@@ -776,7 +760,7 @@ export async function setConflictResolutionAction(
     { action: "d365.import.record.set_conflict_resolution" },
     async () => {
       const user = await requireAdmin();
-      const { recordId, resolution } = parse(
+      const { recordId, resolution } = parseFormOrThrow(
         setConflictResolutionSchema,
         formData,
       );
@@ -817,7 +801,7 @@ export async function commitBatchAction(
     { action: "d365.import.batch.commit" },
     async () => {
       const user = await requireAdmin();
-      const { batchId } = parse(commitBatchSchema, formData);
+      const { batchId } = parseFormOrThrow(commitBatchSchema, formData);
 
       const [batch] = await db
         .select({
