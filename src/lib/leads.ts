@@ -31,8 +31,9 @@ import {
 } from "@/lib/lead-constants";
 import {
   nameField,
+  optionalEmailField,
   optionalMoneyField,
-  urlField,
+  optionalUrlField,
 } from "@/lib/validation/primitives";
 
 export { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES };
@@ -122,11 +123,11 @@ const leadCreateSchemaBase = z.object({
   jobTitle: z.string().max(200).optional().nullable(),
   companyName: z.string().max(200).optional().nullable(),
   industry: z.string().max(100).optional().nullable(),
-  email: z.string().email().or(z.literal("")).optional().nullable(),
+  email: optionalEmailField,
   phone: z.string().max(40).optional().nullable(),
   mobilePhone: z.string().max(40).optional().nullable(),
-  website: urlField.or(z.literal("")).optional().nullable(),
-  linkedinUrl: urlField.or(z.literal("")).optional().nullable(),
+  website: optionalUrlField,
+  linkedinUrl: optionalUrlField,
   street1: z.string().max(200).optional().nullable(),
   street2: z.string().max(200).optional().nullable(),
   city: z.string().max(100).optional().nullable(),

@@ -21,8 +21,9 @@ import { expectAffected } from "@/lib/db/concurrent-update";
 import { ConflictError } from "@/lib/errors";
 import {
   optionalCountField,
+  optionalEmailField,
   optionalMoneyField,
-  urlField,
+  optionalUrlField,
 } from "@/lib/validation/primitives";
 
 /**
@@ -39,16 +40,9 @@ import {
 export const accountCreateSchema = z.object({
   name: z.string().trim().min(1, "Required").max(200),
   industry: z.string().trim().max(100).optional().nullable(),
-  website: urlField.or(z.literal("")).optional().nullable(),
+  website: optionalUrlField,
   phone: z.string().trim().max(60).optional().nullable(),
-  email: z
-    .string()
-    .trim()
-    .email("Not a valid email")
-    .max(254)
-    .or(z.literal(""))
-    .optional()
-    .nullable(),
+  email: optionalEmailField,
   accountNumber: z.string().trim().max(100).optional().nullable(),
   numberOfEmployees: optionalCountField,
   annualRevenue: optionalMoneyField,

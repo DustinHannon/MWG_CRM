@@ -10,7 +10,9 @@ import { requireSession } from "@/lib/auth-helpers";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import {
   optionalCountField,
+  optionalEmailField,
   optionalMoneyField,
+  optionalUrlField,
 } from "@/lib/validation/primitives";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
@@ -304,15 +306,9 @@ const accountUpdateSchema = z.object({
   version: z.coerce.number().int().positive(),
   name: z.string().trim().min(1).max(200),
   industry: z.string().trim().max(120).optional().nullable(),
-  website: z.string().trim().max(200).optional().nullable(),
+  website: optionalUrlField,
   phone: z.string().trim().max(40).optional().nullable(),
-  email: z
-    .string()
-    .trim()
-    .max(254)
-    .optional()
-    .nullable()
-    .transform((v) => (v && v.length > 0 ? v : null)),
+  email: optionalEmailField,
   accountNumber: z.string().trim().max(100).optional().nullable(),
   numberOfEmployees: optionalCountField,
   annualRevenue: optionalMoneyField,

@@ -78,13 +78,24 @@ function isNextControlFlowError(err: unknown): boolean {
  */
 function translatePgError(err: unknown): unknown {
   if (!err || typeof err !== "object") return err;
-  const code = (err as { code?: unknown }).code;
-  // postgres-js always returns Error subclasses
-  // today, but a non-Error object that happens to carry `.code` would
-  // surface as `"[object Object]"` via `(err as Error).message`. Coerce
-  // safely so the audit `cause` field stays readable.
+  // Drizzle wraps the postgres-js error in a DrizzleQueryError whose
+  // top-level `.code` is undefined; the real SQLSTATE lives one level
+  // deeper on `.cause.code`. One level of unwrap only — be defensive.
+  const topCode = (err as { code?: unknown }).code;
+  const cause = (err as { cause?: unknown }).cause;
+  const causeCode =
+    cause && typeof cause === "object"
+      ? (cause as { code?: unknown }).code
+      : undefined;
+  const code = topCode ?? causeCode;
+  // Use the cause's message when the wrapper message is generic so the
+  // audit `cause` field contains the actual postgres error detail.
   const causeMsg =
-    err instanceof Error ? err.message : String(err);
+    cause instanceof Error
+      ? cause.message
+      : err instanceof Error
+        ? err.message
+        : String(err);
   if (code === "23514") {
     return new ValidationError("One or more fields failed validation.", {
       pgCode: "23514",
@@ -198,6 +209,19 @@ export async function withErrorBoundary<T>(
     const isKnown = err instanceof KnownError;
     const durationMs = Math.round(performance.now() - start);
 
+    const knownMeta = isKnown ? (err as KnownError).meta : undefined;
+    const pgDetail =
+      knownMeta && typeof knownMeta.pgCode === "string"
+        ? {
+            pgCode: knownMeta.pgCode,
+            ...(typeof knownMeta.cause === "string"
+              ? { cause: knownMeta.cause }
+              : {}),
+            ...(typeof knownMeta.constraint === "string"
+              ? { constraint: knownMeta.constraint }
+              : {}),
+          }
+        : undefined;
     logger.error("action.failure", {
       requestId,
       action: ctx.action,
@@ -211,6 +235,7 @@ export async function withErrorBoundary<T>(
         : err instanceof Error
           ? err.message
           : String(err),
+      ...(pgDetail ? { pgDetail } : {}),
       ...(process.env.NODE_ENV !== "production" && err instanceof Error
         ? { errorStack: err.stack }
         : {}),

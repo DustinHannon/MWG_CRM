@@ -147,6 +147,85 @@ export const urlField = z
     message: "URL must use http or https",
   });
 
+/**
+ * Optional URL field for forms. Empty string or whitespace-only → null.
+ * A non-empty value must be a valid http/https URL; anything else is
+ * rejected with a clear Zod error. Output: string | null.
+ *
+ * Use this instead of `urlField.or(z.literal("")).optional().nullable()`
+ * so that `''` is guaranteed to become null — never reaches a DB CHECK
+ * constraint on the website/linkedinUrl columns.
+ */
+export const optionalUrlField = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .transform((v, ctx) => {
+    if (v == null || v === "") return null;
+    if (v.length > 2048) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "URL is too long",
+      });
+      return z.NEVER;
+    }
+    if (!/^https?:\/\//i.test(v)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "URL must use http or https",
+      });
+      return z.NEVER;
+    }
+    try {
+      new URL(v);
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Not a valid URL",
+      });
+      return z.NEVER;
+    }
+    return v;
+  });
+
+/**
+ * Optional email field for forms. Empty string or whitespace-only → null.
+ * A non-empty value must be a valid email (RFC-ish, same rules as
+ * `emailField`); anything else is rejected with a clear Zod error.
+ * Output: string | null.
+ *
+ * Use this instead of `z.string().email().or(z.literal("")).optional().nullable()`
+ * so that `''` is guaranteed to become null — never reaches a DB CHECK
+ * constraint on the email column.
+ */
+export const optionalEmailField = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .transform((v, ctx) => {
+    if (v == null || v === "") return null;
+    // Reuse emailField's rules: toLowerCase + email shape + max length.
+    const lower = v.toLowerCase();
+    if (lower.length > 254) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Email is too long",
+      });
+      return z.NEVER;
+    }
+    // Basic RFC-ish check — same as Zod's built-in .email().
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(lower)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Not a valid email address",
+      });
+      return z.NEVER;
+    }
+    return lower;
+  });
+
 /** Currency — non-negative, ≤ $1B, two decimal places. */
 export const currencyField = z
   .number()
