@@ -7,7 +7,7 @@ import {
   AVAILABLE_ACCOUNT_COLUMNS,
   type AccountColumnKey,
 } from "@/lib/account-view-constants";
-import { ModifiedBadge } from "@/components/saved-views";
+import { ModifiedBadge, SaveViewDialog } from "@/components/saved-views";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import {
   subscribeToViewAction,
@@ -296,10 +296,44 @@ export function AccountViewToolbar({
 
       {saveOpen ? (
         <SaveViewDialog
-          defaultColumns={activeColumns}
-          activeViewId={activeViewId}
-          search={search.toString()}
           onClose={() => setSaveOpen(false)}
+          namePlaceholder="e.g. Texas healthcare accounts"
+          buildPayloadJson={({ name, pin }) => {
+            const params = new URLSearchParams(search.toString());
+            const filters: Record<string, unknown> = {};
+            if (params.get("q")) filters.search = params.get("q");
+            if (params.get("owner"))
+              filters.owner = params.get("owner")!.split(",").filter(Boolean);
+            if (params.get("industry"))
+              filters.industry = params.get("industry")!.split(",").filter(Boolean);
+            if (params.get("recentlyUpdatedDays")) {
+              const n = Number(params.get("recentlyUpdatedDays"));
+              if (Number.isFinite(n) && n > 0) filters.recentlyUpdatedDays = n;
+            }
+            if (params.get("tag")) {
+              const raw = params.get("tag") ?? "";
+              const list = raw
+                .split(",")
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0);
+              if (list.length > 0) filters.tags = list;
+            }
+            const sortField = params.get("sort") ?? "updatedAt";
+            const sortDir = params.get("dir") === "asc" ? "asc" : "desc";
+            return JSON.stringify({
+              name,
+              isPinned: pin,
+              scope: activeViewId.includes("all") ? "all" : "mine",
+              filters,
+              columns: activeColumns,
+              sort: { field: sortField, direction: sortDir },
+            });
+          }}
+          onSave={async ({ payloadJson }) => {
+            const fd = new FormData();
+            fd.set("payload", payloadJson);
+            return createAccountViewAction(fd);
+          }}
           onSaved={(id) => {
             setSaveOpen(false);
             const params = new URLSearchParams(search.toString());
@@ -446,139 +480,6 @@ function ColumnChooser({
         ))}
       </div>
     </>
-  );
-}
-
-function SaveViewDialog({
-  defaultColumns,
-  activeViewId,
-  search,
-  onClose,
-  onSaved,
-}: {
-  defaultColumns: AccountColumnKey[];
-  activeViewId: string;
-  search: string;
-  onClose: () => void;
-  onSaved: (newId: string) => void;
-}) {
-  const [name, setName] = useState("");
-  const [pin, setPin] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setSubmitting(true);
-    setError(null);
-
-    // Derive filters from URL params.
-    const params = new URLSearchParams(search);
-    const filters: Record<string, unknown> = {};
-    if (params.get("q")) filters.search = params.get("q");
-    if (params.get("owner"))
-      filters.owner = params.get("owner")!.split(",").filter(Boolean);
-    if (params.get("industry"))
-      filters.industry = params.get("industry")!.split(",").filter(Boolean);
-    if (params.get("recentlyUpdatedDays")) {
-      const n = Number(params.get("recentlyUpdatedDays"));
-      if (Number.isFinite(n) && n > 0) filters.recentlyUpdatedDays = n;
-    }
-    if (params.get("tag")) {
-      // tag accepts a comma-separated list (multi-select).
-      const raw = params.get("tag") ?? "";
-      const list = raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-      if (list.length > 0) filters.tags = list;
-    }
-
-    const sortField = params.get("sort") ?? "updatedAt";
-    const sortDir = params.get("dir") === "asc" ? "asc" : "desc";
-
-    const payload = {
-      name: name.trim(),
-      isPinned: pin,
-      scope: activeViewId.includes("all") ? "all" : "mine",
-      filters,
-      columns: defaultColumns,
-      sort: { field: sortField, direction: sortDir },
-    };
-    const fd = new FormData();
-    fd.set("payload", JSON.stringify(payload));
-    const res = await createAccountViewAction(fd);
-    setSubmitting(false);
-    if (!res.ok) {
-      setError(res.error ?? "Save failed.");
-      return;
-    }
-    if (res.data?.id) onSaved(`saved:${res.data.id}`);
-  };
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-border bg-[var(--popover)] text-[var(--popover-foreground)] p-6 shadow-2xl"
-      >
-        <h2 className="text-lg font-semibold">Save current view</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Captures your current filters and columns so you can come back to
-          them with one click.
-        </p>
-        <form onSubmit={onSubmit} className="mt-4 space-y-3">
-          <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-            Name
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={80}
-              className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-              placeholder="e.g. Texas healthcare accounts"
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={pin}
-              onChange={(e) => setPin(e.target.checked)}
-              className="h-4 w-4 rounded border-border bg-muted/40 text-primary focus:ring-ring"
-            />
-            <span>Pin to top of list</span>
-          </label>
-          {error ? (
-            <p className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-2 text-xs text-[var(--status-lost-fg)]">
-              {error}
-            </p>
-          ) : null}
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting || !name.trim()}
-              className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting ? "Saving…" : "Save view"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }
 

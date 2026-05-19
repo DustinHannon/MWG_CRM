@@ -4,3 +4,4 @@
  * "@/components/saved-views" rather than per-file paths.
  */
 export { ModifiedBadge, type ModifiedBadgeProps } from "./modified-badge";
+export { SaveViewDialog, type SaveViewDialogProps } from "./save-view-dialog";
