@@ -25,6 +25,7 @@ import {
   undoArchiveOpportunityAction,
 } from "../../actions";
 import { ConfirmDeleteDialog, showUndoToast } from "@/components/delete";
+import { formatCurrency } from "@/lib/format/currency";
 
 interface Card {
   id: string;
@@ -218,7 +219,7 @@ function Column({
         </p>
         {total > 0 ? (
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            ${total.toLocaleString()}
+            {formatCurrency(total)}
           </p>
         ) : null}
       </div>
@@ -322,7 +323,7 @@ function Card({
         )}
         {card.amount ? (
           <span className="tabular-nums text-foreground/80">
-            ${Number(card.amount).toLocaleString()}
+            {formatCurrency(card.amount)}
           </span>
         ) : null}
       </div>
