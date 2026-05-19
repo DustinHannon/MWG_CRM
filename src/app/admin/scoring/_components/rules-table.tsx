@@ -193,6 +193,7 @@ export function ScoringRulesTable({ rows }: { rows: RuleRow[] }) {
                         onChange={(e) =>
                           setDraft({
                             ...draft,
+                            // Intentional sane default: blank/NaN → 0 (in-range, visible in-row, slider-mirrored); not the silent-loss class.
                             points: Number(e.target.value || 0),
                           })
                         }
@@ -378,6 +379,7 @@ function CreateInline({
           max={100}
           value={draft.points}
           onChange={(e) =>
+            // Intentional sane default: blank/NaN → 0 (in-range, visible in-row, slider-mirrored); not the silent-loss class.
             setDraft({ ...draft, points: Number(e.target.value || 0) })
           }
           placeholder="Points"

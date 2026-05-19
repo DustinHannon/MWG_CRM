@@ -113,6 +113,7 @@ function Slider({
         min={-100}
         max={500}
         value={value}
+        // Intentional sane default: blank/NaN → 0 (in-range, visible in-row, slider-mirrored); not the silent-loss class.
         onChange={(e) => onChange(Number(e.target.value || 0))}
         className="w-20 rounded border border-glass-border bg-input/40 px-2 py-1 text-right text-sm tabular-nums"
       />

@@ -459,6 +459,14 @@ function MappedFieldsEditor({
   const otherKeys = Object.keys(draft).filter(
     (k) => !configByName.has(k) && !k.startsWith("_"),
   );
+  // Stable type map for "Other" keys: type is determined from the ORIGINAL
+  // value at draft initialisation (i.e. the JS type before any user edit),
+  // not from the post-edit draft string. This mirrors exactly what the
+  // renderer uses to pick the input type, and ensures onSave validates and
+  // coerces by the RENDER-time type rather than re-inferring from a string.
+  const otherKeyTypes = new Map<string, FieldConfig["type"]>(
+    otherKeys.map((name) => [name, inferTypeFromValue(initial[name])]),
+  );
   if (otherKeys.length > 0) {
     sections.set(
       "Other",
@@ -466,7 +474,7 @@ function MappedFieldsEditor({
         name,
         label: name,
         section: "Other",
-        type: inferTypeFromValue(draft[name]),
+        type: otherKeyTypes.get(name)!,
       })),
     );
   }
@@ -479,10 +487,64 @@ function MappedFieldsEditor({
   function onSave() {
     setError(null);
     setSaved(false);
+
+    // Validate number fields before serializing. A non-empty string that
+    // is not a finite number (e.g. "abc", "1e!") must be caught here —
+    // JSON.stringify(NaN) → null, which would commit silently with no error.
+    // Empty string is legitimate (→ null, cleared field).
+    const invalidFields: string[] = [];
+    for (const f of config) {
+      if (f.type !== "number") continue;
+      const raw = draft[f.name];
+      if (raw === null || raw === undefined || raw === "") continue;
+      const n = Number(raw);
+      if (!isFinite(n)) invalidFields.push(f.label);
+    }
+    // Also validate "Other" number fields using the STABLE render-time type
+    // (otherKeyTypes), NOT inferTypeFromValue(draft[key]) which would return
+    // "text" for any edited value (a string) and silently skip validation.
+    for (const key of otherKeys) {
+      if (otherKeyTypes.get(key) !== "number") continue;
+      const raw = draft[key];
+      if (raw === null || raw === undefined || raw === "") continue;
+      const n = Number(raw);
+      if (!isFinite(n)) invalidFields.push(key);
+    }
+    if (invalidFields.length > 0) {
+      setError(
+        `Invalid number value in: ${invalidFields.join(", ")}. Enter a valid number or clear the field.`,
+      );
+      return;
+    }
+
+    // Coerce number-type fields from their raw string back to JS numbers
+    // before stringify so the stored JSON contains numeric values, not strings.
+    const coerced: Record<string, unknown> = { ...draft };
+    for (const f of config) {
+      if (f.type !== "number") continue;
+      const raw = coerced[f.name];
+      if (raw === null || raw === undefined || raw === "") {
+        coerced[f.name] = null;
+      } else {
+        coerced[f.name] = Number(raw);
+      }
+    }
+    // Coerce "Other" number fields using the stable render-time type so that
+    // an edited "Other" numeric field commits as a JSON NUMBER, not a string.
+    for (const key of otherKeys) {
+      if (otherKeyTypes.get(key) !== "number") continue;
+      const raw = coerced[key];
+      if (raw === null || raw === undefined || raw === "") {
+        coerced[key] = null;
+      } else {
+        coerced[key] = Number(raw);
+      }
+    }
+
     startTransition(async () => {
       const fd = new FormData();
       fd.set("recordId", record.id);
-      fd.set("mappedPayloadJson", JSON.stringify(draft));
+      fd.set("mappedPayloadJson", JSON.stringify(coerced));
       const res = await editRecordFieldsAction(fd);
       if (!res.ok) setError(res.error);
       else setSaved(true);
@@ -641,13 +703,18 @@ function FieldInput({
     );
   }
   if (type === "number") {
+    // type="text" inputMode="decimal" keeps the raw typed string in the
+    // draft so mid-edit values (e.g. "-", "1.") and garbage (e.g. "1e!")
+    // are not silently coerced to NaN→null before Save is clicked.
+    // Validation happens in onSave (MappedFieldsEditor) before stringify.
     return (
       <input
-        type="number"
+        type="text"
+        inputMode="decimal"
         disabled={readOnly}
-        value={value == null ? "" : Number(value)}
+        value={value == null ? "" : String(value)}
         onChange={(e) =>
-          onChange(e.target.value === "" ? null : Number(e.target.value))
+          onChange(e.target.value === "" ? null : e.target.value)
         }
         className={baseInput}
       />
