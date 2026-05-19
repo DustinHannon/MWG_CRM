@@ -1,54 +1,6 @@
-/**
- * Smoke assertions for optionalUrlField and optionalEmailField.
- * Run: npx tsx src/lib/validation/__tests__/optional-fields.assert.mjs
- */
-import { z } from "zod";
-
-// ---------------------------------------------------------------------------
-// Inline the schemas under test so this file has no build-time deps.
-// These match the implementations in primitives.ts exactly.
-// ---------------------------------------------------------------------------
-
-const optionalUrlField = z
-  .string()
-  .trim()
-  .optional()
-  .nullable()
-  .transform((v, ctx) => {
-    if (v == null || v === "") return null;
-    if (v.length > 2048) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "URL is too long" });
-      return z.NEVER;
-    }
-    if (!/^https?:\/\//i.test(v)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "URL must use http or https" });
-      return z.NEVER;
-    }
-    try { new URL(v); } catch {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Not a valid URL" });
-      return z.NEVER;
-    }
-    return v;
-  });
-
-const optionalEmailField = z
-  .string()
-  .trim()
-  .optional()
-  .nullable()
-  .transform((v, ctx) => {
-    if (v == null || v === "") return null;
-    const lower = v.toLowerCase();
-    if (lower.length > 254) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Email is too long" });
-      return z.NEVER;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(lower)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Not a valid email address" });
-      return z.NEVER;
-    }
-    return lower;
-  });
+// Run: npx tsx src/lib/validation/__tests__/optional-fields.assert.mjs
+// Smoke assertions for optionalUrlField and optionalEmailField.
+import { optionalUrlField, optionalEmailField } from "../primitives.ts";
 
 // ---------------------------------------------------------------------------
 // Assertions
