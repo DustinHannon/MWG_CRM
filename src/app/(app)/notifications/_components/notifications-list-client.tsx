@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
 import {
   StandardEmptyState,
   StandardListPage,
@@ -10,20 +11,31 @@ import {
 import { ActivityPill } from "@/components/ui/activity-pill";
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import { type TimePrefs } from "@/lib/format-time";
+import { restoreFromNotificationAction } from "@/components/notifications/actions";
 
 /**
  * Row shape served by /api/notifications/list (createdAt is an ISO
- * string over the wire). The raw `kind` is deliberately absent — it is
- * an internal discriminator, never user copy; the row self-describes
- * via the composed `title`.
+ * string over the wire). The raw `kind` is exposed only because the
+ * client dispatches the actionable Restore button on
+ * kind === "archive_pending"; it is NEVER rendered as raw copy — the
+ * row self-describes via the composed `title`.
  */
 export interface NotificationRow {
   id: string;
+  /**
+   * Internal discriminator — never shown as raw copy; used to render
+   * the Restore button on archive_pending rows.
+   */
+  kind: string;
   title: string;
   body: string | null;
   link: string | null;
   /** ActivityVerb for kind="activity" rows; null for other kinds. */
   verb: string | null;
+  /** Entity discriminator for actionable rows. */
+  entityType: string | null;
+  /** Entity id for actionable rows. */
+  entityId: string | null;
   isRead: boolean;
   createdAt: string;
 }
@@ -143,6 +155,112 @@ function NotificationContent({
   );
 }
 
+/**
+ * Restore button for an actionable `archive_pending` row. Dispatches
+ * restoreFromNotificationAction with the snapshotted entityType +
+ * entityId. The server action runs the same canDelete<E> gate as the
+ * per-entity restoreXAction (single code path, two entry points) and
+ * marks the notification is_read = true on success — we mirror the
+ * read state locally via `isResolved` so the button shows "Restored"
+ * until the list re-fetches.
+ */
+function RestoreNotificationButton({
+  notificationId,
+  entityType,
+  entityId,
+  isResolved,
+}: {
+  notificationId: string;
+  entityType: string;
+  entityId: string;
+  isResolved: boolean;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [doneState, setDoneState] = useState<
+    "idle" | "restored" | "unavailable"
+  >(isResolved ? "restored" : "idle");
+
+  function handleRestore(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    startTransition(async () => {
+      const res = await restoreFromNotificationAction({
+        notificationId,
+        entityType,
+        entityId,
+      });
+      if (res.ok) {
+        setDoneState("restored");
+        toast.success("Restored.");
+        return;
+      }
+      const msg = res.error ?? "Restore failed.";
+      if (/not found|permanently deleted|no longer/i.test(msg)) {
+        setDoneState("unavailable");
+        toast.error("No longer available.");
+        return;
+      }
+      toast.error(msg);
+    });
+  }
+
+  if (doneState === "restored") {
+    return (
+      <button
+        type="button"
+        disabled
+        className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+      >
+        Restored
+      </button>
+    );
+  }
+  if (doneState === "unavailable") {
+    return (
+      <button
+        type="button"
+        disabled
+        className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+      >
+        No longer available
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleRestore}
+      disabled={pending}
+      className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-foreground transition hover:bg-primary/20 disabled:opacity-50"
+    >
+      {pending ? "Restoring…" : "Restore"}
+    </button>
+  );
+}
+
+/**
+ * Renders the Restore button when the row is an actionable
+ * archive_pending prompt. Rendered OUTSIDE the wrapping <Link> on
+ * each row so the button's click doesn't navigate.
+ */
+function RowActions({ row }: { row: NotificationRow }) {
+  if (
+    row.kind === "archive_pending" &&
+    row.entityType &&
+    row.entityId
+  ) {
+    return (
+      <RestoreNotificationButton
+        notificationId={row.id}
+        entityType={row.entityType}
+        entityId={row.entityId}
+        isResolved={row.isRead}
+      />
+    );
+  }
+  return null;
+}
+
 function NotificationDesktopRow({
   row,
   timePrefs,
@@ -166,6 +284,7 @@ function NotificationDesktopRow({
       ) : (
         <NotificationContent row={row} timePrefs={timePrefs} />
       )}
+      <RowActions row={row} />
     </div>
   );
 }
@@ -193,6 +312,7 @@ function NotificationMobileCard({
       ) : (
         <NotificationContent row={row} timePrefs={timePrefs} />
       )}
+      <RowActions row={row} />
     </div>
   );
 }
