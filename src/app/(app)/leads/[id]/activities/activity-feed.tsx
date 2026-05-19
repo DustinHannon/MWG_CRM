@@ -4,6 +4,7 @@ import { listActivitiesForLead } from "@/lib/activities";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { UserChip } from "@/components/user-display";
 import { ActivityDeleteButton } from "./activity-delete-button";
+import { ActivityEditButton } from "./activity-edit-button";
 
 const KIND_LABEL: Record<string, string> = {
   note: "Note",
@@ -43,6 +44,16 @@ export async function ActivityFeed({
     <ol className="space-y-4">
       {rows.map((r) => {
         const canDelete = user.isAdmin || r.userId === user.id;
+        // Inline-edit affordance gate — must match
+        // `updateActivityAction`'s server gate exactly: author-or-admin,
+        // note/call only, and not Graph-synced or D365-imported.
+        const isEditableKind = r.kind === "note" || r.kind === "call";
+        const canEdit =
+          canDelete &&
+          isEditableKind &&
+          !r.graphMessageId &&
+          !r.graphEventId &&
+          !r.importDedupKey;
         const tooltip = formatUserTime(r.occurredAt, prefs);
         const relative = formatUserTime(r.occurredAt, prefs, "relative");
 
@@ -127,6 +138,28 @@ export async function ActivityFeed({
                   </li>
                 ))}
               </ul>
+            ) : null}
+
+            {canEdit ? (
+              <div className="mt-3 opacity-100 md:opacity-0 md:group-hover/activity:opacity-100 md:focus-within:opacity-100">
+                <ActivityEditButton
+                  activityId={r.id}
+                  kind={r.kind === "call" ? "call" : "note"}
+                  version={r.version}
+                  subject={r.subject}
+                  body={r.body}
+                  call={
+                    r.kind === "call"
+                      ? {
+                          subject: r.subject,
+                          outcome: r.outcome,
+                          durationMinutes: r.durationMinutes,
+                          occurredAt: r.occurredAt.toISOString(),
+                        }
+                      : null
+                  }
+                />
+              </div>
             ) : null}
 
           </li>

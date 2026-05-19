@@ -70,6 +70,14 @@ export interface ActivityRow {
   occurredAt: Date;
   durationMinutes: number | null;
   outcome: string | null;
+  // OCC token the inline-edit form submits back unchanged.
+  version: number;
+  // Provenance flags. The timeline shows the inline-edit affordance
+  // only for free-form note/call rows that are NOT Graph-synced or
+  // D365-imported — identical to `updateActivityAction`'s server gate.
+  graphMessageId: string | null;
+  graphEventId: string | null;
+  importDedupKey: string | null;
   attachments: Array<{
     id: string;
     filename: string;
@@ -95,6 +103,10 @@ export async function listActivitiesForLead(
       occurredAt: activities.occurredAt,
       durationMinutes: activities.durationMinutes,
       outcome: activities.outcome,
+      version: activities.version,
+      graphMessageId: activities.graphMessageId,
+      graphEventId: activities.graphEventId,
+      importDedupKey: activities.importDedupKey,
     })
     .from(activities)
     .leftJoin(users, eq(activities.userId, users.id))

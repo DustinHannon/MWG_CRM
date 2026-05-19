@@ -224,6 +224,61 @@ export async function updateActivityAction(
 }
 
 /**
+ * Read-only fetch of an activity's current editable state, used solely
+ * by the inline-edit form to populate the OCC conflict dialog when a
+ * save loses the version race (the canonical occ-conflict-dialog is
+ * presentation-only — loading server state to diff against is the
+ * caller's job). Author-or-admin gated, identical to the edit gate, so
+ * it can't be used to read activities the actor couldn't already edit.
+ */
+export async function getActivityForConflictAction(input: {
+  activityId: string;
+}): Promise<
+  ActionResult<{
+    version: number;
+    subject: string | null;
+    body: string | null;
+    outcome: string | null;
+    durationMinutes: number | null;
+    occurredAt: string;
+  }>
+> {
+  return withErrorBoundary({ action: "activity.conflict_state" }, async () => {
+    const user = await requireSession();
+    const activityId = z.string().uuid().parse(input.activityId);
+    const [row] = await db
+      .select({
+        leadId: activities.leadId,
+        userId: activities.userId,
+        isDeleted: activities.isDeleted,
+        version: activities.version,
+        subject: activities.subject,
+        body: activities.body,
+        outcome: activities.outcome,
+        durationMinutes: activities.durationMinutes,
+        occurredAt: activities.occurredAt,
+      })
+      .from(activities)
+      .where(eq(activities.id, activityId))
+      .limit(1);
+    if (!row || row.isDeleted) {
+      throw new ForbiddenError("Activity not found.");
+    }
+    if (!canEditActivity(user, row)) {
+      throw new ForbiddenError("You can't edit this activity.");
+    }
+    return {
+      version: row.version,
+      subject: row.subject,
+      body: row.body,
+      outcome: row.outcome,
+      durationMinutes: row.durationMinutes,
+      occurredAt: row.occurredAt.toISOString(),
+    };
+  });
+}
+
+/**
  * Add-task tab on the lead detail actions panel. This creates a REAL
  * `tasks` row via the canonical task path (`@/lib/tasks.createTask`) —
  * NOT an `activities kind:"task"` row. The activities-row variant had
