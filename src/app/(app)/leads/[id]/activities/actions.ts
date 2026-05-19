@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { fromZonedTime } from "date-fns-tz";
 import { z } from "zod";
 import {
   callEditSchema,
@@ -30,12 +31,17 @@ import { activities } from "@/db/schema/activities";
 import { eq } from "drizzle-orm";
 import { canDeleteActivity, canEditActivity } from "@/lib/access/can-delete";
 import { parseFormOrThrow } from "@/lib/forms/form-data";
+import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 
 /**
- * A `YYYY-MM-DD` date-only value parsed by `new Date()` is treated as
- * UTC midnight, which renders as the previous calendar day in negative
- * offsets. Anchor it to local midnight (mirrors entity-tasks-quick-add)
- * so a task due "May 21" is stored as May 21 local, not May 20.
+ * Parse a `datetime-local` `occurredAt` (carries the user-entered wall
+ * clock, e.g. `2026-05-22T14:30`). `new Date("...T00:00:00")` interprets
+ * a zoneless string in the RUNTIME timezone. This is only used for the
+ * call-log `When` field, whose value is a full local datetime the user
+ * typed; do NOT route a date-only `YYYY-MM-DD` due date through here —
+ * see `parseDueDateInUserTz` (the runtime is `TZ=UTC` on Vercel, so a
+ * bare date would anchor to UTC midnight, not the user's, and render a
+ * day early).
  */
 function parseOccurredAt(value: string | undefined): Date | null {
   if (!value) return null;
@@ -45,6 +51,31 @@ function parseOccurredAt(value: string | undefined): Date | null {
   // occurredAt is only z.string() (no format check); an unparseable
   // value must become null, not an Invalid Date that the timestamp
   // column rejects with an opaque 500.
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Convert a date-only `YYYY-MM-DD` task due date to the UTC instant for
+ * **00:00 in the user's timezone** — the same instant the canonical
+ * client paths (`entity-tasks-quick-add`, `task-edit-dialog`) store by
+ * doing `new Date("${date}T00:00:00")` in the browser (Central), and
+ * the exact inverse of the `formatUserTime` display path. `fromZonedTime`
+ * treats the zoneless wall clock as local time in `timeZone` and is
+ * DST-aware, so this is correct under any server `TZ` (Vercel is
+ * `TZ=UTC`) for both CDT and CST dates. `timeZone` MUST be the same
+ * source the display uses (`getCurrentUserTimePrefs().timezone`, default
+ * `America/Chicago`) so entry → store → render round-trips.
+ *
+ * A non-`YYYY-MM-DD` value (the `Due date` input is `type="date"`, so
+ * this should not occur) or an unparseable one yields `null`, mirroring
+ * `parseOccurredAt` — never an Invalid Date the column rejects with a 500.
+ */
+function parseDueDateInUserTz(
+  value: string | undefined,
+  timeZone: string,
+): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const d = fromZonedTime(`${value}T00:00:00`, timeZone);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -329,10 +360,17 @@ export async function addTaskAction(
     });
     await requireLeadAccess(user, form.leadId);
 
+    // The `Due date` field is `type="date"` → a bare `YYYY-MM-DD`.
+    // Anchor it to 00:00 in the user's timezone (the same source the
+    // display path reads), not the runtime's — Vercel runs `TZ=UTC`, so
+    // parsing it as runtime-local would store UTC midnight and render a
+    // day early in Central. `getCurrentUserTimePrefs` is the canonical
+    // single source for the user/app timezone.
+    const { timezone } = await getCurrentUserTimePrefs();
     const input = taskCreateSchema.parse({
       title: form.subject,
       description: form.body ?? null,
-      dueAt: parseOccurredAt(form.occurredAt),
+      dueAt: parseDueDateInUserTz(form.occurredAt, timezone),
       assignedToId: user.id,
       leadId: form.leadId,
     });
