@@ -6,12 +6,14 @@ import {
   callSchema,
   createCall,
   createNote,
-  createTask,
   noteSchema,
   restoreActivity,
   softDeleteActivity,
   taskSchema,
 } from "@/lib/activities";
+import { createTask, taskCreateSchema } from "@/lib/tasks";
+import { createNotification } from "@/lib/notifications";
+import { userPreferences } from "@/db/schema/views";
 import { writeAudit } from "@/lib/audit";
 import {
   requireLeadAccess,
@@ -102,30 +104,62 @@ export async function addCallAction(
   });
 }
 
+/**
+ * Add-task tab on the lead detail actions panel. This creates a REAL
+ * `tasks` row via the canonical task path (`@/lib/tasks.createTask`) —
+ * NOT an `activities kind:"task"` row. The activities-row variant had
+ * no due_at/status/assignee, so it never reached /tasks, the dashboard
+ * "My open tasks", the saved-search digest, or the tasks-due-today
+ * cron — the reminder silently never fired. Subject→title, Details→
+ * description, Due date→dueAt; the task is self-assigned to the actor
+ * (the lead actions panel has no assignee picker). `createTask`
+ * already writes the `task.create` audit (`targetType:"tasks"`) and
+ * emits the timeline activity, so this action only adds the
+ * assignee-notification (no-op while self-assigned, kept for parity
+ * with `createTaskAction`) + revalidation. The form still parses via
+ * `taskSchema` so its ValidationError carries the raw `values` the
+ * React-19 reset-restore in TaskForm depends on.
+ */
 export async function addTaskAction(
   formData: FormData,
 ): Promise<ActionResult> {
-  return withErrorBoundary({ action: "activity.task_create" }, async () => {
+  return withErrorBoundary({ action: "task.create" }, async () => {
     const user = await requireSession();
-    const parsed = parseFormOrThrow(taskSchema, formData, {
+    const form = parseFormOrThrow(taskSchema, formData, {
       emptyMode: "exact",
     });
-    await requireLeadAccess(user, parsed.leadId);
-    const { id } = await createTask({
-      leadId: parsed.leadId,
-      userId: user.id,
-      subject: parsed.subject,
-      body: parsed.body ?? null,
-      occurredAt: parseOccurredAt(parsed.occurredAt),
+    await requireLeadAccess(user, form.leadId);
+
+    const input = taskCreateSchema.parse({
+      title: form.subject,
+      description: form.body ?? null,
+      dueAt: parseOccurredAt(form.occurredAt),
+      assignedToId: user.id,
+      leadId: form.leadId,
     });
-    await writeAudit({
-      actorId: user.id,
-      action: "activity.task_create",
-      targetType: "activity",
-      targetId: id,
-      after: { subject: parsed.subject },
-    });
-    revalidatePath(`/leads/${parsed.leadId}`);
+    await createTask(input, user.id);
+
+    // Parity with createTaskAction: notify the assignee when it is not
+    // the actor. Self-assigned here (no picker on the panel), so this
+    // is a no-op today; kept so a future assignee field stays correct.
+    if (input.assignedToId && input.assignedToId !== user.id) {
+      const prefs = await db
+        .select({ notify: userPreferences.notifyTasksAssigned })
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, input.assignedToId))
+        .limit(1);
+      if (prefs[0]?.notify !== false) {
+        await createNotification({
+          userId: input.assignedToId,
+          kind: "task_assigned",
+          title: `New task: ${input.title}`,
+          link: `/leads/${form.leadId}`,
+        });
+      }
+    }
+
+    revalidatePath(`/leads/${form.leadId}`);
+    revalidatePath("/tasks");
   });
 }
 

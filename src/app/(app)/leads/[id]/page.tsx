@@ -279,14 +279,19 @@ export default async function LeadDetailPage({
           <ActivityFeed leadId={lead.id} user={user} />
         </div>
 
-        {/* Tasks list. Read-only display of tasks where lead_id =
-            currentLead.id. Task creation on the lead detail page is
-            canonical via the merged lead actions panel's Add task tab
-            (above) per STANDARDS §17.1; the EntityTasksSection
-            quick-add is suppressed here to avoid the duplicate
-            affordance. Same `tasks` table backs this and /tasks;
-            CHECK `tasks_at_most_one_parent` is the single-parent
-            guard. */}
+        {/* Tasks list. Read-only display of `tasks` rows where
+            lead_id = currentLead.id (listTasksForLead). The single
+            task-creation affordance on this page is the lead actions
+            panel's Add task tab (above): it now writes a real `tasks`
+            row via the canonical path (addTaskAction → @/lib/tasks
+            .createTask), so the same `tasks` table backs this section,
+            /tasks, the dashboard "My open tasks", the saved-search
+            digest, and the tasks-due-today cron. The EntityTasksSection
+            quick-add is suppressed here (showQuickAdd={false}) so there
+            is exactly one affordance — surfacing it too would
+            reintroduce the duplicate-affordance the panel consolidation
+            removed (STANDARDS §17.1). CHECK `tasks_at_most_one_parent`
+            is the single-parent guard. */}
         <div className="lg:col-span-3">
           <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Tasks

@@ -22,10 +22,16 @@ export const callSchema = z.object({
   occurredAt: z.string().optional(), // ISO; defaults to now
 });
 
+// Lead Add-task tab form schema. Limits MUST match the canonical
+// `taskCreateSchema` (@/lib/tasks: title ≤200, description ≤2000) so
+// this layer-1 parse rejects an over-length value first — if a value
+// passed here but failed the canonical parse in addTaskAction, the
+// boundary's raw-ZodError path would drop the `values` echo and blank
+// the form on submit. Single validation source of truth.
 export const taskSchema = z.object({
   leadId: z.string().uuid(),
-  subject: z.string().trim().min(1, "Task subject is required").max(240),
-  body: z.string().trim().max(20_000).optional(),
+  subject: z.string().trim().min(1, "Task subject is required").max(200),
+  body: z.string().trim().max(2000).optional(),
   occurredAt: z.string().optional(),
 });
 
@@ -184,28 +190,6 @@ export async function createCall(input: {
       body: input.body ?? null,
       outcome: input.outcome ?? null,
       durationMinutes: input.durationMinutes ?? null,
-      occurredAt: input.occurredAt ?? sql`now()`,
-    })
-    .returning({ id: activities.id });
-  await bumpLastActivityAt(input.leadId);
-  return { id: inserted[0].id };
-}
-
-export async function createTask(input: {
-  leadId: string;
-  userId: string;
-  subject: string;
-  body?: string | null;
-  occurredAt?: Date | null;
-}): Promise<{ id: string }> {
-  const inserted = await db
-    .insert(activities)
-    .values({
-      leadId: input.leadId,
-      userId: input.userId,
-      kind: "task",
-      subject: input.subject,
-      body: input.body ?? null,
       occurredAt: input.occurredAt ?? sql`now()`,
     })
     .returning({ id: activities.id });
