@@ -241,8 +241,12 @@ export async function updateActivityAction(
  * by the inline-edit form to populate the OCC conflict dialog when a
  * save loses the version race (the canonical occ-conflict-dialog is
  * presentation-only — loading server state to diff against is the
- * caller's job). Author-or-admin gated, identical to the edit gate, so
- * it can't be used to read activities the actor couldn't already edit.
+ * caller's job). Gated by the SAME rule as `updateActivityAction`: the
+ * actor must have lead access (`requireLeadAccess`) AND be the activity
+ * author or an admin (`canEditActivity`). The edit path is deliberately
+ * stricter than delete — delete (`canDeleteActivity`) does not check
+ * lead access — so this read gate must enforce both to ensure it can't
+ * surface an activity the actor couldn't already edit.
  */
 export async function getActivityForConflictAction(input: {
   activityId: string;
@@ -277,6 +281,14 @@ export async function getActivityForConflictAction(input: {
     if (!row || row.isDeleted) {
       throw new ForbiddenError("Activity not found.");
     }
+    // Match `updateActivityAction`'s gate exactly: lead-attached only,
+    // then lead access, then author-or-admin. The edit path requires
+    // lead access (stricter than delete) — enforce it here too so this
+    // read can't surface an activity the actor couldn't edit.
+    if (!row.leadId) {
+      throw new ValidationError("This activity can't be edited here.");
+    }
+    await requireLeadAccess(user, row.leadId);
     if (!canEditActivity(user, row)) {
       throw new ForbiddenError("You can't edit this activity.");
     }

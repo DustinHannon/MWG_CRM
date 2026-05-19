@@ -9,8 +9,13 @@ import "server-only";
  * Rules per the matrix:
  * Lead/Account/Contact/Opportunity: owner OR admin can soft-delete
  * Task: creator OR assignee OR admin
- * Activity: author (user_id) OR admin — same rule for soft-delete
- *   (canDeleteActivity) and inline edit (canEditActivity)
+ * Activity: author (user_id) OR admin for this predicate, shared by
+ *   soft-delete (canDeleteActivity) and inline edit (canEditActivity).
+ *   NOTE the EDIT path is stricter than delete at the action layer:
+ *   `updateActivityAction` (and the conflict-state read) also call
+ *   `requireLeadAccess` before this check; `softDeleteActivityAction`
+ *   does not. This predicate is the author/admin half only — not the
+ *   full edit gate.
  * Hard delete (any entity): admin only, from archive view
  *
  * `canViewAllRecords` deliberately does NOT grant delete. View ≠ delete.
@@ -72,12 +77,15 @@ export function canDeleteActivity(
 }
 
 /**
- * Inline-edit gate for a note/call timeline entry. Same author-or-admin
- * rule as delete (an activity's author may correct their own note/call;
- * admins may correct anyone's). Behavior-named rather than reusing the
- * delete-named helper so the call site reads as an edit check, not a
- * delete check — the predicate body is identical today but the two
- * concerns are allowed to diverge.
+ * Author/admin half of the inline-edit gate for a note/call timeline
+ * entry (an activity's author may correct their own note/call; admins
+ * may correct anyone's). This predicate body is identical to
+ * `canDeleteActivity` today, but the full EDIT gate is stricter than
+ * delete: `updateActivityAction` and `getActivityForConflictAction`
+ * also require `requireLeadAccess` before calling this, whereas
+ * `softDeleteActivityAction` does not check lead access. Behavior-named
+ * rather than reusing the delete helper so the call site reads as an
+ * edit check; the two concerns are allowed to diverge.
  */
 export function canEditActivity(
   user: ActorLite,
