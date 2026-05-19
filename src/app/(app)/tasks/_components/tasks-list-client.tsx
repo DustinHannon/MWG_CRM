@@ -21,6 +21,7 @@ import {
   useTransition,
 } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   StandardEmptyState,
   StandardListPage,
@@ -229,6 +230,13 @@ function TasksListInner({
 }: TasksListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // The list is rendered by StandardListPage which uses TanStack
+  // useInfiniteQuery internally; router.refresh() alone does NOT
+  // invalidate that in-memory cache, so a row's `version` stays stale
+  // and the next click sends an outdated OCC token → ConflictError
+  // loop. We invalidate the matching query (prefix-match on the same
+  // queryKey we pass below) after every mutation that changes a row.
+  const queryClient = useQueryClient();
 
   // Sort + dir come from URL — read once on mount. URL changes via
   // the sortable header `Link` components trigger a router refresh
@@ -363,6 +371,14 @@ function TasksListInner({
       if (!res.ok) {
         toast.error(res.error, { duration: Infinity, dismissible: true });
       } else {
+        // Update the loaded-versions ref optimistically so a second
+        // click before the refetch lands still sends the fresh OCC
+        // token — prevents the stale-version CONFLICT loop.
+        versionById.current.set(task.id, res.data.version);
+        // Invalidate the TanStack infinite-query cache so the row's
+        // status/version reflect server truth across all pages.
+        // Prefix-match on "tasks" catches every active view variant.
+        await queryClient.invalidateQueries({ queryKey: ["tasks"] });
         router.refresh();
       }
     });
@@ -404,6 +420,7 @@ function TasksListInner({
         );
         notifyConflicts(res.data.conflicts);
         clearSelection();
+        await queryClient.invalidateQueries({ queryKey: ["tasks"] });
         router.refresh();
       } else {
         toast.error(res.error, { duration: Infinity, dismissible: true });
@@ -428,6 +445,7 @@ function TasksListInner({
         toast.success(`Deleted ${res.data.updated.length} task(s)`);
         notifyConflicts(res.data.conflicts);
         clearSelection();
+        await queryClient.invalidateQueries({ queryKey: ["tasks"] });
         router.refresh();
       } else {
         toast.error(res.error, { duration: Infinity, dismissible: true });
@@ -459,6 +477,7 @@ function TasksListInner({
         setReassignOpen(false);
         setReassignTo("");
         clearSelection();
+        await queryClient.invalidateQueries({ queryKey: ["tasks"] });
         router.refresh();
       } else {
         toast.error(res.error, { duration: Infinity, dismissible: true });
@@ -837,6 +856,10 @@ function TasksListInner({
           onClose={() => setEditingTask(null)}
           onSaved={() => {
             setEditingTask(null);
+            // Same TanStack cache concern as toggleComplete — without
+            // this invalidate the edited row keeps its stale version
+            // in the list.
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
             router.refresh();
           }}
         />
