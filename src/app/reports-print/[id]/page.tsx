@@ -6,8 +6,16 @@ import {
   executeReport,
 } from "@/lib/reports/access";
 import { getReportById } from "@/lib/reports/repository";
-import { getEntityMeta } from "@/lib/reports/schemas";
-import type { ReportEntityType } from "@/db/schema/saved-reports";
+import {
+  buildReportColumnKinds,
+  getEntityMeta,
+  type FieldKind,
+} from "@/lib/reports/schemas";
+import { formatCurrency } from "@/lib/format/currency";
+import type {
+  ReportEntityType,
+  ReportMetric,
+} from "@/db/schema/saved-reports";
 import { AutoPrint } from "./auto-print";
 import "./print.css";
 
@@ -38,7 +46,13 @@ export default async function ReportPrintPage({
 
   await assertCanViewReport(report, viewer);
   const result = await executeReport(report, viewer);
-  const meta = getEntityMeta(report.entityType as ReportEntityType);
+  const entityType = report.entityType as ReportEntityType;
+  const meta = getEntityMeta(entityType);
+  const columnKinds = buildReportColumnKinds(
+    entityType,
+    result.columns,
+    (report.metrics as ReportMetric[]) ?? [],
+  );
 
   return (
     <div className="print-root">
@@ -80,7 +94,7 @@ export default async function ReportPrintPage({
               {result.rows.map((r, i) => (
                 <tr key={i}>
                   {result.columns.map((c) => (
-                    <td key={c}>{formatCell(r[c])}</td>
+                    <td key={c}>{formatCell(r[c], columnKinds[c])}</td>
                   ))}
                 </tr>
               ))}
@@ -103,8 +117,14 @@ function humanize(s: string): string {
   return s.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatCell(v: unknown): string {
+function formatCell(v: unknown, kind?: FieldKind): string {
   if (v === null || v === undefined) return "—";
+  // Money columns (kind="currency", incl. sum/avg/min/max over one)
+  // render through the canonical formatter. postgres-js returns
+  // numeric columns as strings, so accept string or number here.
+  if (kind === "currency" && (typeof v === "string" || typeof v === "number")) {
+    return formatCurrency(v);
+  }
   if (v instanceof Date) return v.toISOString().slice(0, 19).replace("T", " ");
   if (typeof v === "string") {
     if (/^\d{4}-\d{2}-\d{2}T/.test(v)) {

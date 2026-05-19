@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Loader2, Plus, X } from "lucide-react";
 import {
+  buildReportColumnKinds,
+  isNumericKind,
   REPORT_ENTITIES,
   type EntityMeta,
   type FieldMeta,
@@ -188,6 +190,13 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
       clearTimeout(t);
     };
   }, [definition]);
+
+  // Same money-formatting map the saved-report page builds, so the
+  // live preview renders currency columns identically to the run view.
+  const previewColumnKinds = useMemo(
+    () => buildReportColumnKinds(entityType, preview.columns, metrics),
+    [entityType, preview.columns, metrics],
+  );
 
   const groupCount = groupBy.length;
   const showMetrics = groupCount > 0;
@@ -405,6 +414,7 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
               columns={preview.columns}
               groupBy={groupBy}
               reportName={name || "preview"}
+              columnKinds={previewColumnKinds}
               hideExports
             />
           )}
@@ -528,7 +538,7 @@ function FilterBuilder({
             ) : (
               <input
                 type={
-                  f?.kind === "number"
+                  f && isNumericKind(f.kind)
                     ? "number"
                     : f?.kind === "date"
                       ? "date"
@@ -574,7 +584,7 @@ const OP_LABELS: Record<FilterOp, string> = {
 
 function defaultOp(f: FieldMeta): FilterOp {
   if (f.kind === "string") return "ilike";
-  if (f.kind === "number") return "eq";
+  if (isNumericKind(f.kind)) return "eq";
   if (f.kind === "date") return "gte";
   return "eq";
 }
@@ -589,6 +599,7 @@ function opsForField(f: FieldMeta | undefined): FilterOp[] {
     case "uuid":
       return ["eq", "in"];
     case "number":
+    case "currency":
       return ["eq", "gte", "lte", "gt", "lt"];
     case "date":
       return ["gte", "lte"];
@@ -608,7 +619,7 @@ function rowsToFilters(
     if (r.value === "" && r.op !== "eq") continue;
 
     let coerced: unknown = r.value;
-    if (f.kind === "number") {
+    if (isNumericKind(f.kind)) {
       const n = Number(r.value);
       if (Number.isNaN(n)) continue;
       coerced = n;
@@ -673,7 +684,7 @@ function MetricBuilder({
     onChange(value.filter((_, idx) => idx !== i));
   }
 
-  const numericFields = meta.fields.filter((f) => f.kind === "number");
+  const numericFields = meta.fields.filter((f) => isNumericKind(f.kind));
 
   return (
     <div className="space-y-2">

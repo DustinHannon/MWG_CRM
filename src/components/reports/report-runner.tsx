@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useMemo } from "react";
 import type { ReportVisualization } from "@/db/schema/saved-reports";
 import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
+import { formatCurrency } from "@/lib/format/currency";
+import type { FieldKind } from "@/lib/reports/schemas";
 import { ReportChart, type ChartDatum } from "./report-charts";
 
 /**
@@ -24,6 +26,12 @@ export interface ReportRunnerProps {
   reportName: string;
   /** Optional metric labels for chart legends. */
   metricLabels?: { primary?: string; secondary?: string };
+  /**
+   * Output-column -> field kind. Drives money formatting: cells whose
+   * column kind is "currency" render through `formatCurrency`. Built
+   * by `buildReportColumnKinds`. Absent column => default formatting.
+   */
+  columnKinds?: Record<string, FieldKind>;
   /** Hide export buttons (used by builder preview). */
   hideExports?: boolean;
 }
@@ -36,6 +44,7 @@ export function ReportRunner({
   groupBy,
   reportName,
   metricLabels,
+  columnKinds,
   hideExports = false,
 }: ReportRunnerProps) {
   const chartData = useMemo<ChartDatum[]>(() => {
@@ -94,7 +103,7 @@ export function ReportRunner({
         />
       ) : null}
 
-      <DataTable rows={rows} columns={columns} />
+      <DataTable rows={rows} columns={columns} columnKinds={columnKinds} />
     </div>
   );
 }
@@ -102,9 +111,11 @@ export function ReportRunner({
 function DataTable({
   rows,
   columns,
+  columnKinds,
 }: {
   rows: Record<string, unknown>[];
   columns: string[];
+  columnKinds?: Record<string, FieldKind>;
 }) {
   if (rows.length === 0) {
     return (
@@ -136,7 +147,7 @@ function DataTable({
                   key={c}
                   className="px-3 py-2 align-top text-foreground/90"
                 >
-                  {formatCell(r[c])}
+                  {formatCell(r[c], columnKinds?.[c])}
                 </td>
               ))}
             </tr>
@@ -151,8 +162,14 @@ function humanize(s: string): string {
   return s.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatCell(v: unknown): string {
+function formatCell(v: unknown, kind?: FieldKind): string {
   if (v === null || v === undefined) return "—";
+  // Money columns (kind="currency", incl. sum/avg/min/max over one)
+  // render through the canonical formatter. postgres-js returns
+  // numeric columns as strings, so accept string or number here.
+  if (kind === "currency" && (typeof v === "string" || typeof v === "number")) {
+    return formatCurrency(v);
+  }
   if (v instanceof Date) return v.toISOString().slice(0, 10);
   if (typeof v === "string") {
     // crude ISO-date detection
@@ -165,7 +182,6 @@ function formatCell(v: unknown): string {
     }
     return v;
   }
-  // currency-aware report formatting: follow-up — column money-semantics not modeled in report schema
   if (typeof v === "number") return Number.isInteger(v) ? v.toString() : v.toFixed(2);
   if (typeof v === "boolean") return v ? "Yes" : "No";
   try {

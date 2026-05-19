@@ -1,4 +1,7 @@
-import type { ReportEntityType } from "@/db/schema/saved-reports";
+import type {
+  ReportEntityType,
+  ReportMetric,
+} from "@/db/schema/saved-reports";
 
 /**
  * report builder field metadata.
@@ -13,12 +16,32 @@ import type { ReportEntityType } from "@/db/schema/saved-reports";
  * "string" / "text" — pickable, groupable, count metric
  * "enum" — pickable, groupable, count metric
  * "number" — pickable, groupable, sum/avg/min/max metric
+ * "currency" — a USD money column; treated identically to "number"
+ * for pick/group/aggregate/sort, but rendered through the canonical
+ * `formatCurrency` ($1,234.56) instead of a bare number
  * "date" — pickable, groupable (truncated to month/week)
  * "uuid" — usually a foreign key; pickable, groupable; surfaced
  * with a label join when possible
  */
 
-export type FieldKind = "string" | "text" | "enum" | "number" | "date" | "uuid";
+export type FieldKind =
+  | "string"
+  | "text"
+  | "enum"
+  | "number"
+  | "currency"
+  | "date"
+  | "uuid";
+
+/**
+ * Kinds the builder treats as numeric metrics: pickable as
+ * sum/avg/min/max aggregation targets and numerically grouped/sorted.
+ * `currency` is numeric in every respect — it differs only in render
+ * (money formatting), never in capability.
+ */
+export function isNumericKind(kind: FieldKind): boolean {
+  return kind === "number" || kind === "currency";
+}
 
 export interface FieldMeta {
   /** SQL column name on the entity table. */
@@ -160,7 +183,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
         values: LEAD_SOURCE_VALUES,
       },
       { column: "owner_id", label: "Owner", kind: "uuid" },
-      { column: "estimated_value", label: "Estimated value", kind: "number" },
+      { column: "estimated_value", label: "Estimated value", kind: "currency" },
       {
         column: "estimated_close_date",
         label: "Estimated close date",
@@ -227,7 +250,7 @@ export const REPORT_ENTITIES: Record<ReportEntityType, EntityMeta> = {
         kind: "enum",
         values: OPP_STAGE_VALUES,
       },
-      { column: "amount", label: "Amount", kind: "number" },
+      { column: "amount", label: "Amount", kind: "currency" },
       { column: "probability", label: "Probability", kind: "number" },
       { column: "expected_close_date", label: "Expected close", kind: "date" },
       { column: "account_id", label: "Account", kind: "uuid" },
@@ -463,4 +486,55 @@ export function tagJunctionFor(
     case "task":
       return { junctionTable: "task_tags", entityIdColumn: "task_id" };
   }
+}
+
+/**
+ * Map every output column of an executed report to the `FieldKind`
+ * its cell should render as. This is the single source the table
+ * renderers (saved-report runner, print page, builder preview) use to
+ * decide money formatting — so all three stay identical.
+ *
+ * Two column shapes are produced by `executeReport` (see access.ts):
+ *
+ *  - **Flat query** — output columns are the raw field names; the kind
+ *    is the field's declared `kind`.
+ *  - **Aggregate query** — output columns are the group-by fields
+ *    (raw field kind) plus metric aliases. A `sum`/`avg`/`min`/`max`
+ *    over a `currency` field stays money; `count` is a plain integer.
+ *    The alias derivation mirrors access.ts exactly
+ *    (`m.alias || \`${m.fn}_${m.field || "all"}\``) so the keys line up.
+ *
+ * Columns with no mapping (unknown alias, virtual `tags`, etc.) are
+ * simply absent — the formatter falls back to its default rendering.
+ */
+export function buildReportColumnKinds(
+  entityType: ReportEntityType,
+  columns: string[],
+  metrics: ReportMetric[] = [],
+): Record<string, FieldKind> {
+  const meta = REPORT_ENTITIES[entityType];
+  const byColumn = new Map<string, FieldKind>(
+    meta.fields.map((f) => [f.column, f.kind]),
+  );
+
+  // Metric alias -> the kind the aggregated value should render as.
+  // sum/avg/min/max preserve the source field's kind (currency stays
+  // currency, number stays number); count is always a bare integer.
+  const aliasKind = new Map<string, FieldKind>();
+  for (const m of metrics) {
+    const alias = m.alias || `${m.fn}_${m.field || "all"}`;
+    if (m.fn === "count") {
+      aliasKind.set(alias, "number");
+      continue;
+    }
+    const srcKind = m.field ? byColumn.get(m.field) : undefined;
+    if (srcKind) aliasKind.set(alias, srcKind);
+  }
+
+  const out: Record<string, FieldKind> = {};
+  for (const c of columns) {
+    const k = aliasKind.get(c) ?? byColumn.get(c);
+    if (k) out[c] = k;
+  }
+  return out;
 }

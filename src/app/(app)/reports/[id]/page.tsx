@@ -12,7 +12,7 @@ import {
   executeReport,
 } from "@/lib/reports/access";
 import { getReportById } from "@/lib/reports/repository";
-import { getEntityMeta } from "@/lib/reports/schemas";
+import { buildReportColumnKinds, getEntityMeta } from "@/lib/reports/schemas";
 import type {
   ReportEntityType,
   ReportMetric,
@@ -53,6 +53,11 @@ export default async function ReportRunPage({
   const entityType = report.entityType as ReportEntityType;
   const meta = getEntityMeta(entityType);
   const metrics = (report.metrics as ReportMetric[]) ?? [];
+  const columnKinds = buildReportColumnKinds(
+    entityType,
+    result.columns,
+    metrics,
+  );
 
   const canEdit = !report.isBuiltin && (viewer.isAdmin || report.ownerId === viewer.id);
   const canDelete = canEdit;
@@ -122,6 +127,7 @@ export default async function ReportRunPage({
             primary: metrics[0]?.alias,
             secondary: metrics[1]?.alias,
           }}
+          columnKinds={columnKinds}
         />
       </GlassCard>
     </div>
