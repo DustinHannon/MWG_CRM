@@ -238,7 +238,11 @@ export default async function LeadDetailPage({
           />
           <Field
             label="Estimated close"
-            value={lead.estimatedCloseDate ?? null}
+            value={
+              lead.estimatedCloseDate
+                ? formatUserTime(lead.estimatedCloseDate, prefs, "date")
+                : null
+            }
           />
           <Field
             label="Tags"
