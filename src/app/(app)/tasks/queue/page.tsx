@@ -7,7 +7,14 @@ import { PageRealtime } from "@/components/realtime/page-realtime";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
+import { appCrumbs } from "@/lib/navigation/breadcrumbs";
 import { QueueClient, type QueueTask, type QueueBucket } from "./_components/queue-client";
+
+// Cap the queue payload. A rep with hundreds of open tasks doesn't need
+// the full list serialised to the client — they can refresh after the
+// first batch is processed. 500 is well clear of any realistic
+// individual workload and keeps the slim-payload bytes bounded.
+const QUEUE_MAX_ROWS = 500;
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +85,8 @@ export default async function TasksQueuePage({
         WHEN 'low' THEN 3
         ELSE 4 END`,
       asc(tasks.createdAt),
-    );
+    )
+    .limit(QUEUE_MAX_ROWS);
 
   const allTasks: QueueTask[] = rows.map((r) => ({
     id: r.id,
@@ -96,9 +104,7 @@ export default async function TasksQueuePage({
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
-      <BreadcrumbsSetter
-        crumbs={[{ label: "Tasks", href: "/tasks" }, { label: "Queue" }]}
-      />
+      <BreadcrumbsSetter crumbs={appCrumbs.tasksQueue()} />
       <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["tasks"]} />
 
@@ -108,24 +114,16 @@ export default async function TasksQueuePage({
             Task queue
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
-            <Link
-              href="/tasks"
-              className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-            >
-              List
-            </Link>
-            <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
-              Queue
-            </span>
-          </div>
+        <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
           <Link
             href="/tasks"
-            className="text-xs text-muted-foreground transition hover:text-foreground hover:underline"
+            className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
-            ← Back to list
+            List
           </Link>
+          <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
+            Queue
+          </span>
         </div>
       </div>
 
@@ -133,7 +131,6 @@ export default async function TasksQueuePage({
         allTasks={allTasks}
         initialBucket={requestedBucket}
         timePrefs={timePrefs}
-        viewerId={session.id}
       />
     </div>
   );

@@ -45,8 +45,21 @@ export function SnoozePopover({
   currentDueAt,
   onSelect,
 }: SnoozePopoverProps) {
-  const now = useMemo(() => new Date(), []);
-  const presets = useMemo(() => snoozePresets(now, timezone), [now, timezone]);
+  // Recompute presets whenever the popover transitions to open so a
+  // session held across midnight / DST still computes wall-clock-
+  // accurate quick-snooze targets. We rebind `now` on the open edge
+  // and re-derive presets from there; closing-then-reopening picks up
+  // a fresh clock.
+  const presets = useMemo(() => {
+    void open;
+    return snoozePresets(new Date(), timezone);
+  }, [open, timezone]);
+  // Sticky "now" reference for the custom-date pre-fill below — same
+  // open-edge re-derive semantics.
+  const now = useMemo(() => {
+    void open;
+    return new Date();
+  }, [open]);
 
   const defaultCustomDate = useMemo(() => {
     const base = currentDueAt ? new Date(currentDueAt) : now;
@@ -92,10 +105,11 @@ export function SnoozePopover({
             <button
               key={it.label}
               type="button"
+              disabled={disabled}
               onClick={() => {
                 void pick(it.target);
               }}
-              className="rounded-md px-3 py-2 text-left text-sm text-foreground transition hover:bg-muted"
+              className="rounded-md px-3 py-2 text-left text-sm text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               {it.label}
             </button>
@@ -108,15 +122,16 @@ export function SnoozePopover({
             <input
               type="date"
               value={customDate}
+              disabled={disabled}
               onChange={(e) => setCustomDate(e.target.value)}
-              className="flex-1 rounded-md border border-border bg-input px-2 py-1 text-sm text-foreground"
+              className="flex-1 rounded-md border border-border bg-input px-2 py-1 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             />
             <button
               type="button"
               onClick={() => {
                 void pickCustom();
               }}
-              disabled={!customDate}
+              disabled={disabled || !customDate}
               className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Save

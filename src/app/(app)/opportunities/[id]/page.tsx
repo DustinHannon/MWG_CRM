@@ -181,6 +181,9 @@ export default async function OpportunityDetailPage({
             entityId={opp.id}
             tasks={await listTasksForOpportunity(opp.id)}
             currentUserId={session.id}
+            viewerCanEditOthers={
+              session.isAdmin || perms.canEditOthersTasks
+            }
           />
         </div>
       </GlassCard>

@@ -48,7 +48,7 @@ export function MyOpenTasksWidget({ tasks }: { tasks: TaskRow[] }) {
             href="/tasks/queue"
             className="text-xs text-muted-foreground transition hover:text-foreground hover:underline"
           >
-            Walk through →
+            Open queue →
           </Link>
         ) : null}
         <Link

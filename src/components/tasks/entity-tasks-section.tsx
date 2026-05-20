@@ -35,6 +35,15 @@ export interface EntityTasksSectionProps {
    * composer carries the Add task tab). STANDARDS §17.1.
    */
   showQuickAdd?: boolean;
+  /**
+   * Whether the viewer is allowed to edit others' tasks (admin OR
+   * `canEditOthersTasks` perm). Defaults to false, which means the
+   * complete-toggle is only enabled on tasks the viewer created or
+   * is assigned to. Callers in entity detail pages should pass
+   * `session.isAdmin || perms.canEditOthersTasks` so cross-user
+   * admins / lead-handlers see editable toggles.
+   */
+  viewerCanEditOthers?: boolean;
 }
 
 export function EntityTasksSection({
@@ -43,6 +52,7 @@ export function EntityTasksSection({
   tasks,
   currentUserId,
   showQuickAdd = true,
+  viewerCanEditOthers = false,
 }: EntityTasksSectionProps) {
   const open = tasks.filter(
     (t) => t.status === "open" || t.status === "in_progress",
@@ -68,10 +78,21 @@ export function EntityTasksSection({
       ) : (
         <div className="space-y-3">
           {open.length > 0 ? (
-            <TaskGroup label="Open" tasks={open} />
+            <TaskGroup
+              label="Open"
+              tasks={open}
+              viewerId={currentUserId}
+              viewerCanEditOthers={viewerCanEditOthers}
+            />
           ) : null}
           {completed.length > 0 ? (
-            <TaskGroup label="Completed" tasks={completed} muted />
+            <TaskGroup
+              label="Completed"
+              tasks={completed}
+              muted
+              viewerId={currentUserId}
+              viewerCanEditOthers={viewerCanEditOthers}
+            />
           ) : null}
         </div>
       )}
@@ -83,10 +104,14 @@ function TaskGroup({
   label,
   tasks,
   muted,
+  viewerId,
+  viewerCanEditOthers,
 }: {
   label: string;
   tasks: TaskRow[];
   muted?: boolean;
+  viewerId: string;
+  viewerCanEditOthers: boolean;
 }) {
   return (
     <div>
@@ -94,15 +119,34 @@ function TaskGroup({
         {label} ({tasks.length})
       </p>
       <ul className="divide-y divide-border/60 overflow-hidden rounded-md border border-border bg-muted/10">
-        {tasks.map((t) => (
-          <TaskRowItem key={t.id} task={t} muted={muted ?? false} />
-        ))}
+        {tasks.map((t) => {
+          const canEdit =
+            viewerCanEditOthers ||
+            t.createdById === viewerId ||
+            t.assignedToId === viewerId;
+          return (
+            <TaskRowItem
+              key={t.id}
+              task={t}
+              muted={muted ?? false}
+              canEdit={canEdit}
+            />
+          );
+        })}
       </ul>
     </div>
   );
 }
 
-function TaskRowItem({ task, muted }: { task: TaskRow; muted: boolean }) {
+function TaskRowItem({
+  task,
+  muted,
+  canEdit,
+}: {
+  task: TaskRow;
+  muted: boolean;
+  canEdit: boolean;
+}) {
   const overdue =
     task.dueAt !== null &&
     task.dueAt < new Date() &&
@@ -115,10 +159,12 @@ function TaskRowItem({ task, muted }: { task: TaskRow; muted: boolean }) {
     >
       <div className="flex min-w-0 items-start gap-2 sm:items-center">
         {/* Shared TaskCompleteToggle — RSC mode (no onSuccess, falls
-            back to router.refresh()). Restores the complete-toggle on
-            entity-detail pages (WS3 surfaced this gap). */}
+            back to router.refresh()). canEdit gates the toggle so a
+            viewer who can SEE someone else's task but lacks edit
+            permission gets a disabled control instead of a server-
+            rejected click. */}
         <div className="shrink-0">
-          <TaskCompleteToggle task={task} />
+          <TaskCompleteToggle task={task} disabled={!canEdit} />
         </div>
         <div className="min-w-0">
         <p

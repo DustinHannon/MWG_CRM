@@ -408,7 +408,10 @@ export async function toggleTaskCompleteAction(
         .where(eq(tasks.id, id))
         .limit(1);
       if (!row) {
-        throw new NotFoundError("task");
+        // Match updateTaskAction's leak-guard shape: a missing row
+        // returns the same ForbiddenError as a forbidden row so a
+        // hostile caller can't enumerate task ids by error code.
+        throw new ForbiddenError("Task not found.");
       }
       const perms = await getPermissions(session.id);
       const isOwnerOrAssignee =

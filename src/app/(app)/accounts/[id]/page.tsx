@@ -288,6 +288,9 @@ export default async function AccountDetailPage({
                 entityId={account.id}
                 tasks={await listTasksForAccount(account.id)}
                 currentUserId={session.id}
+                viewerCanEditOthers={
+                  session.isAdmin || perms.canEditOthersTasks
+                }
               />
             </div>
           </GlassCard>

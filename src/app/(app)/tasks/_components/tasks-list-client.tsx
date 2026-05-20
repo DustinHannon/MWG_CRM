@@ -640,6 +640,11 @@ function TasksListInner({
         task={task}
         prefs={timePrefs}
         viewerId={user.id}
+        canEdit={
+          canEditOthersTasks ||
+          task.createdById === user.id ||
+          task.assignedToId === user.id
+        }
         onToggleSuccess={(newVersion) =>
           handleToggleSuccess(task.id, newVersion)
         }
@@ -1089,10 +1094,14 @@ function TaskDesktopRow({
             so sighted users can tell the two controls apart at a glance;
             aria-label keeps it accessible. Extracted to the shared
             TaskCompleteToggle so entity-detail pages render the same
-            affordance (CLAUDE.md §1.8, §18 rule of 3). */}
+            affordance (CLAUDE.md §1.8, §18 rule of 3). canEdit gates
+            the toggle so a viewer who can SEE someone else's task but
+            can't EDIT it (canViewOthersTasks=true, canEditOthersTasks=
+            false) gets a disabled control instead of a server-rejected
+            click. */}
         <TaskCompleteToggle
           task={task}
-          disabled={disabled}
+          disabled={disabled || !canEdit}
           onSuccess={onToggleSuccess}
         />
       </div>
@@ -1147,12 +1156,14 @@ function TaskMobileCard({
   task,
   prefs,
   viewerId,
+  canEdit,
   onToggleSuccess,
   disabled,
 }: {
   task: TaskRow;
   prefs: TimePrefs;
   viewerId: string;
+  canEdit: boolean;
   onToggleSuccess: (newVersion: number) => void;
   disabled: boolean;
 }) {
@@ -1170,11 +1181,14 @@ function TaskMobileCard({
       data-row-flash="new"
     >
       {/* Same TaskCompleteToggle as the desktop row — visual coherence
-          between viewports, single source of truth. */}
+          between viewports, single source of truth. canEdit gates the
+          control so a viewer with canViewOthersTasks=true but
+          canEditOthersTasks=false sees a disabled toggle instead of
+          getting a sticky error toast on click. */}
       <div className="mt-1 shrink-0">
         <TaskCompleteToggle
           task={task}
-          disabled={disabled}
+          disabled={disabled || !canEdit}
           onSuccess={onToggleSuccess}
         />
       </div>

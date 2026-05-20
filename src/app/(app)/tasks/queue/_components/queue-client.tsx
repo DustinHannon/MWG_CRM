@@ -21,7 +21,7 @@ import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import { toZonedTime } from "date-fns-tz";
 import type { TimePrefs } from "@/lib/format-time";
-import { updateTaskAction } from "@/app/(app)/tasks/actions";
+import { updateTaskAction, toggleTaskCompleteAction } from "@/app/(app)/tasks/actions";
 import { SnoozePopover } from "./snooze-popover";
 
 export type QueueBucket = "overdue" | "today" | "week" | "all";
@@ -44,7 +44,6 @@ export interface QueueClientProps {
   allTasks: QueueTask[];
   initialBucket: QueueBucket | undefined;
   timePrefs: TimePrefs;
-  viewerId: string;
 }
 
 interface BucketCounts {
@@ -106,19 +105,22 @@ function entityLink(task: QueueTask): string | null {
   return null;
 }
 
-interface QueueClientInnerProps extends QueueClientProps {}
-
 function QueueClientInner({
   allTasks,
   initialBucket,
   timePrefs,
-  viewerId: _viewerId,
-}: QueueClientInnerProps) {
-  void _viewerId;
+}: QueueClientProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const now = useMemo(() => new Date(), []);
+  // `now` refreshes every 60s so day-bucket math (Today / Overdue /
+  // Later this week) stays accurate across midnight and DST boundaries
+  // for reps who keep the queue open all session.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const timezone = timePrefs.timezone;
 
   const counts = useMemo<BucketCounts>(() => {
@@ -157,6 +159,14 @@ function QueueClientInner({
   const [skippedIds, setSkippedIds] = useState<Set<string>>(() => new Set());
   const [snoozedIds, setSnoozedIds] = useState<Set<string>>(() => new Set());
   const [snoozePending, setSnoozePending] = useState(false);
+  const [donePending, setDonePending] = useState(false);
+  // Tracks the latest server-known version after a successful Done /
+  // Snooze, so back-arrow navigating to a previously-completed card
+  // doesn't post a stale version (which would surface a ConflictError
+  // toast on a task the rep already actioned).
+  const [versionOverrides, setVersionOverrides] = useState<
+    Record<string, number>
+  >({});
 
   // If the bucket switches (URL change), reset cursor to 0 and clear
   // session state — we're effectively starting a new walk-through.
@@ -172,9 +182,24 @@ function QueueClientInner({
   }, [activeBucket]);
 
   const totalCount = taskIds.length;
-  const processedCount = doneIds.size + skippedIds.size + snoozedIds.size;
+  // Use a unioned Set so a task that's been Skipped-then-Done (or any
+  // combination) counts ONCE in the progress bar / "remaining" math —
+  // not three times across the three sets.
+  const processedCount = useMemo(() => {
+    const seen = new Set<string>();
+    for (const id of doneIds) seen.add(id);
+    for (const id of skippedIds) seen.add(id);
+    for (const id of snoozedIds) seen.add(id);
+    return Math.min(seen.size, totalCount);
+  }, [doneIds, skippedIds, snoozedIds, totalCount]);
   const currentId = taskIds[cursor];
-  const currentTask = currentId ? taskMap.get(currentId) : undefined;
+  const rawCurrentTask = currentId ? taskMap.get(currentId) : undefined;
+  const currentTask = useMemo<QueueTask | undefined>(() => {
+    if (!rawCurrentTask) return undefined;
+    const override = versionOverrides[rawCurrentTask.id];
+    if (override === undefined) return rawCurrentTask;
+    return { ...rawCurrentTask, version: override };
+  }, [rawCurrentTask, versionOverrides]);
   const atEnd = cursor >= totalCount;
 
   const advanceCursor = useCallback(() => {
@@ -200,28 +225,52 @@ function QueueClientInner({
   }, [totalCount]);
 
   const handleDoneSuccess = useCallback(
-    (_newVersion: number) => {
-      void _newVersion;
+    (newVersion: number) => {
       if (!currentId) return;
       setDoneIds((s) => {
         const next = new Set(s);
         next.add(currentId);
         return next;
       });
+      setVersionOverrides((v) => ({ ...v, [currentId]: newVersion }));
       advanceCursor();
-      try {
-        void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      } catch {
-        // queryClient unavailable in this surface — refresh covers it.
-      }
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
       router.refresh();
     },
     [currentId, advanceCursor, queryClient, router],
   );
 
+  // Direct Done call — used by both the keyboard handler (`D`) and a
+  // belt-and-suspenders fallback. The visible Done toggle is the
+  // canonical click path (TaskCompleteToggle owns OCC + toast), but the
+  // keyboard shortcut calls the action here so we don't depend on a
+  // DOM querySelector against the toggle's internal markup.
+  const triggerDone = useCallback(async () => {
+    if (!currentTask || donePending) return;
+    setDonePending(true);
+    try {
+      const res = await toggleTaskCompleteAction(
+        currentTask.id,
+        currentTask.version,
+        currentTask.status !== "completed",
+      );
+      if (!res.ok) {
+        toast.error(res.error, { duration: 10_000, dismissible: true });
+        return;
+      }
+      handleDoneSuccess(res.data.version);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to complete task.";
+      toast.error(message, { duration: 10_000, dismissible: true });
+    } finally {
+      setDonePending(false);
+    }
+  }, [currentTask, donePending, handleDoneSuccess]);
+
   const handleSnooze = useCallback(
     async (targetUtc: Date) => {
-      if (!currentTask) return;
+      if (!currentTask || snoozePending) return;
       setSnoozePending(true);
       try {
         const res = await updateTaskAction({
@@ -230,8 +279,12 @@ function QueueClientInner({
           dueAt: targetUtc,
         });
         if (!res.ok) {
-          toast.error(res.error, {
-            duration: Infinity,
+          const message =
+            res.code === "CONFLICT"
+              ? "Task was changed elsewhere — refresh to see the latest."
+              : res.error;
+          toast.error(message, {
+            duration: 10_000,
             dismissible: true,
           });
           return;
@@ -241,12 +294,9 @@ function QueueClientInner({
           next.add(currentTask.id);
           return next;
         });
+        setVersionOverrides((v) => ({ ...v, [currentTask.id]: res.data.version }));
         advanceCursor();
-        try {
-          void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-        } catch {
-          // ignore — refresh covers it
-        }
+        void queryClient.invalidateQueries({ queryKey: ["tasks"] });
         router.refresh();
       } catch (err) {
         const message =
@@ -254,20 +304,30 @@ function QueueClientInner({
             ? err.message
             : "Failed to snooze task.";
         toast.error(message, {
-          duration: Infinity,
+          duration: 10_000,
           dismissible: true,
         });
       } finally {
         setSnoozePending(false);
       }
     },
-    [currentTask, advanceCursor, queryClient, router],
+    [currentTask, snoozePending, advanceCursor, queryClient, router],
   );
 
   // Keyboard handler — D / S / Z / ← → / j k / Esc.
-  // Suppress when an input / textarea / select is focused (e.g. the
-  // custom-date picker inside the snooze popover) OR when a Radix
-  // dialog/popover is open and its content owns focus.
+  // Suppression layers (each independent, all must pass to fire):
+  //   - Modifier keys (Ctrl/Cmd/Alt/Shift) bypass shortcuts so they
+  //     don't collide with browser/OS shortcuts.
+  //   - Key auto-repeat (held key) ignored so holding D doesn't burst-
+  //     fire the action against a stale version.
+  //   - IME composition ignored (CJK / Japanese keyboards mid-compose).
+  //   - INPUT / TEXTAREA / SELECT / contentEditable focused → ignored
+  //     (Snooze custom-date picker stays usable).
+  //   - Snooze popover open → only Escape fires (closes the popover).
+  //     This is the Radix-Popover focus case: focus lands on a
+  //     <button> inside the popover, which isn't a text input, so
+  //     without an explicit popover-open guard a "D" inside the popover
+  //     would synthesize Done on the underlying card.
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   useEffect(() => {
     function isTextInputFocused(): boolean {
@@ -280,7 +340,9 @@ function QueueClientInner({
     }
 
     function onKey(e: KeyboardEvent) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.repeat) return;
+      if (e.isComposing) return;
       if (isTextInputFocused()) return;
 
       if (e.key === "Escape") {
@@ -294,18 +356,15 @@ function QueueClientInner({
         return;
       }
 
+      // While the snooze popover is open, swallow everything but Esc.
+      if (snoozeOpen) return;
+
       if (atEnd) return;
 
       const k = e.key.toLowerCase();
       if (k === "d") {
         e.preventDefault();
-        // Synthesize a click on the visible Done toggle so the
-        // existing TaskCompleteToggle + onSuccess wiring fires
-        // exactly once, including its toast-on-error path.
-        const btn = document.querySelector<HTMLButtonElement>(
-          "[data-queue-done] button",
-        );
-        btn?.click();
+        void triggerDone();
         return;
       }
       if (k === "s") {
@@ -330,7 +389,7 @@ function QueueClientInner({
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [atEnd, snoozeOpen, handleSkip, handlePrev, handleNext, router]);
+  }, [atEnd, snoozeOpen, triggerDone, handleSkip, handlePrev, handleNext, router]);
 
   const remainingLabel = useMemo(() => {
     if (activeBucket === "today") return "today";
@@ -351,6 +410,14 @@ function QueueClientInner({
   }
 
   function refreshQueue() {
+    // Wipe per-session state so a new walk-through starts cleanly with
+    // whatever rows the server now returns; otherwise the cursor would
+    // resume at `atEnd` even if the server now has unprocessed tasks.
+    setCursor(0);
+    setDoneIds(new Set());
+    setSkippedIds(new Set());
+    setSnoozedIds(new Set());
+    setVersionOverrides({});
     router.refresh();
   }
 
@@ -359,20 +426,21 @@ function QueueClientInner({
       <>
         <BucketTabs counts={counts} active={activeBucket} buildHref={buildBucketHref} />
         <StandardEmptyState
-          title="Nothing here."
-          description="Switch buckets above or head back to the list."
+          title="No tasks in this bucket."
+          description="Switch buckets above or return to the list."
         />
       </>
     );
   }
 
   if (atEnd) {
+    const cappedProcessed = Math.min(processedCount, totalCount);
     return (
       <>
         <BucketTabs counts={counts} active={activeBucket} buildHref={buildBucketHref} />
         <StandardEmptyState
-          title="Queue cleared. Nice work."
-          description={`Processed ${processedCount} of ${totalCount} task${totalCount === 1 ? "" : "s"} (${doneIds.size} done, ${snoozedIds.size} snoozed, ${skippedIds.size} skipped).`}
+          title="Queue cleared."
+          description={`Processed ${cappedProcessed} of ${totalCount} task${totalCount === 1 ? "" : "s"} (${doneIds.size} done, ${snoozedIds.size} snoozed, ${skippedIds.size} skipped).`}
         />
         <div className="mt-4 flex justify-center gap-3">
           <Link
@@ -412,7 +480,12 @@ function QueueClientInner({
         <p className="text-sm text-muted-foreground">
           Task {Math.min(cursor + 1, totalCount)} of {totalCount}
           <span className="ml-2">
-            · {Math.max(0, totalCount - processedCount)} remaining {remainingLabel}
+            ·{" "}
+            {Math.max(
+              0,
+              totalCount - Math.min(processedCount, totalCount),
+            )}{" "}
+            remaining {remainingLabel}
           </span>
         </p>
         <div className="flex items-center gap-2">
@@ -454,7 +527,7 @@ function QueueClientInner({
       <div className="mt-6 rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div data-queue-done className="pt-0.5">
+            <div className="pt-0.5">
               <TaskCompleteToggle
                 task={{
                   id: currentTask.id,
@@ -462,6 +535,7 @@ function QueueClientInner({
                   version: currentTask.version,
                   status: currentTask.status,
                 }}
+                disabled={donePending}
                 onSuccess={handleDoneSuccess}
               />
             </div>
@@ -613,9 +687,7 @@ function BucketTabs({
   );
 }
 
-export interface QueueClientPropsExternal extends QueueClientProps {}
-
-export function QueueClient(props: QueueClientPropsExternal) {
+export function QueueClient(props: QueueClientProps) {
   return (
     <StandardErrorBoundary>
       <QueueClientInner {...props} />

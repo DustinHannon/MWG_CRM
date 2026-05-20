@@ -184,6 +184,9 @@ export default async function ContactDetailPage({
             entityId={contact.id}
             tasks={await listTasksForContact(contact.id)}
             currentUserId={session.id}
+            viewerCanEditOthers={
+              session.isAdmin || perms.canEditOthersTasks
+            }
           />
         </div>
       </GlassCard>
