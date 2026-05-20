@@ -42,7 +42,15 @@ export function MyOpenTasksWidget({ tasks }: { tasks: TaskRow[] }) {
         </ul>
       )}
 
-      <div className="mt-3 flex items-center justify-end">
+      <div className="mt-3 flex items-center justify-end gap-4">
+        {tasks.length > 0 ? (
+          <Link
+            href="/tasks/queue"
+            className="text-xs text-muted-foreground transition hover:text-foreground hover:underline"
+          >
+            Walk through →
+          </Link>
+        ) : null}
         <Link
           href="/tasks?assignee=me&status=open"
           className="text-xs text-muted-foreground transition hover:text-foreground hover:underline"

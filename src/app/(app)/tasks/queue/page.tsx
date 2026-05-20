@@ -108,16 +108,24 @@ export default async function TasksQueuePage({
             Task queue
           </h1>
         </div>
-        <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
+            <Link
+              href="/tasks"
+              className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              List
+            </Link>
+            <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
+              Queue
+            </span>
+          </div>
           <Link
             href="/tasks"
-            className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            className="text-xs text-muted-foreground transition hover:text-foreground hover:underline"
           >
-            List
+            ← Back to list
           </Link>
-          <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
-            Queue
-          </span>
         </div>
       </div>
 

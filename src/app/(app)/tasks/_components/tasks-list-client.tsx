@@ -656,7 +656,7 @@ function TasksListInner({
   );
 
   const headerControls = (
-    <div className="hidden gap-1 rounded-lg border border-glass-border bg-glass-1 p-1 md:flex">
+    <div className="flex gap-1 rounded-lg border border-glass-border bg-glass-1 p-1">
       <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
         List
       </span>
