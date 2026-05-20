@@ -9,7 +9,8 @@ export type EntityKind =
   | "contact"
   | "opportunity"
   | "task"
-  | "activity";
+  | "activity"
+  | "report";
 
 const ENTITY_LABEL: Record<EntityKind, string> = {
   lead: "lead",
@@ -18,6 +19,7 @@ const ENTITY_LABEL: Record<EntityKind, string> = {
   opportunity: "opportunity",
   task: "task",
   activity: "activity",
+  report: "report",
 };
 
 /**

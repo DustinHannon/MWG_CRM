@@ -10,6 +10,7 @@ const LABEL: Record<EntityKind, string> = {
   opportunity: "Opportunity",
   task: "Task",
   activity: "Activity",
+  report: "Report",
 };
 
 /**

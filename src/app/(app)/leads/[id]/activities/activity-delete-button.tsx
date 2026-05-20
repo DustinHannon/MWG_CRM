@@ -27,12 +27,13 @@ export function ActivityDeleteButton({
     <ConfirmDeleteDialog
       entityKind="activity"
       entityName={activityName}
-      // Activities do not surface a persistent archive notification
-      // (they are timeline entries on a parent record). The undo
-      // toast is the only longer-term restore path; this preserves
-      // the prior dialog phrasing rather than the new
-      // "notifications" default which would misdirect the user.
-      restorePath="archive"
+      // Activities do not emit a persistent archive notification
+      // (they are timeline entries on a parent record) AND no
+      // /activities/archived page exists. Both built-in restore
+      // paths would misdirect the user — "none" keeps the dialog
+      // honest; the undo toast is the only restore on this surface
+      // (L-11 sibling of M-4).
+      restorePath="none"
       extraBody={
         <p>
           The parent record&rsquo;s last-activity timestamp will recompute.

@@ -133,8 +133,15 @@ export function ReportActionMenu({
       ) : null}
       {canDelete && !isBuiltin ? (
         <ConfirmDeleteDialog
-          entityKind="lead"
+          entityKind="report"
           entityName={reportName}
+          // Reports do not emit emitArchiveNotification (no recipient
+          // model — reports are owned but not "owner-watched") AND no
+          // /reports/archived page exists. Both built-in restore
+          // paths would mislead the user; "none" keeps the dialog
+          // honest — the undo toast is the only restore on this
+          // surface (M-4).
+          restorePath="none"
           extraBody={
             <p>
               This report will be archived. You can recreate it from the
