@@ -112,6 +112,10 @@ export const appCrumbs = {
     { label: "Tasks", href: "/tasks" },
     { label: "Archived" },
   ],
+  tasksQueue: (): Breadcrumb[] => [
+    { label: "Tasks", href: "/tasks" },
+    { label: "Queue" },
+  ],
 
   // Reports
   reportsIndex: (): Breadcrumb[] => [{ label: "Reports" }],
