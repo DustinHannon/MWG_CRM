@@ -267,8 +267,13 @@ export async function restoreFromNotificationAction(input: {
           ),
         );
 
+      // Narrow revalidation only (M-6). The per-entity revalidatePath
+      // calls inside each switch arm already touch the relevant list
+      // / detail / archive paths; a layout-wide revalidation was
+      // overkill — only the bell badge + /notifications page need a
+      // recompute beyond the per-entity surfaces, both of which the
+      // bell pulls fresh via its own next/cache layer.
       revalidatePath("/notifications");
-      revalidatePath("/", "layout");
     },
   );
 }
