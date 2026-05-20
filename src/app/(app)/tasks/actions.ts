@@ -249,12 +249,18 @@ export async function undoArchiveTaskAction(input: {
     if (!canDeleteTask(session, row)) {
       throw new ForbiddenError("You can't restore this task.");
     }
-    await restoreTasksById([payload.id], session.id);
+    const undoCascade = await restoreTasksById([payload.id], session.id);
     await writeAudit({
       actorId: session.id,
       action: "task.unarchive_undo",
       targetType: "task",
       targetId: payload.id,
+      after: {
+        // Tasks have no children; cascade shape returned with zeros
+        // to keep forensic parity with sibling undoArchiveX audits.
+        cascadedTasks: undoCascade.cascadedTasks,
+        cascadedActivities: undoCascade.cascadedActivities,
+      },
     });
 
     await emitActivity({
