@@ -87,17 +87,28 @@ export function ConfirmDeleteDialog({
   const [reason, setReason] = useState("");
   const [pending, startTransition] = useTransition();
   const label = ENTITY_LABEL[entityKind];
-  const isBulk = count > 1;
+  // Bulk branch covers count>1 AND also count==1 from bulk callers
+  // (selection-of-one passes entityName="" deliberately because the
+  // dialog has no single name to display). Without the entityName
+  // guard, count=1 falls into the single-row branch and renders an
+  // empty `<span>` where the name would go.
+  const isBulk = count > 1 || (count >= 1 && entityName.trim() === "");
   const pluralLabel = `${label}s`;
+  // Pluralize the noun only when count > 1; count==1 bulk callers
+  // still say "1 task will be hidden …".
+  const bulkLabel = count === 1 ? label : pluralLabel;
   // Restore-hint copy varies by destination. "none" omits it entirely
   // (surfaces with no archive page and no persistent prompt — only
   // the undo toast is offered).
+  // Pronoun follows count, not the bulk-branch flag — a count=1
+  // bulk caller (selection-of-one) still says "it".
+  const restorePronoun = count > 1 ? "them" : "it";
   const restoreHint =
     restorePath === "none"
       ? `You can click Undo on the toast that appears next.`
       : restorePath === "archive"
-      ? `You can restore ${isBulk ? "them" : "it"} from the ${label} archive within 30 days, or click Undo on the toast that appears next.`
-      : `You can restore ${isBulk ? "them" : "it"} from your notifications within 30 days, or click Undo on the toast that appears next.`;
+      ? `You can restore ${restorePronoun} from the ${label} archive within 30 days, or click Undo on the toast that appears next.`
+      : `You can restore ${restorePronoun} from your notifications within 30 days, or click Undo on the toast that appears next.`;
 
   function handleConfirm() {
     startTransition(async () => {
@@ -121,7 +132,7 @@ export function ConfirmDeleteDialog({
         <AlertDialog.Content className="mwg-mobile-sheet fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-background p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0">
           <AlertDialog.Title className="text-base font-semibold text-foreground">
             {isBulk
-              ? `Archive ${count} ${pluralLabel}?`
+              ? `Archive ${count} ${bulkLabel}?`
               : `Archive this ${label}?`}
           </AlertDialog.Title>
           <AlertDialog.Description asChild>
@@ -130,7 +141,7 @@ export function ConfirmDeleteDialog({
                 {isBulk ? (
                   <>
                     <span className="font-medium text-foreground">
-                      {count} {pluralLabel}
+                      {count} {bulkLabel}
                     </span>{" "}
                     will be hidden from active views.
                   </>
