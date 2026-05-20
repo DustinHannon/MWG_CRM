@@ -121,6 +121,18 @@ export async function restoreFromNotificationAction(input: {
       // Per-entity restore: re-fetch the archived row, run the same
       // predicate the per-entity restoreXAction enforces, then
       // invoke the same cascade-restore lib (single code path).
+      //
+      // Ownership re-check (M-7): the canDelete<E> predicate below
+      // is the AUTHORITATIVE ownership gate. It reads the LIVE row's
+      // ownerId / createdById / assignedToId — so a user whose
+      // ownership of the entity LATER changed (transfer-of-ownership
+      // after the archive_pending notification was emitted) is
+      // caught here and rejected with ForbiddenError. The
+      // `notif.userId === session.id` check above is for
+      // notification-row attribution only (does the caller actually
+      // own this notification row?); it is NOT an authorization
+      // check on the underlying entity. Stale notifications that
+      // outlive their recipient's ownership cannot grant restore.
       switch (parsed.entityType) {
         case "lead": {
           const [row] = await db
