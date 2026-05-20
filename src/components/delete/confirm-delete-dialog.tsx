@@ -25,9 +25,12 @@ const ENTITY_LABEL: Record<EntityKind, string> = {
  * restore-hint copy in the dialog body. Defaults to "notifications"
  * — the path every authenticated user can reach. Callers explicitly
  * pass "archive" only when the user is an admin (the /<e>/archived
- * page is admin-only).
+ * page is admin-only). "none" omits the restore hint entirely — used
+ * for surfaces that do NOT emit a persistent archive prompt AND do
+ * NOT have an admin-archive page (e.g. reports, activities); the
+ * undo toast remains the only restore path on those surfaces.
  */
-export type RestorePath = "notifications" | "archive";
+export type RestorePath = "notifications" | "archive" | "none";
 
 /**
  * canonical archive confirmation dialog. Wraps Radix
@@ -35,11 +38,22 @@ export type RestorePath = "notifications" | "archive";
  * come for free. Body copy is derived from `entityKind`; pass
  * `extraBody` for entity-specific cascade hints (e.g., "Its 14
  * activities and 3 tasks will be hidden too.").
+ *
+ * Supports both single-row and bulk callers: pass `count` > 1 for
+ * the bulk variant — the title pluralizes the label and the body
+ * shows "N <label>s" instead of the single name. `entityName` is
+ * still required for single-row callers and ignored for bulk.
  */
 export interface ConfirmDeleteDialogProps {
   trigger: ReactNode;
   entityKind: EntityKind;
   entityName: string;
+  /**
+   * Number of records being archived. Defaults to 1 (single-row
+   * surfaces). Pass the selection size for bulk surfaces; the title
+   * and body switch to pluralized copy automatically.
+   */
+  count?: number;
   /** Extra paragraph rendered before the standard archive-view hint. */
   extraBody?: ReactNode;
   /** Whether to show the optional reason textarea. Defaults true. */
@@ -47,7 +61,9 @@ export interface ConfirmDeleteDialogProps {
   /**
    * Where the actor can self-restore: "notifications" for non-admin
    * owners (the persistent archive prompt in the bell + /notifications
-   * page), or "archive" for admins (the /<e>/archived page).
+   * page), "archive" for admins (the /<e>/archived page), or "none"
+   * for surfaces that do not emit a persistent prompt AND have no
+   * admin-archive page (the undo toast is the only restore path).
    * Defaults to "notifications" — the universally-reachable path.
    */
   restorePath?: RestorePath;
@@ -59,6 +75,7 @@ export function ConfirmDeleteDialog({
   trigger,
   entityKind,
   entityName,
+  count = 1,
   extraBody,
   showReason = true,
   restorePath = "notifications",
@@ -68,10 +85,17 @@ export function ConfirmDeleteDialog({
   const [reason, setReason] = useState("");
   const [pending, startTransition] = useTransition();
   const label = ENTITY_LABEL[entityKind];
+  const isBulk = count > 1;
+  const pluralLabel = `${label}s`;
+  // Restore-hint copy varies by destination. "none" omits it entirely
+  // (surfaces with no archive page and no persistent prompt — only
+  // the undo toast is offered).
   const restoreHint =
-    restorePath === "archive"
-      ? `You can restore it from the ${label} archive within 30 days, or click Undo on the toast that appears next.`
-      : "You can restore it from your notifications within 30 days, or click Undo on the toast that appears next.";
+    restorePath === "none"
+      ? `You can click Undo on the toast that appears next.`
+      : restorePath === "archive"
+      ? `You can restore ${isBulk ? "them" : "it"} from the ${label} archive within 30 days, or click Undo on the toast that appears next.`
+      : `You can restore ${isBulk ? "them" : "it"} from your notifications within 30 days, or click Undo on the toast that appears next.`;
 
   function handleConfirm() {
     startTransition(async () => {
@@ -94,13 +118,28 @@ export function ConfirmDeleteDialog({
             transforms. */}
         <AlertDialog.Content className="mwg-mobile-sheet fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-background p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0">
           <AlertDialog.Title className="text-base font-semibold text-foreground">
-            Archive this {label}?
+            {isBulk
+              ? `Archive ${count} ${pluralLabel}?`
+              : `Archive this ${label}?`}
           </AlertDialog.Title>
           <AlertDialog.Description asChild>
             <div className="mt-3 space-y-3 text-sm text-muted-foreground">
               <p>
-                <span className="font-medium text-foreground">{entityName}</span>{" "}
-                will be hidden from active views.
+                {isBulk ? (
+                  <>
+                    <span className="font-medium text-foreground">
+                      {count} {pluralLabel}
+                    </span>{" "}
+                    will be hidden from active views.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-foreground">
+                      {entityName}
+                    </span>{" "}
+                    will be hidden from active views.
+                  </>
+                )}
               </p>
               {extraBody ? <div className="text-sm">{extraBody}</div> : null}
               <p className="text-xs text-muted-foreground/80">{restoreHint}</p>

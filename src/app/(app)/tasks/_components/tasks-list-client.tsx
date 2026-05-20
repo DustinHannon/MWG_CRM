@@ -32,6 +32,7 @@ import {
   BulkSelectionProvider,
   useBulkSelection,
 } from "@/components/bulk-selection";
+import { ConfirmDeleteDialog } from "@/components/delete";
 import { BulkTagButton } from "@/components/tags/bulk-tag-button";
 import { TagsCell } from "@/components/tags/tags-cell";
 import { TagChip } from "@/components/tags/tag-chip";
@@ -426,29 +427,28 @@ function TasksListInner({
     });
   }
 
-  function bulkDelete() {
+  /**
+   * Bulk archive confirmation runs inside the canonical
+   * ConfirmDeleteDialog (M-3). The dialog's async onConfirm awaits
+   * the action directly — no startTransition wrapper here so the
+   * dialog's own pending state stays accurate; `pending` (from the
+   * top-level useTransition) still toggles via the other bulk paths
+   * (Complete / Reassign).
+   */
+  async function bulkDelete(): Promise<void> {
     if (selected.size === 0) return;
-    if (
-      !confirm(
-        `Delete ${selected.size} task(s)? This soft-deletes them; the retention cron purges after 730 days.`,
-      )
-    ) {
-      return;
+    const items = selectedItems();
+    if (items.length === 0) return;
+    const res = await bulkDeleteTasksAction({ items });
+    if (res.ok) {
+      toast.success(`Deleted ${res.data.updated.length} task(s)`);
+      notifyConflicts(res.data.conflicts);
+      clearSelection();
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      router.refresh();
+    } else {
+      toast.error(res.error, { duration: Infinity, dismissible: true });
     }
-    startTransition(async () => {
-      const items = selectedItems();
-      if (items.length === 0) return;
-      const res = await bulkDeleteTasksAction({ items });
-      if (res.ok) {
-        toast.success(`Deleted ${res.data.updated.length} task(s)`);
-        notifyConflicts(res.data.conflicts);
-        clearSelection();
-        await queryClient.invalidateQueries({ queryKey: ["tasks"] });
-        router.refresh();
-      } else {
-        toast.error(res.error, { duration: Infinity, dismissible: true });
-      }
-    });
   }
 
   function openReassign() {
@@ -710,14 +710,25 @@ function TasksListInner({
             >
               Complete
             </button>
-            <button
-              type="button"
-              onClick={bulkDelete}
-              disabled={pending}
-              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20"
-            >
-              Delete
-            </button>
+            <ConfirmDeleteDialog
+              entityKind="task"
+              entityName=""
+              count={selected.size}
+              showReason={false}
+              restorePath={user.isAdmin ? "archive" : "notifications"}
+              onConfirm={async () => {
+                await bulkDelete();
+              }}
+              trigger={
+                <button
+                  type="button"
+                  disabled={pending}
+                  className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20"
+                >
+                  Delete
+                </button>
+              }
+            />
             {canReassign && assignableUsers.length > 0 ? (
               <button
                 type="button"
