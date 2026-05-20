@@ -10,6 +10,7 @@ import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   emitActivity,
   emitActivities,
+  emitArchiveNotification,
   type EmitActivityInput,
 } from "@/lib/notifications";
 import {
@@ -670,7 +671,9 @@ export async function bulkReassignTasks(
  * whose client `version` no longer matches is reported in `conflicts`
  * and left untouched (also skips rows already archived). One
  * transaction; audit after the tx (STANDARDS 19.1.2) for ids actually
- * archived.
+ * archived. Per-task stakeholder archive-notifications are emitted
+ * after the audit (M-1), mirroring the single-row deleteTaskAction
+ * de-dup logic so creator + assignee both see the restore prompt.
  */
 export async function bulkDeleteTasks(
   items: BulkRowVersion[],
@@ -678,57 +681,74 @@ export async function bulkDeleteTasks(
 ): Promise<BulkTaskResult> {
   if (items.length === 0) return { updated: [], conflicts: [] };
   const deletedAt = new Date();
-  const { updated, conflicts, updatedRows } = await db.transaction(async (tx) => {
-    const updated: string[] = [];
-    const conflicts: string[] = [];
-    const updatedRows: EmitActivityInput[] = [];
-    for (const item of items) {
-      const claimed = await tx
-        .update(tasks)
-        .set({
-          isDeleted: true,
-          deletedAt,
-          deletedById: actorId,
-          updatedAt: deletedAt,
-          updatedById: actorId,
-          version: sql`${tasks.version} + 1`,
-        })
-        .where(
-          and(
-            eq(tasks.id, item.id),
-            eq(tasks.version, item.version),
-            eq(tasks.isDeleted, false),
-          ),
-        )
-        .returning({
-          id: tasks.id,
-          title: tasks.title,
-          leadId: tasks.leadId,
-        });
-      if (claimed.length === 1) {
-        updated.push(item.id);
-        updatedRows.push({
-          actorId,
-          verb: "Archived",
-          entityType: "task",
-          entityId: claimed[0].id,
-          entityDisplayName: claimed[0].title,
-          link: claimed[0].leadId
-            ? `/leads/${claimed[0].leadId}`
-            : "/tasks",
-        });
-        continue;
+  // Per-claimed-row metadata captured inside the tx so the post-tx
+  // notification emit doesn't need a second read. Title + leadId
+  // drive the activity link; createdById + assignedToId drive the
+  // stakeholder fan-out.
+  interface ClaimedRow {
+    id: string;
+    title: string;
+    leadId: string | null;
+    createdById: string | null;
+    assignedToId: string | null;
+  }
+  const { updated, conflicts, updatedRows, claimedRows } = await db.transaction(
+    async (tx) => {
+      const updated: string[] = [];
+      const conflicts: string[] = [];
+      const updatedRows: EmitActivityInput[] = [];
+      const claimedRows: ClaimedRow[] = [];
+      for (const item of items) {
+        const claimed = await tx
+          .update(tasks)
+          .set({
+            isDeleted: true,
+            deletedAt,
+            deletedById: actorId,
+            updatedAt: deletedAt,
+            updatedById: actorId,
+            version: sql`${tasks.version} + 1`,
+          })
+          .where(
+            and(
+              eq(tasks.id, item.id),
+              eq(tasks.version, item.version),
+              eq(tasks.isDeleted, false),
+            ),
+          )
+          .returning({
+            id: tasks.id,
+            title: tasks.title,
+            leadId: tasks.leadId,
+            createdById: tasks.createdById,
+            assignedToId: tasks.assignedToId,
+          });
+        if (claimed.length === 1) {
+          updated.push(item.id);
+          updatedRows.push({
+            actorId,
+            verb: "Archived",
+            entityType: "task",
+            entityId: claimed[0].id,
+            entityDisplayName: claimed[0].title,
+            link: claimed[0].leadId
+              ? `/leads/${claimed[0].leadId}`
+              : "/tasks",
+          });
+          claimedRows.push(claimed[0]);
+          continue;
+        }
+        const [live] = await tx
+          .select({ version: tasks.version })
+          .from(tasks)
+          .where(eq(tasks.id, item.id))
+          .limit(1);
+        if (live && live.version !== item.version) conflicts.push(item.id);
+        // else: already archived at the same version — idempotent no-op.
       }
-      const [live] = await tx
-        .select({ version: tasks.version })
-        .from(tasks)
-        .where(eq(tasks.id, item.id))
-        .limit(1);
-      if (live && live.version !== item.version) conflicts.push(item.id);
-      // else: already archived at the same version — idempotent no-op.
-    }
-    return { updated, conflicts, updatedRows };
-  });
+      return { updated, conflicts, updatedRows, claimedRows };
+    },
+  );
   await writeAuditBatch({
     actorId,
     events: updated.map((id) => ({
@@ -741,6 +761,28 @@ export async function bulkDeleteTasks(
   // archived; title/leadId from the claim RETURNING (STANDARDS
   // 19.6.3). Best-effort, after the tx + audit.
   await emitActivities(updatedRows);
+  // Per-task stakeholder archive-notifications (M-1 parity with the
+  // single-row deleteTaskAction). De-duped per task to creator +
+  // assignee; emitArchiveNotification itself skips self-emits and
+  // null owners, so we pass the raw stakeholder ids. Best-effort —
+  // emitArchiveNotification swallows its own write failures so a
+  // notification outage cannot block the bulk archive.
+  for (const row of claimedRows) {
+    const taskLink = row.leadId ? `/leads/${row.leadId}` : "/tasks";
+    const stakeholders = new Set<string>();
+    if (row.createdById) stakeholders.add(row.createdById);
+    if (row.assignedToId) stakeholders.add(row.assignedToId);
+    for (const ownerId of stakeholders) {
+      await emitArchiveNotification({
+        entityType: "task",
+        entityId: row.id,
+        entityDisplayName: row.title,
+        ownerId,
+        actorId,
+        link: taskLink,
+      });
+    }
+  }
   return { updated, conflicts };
 }
 
