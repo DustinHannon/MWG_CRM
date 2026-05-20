@@ -342,6 +342,10 @@ export async function restoreOpportunitiesById(
         // actor stamping for skip-self in Supabase Realtime.
         updatedById: actorId,
         updatedAt: sql`now()`,
+        // OCC bump on restore mirrors archive + update; without it,
+        // a concurrent edit-from-stale-version after restore would
+        // silently win.
+        version: sql`${opportunities.version} + 1`,
       })
       .where(inArray(opportunities.id, ids));
     let cascadedTasks = 0;

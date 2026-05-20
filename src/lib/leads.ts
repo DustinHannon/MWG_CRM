@@ -645,6 +645,10 @@ export async function restoreLeadsById(
         deleteReason: null,
         updatedAt: sql`now()`,
         updatedById: actorId,
+        // OCC bump on restore mirrors archive + update; without it,
+        // a concurrent edit-from-stale-version after restore would
+        // silently win.
+        version: sql`${leads.version} + 1`,
       })
       .where(inArray(leads.id, ids));
     let cascadedTasks = 0;

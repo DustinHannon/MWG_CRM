@@ -892,11 +892,17 @@ export async function archiveTasksById(
 }
 
 /** restore archived tasks. */
+/**
+ * Restore archived tasks. Tasks have no children, so the cascade
+ * shape is returned with zeroed counts to keep the contract uniform
+ * across all five restoreXsById functions; the type system then
+ * enforces forensic-audit parity at every call site.
+ */
 export async function restoreTasksById(
   ids: string[],
   actorId: string,
-): Promise<void> {
-  if (ids.length === 0) return;
+): Promise<{ cascadedTasks: 0; cascadedActivities: 0 }> {
+  if (ids.length === 0) return { cascadedTasks: 0, cascadedActivities: 0 };
   await db
     .update(tasks)
     .set({
@@ -907,8 +913,13 @@ export async function restoreTasksById(
       // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
+      // OCC bump on restore mirrors archive + update; without it,
+      // a concurrent edit-from-stale-version after restore would
+      // silently win.
+      version: sql`${tasks.version} + 1`,
     })
     .where(inArray(tasks.id, ids));
+  return { cascadedTasks: 0, cascadedActivities: 0 };
 }
 
 /** admin hard-delete. Use only from admin flows. */
