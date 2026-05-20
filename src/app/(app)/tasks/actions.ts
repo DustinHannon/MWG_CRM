@@ -394,6 +394,35 @@ export async function toggleTaskCompleteAction(
     { action: "task.toggle_complete", entityType: "task", entityId: id },
     async (): Promise<TaskVersionData> => {
       const session = await requireSession();
+      // Defence-in-depth access gate. Mirrors updateTaskAction's
+      // predicate so the toggle path (used by /tasks list, mobile card,
+      // entity-tasks-section, and the new /tasks/queue) can't mark
+      // someone else's task complete just because the actor knows
+      // its id+version. Admin or canEditOthersTasks bypass.
+      const [row] = await db
+        .select({
+          createdById: tasks.createdById,
+          assignedToId: tasks.assignedToId,
+        })
+        .from(tasks)
+        .where(eq(tasks.id, id))
+        .limit(1);
+      if (!row) {
+        throw new NotFoundError("task");
+      }
+      const perms = await getPermissions(session.id);
+      const isOwnerOrAssignee =
+        row.createdById === session.id || row.assignedToId === session.id;
+      const canEditOthers = session.isAdmin || perms.canEditOthersTasks;
+      if (!canEditOthers && !isOwnerOrAssignee) {
+        await writeAudit({
+          actorId: session.id,
+          action: "access.denied.task.complete",
+          targetType: "task",
+          targetId: id,
+        });
+        throw new ForbiddenError("You can't change this task.");
+      }
       const result = await updateTask(
         id,
         expectedVersion,
