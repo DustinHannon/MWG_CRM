@@ -655,6 +655,20 @@ function TasksListInner({
     [timePrefs, user.id, pending],
   );
 
+  const headerControls = (
+    <div className="hidden gap-1 rounded-lg border border-glass-border bg-glass-1 p-1 md:flex">
+      <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
+        List
+      </span>
+      <Link
+        href="/tasks/queue"
+        className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+      >
+        Queue
+      </Link>
+    </div>
+  );
+
   const headerActions = (
     <>
       <div className="hidden md:inline-flex">
@@ -849,6 +863,7 @@ function TasksListInner({
         }
         header={{
           title: "Tasks",
+          controls: headerControls,
           actions: headerActions,
         }}
         filtersSlot={filtersSlot}
