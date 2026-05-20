@@ -61,10 +61,19 @@ export function SnoozePopover({
     return new Date();
   }, [open]);
 
+  // Default "Pick a date" to the calendar day AFTER the task's current
+  // due date in user tz (or after "now" if no due date). Done as
+  // calendar arithmetic on the YYYY-MM-DD string — not `+ 24h` in UTC
+  // — so a spring-forward / fall-back day doesn't shift the default
+  // by ±1.
   const defaultCustomDate = useMemo(() => {
-    const base = currentDueAt ? new Date(currentDueAt) : now;
-    const plusOne = new Date(base.getTime() + 24 * 60 * 60 * 1000);
-    return isoDateInTz(plusOne, timezone);
+    const baseYmd = currentDueAt
+      ? isoDateInTz(new Date(currentDueAt), timezone)
+      : isoDateInTz(now, timezone);
+    const [y, m, d] = baseYmd.split("-").map(Number);
+    if (!y || !m || !d) return baseYmd;
+    const next = new Date(Date.UTC(y, m - 1, d + 1));
+    return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
   }, [currentDueAt, now, timezone]);
 
   const [customDate, setCustomDate] = useState<string>(defaultCustomDate);

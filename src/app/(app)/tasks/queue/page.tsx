@@ -105,6 +105,10 @@ export default async function TasksQueuePage({
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={appCrumbs.tasksQueue()} />
+      {/* Both realtime channels mount: PageRealtime is the primary
+          WebSocket-driven invalidator; PagePoll is the off-publication
+          backstop for tables not covered by Supabase Realtime + a soak
+          for missed events. Same pattern as /tasks and /leads. */}
       <PageRealtime entities={["tasks"]} />
       <PagePoll entities={["tasks"]} />
 

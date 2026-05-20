@@ -79,9 +79,15 @@ function classifyBucket(
 
   const overdue = dueYmd < nowYmd;
   const today = dueYmd === nowYmd;
-  const endOfWeekZoned = new Date(nowZoned);
+  // "Later this week" runs from tomorrow through Saturday. Calendar
+  // weeks here are Sun–Sat (dow 0–6); a Saturday viewer has an empty
+  // "Later this week" by design (everything later is next week).
+  // Previously used dow→(7-dow), which gave Sunday viewers an 8-day
+  // window vs every other day's 1–6.
   const dow = nowZoned.getDay();
-  endOfWeekZoned.setDate(nowZoned.getDate() + (7 - dow));
+  const daysToWeekEnd = 6 - dow;
+  const endOfWeekZoned = new Date(nowZoned);
+  endOfWeekZoned.setDate(nowZoned.getDate() + daysToWeekEnd);
   const eowYmd =
     endOfWeekZoned.getFullYear() * 10000 +
     (endOfWeekZoned.getMonth() + 1) * 100 +
@@ -286,6 +292,7 @@ function QueueClientInner({
           id: currentTask.id,
           version: currentTask.version,
           dueAt: targetUtc,
+          source: "snooze",
         });
         if (!res.ok) {
           const message =

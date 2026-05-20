@@ -857,6 +857,16 @@ export async function updateTask(
   expectedVersion: number,
   patch: TaskUpdateInput,
   actorId: string,
+  opts?: {
+    /**
+     * Override the audit action string. Defaults to `task.update`.
+     * Callers that capture user intent (e.g. queue Snooze) pass a
+     * distinct event name like `task.snooze` so forensic queries
+     * ("show me all snoozes this week") can filter on action without
+     * scanning the patch payload.
+     */
+    auditAction?: string;
+  },
 ): Promise<{ id: string; version: number }> {
   const set: Record<string, unknown> = {
     ...patch,
@@ -886,7 +896,7 @@ export async function updateTask(
   await expectAffected(rows, { table: tasks, id, entityLabel: "task" });
   await writeAudit({
     actorId,
-    action: "task.update",
+    action: opts?.auditAction ?? "task.update",
     targetType: "tasks",
     targetId: id,
     before: beforeRows[0] ?? null,

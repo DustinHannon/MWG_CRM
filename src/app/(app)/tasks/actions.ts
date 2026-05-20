@@ -86,6 +86,12 @@ const updateActionSchema = taskUpdateSchema.extend({
   id: z.string().uuid(),
   // required so concurrentUpdate can reject stale writes.
   version: z.coerce.number().int().positive(),
+  // Optional source discriminator so callers that capture user intent
+  // can tag the audit row with a distinct event name. Today only the
+  // queue Snooze passes `"snooze"` → `task.snooze` audit; every other
+  // caller (edit dialog, bulk reschedule, future surfaces) omits it
+  // and falls through to the generic `task.update`.
+  source: z.enum(["snooze"]).optional(),
 });
 
 export async function updateTaskAction(
@@ -97,7 +103,7 @@ export async function updateTaskAction(
       const session = await requireSession();
       const parsed = updateActionSchema.parse(raw);
 
-      const { id, version, ...patch } = parsed;
+      const { id, version, source, ...patch } = parsed;
 
       // Defence-in-depth access gate. Admin or canEditOthersTasks
       // can touch any task; otherwise the actor must be the
@@ -132,6 +138,7 @@ export async function updateTaskAction(
         version,
         patch as TaskUpdateInput,
         session.id,
+        source === "snooze" ? { auditAction: "task.snooze" } : undefined,
       );
       revalidatePath("/tasks");
       return { version: result.version };
