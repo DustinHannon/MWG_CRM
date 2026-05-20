@@ -479,6 +479,11 @@ export async function restoreAccountsById(
     let cascadedOpportunities = 0;
     let cascadedTasks = 0;
     let cascadedActivities = 0;
+    // Cascaded children (contacts/opportunities/tasks/activities)
+    // skip the OCC version bump (symmetric with archive);
+    // updateContact / updateOpportunity / updateTask /
+    // updateActivity filter is_deleted=false so stale-version edits
+    // on restored children fail with NotFoundError, not silent wins.
     for (const id of ids) {
       const marker = cascadeMarker("account", id);
       const c = await tx

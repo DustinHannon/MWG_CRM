@@ -653,6 +653,10 @@ export async function restoreLeadsById(
       .where(inArray(leads.id, ids));
     let cascadedTasks = 0;
     let cascadedActivities = 0;
+    // Cascaded children skip the OCC version bump (symmetric with
+    // archive); updateTask/updateActivity filter is_deleted=false
+    // so stale-version edits on restored children fail with
+    // NotFoundError, not silent wins.
     for (const id of ids) {
       const t = await tx
         .update(tasks)
