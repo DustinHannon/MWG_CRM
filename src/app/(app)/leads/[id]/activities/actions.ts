@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { fromZonedTime } from "date-fns-tz";
 import { z } from "zod";
+import { parseDueDateInUserTz } from "@/lib/dates";
 import {
   callEditSchema,
   callSchema,
@@ -54,30 +54,6 @@ function parseOccurredAt(value: string | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/**
- * Convert a date-only `YYYY-MM-DD` task due date to the UTC instant for
- * **00:00 in the user's timezone** — the same instant the canonical
- * client paths (`entity-tasks-quick-add`, `task-edit-dialog`) store by
- * doing `new Date("${date}T00:00:00")` in the browser (Central), and
- * the exact inverse of the `formatUserTime` display path. `fromZonedTime`
- * treats the zoneless wall clock as local time in `timeZone` and is
- * DST-aware, so this is correct under any server `TZ` (Vercel is
- * `TZ=UTC`) for both CDT and CST dates. `timeZone` MUST be the same
- * source the display uses (`getCurrentUserTimePrefs().timezone`, default
- * `America/Chicago`) so entry → store → render round-trips.
- *
- * A non-`YYYY-MM-DD` value (the `Due date` input is `type="date"`, so
- * this should not occur) or an unparseable one yields `null`, mirroring
- * `parseOccurredAt` — never an Invalid Date the column rejects with a 500.
- */
-function parseDueDateInUserTz(
-  value: string | undefined,
-  timeZone: string,
-): Date | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const d = fromZonedTime(`${value}T00:00:00`, timeZone);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
 
 export async function addNoteAction(
   formData: FormData,
