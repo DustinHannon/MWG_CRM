@@ -429,26 +429,37 @@ function TasksListInner({
 
   /**
    * Bulk archive confirmation runs inside the canonical
-   * ConfirmDeleteDialog (M-3). The dialog's async onConfirm awaits
-   * the action directly — no startTransition wrapper here so the
-   * dialog's own pending state stays accurate; `pending` (from the
-   * top-level useTransition) still toggles via the other bulk paths
-   * (Complete / Reassign).
+   * ConfirmDeleteDialog. The dialog has its own pending state for
+   * the Archive/Cancel buttons inside the dialog; we also wrap the
+   * action body in the parent `startTransition` so the sibling
+   * bulk buttons (Complete / Reassign) disable for the entire
+   * fan-out window (notifications + audit + revalidate), matching
+   * pre-WS4 behavior. The returned promise resolves only when the
+   * inner action settles so the dialog's await still gates its
+   * own close + reset.
    */
   async function bulkDelete(): Promise<void> {
     if (selected.size === 0) return;
     const items = selectedItems();
     if (items.length === 0) return;
-    const res = await bulkDeleteTasksAction({ items });
-    if (res.ok) {
-      toast.success(`Deleted ${res.data.updated.length} task(s)`);
-      notifyConflicts(res.data.conflicts);
-      clearSelection();
-      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      router.refresh();
-    } else {
-      toast.error(res.error, { duration: Infinity, dismissible: true });
-    }
+    await new Promise<void>((resolve) => {
+      startTransition(async () => {
+        try {
+          const res = await bulkDeleteTasksAction({ items });
+          if (res.ok) {
+            toast.success(`Deleted ${res.data.updated.length} task(s)`);
+            notifyConflicts(res.data.conflicts);
+            clearSelection();
+            await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            router.refresh();
+          } else {
+            toast.error(res.error, { duration: Infinity, dismissible: true });
+          }
+        } finally {
+          resolve();
+        }
+      });
+    });
   }
 
   function openReassign() {
