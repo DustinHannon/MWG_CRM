@@ -596,6 +596,24 @@ export async function bulkArchiveContactsAction(
         }),
       );
     }
+    // Per-record persistent archive prompt (M-2 parity with the
+    // single-row archiveContactAction). Owner-side fan-out only —
+    // emitArchiveNotification skips self-emits and null owners. Best-
+    // effort: the helper swallows its own write failures so a
+    // notification outage cannot block the bulk archive.
+    for (const id of result.updated) {
+      const row = rowById.get(id);
+      if (!row) continue;
+      const displayName = `${row.firstName} ${row.lastName ?? ""}`.trim();
+      await emitArchiveNotification({
+        entityType: "contact",
+        entityId: id,
+        entityDisplayName: displayName,
+        ownerId: row.ownerId,
+        actorId: user.id,
+        link: `/contacts/${id}`,
+      });
+    }
     revalidatePath("/contacts");
     return {
       archived: result.updated.length,

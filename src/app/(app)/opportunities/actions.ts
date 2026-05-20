@@ -558,6 +558,23 @@ export async function bulkArchiveOpportunitiesAction(
           }),
         );
       }
+      // Per-record persistent archive prompt (M-2 parity with the
+      // single-row archiveOpportunityAction). Owner-side fan-out only
+      // — emitArchiveNotification skips self-emits and null owners.
+      // Best-effort: the helper swallows its own write failures so a
+      // notification outage cannot block the bulk archive.
+      for (const id of result.updated) {
+        const row = rowById.get(id);
+        if (!row) continue;
+        await emitArchiveNotification({
+          entityType: "opportunity",
+          entityId: id,
+          entityDisplayName: row.name,
+          ownerId: row.ownerId,
+          actorId: user.id,
+          link: `/opportunities/${id}`,
+        });
+      }
       revalidatePath("/opportunities");
       revalidatePath("/opportunities/pipeline");
       return {
