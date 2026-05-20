@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, desc, eq, gt } from "drizzle-orm";
+import { and, count, desc, eq, gt, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications } from "@/db/schema/tasks";
 import { userPreferences } from "@/db/schema/views";
@@ -304,6 +304,24 @@ export async function countUnseen(userId: string): Promise<number> {
     .where(eq(userPreferences.userId, userId))
     .limit(1);
   const since = pref[0]?.at ?? new Date(0);
+  // Self-emit exclusion: rows where userId === actorId AND kind ===
+  // 'activity' are the actor's-own-activity-feed entries (emitActivity
+  // writes userId = actorId, kind = 'activity'). They are visible in
+  // the bell popover + /notifications log (the actor's feed model) but
+  // MUST NOT inflate the unseen badge — counting "I just added a note"
+  // toward your own attention prompt is feedback noise.
+  //
+  // Directed-AT-user kinds still count even when actorId === userId:
+  //   - task_assigned, task_due, mention, saved_search,
+  //     mailbox_blocked, new_user_jit: created via
+  //     createNotification(s) which leaves actor_id NULL, so the
+  //     NULL-safe `or(ne(actorId, userId), ...)` branch keeps them
+  //     (SQL `actor_id != user_id` is NULL/unknown when actor_id is
+  //     NULL → would be silently excluded without the explicit OR).
+  //   - archive_pending: emitArchiveNotification sets actorId and
+  //     already returns early when ownerId === actorId, so self-rows
+  //     can't reach the DB; the kind != 'activity' clause covers it
+  //     defensively if one ever does.
   const r = await db
     .select({ n: count() })
     .from(notifications)
@@ -311,6 +329,7 @@ export async function countUnseen(userId: string): Promise<number> {
       and(
         eq(notifications.userId, userId),
         gt(notifications.createdAt, since),
+        or(ne(notifications.actorId, userId), ne(notifications.kind, "activity")),
       ),
     );
   return r[0]?.n ?? 0;
