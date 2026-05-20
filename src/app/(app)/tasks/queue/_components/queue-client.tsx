@@ -245,8 +245,17 @@ function QueueClientInner({
   // canonical click path (TaskCompleteToggle owns OCC + toast), but the
   // keyboard shortcut calls the action here so we don't depend on a
   // DOM querySelector against the toggle's internal markup.
+  //
+  // If the current card is already completed (rep pressed ← back to a
+  // task they finished earlier this session), `D` is a no-op-advance
+  // rather than re-opening the task — pressing D on a done card means
+  // "next", not "re-open".
   const triggerDone = useCallback(async () => {
     if (!currentTask || donePending) return;
+    if (currentTask.status === "completed") {
+      advanceCursor();
+      return;
+    }
     setDonePending(true);
     try {
       const res = await toggleTaskCompleteAction(
@@ -266,7 +275,7 @@ function QueueClientInner({
     } finally {
       setDonePending(false);
     }
-  }, [currentTask, donePending, handleDoneSuccess]);
+  }, [currentTask, donePending, advanceCursor, handleDoneSuccess]);
 
   const handleSnooze = useCallback(
     async (targetUtc: Date) => {
@@ -524,7 +533,10 @@ function QueueClientInner({
         />
       </div>
 
-      <div className="mt-6 rounded-lg border border-border bg-card p-6 shadow-sm">
+      <div
+        data-queue-card
+        className="mt-6 rounded-lg border border-border bg-card p-6 shadow-sm"
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="pt-0.5">
@@ -537,6 +549,7 @@ function QueueClientInner({
                 }}
                 disabled={donePending}
                 onSuccess={handleDoneSuccess}
+                errorToastDuration={10_000}
               />
             </div>
             <div>

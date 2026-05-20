@@ -38,12 +38,22 @@ export interface TaskCompleteToggleProps {
   };
   disabled?: boolean;
   onSuccess?: (newVersion: number) => void;
+  /**
+   * Error-toast duration in milliseconds. Default `Infinity` (sticky
+   * until dismissed) matches the established list-page behaviour
+   * where a rare ConflictError is high-signal. Surfaces like the
+   * /tasks/queue focused card pass a finite value (10_000) so the
+   * walk-through doesn't trap the rep behind a permanent banner
+   * mid-session.
+   */
+  errorToastDuration?: number;
 }
 
 export function TaskCompleteToggle({
   task,
   disabled,
   onSuccess,
+  errorToastDuration,
 }: TaskCompleteToggleProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -58,7 +68,10 @@ export function TaskCompleteToggle({
         next,
       );
       if (!res.ok) {
-        toast.error(res.error, { duration: Infinity, dismissible: true });
+        toast.error(res.error, {
+          duration: errorToastDuration ?? Infinity,
+          dismissible: true,
+        });
         return;
       }
       if (onSuccess) {
