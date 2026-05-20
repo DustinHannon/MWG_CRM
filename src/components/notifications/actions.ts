@@ -8,7 +8,7 @@ import { notifications, tasks } from "@/db/schema/tasks";
 import { leads } from "@/db/schema/leads";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { requireSession } from "@/lib/auth-helpers";
-import { markAllSeen } from "@/lib/notifications";
+import { emitActivity, markAllSeen } from "@/lib/notifications";
 import {
   ForbiddenError,
   NotFoundError,
@@ -138,11 +138,15 @@ export async function restoreFromNotificationAction(input: {
           // Reads soft-delete attribution columns too so the audit
           // can record the pre-restore state (L-9 forensic
           // before+after sibling parity with the direct
-          // restoreLeadAction).
+          // restoreLeadAction). Also reads firstName/lastName so
+          // the activity emit below can snapshot the display name
+          // (parity with the direct restoreLeadAction emit).
           const [row] = await db
             .select({
               id: leads.id,
               ownerId: leads.ownerId,
+              firstName: leads.firstName,
+              lastName: leads.lastName,
               isDeleted: leads.isDeleted,
               deletedAt: leads.deletedAt,
               deletedById: leads.deletedById,
@@ -176,6 +180,16 @@ export async function restoreFromNotificationAction(input: {
               cascadedActivities: cascade.cascadedActivities,
             },
           });
+          await emitActivity({
+            actorId: session.id,
+            verb: "Restored",
+            entityType: "lead",
+            entityId: parsed.entityId,
+            entityDisplayName: `${row.firstName} ${
+              row.lastName ?? ""
+            }`.trim(),
+            link: `/leads/${parsed.entityId}`,
+          });
           revalidatePath("/leads");
           revalidatePath("/leads/archived");
           revalidatePath(`/leads/${parsed.entityId}`);
@@ -186,6 +200,7 @@ export async function restoreFromNotificationAction(input: {
             .select({
               id: crmAccounts.id,
               ownerId: crmAccounts.ownerId,
+              name: crmAccounts.name,
               isDeleted: crmAccounts.isDeleted,
               deletedAt: crmAccounts.deletedAt,
               deletedById: crmAccounts.deletedById,
@@ -221,6 +236,14 @@ export async function restoreFromNotificationAction(input: {
               cascadedActivities: cascade.cascadedActivities,
             },
           });
+          await emitActivity({
+            actorId: session.id,
+            verb: "Restored",
+            entityType: "account",
+            entityId: parsed.entityId,
+            entityDisplayName: row.name,
+            link: `/accounts/${parsed.entityId}`,
+          });
           revalidatePath("/accounts");
           revalidatePath("/accounts/archived");
           revalidatePath(`/accounts/${parsed.entityId}`);
@@ -231,6 +254,8 @@ export async function restoreFromNotificationAction(input: {
             .select({
               id: contacts.id,
               ownerId: contacts.ownerId,
+              firstName: contacts.firstName,
+              lastName: contacts.lastName,
               isDeleted: contacts.isDeleted,
               deletedAt: contacts.deletedAt,
               deletedById: contacts.deletedById,
@@ -264,6 +289,16 @@ export async function restoreFromNotificationAction(input: {
               cascadedActivities: cascade.cascadedActivities,
             },
           });
+          await emitActivity({
+            actorId: session.id,
+            verb: "Restored",
+            entityType: "contact",
+            entityId: parsed.entityId,
+            entityDisplayName: `${row.firstName} ${
+              row.lastName ?? ""
+            }`.trim(),
+            link: `/contacts/${parsed.entityId}`,
+          });
           revalidatePath("/contacts");
           revalidatePath("/contacts/archived");
           revalidatePath(`/contacts/${parsed.entityId}`);
@@ -274,6 +309,7 @@ export async function restoreFromNotificationAction(input: {
             .select({
               id: opportunities.id,
               ownerId: opportunities.ownerId,
+              name: opportunities.name,
               isDeleted: opportunities.isDeleted,
               deletedAt: opportunities.deletedAt,
               deletedById: opportunities.deletedById,
@@ -307,6 +343,14 @@ export async function restoreFromNotificationAction(input: {
               cascadedActivities: cascade.cascadedActivities,
             },
           });
+          await emitActivity({
+            actorId: session.id,
+            verb: "Restored",
+            entityType: "opportunity",
+            entityId: parsed.entityId,
+            entityDisplayName: row.name,
+            link: `/opportunities/${parsed.entityId}`,
+          });
           revalidatePath("/opportunities");
           revalidatePath("/opportunities/pipeline");
           revalidatePath("/opportunities/archived");
@@ -319,6 +363,8 @@ export async function restoreFromNotificationAction(input: {
               id: tasks.id,
               createdById: tasks.createdById,
               assignedToId: tasks.assignedToId,
+              title: tasks.title,
+              leadId: tasks.leadId,
               isDeleted: tasks.isDeleted,
               deletedAt: tasks.deletedAt,
               deletedById: tasks.deletedById,
@@ -353,6 +399,14 @@ export async function restoreFromNotificationAction(input: {
               cascadedTasks: cascade.cascadedTasks,
               cascadedActivities: cascade.cascadedActivities,
             },
+          });
+          await emitActivity({
+            actorId: session.id,
+            verb: "Restored",
+            entityType: "task",
+            entityId: parsed.entityId,
+            entityDisplayName: row.title,
+            link: row.leadId ? `/leads/${row.leadId}` : "/tasks",
           });
           revalidatePath("/tasks");
           revalidatePath("/tasks/archived");
