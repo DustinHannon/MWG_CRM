@@ -405,9 +405,18 @@ export async function restoreLeadAction(
 
       // Re-fetch the archived row (no isDeleted filter — we are
       // explicitly restoring a soft-deleted row). canDeleteLead is the
-      // same predicate the archive path uses.
+      // same predicate the archive path uses. Reads the soft-delete
+      // attribution columns too so the audit can record the pre-
+      // restore archived state (L-9 forensic before+after).
       const [archivedRow] = await db
-        .select({ id: leads.id, ownerId: leads.ownerId })
+        .select({
+          id: leads.id,
+          ownerId: leads.ownerId,
+          isDeleted: leads.isDeleted,
+          deletedAt: leads.deletedAt,
+          deletedById: leads.deletedById,
+          deleteReason: leads.deleteReason,
+        })
         .from(leads)
         .where(eq(leads.id, id))
         .limit(1);
@@ -436,6 +445,12 @@ export async function restoreLeadAction(
         action: "lead.restore",
         targetType: "lead",
         targetId: id,
+        before: {
+          isDeleted: archivedRow.isDeleted,
+          deletedAt: archivedRow.deletedAt,
+          deletedById: archivedRow.deletedById,
+          deleteReason: archivedRow.deleteReason,
+        },
         after: {
           cascadedTasks: cascade.cascadedTasks,
           cascadedActivities: cascade.cascadedActivities,

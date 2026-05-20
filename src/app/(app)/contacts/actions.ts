@@ -182,9 +182,18 @@ export async function restoreContactAction(
 
     // Re-fetch the archived row (no isDeleted filter — we are
     // explicitly restoring a soft-deleted row). canDeleteContact is
-    // the same predicate the archive path uses.
+    // the same predicate the archive path uses. Reads the soft-delete
+    // attribution columns too so the audit can record the pre-
+    // restore archived state (L-9 forensic before+after).
     const [archivedRow] = await db
-      .select({ id: contacts.id, ownerId: contacts.ownerId })
+      .select({
+        id: contacts.id,
+        ownerId: contacts.ownerId,
+        isDeleted: contacts.isDeleted,
+        deletedAt: contacts.deletedAt,
+        deletedById: contacts.deletedById,
+        deleteReason: contacts.deleteReason,
+      })
       .from(contacts)
       .where(eq(contacts.id, id))
       .limit(1);
@@ -213,6 +222,12 @@ export async function restoreContactAction(
       action: "contact.restore",
       targetType: "contact",
       targetId: id,
+      before: {
+        isDeleted: archivedRow.isDeleted,
+        deletedAt: archivedRow.deletedAt,
+        deletedById: archivedRow.deletedById,
+        deleteReason: archivedRow.deleteReason,
+      },
       after: {
         cascadedTasks: cascade.cascadedTasks,
         cascadedActivities: cascade.cascadedActivities,

@@ -289,12 +289,18 @@ export async function restoreTaskAction(
     // Re-fetch the archived row (no isDeleted filter — we are
     // explicitly restoring a soft-deleted row). canDeleteTask is the
     // same predicate the archive path uses (creator OR assignee OR
-    // admin).
+    // admin). Reads the soft-delete attribution columns too so the
+    // audit can record the pre-restore archived state (L-9 forensic
+    // before+after).
     const [archivedRow] = await db
       .select({
         id: tasks.id,
         createdById: tasks.createdById,
         assignedToId: tasks.assignedToId,
+        isDeleted: tasks.isDeleted,
+        deletedAt: tasks.deletedAt,
+        deletedById: tasks.deletedById,
+        deleteReason: tasks.deleteReason,
       })
       .from(tasks)
       .where(eq(tasks.id, id))
@@ -310,7 +316,7 @@ export async function restoreTaskAction(
       throw new ForbiddenError("You can't restore this task.");
     }
 
-    await restoreTasksById([id], session.id);
+    const cascade = await restoreTasksById([id], session.id);
     const [restored] = await db
       .select({ title: tasks.title, leadId: tasks.leadId })
       .from(tasks)
@@ -321,6 +327,18 @@ export async function restoreTaskAction(
       action: "task.restore",
       targetType: "task",
       targetId: id,
+      before: {
+        isDeleted: archivedRow.isDeleted,
+        deletedAt: archivedRow.deletedAt,
+        deletedById: archivedRow.deletedById,
+        deleteReason: archivedRow.deleteReason,
+      },
+      after: {
+        // Tasks have no children; cascade shape returned with zeros
+        // to keep forensic parity with sibling restore audits.
+        cascadedTasks: cascade.cascadedTasks,
+        cascadedActivities: cascade.cascadedActivities,
+      },
     });
 
     await emitActivity({

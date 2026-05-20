@@ -181,9 +181,18 @@ export async function restoreOpportunityAction(
 
     // Re-fetch the archived row (no isDeleted filter — we are
     // explicitly restoring a soft-deleted row). canDeleteOpportunity
-    // is the same predicate the archive path uses.
+    // is the same predicate the archive path uses. Reads the soft-
+    // delete attribution columns too so the audit can record the
+    // pre-restore archived state (L-9 forensic before+after).
     const [archivedRow] = await db
-      .select({ id: opportunities.id, ownerId: opportunities.ownerId })
+      .select({
+        id: opportunities.id,
+        ownerId: opportunities.ownerId,
+        isDeleted: opportunities.isDeleted,
+        deletedAt: opportunities.deletedAt,
+        deletedById: opportunities.deletedById,
+        deleteReason: opportunities.deleteReason,
+      })
       .from(opportunities)
       .where(eq(opportunities.id, id))
       .limit(1);
@@ -209,6 +218,12 @@ export async function restoreOpportunityAction(
       action: "opportunity.restore",
       targetType: "opportunity",
       targetId: id,
+      before: {
+        isDeleted: archivedRow.isDeleted,
+        deletedAt: archivedRow.deletedAt,
+        deletedById: archivedRow.deletedById,
+        deleteReason: archivedRow.deleteReason,
+      },
       after: {
         cascadedTasks: cascade.cascadedTasks,
         cascadedActivities: cascade.cascadedActivities,
