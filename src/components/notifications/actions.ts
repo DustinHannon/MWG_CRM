@@ -135,8 +135,19 @@ export async function restoreFromNotificationAction(input: {
       // outlive their recipient's ownership cannot grant restore.
       switch (parsed.entityType) {
         case "lead": {
+          // Reads soft-delete attribution columns too so the audit
+          // can record the pre-restore state (L-9 forensic
+          // before+after sibling parity with the direct
+          // restoreLeadAction).
           const [row] = await db
-            .select({ id: leads.id, ownerId: leads.ownerId })
+            .select({
+              id: leads.id,
+              ownerId: leads.ownerId,
+              isDeleted: leads.isDeleted,
+              deletedAt: leads.deletedAt,
+              deletedById: leads.deletedById,
+              deleteReason: leads.deleteReason,
+            })
             .from(leads)
             .where(eq(leads.id, parsed.entityId))
             .limit(1);
@@ -144,13 +155,26 @@ export async function restoreFromNotificationAction(input: {
           if (!canDeleteLead(session, row)) {
             throw new ForbiddenError("You can't restore this lead.");
           }
-          await restoreLeadsById([parsed.entityId], session.id);
+          const cascade = await restoreLeadsById(
+            [parsed.entityId],
+            session.id,
+          );
           await writeAudit({
             actorId: session.id,
             action: "lead.restore",
             targetType: "lead",
             targetId: parsed.entityId,
-            after: { via: "notification" },
+            before: {
+              isDeleted: row.isDeleted,
+              deletedAt: row.deletedAt,
+              deletedById: row.deletedById,
+              deleteReason: row.deleteReason,
+            },
+            after: {
+              via: "notification",
+              cascadedTasks: cascade.cascadedTasks,
+              cascadedActivities: cascade.cascadedActivities,
+            },
           });
           revalidatePath("/leads");
           revalidatePath("/leads/archived");
@@ -159,7 +183,14 @@ export async function restoreFromNotificationAction(input: {
         }
         case "account": {
           const [row] = await db
-            .select({ id: crmAccounts.id, ownerId: crmAccounts.ownerId })
+            .select({
+              id: crmAccounts.id,
+              ownerId: crmAccounts.ownerId,
+              isDeleted: crmAccounts.isDeleted,
+              deletedAt: crmAccounts.deletedAt,
+              deletedById: crmAccounts.deletedById,
+              deleteReason: crmAccounts.deleteReason,
+            })
             .from(crmAccounts)
             .where(eq(crmAccounts.id, parsed.entityId))
             .limit(1);
@@ -167,13 +198,28 @@ export async function restoreFromNotificationAction(input: {
           if (!canDeleteAccount(session, row)) {
             throw new ForbiddenError("You can't restore this account.");
           }
-          await restoreAccountsById([parsed.entityId], session.id);
+          const cascade = await restoreAccountsById(
+            [parsed.entityId],
+            session.id,
+          );
           await writeAudit({
             actorId: session.id,
             action: "account.restore",
             targetType: "account",
             targetId: parsed.entityId,
-            after: { via: "notification" },
+            before: {
+              isDeleted: row.isDeleted,
+              deletedAt: row.deletedAt,
+              deletedById: row.deletedById,
+              deleteReason: row.deleteReason,
+            },
+            after: {
+              via: "notification",
+              cascadedContacts: cascade.cascadedContacts,
+              cascadedOpportunities: cascade.cascadedOpportunities,
+              cascadedTasks: cascade.cascadedTasks,
+              cascadedActivities: cascade.cascadedActivities,
+            },
           });
           revalidatePath("/accounts");
           revalidatePath("/accounts/archived");
@@ -182,7 +228,14 @@ export async function restoreFromNotificationAction(input: {
         }
         case "contact": {
           const [row] = await db
-            .select({ id: contacts.id, ownerId: contacts.ownerId })
+            .select({
+              id: contacts.id,
+              ownerId: contacts.ownerId,
+              isDeleted: contacts.isDeleted,
+              deletedAt: contacts.deletedAt,
+              deletedById: contacts.deletedById,
+              deleteReason: contacts.deleteReason,
+            })
             .from(contacts)
             .where(eq(contacts.id, parsed.entityId))
             .limit(1);
@@ -190,13 +243,26 @@ export async function restoreFromNotificationAction(input: {
           if (!canDeleteContact(session, row)) {
             throw new ForbiddenError("You can't restore this contact.");
           }
-          await restoreContactsById([parsed.entityId], session.id);
+          const cascade = await restoreContactsById(
+            [parsed.entityId],
+            session.id,
+          );
           await writeAudit({
             actorId: session.id,
             action: "contact.restore",
             targetType: "contact",
             targetId: parsed.entityId,
-            after: { via: "notification" },
+            before: {
+              isDeleted: row.isDeleted,
+              deletedAt: row.deletedAt,
+              deletedById: row.deletedById,
+              deleteReason: row.deleteReason,
+            },
+            after: {
+              via: "notification",
+              cascadedTasks: cascade.cascadedTasks,
+              cascadedActivities: cascade.cascadedActivities,
+            },
           });
           revalidatePath("/contacts");
           revalidatePath("/contacts/archived");
@@ -205,7 +271,14 @@ export async function restoreFromNotificationAction(input: {
         }
         case "opportunity": {
           const [row] = await db
-            .select({ id: opportunities.id, ownerId: opportunities.ownerId })
+            .select({
+              id: opportunities.id,
+              ownerId: opportunities.ownerId,
+              isDeleted: opportunities.isDeleted,
+              deletedAt: opportunities.deletedAt,
+              deletedById: opportunities.deletedById,
+              deleteReason: opportunities.deleteReason,
+            })
             .from(opportunities)
             .where(eq(opportunities.id, parsed.entityId))
             .limit(1);
@@ -213,13 +286,26 @@ export async function restoreFromNotificationAction(input: {
           if (!canDeleteOpportunity(session, row)) {
             throw new ForbiddenError("You can't restore this opportunity.");
           }
-          await restoreOpportunitiesById([parsed.entityId], session.id);
+          const cascade = await restoreOpportunitiesById(
+            [parsed.entityId],
+            session.id,
+          );
           await writeAudit({
             actorId: session.id,
             action: "opportunity.restore",
             targetType: "opportunity",
             targetId: parsed.entityId,
-            after: { via: "notification" },
+            before: {
+              isDeleted: row.isDeleted,
+              deletedAt: row.deletedAt,
+              deletedById: row.deletedById,
+              deleteReason: row.deleteReason,
+            },
+            after: {
+              via: "notification",
+              cascadedTasks: cascade.cascadedTasks,
+              cascadedActivities: cascade.cascadedActivities,
+            },
           });
           revalidatePath("/opportunities");
           revalidatePath("/opportunities/pipeline");
@@ -233,6 +319,10 @@ export async function restoreFromNotificationAction(input: {
               id: tasks.id,
               createdById: tasks.createdById,
               assignedToId: tasks.assignedToId,
+              isDeleted: tasks.isDeleted,
+              deletedAt: tasks.deletedAt,
+              deletedById: tasks.deletedById,
+              deleteReason: tasks.deleteReason,
             })
             .from(tasks)
             .where(eq(tasks.id, parsed.entityId))
@@ -241,13 +331,28 @@ export async function restoreFromNotificationAction(input: {
           if (!canDeleteTask(session, row)) {
             throw new ForbiddenError("You can't restore this task.");
           }
-          await restoreTasksById([parsed.entityId], session.id);
+          const cascade = await restoreTasksById(
+            [parsed.entityId],
+            session.id,
+          );
           await writeAudit({
             actorId: session.id,
             action: "task.restore",
             targetType: "task",
             targetId: parsed.entityId,
-            after: { via: "notification" },
+            before: {
+              isDeleted: row.isDeleted,
+              deletedAt: row.deletedAt,
+              deletedById: row.deletedById,
+              deleteReason: row.deleteReason,
+            },
+            after: {
+              via: "notification",
+              // Tasks have no children; cascade shape returned with
+              // zeros to keep forensic parity with sibling restores.
+              cascadedTasks: cascade.cascadedTasks,
+              cascadedActivities: cascade.cascadedActivities,
+            },
           });
           revalidatePath("/tasks");
           revalidatePath("/tasks/archived");
