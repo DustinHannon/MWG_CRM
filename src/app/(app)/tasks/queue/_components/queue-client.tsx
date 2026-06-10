@@ -161,6 +161,22 @@ function QueueClientInner({
   }, [filteredTasks]);
 
   const [cursor, setCursor] = useState(0);
+  // A Done / Snooze advances the cursor optimistically (so the next card
+  // shows immediately) but the follow-up router.refresh() re-slices
+  // `allTasks`: the actioned row drops out and everything after it shifts
+  // down one index. Without reconciliation the cursor would then point one
+  // row too far and the next task would be silently skipped. This ref drives
+  // the reconcile that re-pins the cursor once the refreshed list lands.
+  //   removedId — the actioned card. The reconcile only runs once this id has
+  //     actually left the list, so an unrelated re-slice (a 60s `now` tick, a
+  //     realtime refresh) while the row is still present can't consume the
+  //     reconcile early and let the next task be skipped.
+  //   nextId — the card we advanced TO; the cursor is re-pinned to its
+  //     post-refresh index. null = the last card was actioned, so the
+  //     reconcile settles at the end instead.
+  const pendingReconcileRef = useRef<
+    { removedId: string; nextId: string | null } | null
+  >(null);
   const [doneIds, setDoneIds] = useState<Set<string>>(() => new Set());
   const [skippedIds, setSkippedIds] = useState<Set<string>>(() => new Set());
   const [snoozedIds, setSnoozedIds] = useState<Set<string>>(() => new Set());
@@ -180,6 +196,9 @@ function QueueClientInner({
   useEffect(() => {
     if (lastBucketRef.current !== activeBucket) {
       lastBucketRef.current = activeBucket;
+      // Drop any in-flight reconcile so it can't override the fresh cursor
+      // reset against the new bucket's list.
+      pendingReconcileRef.current = null;
       setCursor(0);
       setDoneIds(new Set());
       setSkippedIds(new Set());
@@ -207,6 +226,31 @@ function QueueClientInner({
     return { ...rawCurrentTask, version: override };
   }, [rawCurrentTask, versionOverrides]);
   const atEnd = cursor >= totalCount;
+
+  // Reconcile the cursor against the re-sliced list once a Done / Snooze
+  // refresh lands (see pendingReconcileRef above). Re-pinning to the
+  // advanced-to id's actual index means the reindex (the actioned row being
+  // dropped and the rest shifting down) never skips the following task.
+  useEffect(() => {
+    const pending = pendingReconcileRef.current;
+    if (!pending) return; // no reconcile pending
+    // Wait until the actioned row has actually left the list. If it's still
+    // present the refresh hasn't landed (or this was a Snooze that kept the
+    // task in the active bucket) — in either case the optimistic advance
+    // already left the cursor in the right place, so don't reconcile yet.
+    if (taskIds.includes(pending.removedId)) return;
+    pendingReconcileRef.current = null;
+    if (pending.nextId === null) {
+      // The actioned card was the last in the list — settle at the end.
+      setCursor(totalCount);
+      return;
+    }
+    const idx = taskIds.indexOf(pending.nextId);
+    // If the pinned next card was itself removed by a concurrent change,
+    // fall back to the actioned row's old position (clamped) so we resume at
+    // the first surviving task rather than skipping ahead.
+    setCursor(idx === -1 ? Math.min(cursor, totalCount) : idx);
+  }, [taskIds, totalCount, cursor]);
 
   const advanceCursor = useCallback(() => {
     setCursor((c) => Math.min(c + 1, totalCount));
@@ -239,11 +283,18 @@ function QueueClientInner({
         return next;
       });
       setVersionOverrides((v) => ({ ...v, [currentId]: newVersion }));
+      // The refresh removes the just-completed row and shifts the rest down
+      // by one. Pin the card we're advancing TO so the post-refresh reconcile
+      // lands the cursor on it; null nextId = we completed the last card.
+      pendingReconcileRef.current = {
+        removedId: currentId,
+        nextId: taskIds[cursor + 1] ?? null,
+      };
       advanceCursor();
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
       router.refresh();
     },
-    [currentId, advanceCursor, queryClient, router],
+    [currentId, cursor, taskIds, advanceCursor, queryClient, router],
   );
 
   // Direct Done call — used by both the keyboard handler (`D`) and a
@@ -311,6 +362,28 @@ function QueueClientInner({
           return next;
         });
         setVersionOverrides((v) => ({ ...v, [currentTask.id]: res.data.version }));
+        // Arm the post-refresh reconcile only when the new due date moves the
+        // task out of the active bucket (it'll drop from the list and shift
+        // the rest down). If the snoozed task still matches the bucket — or
+        // we're in "all", which keeps every task — the row stays put and the
+        // optimistic advance alone correctly steps past it; arming here would
+        // leave a stale reconcile that could later mis-fire.
+        const cls = classifyBucket(
+          { ...currentTask, dueAt: targetUtc.toISOString() },
+          now,
+          timezone,
+        );
+        const staysInBucket =
+          activeBucket === "all" ||
+          (activeBucket === "overdue" && cls.overdue) ||
+          (activeBucket === "today" && cls.today) ||
+          (activeBucket === "week" && cls.week);
+        if (!staysInBucket) {
+          pendingReconcileRef.current = {
+            removedId: currentTask.id,
+            nextId: taskIds[cursor + 1] ?? null,
+          };
+        }
         advanceCursor();
         void queryClient.invalidateQueries({ queryKey: ["tasks"] });
         router.refresh();
@@ -327,7 +400,18 @@ function QueueClientInner({
         setSnoozePending(false);
       }
     },
-    [currentTask, snoozePending, advanceCursor, queryClient, router],
+    [
+      currentTask,
+      snoozePending,
+      cursor,
+      taskIds,
+      activeBucket,
+      now,
+      timezone,
+      advanceCursor,
+      queryClient,
+      router,
+    ],
   );
 
   // Keyboard handler — D / S / Z / ← → / j k / Esc.
@@ -429,6 +513,7 @@ function QueueClientInner({
     // Wipe per-session state so a new walk-through starts cleanly with
     // whatever rows the server now returns; otherwise the cursor would
     // resume at `atEnd` even if the server now has unprocessed tasks.
+    pendingReconcileRef.current = null;
     setCursor(0);
     setDoneIds(new Set());
     setSkippedIds(new Set());

@@ -98,14 +98,24 @@ class AsyncSemaphore {
       this.active++;
       return;
     }
+    // Queue and wait. When woken by release(), the slot has already
+    // been handed off to us (active was NOT decremented), so we must
+    // NOT re-increment here — doing so would let in-flight count exceed
+    // max during the microtask gap between release() and resume.
     await new Promise<void>((resolve) => this.waiters.push(resolve));
-    this.active++;
   }
 
   release(): void {
-    this.active--;
+    // Atomic slot hand-off: if a waiter is queued, transfer this slot
+    // to it without touching `active` (one finished, one starts — net
+    // zero). Only decrement when nobody is waiting. This keeps `active`
+    // an exact invariant of in-flight count with no transient overshoot.
     const next = this.waiters.shift();
-    if (next) next();
+    if (next) {
+      next();
+    } else {
+      this.active--;
+    }
   }
 }
 

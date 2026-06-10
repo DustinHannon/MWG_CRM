@@ -7,6 +7,7 @@ import { leads } from "@/db/schema/leads";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { tasks } from "@/db/schema/tasks";
 import { permissions, users } from "@/db/schema/users";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
 
 export interface SessionUser {
   id: string;
@@ -137,25 +138,14 @@ export async function requirePermission(
 }
 
 /**
- * Forbidden — used by helpers that throw rather than redirect, e.g. when
- * called from a server action that wants to return an error result.
- */
-export class ForbiddenError extends Error {
-  constructor(message = "Forbidden") {
-    super(message);
-    this.name = "ForbiddenError";
-  }
-}
-
-/**
  * Verify the user can access a specific lead. Closes the horizontal
  * privilege escalation where a server action accepts a leadId from form
  * data but does not check whether the actor owns it or has the
  * canViewAllRecords flag. Admin always passes.
  *
- * Throws `ForbiddenError` if the lead doesn't exist or the user can't
- * access it. Returns the lead row's owner_id on success so callers don't
- * need to re-fetch.
+ * Throws `NotFoundError` if the lead doesn't exist and `ForbiddenError`
+ * if the user can't access it. Returns the lead row's owner_id on success
+ * so callers don't need to re-fetch.
  */
 export async function requireLeadAccess(
   user: SessionUser,
@@ -166,7 +156,7 @@ export async function requireLeadAccess(
     .from(leads)
     .where(eq(leads.id, leadId))
     .limit(1);
-  if (!row[0]) throw new ForbiddenError("Lead not found.");
+  if (!row[0]) throw new NotFoundError("lead");
 
   if (user.isAdmin) return { ownerId: row[0].ownerId };
 
@@ -186,8 +176,9 @@ export async function requireLeadAccess(
 /**
  * Verify the user can access a specific CRM entity (account / contact /
  * opportunity). Mirrors `requireLeadAccess`: admin always passes; non-admin
- * must own the row OR carry `canViewAllRecords`. Throws ForbiddenError
- * otherwise. Tasks are gated separately via `requireTaskAccess` because
+ * must own the row OR carry `canViewAllRecords`. Throws NotFoundError when
+ * the row is missing/deleted and ForbiddenError on an access miss. Tasks
+ * are gated separately via `requireTaskAccess` because
  * their access model is creator/assignee/admin rather than owner-based.
  *
  * The wide entity union keeps the helper general — every CRM entity that
@@ -206,7 +197,7 @@ export async function requireOwnedEntityAccess(
       .where(eq(crmAccounts.id, entityId))
       .limit(1);
     if (!row[0] || row[0].isDeleted) {
-      throw new ForbiddenError("Account not found.");
+      throw new NotFoundError("account");
     }
     ownerId = row[0].ownerId;
   } else if (entityType === "contact") {
@@ -216,7 +207,7 @@ export async function requireOwnedEntityAccess(
       .where(eq(contacts.id, entityId))
       .limit(1);
     if (!row[0] || row[0].isDeleted) {
-      throw new ForbiddenError("Contact not found.");
+      throw new NotFoundError("contact");
     }
     ownerId = row[0].ownerId;
   } else {
@@ -229,7 +220,7 @@ export async function requireOwnedEntityAccess(
       .where(eq(opportunities.id, entityId))
       .limit(1);
     if (!row[0] || row[0].isDeleted) {
-      throw new ForbiddenError("Opportunity not found.");
+      throw new NotFoundError("opportunity");
     }
     ownerId = row[0].ownerId;
   }
@@ -250,7 +241,8 @@ export async function requireOwnedEntityAccess(
 /**
  * Verify the user can access a specific task. Tasks use a different
  * access model than other CRM entities: admin OR creator OR assignee
- * OR `canViewOthersTasks` may interact. Throws ForbiddenError otherwise.
+ * OR `canViewOthersTasks` may interact. Throws NotFoundError when the task
+ * is missing/deleted and ForbiddenError on an access miss.
  */
 export async function requireTaskAccess(
   user: SessionUser,
@@ -266,7 +258,7 @@ export async function requireTaskAccess(
     .where(eq(tasks.id, taskId))
     .limit(1);
   if (!row[0] || row[0].isDeleted) {
-    throw new ForbiddenError("Task not found.");
+    throw new NotFoundError("task");
   }
   if (user.isAdmin) return row[0];
   if (row[0].createdById === user.id || row[0].assignedToId === user.id) {

@@ -6,6 +6,7 @@ import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
 import { users } from "@/db/schema/users";
 import { savedViews, userPreferences } from "@/db/schema/views";
 import { expectAffected } from "@/lib/db/concurrent-update";
+import { ValidationError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { encodeCursor, parseCursor } from "@/lib/leads";
 import {
@@ -348,8 +349,18 @@ export async function setDefaultAccountView(
   userId: string,
   viewId: string | null,
 ): Promise<void> {
+  // Only saved views can be persisted as a default. `null` clears it.
+  // Built-in ids have no row to point at, so silently coercing them to
+  // null would discard the user's choice while the action still audits
+  // the selection — reject them so the contract stays honest and the
+  // caller surfaces the failure instead of writing a misleading audit row.
   let savedId: string | null = null;
-  if (viewId?.startsWith("saved:")) {
+  if (viewId !== null) {
+    if (!viewId.startsWith("saved:")) {
+      throw new ValidationError(
+        "Only saved views can be set as the default.",
+      );
+    }
     savedId = viewId.slice("saved:".length);
   }
   await db
@@ -688,6 +699,13 @@ export async function runAccountView(
     ),
   );
 
+  // Owner-scope the name lookups for restricted callers. parent_account_id /
+  // primary_contact_id are user-settable to any UUID at write time, so an
+  // owner-scoped rep could point their own account at another rep's record
+  // and read its name here even though the foreign record is excluded from
+  // the owner-scoped base query. Mirror the base query's owner predicate so
+  // the parent/contact column never discloses a name the actor can't see.
+  const restrictToOwner = !canViewAll && !user.isAdmin;
   const [parentRows, primaryContactRows] = await Promise.all([
     parentIds.length > 0
       ? db
@@ -702,6 +720,9 @@ export async function runAccountView(
               // FK referenced and would otherwise render a stale
               // name here.
               eq(crmAccounts.isDeleted, false),
+              ...(restrictToOwner
+                ? [eq(crmAccounts.ownerId, user.id)]
+                : []),
             ),
           )
       : Promise.resolve([]),
@@ -717,6 +738,9 @@ export async function runAccountView(
             and(
               inArray(contacts.id, primaryContactIds),
               eq(contacts.isDeleted, false),
+              ...(restrictToOwner
+                ? [eq(contacts.ownerId, user.id)]
+                : []),
             ),
           )
       : Promise.resolve([]),

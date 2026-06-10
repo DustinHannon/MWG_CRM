@@ -66,6 +66,19 @@ export function OccConflictDialog({
   // since Overwrite throws away whoever-saved-first's work.
   const [overwriteArmed, setOverwriteArmed] = useState(false);
 
+  // Re-arm the two-click safety every time the dialog closes. The
+  // consumer keeps this component mounted (renders null via the early
+  // return below) and reuses the same instance across conflicts, so
+  // without this reset a previously-armed Overwrite would let the next
+  // conflict be force-overwritten with a single click. Reset during
+  // render on the open->closed transition (React's adjust-state-on-
+  // change pattern) rather than in an effect, to avoid a cascading render.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (!open) setOverwriteArmed(false);
+  }
+
   if (!open) return null;
 
   return (

@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema/users";
 import {
   archiveTasksById,
   deleteTasksById,
@@ -148,6 +151,21 @@ export const PATCH = withApi<{ id: string }>(
       patch.dueAt = m.due_at ? new Date(m.due_at) : null;
     }
     if (m.assigned_to_id !== undefined) {
+      // Verify a non-null assignee exists before update so a stale/wrong
+      // id returns a recoverable 422 instead of an opaque 500 from a
+      // Postgres FK-violation (23503). A null value means unassign.
+      if (m.assigned_to_id !== null) {
+        const [assignee] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.id, m.assigned_to_id))
+          .limit(1);
+        if (!assignee) {
+          return errorResponse(422, "VALIDATION_ERROR", "Assignee not found", {
+            details: [{ field: "assigned_to_id", issue: "assignee_missing" }],
+          });
+        }
+      }
       patch.assignedToId = m.assigned_to_id ?? null;
     }
 

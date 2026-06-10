@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface AvatarProps {
@@ -16,38 +19,19 @@ interface AvatarProps {
  * a colored circle with the user's initials. Color is derived from the
  * user's id with a tiny string hash so the same user always gets the
  * same color across sessions and devices.
+ *
+ * `src` (the DB photo_blob_url value) is only a "this user has a photo"
+ * flag. The authenticated proxy at /api/users/[id]/avatar can still fail
+ * (404 after the row/blob is cleared, 502 on upstream Blob failure, 503
+ * when the blob token is missing), so the photo branch falls back to the
+ * same colored-initials avatar on image load error instead of stranding
+ * the user on the native broken-image glyph.
  */
 export function Avatar({ src, name, id, size = 36, className }: AvatarProps) {
   const initials = getInitials(name);
   const palette = AVATAR_PALETTE[hashString(id) % AVATAR_PALETTE.length];
 
-  if (src) {
-    // The Blob store is private; route image bytes through the
-    // authenticated proxy at /api/users/[id]/avatar instead of using
-    // the raw blob URL. `src` (the DB photo_blob_url value) acts as a
-    // "this user has a photo" flag here.
-    const proxySrc = `/api/users/${encodeURIComponent(id)}/avatar`;
-    return (
-      <span
-        className={cn(
-          "inline-block shrink-0 overflow-hidden rounded-full ring-1 ring-glass-border",
-          className,
-        )}
-        style={{ width: size, height: size }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={proxySrc}
-          alt={name}
-          width={size}
-          height={size}
-          className="h-full w-full object-cover"
-        />
-      </span>
-    );
-  }
-
-  return (
+  const initialsFallback = (
     <span
       className={cn(
         "inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold ring-1 ring-glass-border",
@@ -63,6 +47,72 @@ export function Avatar({ src, name, id, size = 36, className }: AvatarProps) {
       aria-label={name}
     >
       {initials}
+    </span>
+  );
+
+  if (src) {
+    // The Blob store is private; route image bytes through the
+    // authenticated proxy at /api/users/[id]/avatar instead of using
+    // the raw blob URL. `src` (the DB photo_blob_url value) acts as a
+    // "this user has a photo" flag here.
+    const proxySrc = `/api/users/${encodeURIComponent(id)}/avatar`;
+    return (
+      <AvatarImage
+        proxySrc={proxySrc}
+        name={name}
+        size={size}
+        className={className}
+        fallback={initialsFallback}
+      />
+    );
+  }
+
+  return initialsFallback;
+}
+
+interface AvatarImageProps {
+  proxySrc: string;
+  name: string;
+  size: number;
+  className?: string;
+  /** Rendered when the proxied photo fails to load. */
+  fallback: React.ReactNode;
+}
+
+/**
+ * Renders the proxied profile photo and swaps to the initials fallback
+ * if the image fails to load (proxy 404/502/503 or any network error).
+ */
+function AvatarImage({
+  proxySrc,
+  name,
+  size,
+  className,
+  fallback,
+}: AvatarImageProps) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return <>{fallback}</>;
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-block shrink-0 overflow-hidden rounded-full ring-1 ring-glass-border",
+        className,
+      )}
+      style={{ width: size, height: size }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={proxySrc}
+        alt={name}
+        width={size}
+        height={size}
+        className="h-full w-full object-cover"
+        onError={() => setFailed(true)}
+      />
     </span>
   );
 }

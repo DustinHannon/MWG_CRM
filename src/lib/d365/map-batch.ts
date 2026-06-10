@@ -369,7 +369,7 @@ export async function mapBatch(
         await writeAudit({
           actorId,
           action: D365_AUDIT_EVENTS.RECORD_FLAGGED_CONFLICT,
-          targetType: "import_record",
+          targetType: "d365_import_record",
           targetId: rec.id,
           after: {
             conflictWith: dedup.conflictWith,
@@ -413,7 +413,7 @@ export async function mapBatch(
         await writeAudit({
           actorId,
           action: D365_AUDIT_EVENTS.RECORD_SKIPPED,
-          targetType: "import_record",
+          targetType: "d365_import_record",
           targetId: rec.id,
           after: {
             reason: "bad_lead_quality",

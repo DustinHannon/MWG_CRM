@@ -19,7 +19,10 @@ import {
 } from "@/lib/tags";
 import { TAG_COLORS, tags as tagsTable } from "@/db/schema/tags";
 import { permissions } from "@/db/schema/users";
-import { eq, sql } from "drizzle-orm";
+import { leads } from "@/db/schema/leads";
+import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
+import { tasks } from "@/db/schema/tasks";
+import { eq, inArray, sql } from "drizzle-orm";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   requireLeadAccess,
@@ -32,9 +35,10 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  RateLimitError,
   ValidationError,
 } from "@/lib/errors";
-import { logger } from "@/lib/logger";
+import { rateLimit } from "@/lib/security/rate-limit";
 import { tagName } from "@/lib/validation/primitives";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { isHexColor, isPaletteColor, nextDefaultPaletteColor } from "./helpers";
@@ -114,6 +118,20 @@ async function requireTagApplicabilityAccess(
   entityId: string,
 ): Promise<void> {
   if (entityType === "lead") {
+    // Reject soft-deleted leads so tagging matches the archived-record
+    // posture the other four entities already enforce (account/contact/
+    // opportunity via requireOwnedEntityAccess, task via requireTaskAccess
+    // all throw on `isDeleted`). requireLeadAccess intentionally does NOT
+    // filter on isDeleted because lead-edit paths reuse it on archived
+    // rows, so the check lives here rather than there.
+    const row = await db
+      .select({ isDeleted: leads.isDeleted })
+      .from(leads)
+      .where(eq(leads.id, entityId))
+      .limit(1);
+    if (!row[0] || row[0].isDeleted) {
+      throw new ForbiddenError("Lead not found.");
+    }
     await requireLeadAccess(user, entityId);
     return;
   }
@@ -122,6 +140,103 @@ async function requireTagApplicabilityAccess(
     return;
   }
   await requireOwnedEntityAccess(user, entityType, entityId);
+}
+
+/**
+ * Set-based access gate for a bulk tag operation. Enforces the exact same
+ * matrix as {@link requireTagApplicabilityAccess} (lead/account/contact/
+ * opportunity: admin OR owner OR canViewAllRecords; task: admin OR creator
+ * OR assignee OR canViewOthersTasks) but in a single SELECT over all
+ * `recordIds` instead of one or two SELECTs per record — so a 5,000-record
+ * batch costs O(1) DB round-trips rather than O(n). Archived rows are
+ * rejected for every entity type (matching the single-record gate).
+ *
+ * Throws the canonical `@/lib/errors` ForbiddenError (a KnownError) with a
+ * generic message that does not leak which specific record id failed, so
+ * the error maps cleanly to a FORBIDDEN client envelope.
+ */
+async function requireBulkTagAccess(
+  user: Awaited<ReturnType<typeof requireSession>>,
+  entityType: TagEntityType,
+  recordIds: string[],
+  flags: { canViewAll: boolean; canViewOthers: boolean },
+): Promise<void> {
+  // De-dupe so the existence check below compares against the distinct
+  // set the caller actually submitted.
+  const uniqueIds = Array.from(new Set(recordIds));
+  if (uniqueIds.length === 0) return;
+
+  const denied = (): never => {
+    throw new ForbiddenError(
+      `You don't have access to one or more of the selected ${entityType}s.`,
+    );
+  };
+
+  if (entityType === "task") {
+    const rows = await db
+      .select({
+        createdById: tasks.createdById,
+        assignedToId: tasks.assignedToId,
+        isDeleted: tasks.isDeleted,
+      })
+      .from(tasks)
+      .where(inArray(tasks.id, uniqueIds));
+    // Every requested id must resolve to a live row.
+    if (rows.length !== uniqueIds.length) denied();
+    for (const row of rows) {
+      if (row.isDeleted) denied();
+      if (user.isAdmin || flags.canViewOthers) continue;
+      if (row.createdById === user.id || row.assignedToId === user.id) continue;
+      denied();
+    }
+    return;
+  }
+
+  // lead / account / contact / opportunity — owner-based access. Each
+  // branch selects from the concrete table (rather than a union-typed
+  // variable) so the column references stay statically typed under TS
+  // strict; the rows resolve to a uniform { ownerId, isDeleted } shape.
+  let rows: { ownerId: string | null; isDeleted: boolean }[];
+  switch (entityType) {
+    case "lead":
+      rows = await db
+        .select({ ownerId: leads.ownerId, isDeleted: leads.isDeleted })
+        .from(leads)
+        .where(inArray(leads.id, uniqueIds));
+      break;
+    case "account":
+      rows = await db
+        .select({
+          ownerId: crmAccounts.ownerId,
+          isDeleted: crmAccounts.isDeleted,
+        })
+        .from(crmAccounts)
+        .where(inArray(crmAccounts.id, uniqueIds));
+      break;
+    case "contact":
+      rows = await db
+        .select({ ownerId: contacts.ownerId, isDeleted: contacts.isDeleted })
+        .from(contacts)
+        .where(inArray(contacts.id, uniqueIds));
+      break;
+    case "opportunity":
+      rows = await db
+        .select({
+          ownerId: opportunities.ownerId,
+          isDeleted: opportunities.isDeleted,
+        })
+        .from(opportunities)
+        .where(inArray(opportunities.id, uniqueIds));
+      break;
+  }
+  // Every requested id must resolve to a live (non-archived) row.
+  if (rows.length !== uniqueIds.length) denied();
+  for (const row of rows) {
+    if (row.isDeleted) denied();
+    if (user.isAdmin || flags.canViewAll) continue;
+    if (row.ownerId === user.id) continue;
+    denied();
+  }
 }
 
 export async function searchTagsAction(
@@ -238,9 +353,10 @@ const applySchema = z
 /**
  * Apply a tag to a single record. When `newTagName` is supplied the
  * server first attempts a case-insensitive lookup; on miss it creates
- * the tag with a rotated default palette colour and emits a
- * `tag.created` audit row. The application itself is idempotent —
- * a duplicate (entityId, tagId) write is treated as success.
+ * the tag with a rotated default palette colour (the lib's
+ * `getOrCreateTag` emits the single `tag.create` audit row). The
+ * application itself is idempotent — a duplicate (entityId, tagId)
+ * write is treated as success.
  *
  * One audit row per apply; bulk operations use bulk_applied for
  * amortization.
@@ -283,19 +399,11 @@ export async function applyTagAction(
             .select({ n: sql<number>`count(*)::int` })
             .from(tagsTable);
           const color = nextDefaultPaletteColor(n);
+          // getOrCreateTag emits the single canonical `tag.create` audit
+          // row on a real insert (lib layer, src/lib/tags.ts). Do NOT
+          // write a second creation row here — one logical tag-definition
+          // creation must produce exactly one forensic row.
           resolved = await getOrCreateTag(validatedName, color, user.id);
-          await writeAudit({
-            actorId: user.id,
-            action: "tag.created",
-            targetType: "tag",
-            targetId: resolved.id,
-            after: {
-              tagId: resolved.id,
-              name: resolved.name,
-              color: resolved.color,
-              source: "inline",
-            },
-          });
         }
       }
       if (!resolved) throw new NotFoundError("tag");
@@ -608,6 +716,33 @@ export async function bulkTagAction(
       await requirePermission(session, "canApplyTags");
       const parsed = bulkSchema.parse(raw);
 
+      // Rate-limit before the (potentially 5,000-record) scope expansion
+      // and access query run. bulkTagAction is a session-user-triggerable
+      // action that fans out to large set-based DB reads/writes; without a
+      // throttle a single user holding canApplyTags could loop it and
+      // saturate the shared session-pooler connection. Dedicated per-user
+      // `bulk_tag` bucket (keyed on the user id) so this expensive surface
+      // doesn't share budget with the cheaper cursor-scroll `internal_list`
+      // limit. Fail-open is handled inside rateLimit on a DB blip.
+      const rl = await rateLimit(
+        { kind: "bulk_tag", principal: session.id },
+        30,
+        60,
+      );
+      if (!rl.allowed) {
+        throw new RateLimitError(
+          "Too many bulk-tag requests. Please wait and retry.",
+        );
+      }
+
+      // Caller's effective visibility flags, resolved once. Reused by
+      // both the filtered-scope expansion and the set-based access gate
+      // below so neither re-reads the permissions row per record.
+      const perms = session.isAdmin ? null : await getPermissions(session.id);
+      const canViewAll = session.isAdmin || (perms?.canViewAllRecords ?? false);
+      const canViewOthers =
+        session.isAdmin || (perms?.canViewOthersTasks ?? false);
+
       // Resolve the concrete `recordIds` from whichever shape was
       // submitted. The legacy shape is direct; the new `scope`
       // shape either reuses the embedded id list, or — for the
@@ -627,13 +762,10 @@ export async function bulkTagAction(
           // `filtered` scope. The expansion walks the same
           // runXxxView / listTasksForUser path the UI sees, capped at
           // BULK_SCOPE_EXPANSION_CAP so a pathological filter set
-          // can't exhaust memory or DB. The action's per-record
-          // access gate below still applies, so a user who somehow
-          // expanded into records they don't own is short-circuited
-          // before any mutation runs.
-          const perms = await getPermissions(session.id);
-          const canViewAll = session.isAdmin || perms.canViewAllRecords;
-          const canViewOthers = session.isAdmin || perms.canViewOthersTasks;
+          // can't exhaust memory or DB. The action's set-based access
+          // gate below still applies, so a user who somehow expanded
+          // into records they don't own is short-circuited before any
+          // mutation runs.
           switch (parsed.scope.entity) {
             case "lead":
               expansion = await expandLeadFilteredScope({
@@ -684,38 +816,20 @@ export async function bulkTagAction(
 
       const { entityType, tagIds, operation } = parsed;
 
-      // Per-record access gate for every entity type. canApplyTags
-      // is necessary but not sufficient — the user must also be
-      // able to access each individual record. Without this gate,
-      // a user with canApplyTags could bulk-tag records they can't
-      // otherwise see. The loop short-circuits on the first
-      // inaccessible record so the operation either applies to all
-      // selected records or none.
-      //
-      // Catch is narrowed: ForbiddenError (the access helper's
-      // primary failure mode) is translated to the generic batch
-      // message that doesn't leak which specific record id failed.
-      // Other KnownError subclasses (NotFoundError, ConflictError,
-      // db connection errors) propagate so withErrorBoundary
-      // surfaces them honestly instead of masking real bugs as
-      // permission failures.
-      for (const id of recordIds) {
-        try {
-          await requireTagApplicabilityAccess(session, entityType, id);
-        } catch (err) {
-          if (err instanceof ForbiddenError) {
-            throw new ForbiddenError(
-              `You don't have access to one or more of the selected ${entityType}s.`,
-            );
-          }
-          logger.warn("tag.bulk.access_check_unexpected_error", {
-            entityType,
-            recordId: id,
-            errorMessage: err instanceof Error ? err.message : String(err),
-          });
-          throw err;
-        }
-      }
+      // Set-based access gate for every entity type. canApplyTags is
+      // necessary but not sufficient — the user must also be able to
+      // access each selected record. A single SELECT over all recordIds
+      // enforces the same owner/assignee/visibility matrix as the
+      // single-record gate (admin OR owner OR canViewAllRecords for CRM
+      // entities; admin OR creator OR assignee OR canViewOthersTasks for
+      // tasks; archived rows always rejected). If any record is
+      // inaccessible the whole batch is rejected with a generic message
+      // that doesn't leak which specific id failed, so no mutation runs.
+      // This is O(1) DB round-trips instead of O(n) per-record SELECTs.
+      await requireBulkTagAccess(session, entityType, recordIds, {
+        canViewAll,
+        canViewOthers,
+      });
 
       const summary = await bulkTagEntities(
         entityType,

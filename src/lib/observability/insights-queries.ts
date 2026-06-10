@@ -258,16 +258,35 @@ interface CoreWebVitalQueryRow {
 }
 
 export async function getCoreWebVitals(): Promise<CoreWebVitalRow[]> {
+  // Speed Insights events are short-lived in hot storage (~30m). For 24h
+  // coverage we UNION hot + cold; cold is filtered by `_row_type=1` per
+  // Better Stack's S3 schema, and bounded above by `dt < now() - 30m` so
+  // the hot/cold overlap window is not double-counted.
   const query = `
     SELECT
-      ${SI_METRIC} AS metric,
-      quantile(0.75)(${SI_VALUE}) AS p75,
+      metric,
+      quantile(0.75)(value) AS p75,
       count(*) AS samples
-    FROM remote(${HOT})
-    WHERE dt > now() - INTERVAL 24 HOUR
-      AND ${SI_FILTER}
-      AND ${SI_VALUE} IS NOT NULL
-      AND ${SI_METRIC} IN ('LCP', 'FCP', 'CLS', 'INP', 'TTFB')
+    FROM (
+      SELECT
+        ${SI_METRIC} AS metric,
+        ${SI_VALUE} AS value
+      FROM remote(${HOT})
+      WHERE dt > now() - INTERVAL 24 HOUR
+        AND ${SI_FILTER}
+        AND ${SI_VALUE} IS NOT NULL
+      UNION ALL
+      SELECT
+        ${SI_METRIC} AS metric,
+        ${SI_VALUE} AS value
+      FROM s3Cluster(primary, ${COLD})
+      WHERE _row_type = 1
+        AND dt > now() - INTERVAL 24 HOUR
+        AND dt < now() - INTERVAL 30 MINUTE
+        AND ${SI_FILTER}
+        AND ${SI_VALUE} IS NOT NULL
+    )
+    WHERE metric IN ('LCP', 'FCP', 'CLS', 'INP', 'TTFB')
     GROUP BY metric
     FORMAT JSONEachRow
   `;
@@ -442,17 +461,41 @@ interface VisitorCountryRow {
 export async function getVisitorsByCountry(): Promise<
   Record<string, number>
 > {
+  // Analytics events are short-lived in hot storage (~30m). For 24h
+  // coverage we UNION hot + cold; cold is filtered by `_row_type=1` per
+  // Better Stack's S3 schema, and bounded above by `dt < now() - 30m` so
+  // the hot/cold overlap window is not double-counted. uniqExact is applied
+  // over the combined (country, deviceId) rows so a visitor seen in both
+  // hot and cold is counted once.
   const query = `
     SELECT
-      ${COUNTRY} AS country,
-      uniqExact(${DEVICE_ID}) AS visitors
-    FROM remote(${HOT})
-    WHERE dt > now() - INTERVAL 24 HOUR
-      AND ${AN_FILTER}
-      AND ${AN_EVENT} = 'pageview'
-      AND ${COUNTRY} IS NOT NULL
-      AND ${COUNTRY} != ''
-      AND ${DEVICE_ID} IS NOT NULL
+      country,
+      uniqExact(device_id) AS visitors
+    FROM (
+      SELECT
+        ${COUNTRY} AS country,
+        ${DEVICE_ID} AS device_id
+      FROM remote(${HOT})
+      WHERE dt > now() - INTERVAL 24 HOUR
+        AND ${AN_FILTER}
+        AND ${AN_EVENT} = 'pageview'
+        AND ${COUNTRY} IS NOT NULL
+        AND ${COUNTRY} != ''
+        AND ${DEVICE_ID} IS NOT NULL
+      UNION ALL
+      SELECT
+        ${COUNTRY} AS country,
+        ${DEVICE_ID} AS device_id
+      FROM s3Cluster(primary, ${COLD})
+      WHERE _row_type = 1
+        AND dt > now() - INTERVAL 24 HOUR
+        AND dt < now() - INTERVAL 30 MINUTE
+        AND ${AN_FILTER}
+        AND ${AN_EVENT} = 'pageview'
+        AND ${COUNTRY} IS NOT NULL
+        AND ${COUNTRY} != ''
+        AND ${DEVICE_ID} IS NOT NULL
+    )
     GROUP BY country
     ORDER BY visitors DESC
     FORMAT JSONEachRow

@@ -18,6 +18,28 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
+ * Report definitions are small; reject anything larger than this before
+ * parsing so a hostile client can't drive an unbounded JSON parse.
+ */
+const MAX_BODY_BYTES = 16 * 1024;
+
+async function readReportBody(req: Request): Promise<unknown> {
+  const len = Number(req.headers.get("content-length") ?? "0");
+  if (Number.isFinite(len) && len > MAX_BODY_BYTES) {
+    throw new ValidationError("Request body too large.");
+  }
+  const text = await req.text();
+  if (text.length > MAX_BODY_BYTES) {
+    throw new ValidationError("Request body too large.");
+  }
+  try {
+    return text.length === 0 ? {} : JSON.parse(text);
+  } catch {
+    throw new ValidationError("Request body must be valid JSON.");
+  }
+}
+
+/**
  * PATCH /api/reports/[id]
  *
  * Owner-or-admin update path. Bumps the `version` column on every
@@ -30,7 +52,6 @@ export async function PATCH(
 ) {
   const viewer = await requireSession();
   const { id } = await params;
-  const body = await req.json();
 
   const result = await withErrorBoundary(
     {
@@ -41,12 +62,17 @@ export async function PATCH(
     },
     async () => {
       const report = await getReportByIdOrThrow(id);
-      await assertCanEditReport(report, viewer);
 
+      const body = await readReportBody(req);
       const input = reportUpdateSchema.parse(body);
       const entityType = (input.entityType ?? report.entityType) as import(
         "@/db/schema/saved-reports"
       ).ReportEntityType;
+
+      // Edit gate evaluates the marketing permission against the
+      // *resulting* entity type (input.entityType ?? current), so a
+      // non-marketing owner can't convert a report into a marketing one.
+      await assertCanEditReport(report, viewer, entityType);
 
       if (input.fields) {
         for (const c of input.fields) {

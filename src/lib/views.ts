@@ -671,6 +671,7 @@ export async function runView(opts: RunViewOptions): Promise<RunViewResult> {
     return sql`(
       ${leads.lastActivityAt} < ${cursorParsed.ts.toISOString()}::timestamptz
       OR (${leads.lastActivityAt} = ${cursorParsed.ts.toISOString()}::timestamptz AND ${leads.id} < ${cursorParsed.id})
+      OR ${leads.lastActivityAt} IS NULL
     )`;
   })();
   const finalWhere = cursorWhere

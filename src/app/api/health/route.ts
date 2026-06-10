@@ -20,8 +20,12 @@ export const runtime = "nodejs";
  * Each probe is bounded with its own catch so a single failure tags
  * exactly the dependency that broke, not the whole probe.
  *
- * Response shape:
- * { healthy: boolean, checks: { db, graph, blob } }
+ * Response shape (public, sanitized):
+ * { healthy: boolean, checks: { db, graph, blob } } where each check is
+ * { ok, durationMs, code? } — `code` is a coarse non-sensitive bucket
+ * ("unreachable"/"timeout"/"unauthorized"/...). Raw driver error text is
+ * never returned to callers (this endpoint is public); it is retained
+ * server-side for the audit row + logger.warn only.
  * Status:
  * 200 when every check passes.
  * 503 when any check fails (load balancers / uptime monitors will
@@ -56,6 +60,15 @@ const PROBE_TIMEOUT_MS = 5000;
 interface CheckResult {
   ok: boolean;
   durationMs: number;
+  // Coarse, non-sensitive status code for the public response body
+  // (e.g. "unreachable", "timeout"). Never the raw driver message.
+  code?: string;
+  // Raw underlying error message. Server-side only — kept for the
+  // logger.warn + writeSystemAudit emission, stripped before the
+  // response is serialized (see toPublicResult). Do NOT return this
+  // to anonymous callers: postgres-js/Graph/Blob messages embed
+  // host/port/role/tenant detail that aids reconnaissance on the one
+  // deliberately public endpoint.
   error?: string;
 }
 
@@ -71,6 +84,61 @@ interface HealthResult {
 }
 
 let cache: { result: HealthResult; expiresAt: number } | null = null;
+
+/**
+ * Map a raw probe error to a coarse, non-sensitive code for the public
+ * response body. The raw message (host/port/role/tenant/OAuth detail)
+ * stays server-side only; the public caller gets a stable bucket.
+ */
+function classifyError(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("timed out") || lower.includes("timeout")) {
+    return "timeout";
+  }
+  if (
+    lower.includes("econnrefused") ||
+    lower.includes("enotfound") ||
+    lower.includes("etimedout") ||
+    lower.includes("ehostunreach") ||
+    lower.includes("getaddrinfo") ||
+    lower.includes("connect")
+  ) {
+    return "unreachable";
+  }
+  if (
+    lower.includes("authentication") ||
+    lower.includes("unauthorized") ||
+    lower.includes("forbidden") ||
+    lower.includes("permission") ||
+    lower.includes("aadsts") ||
+    lower.includes("token")
+  ) {
+    return "unauthorized";
+  }
+  return "unavailable";
+}
+
+/**
+ * Strip the server-only `error` field from every check, leaving only
+ * { ok, durationMs, code }. This is the only shape that may reach an
+ * unauthenticated caller — the raw `error` is retained on the cached
+ * HealthResult for the audit/log path but never serialized to the body.
+ */
+function toPublicResult(result: HealthResult): HealthResult {
+  const stripError = (c: CheckResult): CheckResult => ({
+    ok: c.ok,
+    durationMs: c.durationMs,
+    ...(c.code ? { code: c.code } : {}),
+  });
+  return {
+    ...result,
+    checks: {
+      db: stripError(result.checks.db),
+      graph: stripError(result.checks.graph),
+      blob: stripError(result.checks.blob),
+    },
+  };
+}
 
 async function withTimeout<T>(
   promise: Promise<T>,
@@ -109,10 +177,12 @@ async function checkDb(): Promise<CheckResult> {
     );
     return { ok: true, durationMs: Date.now() - start };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
       durationMs: Date.now() - start,
-      error: err instanceof Error ? err.message : String(err),
+      code: classifyError(message),
+      error: message,
     };
   }
 }
@@ -122,9 +192,11 @@ async function checkGraph(): Promise<CheckResult> {
   try {
     if (!isGraphAppConfigured()) {
       // Treat unconfigured as a degraded state: outbound email is dead.
+      // ENTRA_NOT_CONFIGURED is a deliberate non-sensitive public signal.
       return {
         ok: false,
         durationMs: Date.now() - start,
+        code: "not_configured",
         error: "ENTRA_NOT_CONFIGURED",
       };
     }
@@ -134,10 +206,12 @@ async function checkGraph(): Promise<CheckResult> {
     await withTimeout(getGraphAppToken(), PROBE_TIMEOUT_MS, "graph");
     return { ok: true, durationMs: Date.now() - start };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
       durationMs: Date.now() - start,
-      error: err instanceof Error ? err.message : String(err),
+      code: classifyError(message),
+      error: message,
     };
   }
 }
@@ -152,10 +226,12 @@ async function checkBlob(): Promise<CheckResult> {
     await withTimeout(list({ limit: 1 }), PROBE_TIMEOUT_MS, "blob");
     return { ok: true, durationMs: Date.now() - start };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
       durationMs: Date.now() - start,
-      error: err instanceof Error ? err.message : String(err),
+      code: classifyError(message),
+      error: message,
     };
   }
 }
@@ -176,7 +252,9 @@ async function checkAll(): Promise<HealthResult> {
 
 export async function GET() {
   if (cache && Date.now() < cache.expiresAt) {
-    return NextResponse.json(cache.result, {
+    // Serialize the sanitized view only — the cached result keeps raw
+    // `error` strings for the server-side audit/log path, never the body.
+    return NextResponse.json(toPublicResult(cache.result), {
       status: cache.result.healthy ? 200 : 503,
       headers: { "Cache-Control": "no-store" },
     });
@@ -201,7 +279,9 @@ export async function GET() {
     logger.warn("api_health.degraded", { degraded });
   }
 
-  return NextResponse.json(result, {
+  // Return the sanitized view — raw per-check `error` strings are kept
+  // only in the cached result for the audit/log emission above.
+  return NextResponse.json(toPublicResult(result), {
     status: result.healthy ? 200 : 503,
     headers: { "Cache-Control": "no-store" },
   });

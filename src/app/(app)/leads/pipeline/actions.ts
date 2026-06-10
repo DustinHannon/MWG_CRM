@@ -55,7 +55,7 @@ export async function updateLeadStatusAction(
       await writeAudit({
         actorId: session.id,
         action: "lead.status_change",
-        targetType: "leads",
+        targetType: "lead",
         targetId: leadId,
         before: before[0] ?? null,
         after: { status: parsed },

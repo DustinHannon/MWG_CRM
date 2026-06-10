@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gt, or } from "drizzle-orm";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
@@ -77,8 +77,20 @@ export async function GET(req: Request) {
 
   const perms = await getPermissions(user.id);
   const canViewAll = user.isAdmin || perms.canViewAllRecords;
+  // Tasks use a wider access model than other CRM entities (see
+  // requireTaskAccess in auth-helpers): admin OR canViewOthersTasks see
+  // every task; otherwise creator OR assignee.
+  const canViewAllTasks = user.isAdmin || perms.canViewOthersTasks;
   const out: Partial<Record<RealtimeEntity, string[]>> = {};
   let lastChangeAt = since;
+  // Advance the change cursor to the newest ts seen in this page. Each entity
+  // query is capped at MAX_IDS_PER_ENTITY newest-first, so a burst of more than
+  // the cap omits the oldest overflow ids from the flash signal; the data is
+  // still refreshed client-side via router.refresh() (see use-realtime-poll:
+  // the ids are best-effort, not exhaustive).
+  const advanceCursor = (rows: ReadonlyArray<{ ts: Date }>) => {
+    for (const r of rows) if (r.ts > lastChangeAt) lastChangeAt = r.ts;
+  };
 
   const wantSet = new Set<RealtimeEntity>(requested);
 
@@ -95,7 +107,7 @@ export async function GET(req: Request) {
       .orderBy(desc(leads.updatedAt))
       .limit(MAX_IDS_PER_ENTITY);
     out.leads = rows.map((r) => r.id);
-    for (const r of rows) if (r.ts > lastChangeAt) lastChangeAt = r.ts;
+    advanceCursor(rows);
   }
 
   if (wantSet.has("accounts")) {
@@ -111,7 +123,7 @@ export async function GET(req: Request) {
       .orderBy(desc(crmAccounts.updatedAt))
       .limit(MAX_IDS_PER_ENTITY);
     out.accounts = rows.map((r) => r.id);
-    for (const r of rows) if (r.ts > lastChangeAt) lastChangeAt = r.ts;
+    advanceCursor(rows);
   }
 
   if (wantSet.has("contacts")) {
@@ -127,7 +139,7 @@ export async function GET(req: Request) {
       .orderBy(desc(contacts.updatedAt))
       .limit(MAX_IDS_PER_ENTITY);
     out.contacts = rows.map((r) => r.id);
-    for (const r of rows) if (r.ts > lastChangeAt) lastChangeAt = r.ts;
+    advanceCursor(rows);
   }
 
   if (wantSet.has("opportunities")) {
@@ -143,15 +155,22 @@ export async function GET(req: Request) {
       .orderBy(desc(opportunities.updatedAt))
       .limit(MAX_IDS_PER_ENTITY);
     out.opportunities = rows.map((r) => r.id);
-    for (const r of rows) if (r.ts > lastChangeAt) lastChangeAt = r.ts;
+    advanceCursor(rows);
   }
 
   if (wantSet.has("tasks")) {
-    // Tasks scope to assignee for non-privileged users.
+    // Mirror requireTaskAccess: privileged viewers see every task; others
+    // see tasks they created or are assigned to (matches the page's own
+    // visibility, so the change-id stream isn't narrower than the list).
     const where = combine(
       gt(tasks.updatedAt, since),
       withActive(tasks.isDeleted),
-      canViewAll ? undefined : eq(tasks.assignedToId, user.id),
+      canViewAllTasks
+        ? undefined
+        : or(
+            eq(tasks.createdById, user.id),
+            eq(tasks.assignedToId, user.id),
+          ),
     );
     const rows = await db
       .select({ id: tasks.id, ts: tasks.updatedAt })
@@ -160,7 +179,7 @@ export async function GET(req: Request) {
       .orderBy(desc(tasks.updatedAt))
       .limit(MAX_IDS_PER_ENTITY);
     out.tasks = rows.map((r) => r.id);
-    for (const r of rows) if (r.ts > lastChangeAt) lastChangeAt = r.ts;
+    advanceCursor(rows);
   }
 
   if (wantSet.has("activities")) {
@@ -181,7 +200,7 @@ export async function GET(req: Request) {
         .orderBy(desc(activities.updatedAt))
         .limit(MAX_IDS_PER_ENTITY);
       out.activities = rows.map((r) => r.id);
-      for (const r of rows) if (r.ts > lastChangeAt) lastChangeAt = r.ts;
+      advanceCursor(rows);
     } else {
       out.activities = [];
     }
@@ -200,7 +219,7 @@ export async function GET(req: Request) {
       .orderBy(desc(notifications.createdAt))
       .limit(MAX_IDS_PER_ENTITY);
     out.notifications = rows.map((r) => r.id);
-    for (const r of rows) if (r.ts > lastChangeAt) lastChangeAt = r.ts;
+    advanceCursor(rows);
   }
 
   // Advance cursor by 1ms so the client never re-asks "since the same

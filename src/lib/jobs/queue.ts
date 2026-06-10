@@ -5,7 +5,7 @@ import { jobQueue, jobQueueDeadLetter } from "@/db/schema/jobs";
 import { writeAudit } from "@/lib/audit";
 import { SYSTEM_SENTINEL_USER_ID } from "@/lib/constants/system-users";
 import { logger } from "@/lib/logger";
-import { NonRetryableJobError } from "./errors";
+import { JobError, NonRetryableJobError } from "./errors";
 import {
   type EnqueueOptions,
   type JobKind,
@@ -147,6 +147,45 @@ function toJobRecord<K extends JobKind = JobKind>(row: {
   };
 }
 
+/**
+ * Guard the idempotency-conflict return path against a cross-kind key
+ * collision before `toJobRecord<K>` casts `kind`/`payload` unchecked.
+ *
+ * The unique index is on `idempotency_key` alone (schema jobs.ts), NOT on
+ * `(kind, idempotency_key)`. So when two different JobKinds reuse the same
+ * idempotency key, the conflict SELECT resolves to whichever row already
+ * exists — which may be a DIFFERENT kind than the caller requested. Returning
+ * it via `toJobRecord<K>` would (a) silently drop the caller's job and (b)
+ * hand back a JobRecord whose `kind`/`payload` types lie about the row.
+ *
+ * Today there is exactly one JobKind ('blob-cleanup') and every call site
+ * namespaces its keys, so this cannot trigger — but the moment a second kind
+ * is added with an overlapping key namespace it becomes silent lost work.
+ * Fail loud instead: surface the mismatch as a queue-internal error so the
+ * caller learns its job was not enqueued rather than being told it was.
+ *
+ * Returns the row narrowed to `JobRecord<K>` only after the kind is verified.
+ */
+function assertEnqueueKindMatch<K extends JobKind>(
+  row: Parameters<typeof toJobRecord<K>>[0],
+  requestedKind: K,
+  idempotencyKey: string,
+): JobRecord<K> {
+  if (row.kind !== requestedKind) {
+    logger.error("jobs.enqueue.idempotency_kind_mismatch", {
+      requestedKind,
+      existingKind: row.kind,
+      idempotencyKey,
+    });
+    throw new JobError(
+      `enqueueJob: idempotency key '${idempotencyKey}' already maps to kind ` +
+        `'${row.kind}', not requested kind '${requestedKind}'. Idempotency ` +
+        `keys must be unique across kinds.`,
+    );
+  }
+  return toJobRecord<K>(row);
+}
+
 /* -------------------------------------------------------------------------- */
 /* enqueueJob                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -265,9 +304,9 @@ export async function enqueueJob<K extends JobKind>(
         `enqueueJob: idempotency key '${idempotencyKey}' collided but no row visible`,
       );
     }
-    return toJobRecord<K>(secondLook);
+    return assertEnqueueKindMatch<K>(secondLook, kind, idempotencyKey);
   }
-  return toJobRecord<K>(existing);
+  return assertEnqueueKindMatch<K>(existing, kind, idempotencyKey);
 }
 
 /* -------------------------------------------------------------------------- */

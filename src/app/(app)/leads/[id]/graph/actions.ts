@@ -18,7 +18,12 @@ import {
   MailboxUnsupportedError,
   NotFoundError,
   ReauthRequiredKnownError,
+  ValidationError,
 } from "@/lib/errors";
+import {
+  ALLOWED_ATTACHMENT_MIMES,
+  FORBIDDEN_EXTENSIONS,
+} from "@/lib/validation/primitives";
 import { checkMailboxKind } from "@/lib/email/preflight";
 import { sendEmailAndTrack } from "@/lib/graph-email";
 import { scheduleMeetingAndTrack } from "@/lib/graph-meeting";
@@ -127,6 +132,19 @@ const sendEmailSchema = z.object({
   body: z.string().trim().min(1).max(50_000),
 });
 
+// Application-layer attachment caps for the delegated lead-email path.
+// Without these the action would buffer attacker-influenced file content into
+// memory with no explicit bound (the framework body limit is incidental, not a
+// defense, and is now 26MB to support imports). Per-attachment is capped at the
+// operative 3MB Microsoft Graph `fileAttachment` ceiling that
+// `sendEmailAndTrack` enforces downstream, so oversize files are rejected here
+// with a clear message instead of being buffered then failing late. Count and
+// aggregate caps bound total memory/outbound payload; content types are
+// allowlisted via the shared `ALLOWED_ATTACHMENT_MIMES` / `FORBIDDEN_EXTENSIONS`.
+const MAX_EMAIL_ATTACHMENT_BYTES = 3 * 1024 * 1024; // matches the Graph fileAttachment ceiling
+const MAX_EMAIL_ATTACHMENT_COUNT = 10;
+const MAX_EMAIL_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
+
 export async function sendEmailAction(
   formData: FormData,
 ): Promise<ActionResult> {
@@ -181,6 +199,15 @@ export async function sendEmailAction(
     // Consent enforcement — never trust the client. The UI hides the panel
     // when lead.doNotEmail, but a stale tab or a crafted POST bypasses that.
     // requireLeadAccess only selects ownerId, so re-read the consent flags.
+    //
+    // The `to` address is intentionally a free recipient (the composer
+    // prefills the lead's email but leaves the field editable, so a rep can
+    // reach an alternate/forwarded contact for the same lead). This gate
+    // therefore checks the LEAD's contact preferences, not `parsed.to`: sending
+    // through a lead that has opted out is blocked regardless of the typed
+    // recipient. The send is non-anonymous (delegated user mailbox), audited,
+    // and permission-gated (canSendEmail) — recipient freedom is by design, not
+    // an enforcement gap.
     const [consent] = await db
       .select({
         doNotEmail: leads.doNotEmail,
@@ -215,16 +242,58 @@ export async function sendEmailAction(
     });
 
     // Attachments: pull from formData (multiple <File>s under name "attachment").
+    // Validate count, type, and size against explicit caps BEFORE buffering any
+    // bytes into memory — never read attacker-influenced content unbounded.
     const files = formData
       .getAll("attachment")
-      .filter((f): f is File => f instanceof File);
+      .filter((f): f is File => f instanceof File && f.size > 0);
+
+    if (files.length > MAX_EMAIL_ATTACHMENT_COUNT) {
+      throw new ValidationError(
+        `Too many attachments (max ${MAX_EMAIL_ATTACHMENT_COUNT}).`,
+      );
+    }
+
     const atts: Array<{
       filename: string;
       contentType: string;
       bytes: Uint8Array;
     }> = [];
+    let totalBytes = 0;
     for (const f of files) {
-      if (f.size === 0) continue;
+      const contentType = (f.type || "application/octet-stream").toLowerCase();
+      const ext = f.name.includes(".")
+        ? f.name.slice(f.name.lastIndexOf(".") + 1).toLowerCase()
+        : "";
+      if (FORBIDDEN_EXTENSIONS.has(ext)) {
+        throw new ValidationError(
+          `Attachment ${f.name} has a blocked file type.`,
+        );
+      }
+      if (!ALLOWED_ATTACHMENT_MIMES.has(contentType)) {
+        throw new ValidationError(
+          `Attachment ${f.name} has an unsupported file type (${contentType}).`,
+        );
+      }
+      if (f.size > MAX_EMAIL_ATTACHMENT_BYTES) {
+        throw new ValidationError(
+          `Attachment ${f.name} exceeds the ${(
+            MAX_EMAIL_ATTACHMENT_BYTES /
+            1024 /
+            1024
+          ).toFixed(0)}MB per-file limit.`,
+        );
+      }
+      totalBytes += f.size;
+      if (totalBytes > MAX_EMAIL_ATTACHMENT_TOTAL_BYTES) {
+        throw new ValidationError(
+          `Attachments exceed the ${(
+            MAX_EMAIL_ATTACHMENT_TOTAL_BYTES /
+            1024 /
+            1024
+          ).toFixed(0)}MB total limit.`,
+        );
+      }
       const buf = new Uint8Array(await f.arrayBuffer());
       atts.push({
         filename: f.name,

@@ -203,17 +203,37 @@ export async function setScoringThresholdsAction(
           "Hot must be greater than Warm; Warm must be greater than Cool.",
         );
       }
-      await db
-        .update(leadScoringSettings)
-        .set({
+      // Upsert the singleton (id=1): the settings row is not seeded by any
+      // migration, so a bare UPDATE would affect 0 rows and silently lose the
+      // admin's change while still reporting success. onConflictDoUpdate seeds
+      // the row on first save and bumps the OCC version on subsequent saves.
+      const updated = await db
+        .insert(leadScoringSettings)
+        .values({
+          id: 1,
           hotThreshold: parsed.hotThreshold,
           warmThreshold: parsed.warmThreshold,
           coolThreshold: parsed.coolThreshold,
           updatedById: session.id,
           updatedAt: sql`now()`,
-          version: sql`${leadScoringSettings.version} + 1`,
         })
-        .where(eq(leadScoringSettings.id, 1));
+        .onConflictDoUpdate({
+          target: leadScoringSettings.id,
+          set: {
+            hotThreshold: parsed.hotThreshold,
+            warmThreshold: parsed.warmThreshold,
+            coolThreshold: parsed.coolThreshold,
+            updatedById: session.id,
+            updatedAt: sql`now()`,
+            version: sql`${leadScoringSettings.version} + 1`,
+          },
+        })
+        .returning({ id: leadScoringSettings.id });
+      if (updated.length === 0) {
+        throw new ConflictError(
+          "Scoring thresholds could not be saved. Refresh and try again.",
+        );
+      }
       invalidateThresholdCache();
       await writeAudit({
         actorId: session.id,
@@ -249,7 +269,7 @@ export async function recomputeAllScoresAction(): Promise<
       await writeAudit({
         actorId: session.id,
         action: "scoring.recompute_manual",
-        targetType: "leads",
+        targetType: "lead",
         targetId: "all",
         after: { processed } as Record<string, unknown>,
       });

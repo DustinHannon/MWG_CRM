@@ -44,6 +44,7 @@ import {
 import { updateContactViewAction } from "../view-actions";
 import {
   ContactViewToolbar,
+  type ContactFilters,
   type ContactViewSummary,
 } from "../view-toolbar";
 
@@ -83,21 +84,6 @@ export interface ContactsListClientProps {
   ownerOptions: OwnerOption[];
   accountOptions: AccountOption[];
   canApplyTags: boolean;
-}
-
-interface ContactFilters {
-  q: string;
-  owner: string; // comma-separated owner ids
-  account: string; // comma-separated account ids
-  doNotContact: boolean;
-  doNotEmail: boolean;
-  doNotCall: boolean;
-  doNotMail: boolean;
-  city: string;
-  state: string;
-  country: string;
-  recentlyUpdatedDays: string;
-  tag: string; // comma-separated tag names
 }
 
 const EMPTY_FILTERS: ContactFilters = {
@@ -340,6 +326,7 @@ function ContactsListInner({
         viewModified={viewModified}
         modifiedFields={modifiedFields}
         subscribedViewIds={subscribedViewIds}
+        filters={filters}
         resetClientState={clearFilters}
         defaultViewId={defaultViewId}
       />

@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { contacts } from "@/db/schema/crm-records";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 import { TagSection } from "@/components/tags/tag-section";
 import { ContactEditForm } from "./_components/contact-edit-form";
@@ -21,7 +21,6 @@ export default async function EditContactPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireSession();
-  const perms = await getPermissions(user.id);
   const { id } = await params;
 
   const [contact] = await db
@@ -31,8 +30,7 @@ export default async function EditContactPage({
     .limit(1);
   if (!contact || contact.isDeleted) notFound();
 
-  const canEdit =
-    user.isAdmin || contact.ownerId === user.id || perms.canViewAllRecords;
+  const canEdit = user.isAdmin || contact.ownerId === user.id;
   if (!canEdit) redirect(`/contacts/${id}`);
 
   return (

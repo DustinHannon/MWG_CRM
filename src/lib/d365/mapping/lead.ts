@@ -9,8 +9,8 @@ import {
   type MapResult,
   type ValidationWarning,
   extractCustomFields,
+  parseHttpUrl,
   parseODataDate,
-  parseOptionalDate,
   parseString,
   picklistMapper,
   softValidate,
@@ -330,8 +330,11 @@ export function mapD365Lead(
       parseString(raw.emailaddress3),
     phone: parseString(raw.telephone1) ?? parseString(raw.telephone2),
     mobilePhone: parseString(raw.mobilephone),
-    website: parseString(raw.websiteurl),
-    linkedinUrl: parseString(
+    // Validate scheme: only http/https survives; a javascript:/data: or
+    // otherwise malformed source URL becomes null so it can never reach
+    // the raw <a href> render sink on the lead detail / print pages.
+    website: parseHttpUrl(raw.websiteurl),
+    linkedinUrl: parseHttpUrl(
       (raw as Record<string, unknown>)["linkedinprofile"],
     ),
     street1: parseString(raw.address1_line1),
@@ -346,10 +349,13 @@ export function mapD365Lead(
     doNotEmail,
     doNotCall,
     externalId: raw.leadid,
-    convertedAt:
-      raw.statecode === 1
-        ? parseOptionalDate(raw.modifiedon ?? null)
-        : null,
+    // D365 statecode=1 means "Qualified", which maps to mwg-crm status
+    // 'qualified' (see statecode override above) — NOT the distinct
+    // 'converted' terminal state. Leaving convertedAt null keeps the two
+    // signals consistent: an imported lead is never half-converted
+    // (status='qualified' with a populated convertedAt). convertedAt is
+    // stamped only on an actual mwg-crm conversion to 'converted'.
+    convertedAt: null,
     lastActivityAt: null, // bumped at first counting activity, not import.
     createdVia: "imported",
     createdById: ctx.resolvedOwnerId,
@@ -427,7 +433,13 @@ export function mapD365Lead(
     firstName: parseString(raw.firstname),
     lastName: parseString(raw.lastname),
     companyName: parseString(raw.companyname),
-    email: parseString(raw.emailaddress1),
+    // Assess the same email the mapper commits (emailaddress1 ?? 2 ?? 3),
+    // not just emailaddress1. A junk primary with a valid secondary must
+    // not verdict garbage/suspicious and auto-skip a usable lead.
+    email:
+      parseString(raw.emailaddress1) ??
+      parseString(raw.emailaddress2) ??
+      parseString(raw.emailaddress3),
     phone: parseString(raw.telephone1),
     mobilePhone: parseString(raw.mobilephone),
     jobTitle: parseString(raw.jobtitle),

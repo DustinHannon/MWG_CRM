@@ -1,6 +1,16 @@
 import "server-only";
 import { logger } from "@/lib/logger";
-import { and, eq, gt, inArray, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  inArray,
+  or,
+  sql,
+  type AnyColumn,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { savedViews, userPreferences } from "@/db/schema/views";
@@ -23,6 +33,7 @@ type SubRow = {
   entityType: string;
   frequency: string;
   lastSeenMaxCreatedAt: Date | null;
+  lastSeenMaxId: string | null;
   emailDigestFreq: string;
   notifyInApp: boolean;
   isAdmin: boolean;
@@ -57,6 +68,37 @@ const ENTITY_META: Record<
  * caller can advance the per-subscription cursor.
  */
 type MatchRecord = DigestRecord & { createdAt: Date };
+
+/**
+ * Per-run page size for each matcher. Matchers order by `created_at ASC`
+ * and take the oldest unseen page so the cutoff advance is deterministic;
+ * when a page comes back full the cursor only advances to the last (newest
+ * in-page) row, leaving the strictly-newer remainder for the next run to
+ * pick up via `gt(createdAt, cutoff)` rather than skipping it.
+ */
+const MATCH_PAGE_SIZE = 50;
+
+/**
+ * Keyset predicate matching the matchers' (created_at ASC, id ASC) ordering.
+ * With a cursor id present, continue strictly after the (cutoff, cutoffId)
+ * tuple — created_at > cutoff OR (created_at = cutoff AND id > cutoffId) — so
+ * rows tying the boundary created_at (e.g. a bulk import sharing one
+ * transaction timestamp) are delivered on a later run instead of being skipped.
+ * Without a cursor id (first run, or a row written before last_seen_max_id
+ * existed) fall back to a plain created_at boundary.
+ */
+function keysetAfter(
+  createdAtCol: AnyColumn,
+  idCol: AnyColumn,
+  cutoff: Date,
+  cutoffId: string | null,
+): SQL {
+  if (!cutoffId) return gt(createdAtCol, cutoff);
+  return or(
+    gt(createdAtCol, cutoff),
+    and(eq(createdAtCol, cutoff), gt(idCol, cutoffId)),
+  )!;
+}
 
 /**
  * runner. Daily cron:
@@ -95,6 +137,7 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
       sv.entity_type AS "entityType",
       s.frequency,
       s.last_seen_max_created_at AS "lastSeenMaxCreatedAt",
+      s.last_seen_max_id AS "lastSeenMaxId",
       coalesce(p.email_digest_frequency, 'off') AS "emailDigestFreq",
       coalesce(p.notify_saved_search, true) AS "notifyInApp",
       u.is_admin AS "isAdmin",
@@ -139,20 +182,24 @@ export async function runSavedSearchDigest(): Promise<DigestSummary> {
           break;
       }
 
-      const newCutoff =
-        matches.length > 0
-          ? matches.reduce(
-              (max, r) => (r.createdAt > max ? r.createdAt : max),
-              matches[0].createdAt,
-            )
-          : sub.lastSeenMaxCreatedAt ?? new Date();
+      // Matchers return rows ordered (created_at ASC, id ASC), so the last row
+      // is the max (created_at, id) keyset tuple consumed this run. Advance the
+      // cursor to BOTH fields so the next run continues strictly after it via
+      // keysetAfter and never skips rows tying the boundary created_at.
+      const lastRow =
+        matches.length > 0 ? matches[matches.length - 1] : null;
+      const newCutoff = lastRow
+        ? lastRow.createdAt
+        : sub.lastSeenMaxCreatedAt ?? new Date();
+      const newCutoffId = lastRow ? lastRow.id : sub.lastSeenMaxId;
 
-      // Always update last_run_at; only bump cutoff if we actually saw rows.
+      // Always update last_run_at; only bump the cursor if we actually saw rows.
       await db
         .update(savedSearchSubscriptions)
         .set({
           lastRunAt: new Date(),
           lastSeenMaxCreatedAt: newCutoff,
+          lastSeenMaxId: newCutoffId,
         })
         .where(eq(savedSearchSubscriptions.id, sub.id));
 
@@ -268,7 +315,7 @@ async function matchLeads(
   // pre-fix runner emailed users about leads that had since been
   // archived, surfacing rows the user may have explicitly hidden.
   const wheres: SQL[] = [
-    gt(leads.createdAt, cutoff),
+    keysetAfter(leads.createdAt, leads.id, cutoff, sub.lastSeenMaxId),
     eq(leads.isDeleted, false),
   ];
   if (filters.status && filters.status.length > 0) {
@@ -302,7 +349,8 @@ async function matchLeads(
     .from(leads)
     .leftJoin(users, eq(users.id, leads.ownerId))
     .where(and(...wheres))
-    .limit(50);
+    .orderBy(asc(leads.createdAt), asc(leads.id))
+    .limit(MATCH_PAGE_SIZE);
 
   return rows.map((r) => ({
     id: r.id,
@@ -330,7 +378,7 @@ async function matchAccounts(
   };
 
   const wheres: SQL[] = [
-    gt(crmAccounts.createdAt, cutoff),
+    keysetAfter(crmAccounts.createdAt, crmAccounts.id, cutoff, sub.lastSeenMaxId),
     eq(crmAccounts.isDeleted, false),
   ];
   if (filters.search) {
@@ -383,7 +431,8 @@ async function matchAccounts(
     .from(crmAccounts)
     .leftJoin(users, eq(users.id, crmAccounts.ownerId))
     .where(and(...wheres))
-    .limit(50);
+    .orderBy(asc(crmAccounts.createdAt), asc(crmAccounts.id))
+    .limit(MATCH_PAGE_SIZE);
 
   return rows.map((r) => ({
     id: r.id,
@@ -414,7 +463,7 @@ async function matchContacts(
   };
 
   const wheres: SQL[] = [
-    gt(contacts.createdAt, cutoff),
+    keysetAfter(contacts.createdAt, contacts.id, cutoff, sub.lastSeenMaxId),
     eq(contacts.isDeleted, false),
   ];
   if (filters.search) {
@@ -477,7 +526,8 @@ async function matchContacts(
     .leftJoin(crmAccounts, eq(crmAccounts.id, contacts.accountId))
     .leftJoin(users, eq(users.id, contacts.ownerId))
     .where(and(...wheres))
-    .limit(50);
+    .orderBy(asc(contacts.createdAt), asc(contacts.id))
+    .limit(MATCH_PAGE_SIZE);
 
   return rows.map((r) => ({
     id: r.id,
@@ -502,7 +552,7 @@ async function matchOpportunities(
   };
 
   const wheres: SQL[] = [
-    gt(opportunities.createdAt, cutoff),
+    keysetAfter(opportunities.createdAt, opportunities.id, cutoff, sub.lastSeenMaxId),
     eq(opportunities.isDeleted, false),
   ];
   if (filters.search) {
@@ -546,7 +596,8 @@ async function matchOpportunities(
     .leftJoin(crmAccounts, eq(crmAccounts.id, opportunities.accountId))
     .leftJoin(users, eq(users.id, opportunities.ownerId))
     .where(and(...wheres))
-    .limit(50);
+    .orderBy(asc(opportunities.createdAt), asc(opportunities.id))
+    .limit(MATCH_PAGE_SIZE);
 
   return rows.map((r) => ({
     id: r.id,
@@ -571,7 +622,7 @@ async function matchTasks(
   };
 
   const wheres: SQL[] = [
-    gt(tasks.createdAt, cutoff),
+    keysetAfter(tasks.createdAt, tasks.id, cutoff, sub.lastSeenMaxId),
     eq(tasks.isDeleted, false),
   ];
   if (filters.status && filters.status.length > 0) {
@@ -632,7 +683,8 @@ async function matchTasks(
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assignedToId))
     .where(and(...wheres))
-    .limit(50);
+    .orderBy(asc(tasks.createdAt), asc(tasks.id))
+    .limit(MATCH_PAGE_SIZE);
 
   return rows.map((r) => ({
     id: r.id,

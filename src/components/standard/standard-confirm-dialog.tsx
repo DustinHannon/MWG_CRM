@@ -33,7 +33,12 @@ export interface StandardConfirmDialogProps {
    * cross-the-Rubicon actions like "DELETE" or "PURGE".
    */
   requireTypedConfirmation?: string;
-  /** Called on confirm. Dialog closes after the promise resolves. */
+  /**
+   * Called on confirm. The dialog closes after the promise resolves. If it
+   * rejects, the dialog stays open for retry — the caller is responsible for
+   * surfacing the failure (toast / inline message). Prefer resolving via the
+   * canonical `ActionResult` envelope rather than throwing.
+   */
   onConfirm: () => Promise<void> | void;
   /** Optional callback when the user cancels (Cancel button or ESC). */
   onCancel?: () => void;
@@ -60,9 +65,16 @@ export function StandardConfirmDialog({
   function handleConfirm() {
     if (!typedOk) return;
     startTransition(async () => {
-      await onConfirm();
-      setOpen(false);
-      setTyped("");
+      try {
+        await onConfirm();
+        setOpen(false);
+        setTyped("");
+      } catch {
+        // onConfirm rejected: keep the dialog open so the user can retry.
+        // The caller / its error boundary is responsible for surfacing the
+        // failure (toast, inline message). Swallowing here only prevents an
+        // unhandled rejection and a dialog stuck in the pending state.
+      }
     });
   }
 

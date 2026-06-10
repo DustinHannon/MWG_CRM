@@ -41,6 +41,20 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
+  experimental: {
+    serverActions: {
+      // XLSX imports arrive as multipart FormData through Server Actions,
+      // whose default body cap is 1 MB — far below the in-action size
+      // gates (MAX_IMPORT_BYTES = 25 MB for leads,
+      // STATIC_LIST_IMPORT_MAX_BYTES = 10 MB for marketing lists). Without
+      // this, the framework rejects normal multi-thousand-row spreadsheets
+      // with an opaque 413 before the action runs, and the friendly
+      // "File too large" message plus the magic-byte check never execute.
+      // Sized to the largest cap (25 MB) plus multipart overhead so those
+      // in-action checks become the real enforcement boundary.
+      bodySizeLimit: "26mb",
+    },
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import { db } from "@/db";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
@@ -32,14 +34,35 @@ interface Props {
  * `?to=` query params.
  */
 export default async function MarketingEmailReportPage({ searchParams }: Props) {
+  // Gate on the report-view permission. The layout only checks for ANY
+  // marketing-view permission, so without this a user holding an unrelated
+  // marketing-view grant could read campaign-performance data. Mirrors the
+  // export route, which restricts the same dataset to canMarketingReportsView.
+  const user = await requireSession();
+  const perms = await getPermissions(user.id);
+  if (!user.isAdmin && !perms.canMarketingReportsView) {
+    redirect("/marketing");
+  }
+
   const sp = await searchParams;
   const prefs = await getCurrentUserTimePrefs();
 
   const today = new Date();
   const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const fromDate = sp.from ? new Date(sp.from) : thirtyDaysAgo;
-  const toDate = sp.to ? new Date(sp.to) : today;
+  // Guard against unparseable query params (stale bookmark, crafted value):
+  // an Invalid Date would propagate into the `gte` predicate and throw
+  // `RangeError: Invalid time value` from `fromDate.toISOString()` below,
+  // crashing the server render. Fall back to the default window, mirroring
+  // the export route's NaN guard.
+  const fromDate =
+    sp.from && !Number.isNaN(new Date(sp.from).getTime())
+      ? new Date(sp.from)
+      : thirtyDaysAgo;
+  const toDate =
+    sp.to && !Number.isNaN(new Date(sp.to).getTime())
+      ? new Date(sp.to)
+      : today;
   // Push toDate to end-of-day to be inclusive.
   const toDateEnd = new Date(toDate);
   toDateEnd.setHours(23, 59, 59, 999);

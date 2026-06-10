@@ -894,6 +894,7 @@ function TasksListInner({
           task={editingTask}
           assignableUsers={assignableUsers}
           canReassign={canReassign}
+          timePrefs={timePrefs}
           canApplyTags={canApplyTags}
           canManageTagDefinitions={canManageTagDefinitions}
           onClose={() => setEditingTask(null)}

@@ -6,11 +6,13 @@ import {
   type ReportMetric,
   type SavedReport,
 } from "@/db/schema/saved-reports";
-import { ForbiddenError } from "@/lib/errors";
+import { ForbiddenError, ValidationError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { getPermissions } from "@/lib/auth-helpers";
 import {
   escapeIdent,
+  type FieldKind,
+  isNumericKind,
   isTagBearingEntity,
   isValidField,
   isVirtualField,
@@ -202,15 +204,29 @@ export async function assertCanViewReport(
 export async function assertCanEditReport(
   report: SavedReport,
   viewer: SessionUser,
+  /**
+   * The entity type the report will have *after* the update, when the
+   * caller is changing it. Defaults to the report's current type. The
+   * marketing gate is evaluated against BOTH the old and the new type so
+   * a non-marketing owner cannot convert a non-marketing report into a
+   * marketing-entity one (the old check keyed only off the existing
+   * type, letting the conversion through).
+   */
+  nextEntityType?: ReportEntityType,
 ): Promise<void> {
   if (report.isBuiltin) {
     throw new ForbiddenError("Built-in reports cannot be edited.");
   }
-  // Marketing-entity reports require the marketing permission to edit
-  // same gate as view.
-  const entityType = report.entityType as ReportEntityType;
+  // Marketing-entity reports require the marketing permission to edit —
+  // same gate as view. Check the current type AND the post-update type
+  // so neither editing an existing marketing report nor converting a
+  // report into a marketing one can bypass the permission.
+  const currentType = report.entityType as ReportEntityType;
+  const effectiveType = nextEntityType ?? currentType;
+  const marketingTypes = MARKETING_REPORT_ENTITY_TYPES as readonly string[];
   if (
-    (MARKETING_REPORT_ENTITY_TYPES as readonly string[]).includes(entityType)
+    marketingTypes.includes(currentType) ||
+    marketingTypes.includes(effectiveType)
   ) {
     if (!(await canViewMarketingEntity(viewer))) {
       throw new ForbiddenError(
@@ -300,46 +316,92 @@ function buildFilterClauses(
       for (const c of clauses) out.push(c);
       continue;
     }
-    // Cast on the column side so enum-typed columns (lead.status,
-    // opportunity.stage, task.status, task.priority, etc.) compare
-    // cleanly against the JSON-encoded string filter values without
-    // per-enum type knowledge. Plain text columns are unaffected.
-    const colExpr = `${quote(field)}::text`;
+    // Derive the comparison form from the field's *declared* kind, not
+    // from the runtime JS type of the filter value. The builder UI sends
+    // date filters as plain `<input type=date>` strings (e.g.
+    // "2026-06-09"), so type-sniffing the value would mis-classify a
+    // date column as text and produce a lexicographic `col::text >= $N`
+    // comparison — which silently drops boundary-day rows and is not a
+    // chronological comparison at all. Instead:
+    //   - date kind     -> compare on the bare column, cast the PARAM to
+    //                      ::timestamptz (PG coerces both `date` and
+    //                      `timestamptz` columns to a typed timestamp
+    //                      comparison).
+    //   - number/currency -> bare column, PARAM cast to ::numeric.
+    //   - everything else (string/text/enum/uuid) -> column cast to
+    //                      ::text so enum-typed columns (lead.status,
+    //                      opportunity.stage, …) compare cleanly against
+    //                      the JSON-encoded string filter value.
+    const kind = fieldKindFor(entityType, field);
+    const isDate = kind === "date";
+    const isNumber = isNumericKind(kind);
+    const isTyped = isDate || isNumber;
+    // LHS expression: bare column for typed comparisons, ::text cast for
+    // text/enum so the param string lines up with the column.
+    const colExpr = isTyped ? quote(field) : `${quote(field)}::text`;
+    // Per-parameter cast suffix for typed comparisons (e.g. `$3::timestamptz`).
+    const paramCast = isDate ? "::timestamptz" : isNumber ? "::numeric" : "";
+    // Coerce a scalar filter value for a typed column. Date sentinels
+    // ($now/$today) resolve to Date objects; everything else stays a
+    // string and PG parses it via the ::timestamptz / ::numeric cast.
+    const coerceTyped = (v: unknown): unknown =>
+      isDate ? resolveDateSentinel(v) : v;
+
     if ("eq" in op && op.eq !== undefined && op.eq !== null) {
-      params.push(String(op.eq));
-      out.push(`${colExpr} = $${params.length}`);
+      params.push(isTyped ? coerceTyped(op.eq) : String(op.eq));
+      out.push(`${colExpr} = $${params.length}${paramCast}`);
     }
     if ("ilike" in op && typeof op.ilike === "string") {
+      // ILIKE is a text-only predicate; force the ::text form even on a
+      // typed column so the cast is well-defined.
       params.push(`%${op.ilike}%`);
-      out.push(`${colExpr} ILIKE $${params.length}`);
+      out.push(`${quote(field)}::text ILIKE $${params.length}`);
     }
     if ("gte" in op && op.gte !== undefined) {
-      const resolved = resolveDateSentinel(op.gte);
-      params.push(resolved);
-      out.push(`${exprForValue(field, resolved)} >= $${params.length}`);
+      params.push(isTyped ? coerceTyped(op.gte) : String(op.gte));
+      out.push(`${colExpr} >= $${params.length}${paramCast}`);
     }
     if ("lte" in op && op.lte !== undefined) {
-      const resolved = resolveDateSentinel(op.lte);
-      params.push(resolved);
-      out.push(`${exprForValue(field, resolved)} <= $${params.length}`);
+      params.push(isTyped ? coerceTyped(op.lte) : String(op.lte));
+      out.push(`${colExpr} <= $${params.length}${paramCast}`);
     }
     if ("gt" in op && op.gt !== undefined) {
-      const resolved = resolveDateSentinel(op.gt);
-      params.push(resolved);
-      out.push(`${exprForValue(field, resolved)} > $${params.length}`);
+      params.push(isTyped ? coerceTyped(op.gt) : String(op.gt));
+      out.push(`${colExpr} > $${params.length}${paramCast}`);
     }
     if ("lt" in op && op.lt !== undefined) {
-      const resolved = resolveDateSentinel(op.lt);
-      params.push(resolved);
-      out.push(`${exprForValue(field, resolved)} < $${params.length}`);
+      params.push(isTyped ? coerceTyped(op.lt) : String(op.lt));
+      out.push(`${colExpr} < $${params.length}${paramCast}`);
     }
     if ("in" in op && Array.isArray(op.in) && op.in.length > 0) {
-      const stringValues = op.in.map((v) => String(v));
-      params.push(stringValues);
-      out.push(`${colExpr} = ANY($${params.length}::text[])`);
+      if (isDate) {
+        const values = op.in.map((v) => coerceTyped(v));
+        params.push(values);
+        out.push(`${colExpr} = ANY($${params.length}::timestamptz[])`);
+      } else if (isNumber) {
+        params.push(op.in.map((v) => String(v)));
+        out.push(`${colExpr} = ANY($${params.length}::numeric[])`);
+      } else {
+        params.push(op.in.map((v) => String(v)));
+        out.push(`${colExpr} = ANY($${params.length}::text[])`);
+      }
     }
   }
   return out;
+}
+
+/**
+ * Look up a whitelisted field's declared `kind`. Callers must have
+ * already passed `isValidField`; an unrecognised column degrades to
+ * "string" (the ::text comparison form), never a typed cast.
+ */
+function fieldKindFor(
+  entityType: ReportEntityType,
+  column: string,
+): FieldKind {
+  const meta = REPORT_ENTITIES[entityType];
+  const f = meta.fields.find((x) => x.column === column);
+  return f?.kind ?? "string";
 }
 
 /**
@@ -356,20 +418,6 @@ function resolveDateSentinel(value: unknown): unknown {
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   }
   return value;
-}
-
-/**
- * Return the LHS SQL expression for a filter comparison. Most columns
- * get cast to `::text` so enum/JSON-encoded filter values compare
- * cleanly. Date/number values bypass the text cast — comparing
- * `due_at::text < <Date>` errors with "operator does not exist:
- * text < timestamptz" because PG won't auto-coerce the cast result.
- */
-function exprForValue(field: string, value: unknown): string {
-  if (value instanceof Date || typeof value === "number") {
-    return quote(field);
-  }
-  return `${quote(field)}::text`;
 }
 
 /**
@@ -441,11 +489,19 @@ async function runFlatQuery(
   const cols = safeColumns
     .map((c) => selectExprFor(entityType, c))
     .join(", ");
-  const orderClause =
+  // Deterministic ordering so a `LIMIT 5000` truncation is stable across
+  // runs. Prefer `updated_at`; for append-only logs without it
+  // (email_send_log -> queued_at, marketing_email_event -> received_at)
+  // fall back to the entity's declared timestampColumn. timestampColumn
+  // is validated metadata, so it is safe to interpolate via quote().
+  const orderColumn =
     isValidField(entityType, "updated_at") &&
     !isVirtualField(entityType, "updated_at")
-      ? ' ORDER BY "updated_at" DESC NULLS LAST'
-      : "";
+      ? "updated_at"
+      : meta.timestampColumn;
+  const orderClause = orderColumn
+    ? ` ORDER BY ${quote(orderColumn)} DESC NULLS LAST`
+    : "";
   const sqlText = `SELECT ${cols} FROM ${quote(meta.table)}${whereSql}${orderClause} LIMIT ${Number(limit) | 0}`;
 
   const rows = (await sqlClient.unsafe(sqlText, params as never[])) as Record<
@@ -485,11 +541,26 @@ async function runAggregateQuery(
   const groupCols = safeGroups.map(quote).join(", ");
   const metricSelects: string[] = [];
   const aliasOut: string[] = [];
+  // postgres-js returns each row as an object keyed by output-column
+  // name, so two columns that escape to the same identifier collapse
+  // into one — the later value silently overwrites the earlier and a
+  // metric's value is lost while both columns are still advertised.
+  // Reject colliding aliases instead of dropping data. Seed with the
+  // group-by columns so a metric alias can't shadow a grouped column
+  // either.
+  const seenAliases = new Set<string>(safeGroups);
   for (const m of metrics) {
     const alias = escapeIdent(m.alias || `${m.fn}_${m.field || "all"}`);
+    if (alias.length === 0) {
+      throw new ValidationError(
+        `Metric alias "${m.alias}" is empty after sanitizing; use letters, numbers, or underscores.`,
+      );
+    }
+    let emitted = false;
     if (m.fn === "count") {
       metricSelects.push(`count(*) AS "${alias}"`);
       aliasOut.push(alias);
+      emitted = true;
     } else if (
       m.field &&
       isValidField(entityType, m.field) &&
@@ -500,7 +571,19 @@ async function runAggregateQuery(
       if (fn === "sum" || fn === "avg" || fn === "min" || fn === "max") {
         metricSelects.push(`${fn}(${quote(safeField)}) AS "${alias}"`);
         aliasOut.push(alias);
+        emitted = true;
       }
+    }
+    // Only collision-check aliases we actually emit (a skipped metric —
+    // unknown/virtual field — never reaches the SELECT, so it can't
+    // collide).
+    if (emitted) {
+      if (seenAliases.has(alias)) {
+        throw new ValidationError(
+          `Duplicate report column "${alias}". Give each metric a unique alias.`,
+        );
+      }
+      seenAliases.add(alias);
     }
   }
   if (metricSelects.length === 0) {

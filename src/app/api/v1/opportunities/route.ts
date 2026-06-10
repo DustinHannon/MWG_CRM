@@ -5,6 +5,7 @@ import {
 } from "@/lib/opportunities";
 import { withApi } from "@/lib/api/handler";
 import { errorResponse } from "@/lib/api/errors";
+import { ValidationError } from "@/lib/errors";
 import { registry } from "@/lib/openapi/registry";
 import {
   OpportunityCreateSchema,
@@ -112,21 +113,31 @@ export const POST = withApi(
       });
     }
     const m = parsed.data;
-    const created = await createOpportunity(
-      {
-        accountId: m.account_id,
-        primaryContactId: m.primary_contact_id ?? null,
-        name: m.name,
-        stage: m.stage ?? "prospecting",
-        amount:
-          m.amount === undefined || m.amount === null
-            ? null
-            : m.amount.toFixed(2),
-        expectedCloseDate: m.expected_close_date ?? null,
-        description: m.description ?? null,
-      },
-      key.createdById,
-    );
+    let created;
+    try {
+      created = await createOpportunity(
+        {
+          accountId: m.account_id,
+          primaryContactId: m.primary_contact_id ?? null,
+          name: m.name,
+          stage: m.stage ?? "prospecting",
+          amount:
+            m.amount === undefined || m.amount === null
+              ? null
+              : m.amount.toFixed(2),
+          expectedCloseDate: m.expected_close_date ?? null,
+          description: m.description ?? null,
+        },
+        key.createdById,
+      );
+    } catch (err) {
+      // Bad account/contact reference in the body (e.g. non-existent
+      // account_id, or a primary contact on a different account).
+      if (err instanceof ValidationError) {
+        return errorResponse(422, "VALIDATION_ERROR", err.publicMessage);
+      }
+      throw err;
+    }
     const fresh = await getOpportunityForApi(created.id, {
       actorId: key.createdById,
       canViewAll: true,

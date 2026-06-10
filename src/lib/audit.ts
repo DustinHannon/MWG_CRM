@@ -70,17 +70,26 @@ export async function writeAudit(args: {
   requestId?: string;
   ipAddress?: string;
 }): Promise<void> {
-  try {
-    let snapshot = args.actorEmailSnapshot ?? null;
-    if (!snapshot && args.actorId) {
+  let snapshot = args.actorEmailSnapshot ?? null;
+  if (!snapshot && args.actorId) {
+    try {
       const [u] = await db
         .select({ email: users.email })
         .from(users)
         .where(eq(users.id, args.actorId))
         .limit(1);
       snapshot = u?.email ?? null;
+    } catch (err) {
+      // Snapshot lookup failure is non-fatal — we'll insert with null
+      // snapshot so the forensic trail still lands.
+      logger.warn("audit.actor_lookup_failed", {
+        actorId: args.actorId,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
     }
+  }
 
+  try {
     // auto-pick requestId from AsyncLocalStorage.
     const requestId = args.requestId ?? getRequestId() ?? null;
     await db.insert(auditLog).values({

@@ -175,7 +175,7 @@ export const AUDIT_EVENT_CATEGORIES: readonly AuditEventCategory[] = [
   {
     id: "activities",
     label: "Activities & notes",
-    prefixes: ["activity."],
+    prefixes: ["activity.", "activities."],
   },
   { id: "tags", label: "Tags", prefixes: ["tag."] },
   { id: "views", label: "Saved views", prefixes: ["view."] },

@@ -14,6 +14,7 @@ import {
   requireSession,
   type MarketingPermissionKey,
 } from "@/lib/auth-helpers";
+import { expectAffected } from "@/lib/db/concurrent-update";
 import {
   ConflictError,
   ForbiddenError,
@@ -289,7 +290,13 @@ export async function updateTemplateAction(input: {
       throw err;
     }
 
-    await db
+    // OCC fence — fold the loaded version into the WHERE so a concurrent
+    // save (e.g. another editor whose lock also lapsed) that bumped the
+    // row between the SELECT above and this UPDATE matches 0 rows. The
+    // soft-lock fence above only blocks a session mismatch; once a lock
+    // has expired/been released the version predicate is what prevents a
+    // silent last-writer-wins overwrite of the design/HTML.
+    const updated = await db
       .update(marketingTemplates)
       .set({
         name: data.name,
@@ -305,7 +312,21 @@ export async function updateTemplateAction(input: {
         updatedAt: new Date(),
         version: existing.version + 1,
       })
-      .where(eq(marketingTemplates.id, data.id));
+      .where(
+        and(
+          eq(marketingTemplates.id, data.id),
+          eq(marketingTemplates.isDeleted, false),
+          eq(marketingTemplates.version, existing.version),
+        ),
+      )
+      .returning({ id: marketingTemplates.id });
+    // empty rows + row exists -> ConflictError (stale version);
+    // empty rows + row absent -> NotFoundError. Non-empty -> no-op.
+    await expectAffected(updated, {
+      table: marketingTemplates,
+      id: data.id,
+      entityLabel: "template",
+    });
 
     await writeAudit({
       actorId: user.id,
@@ -792,14 +813,12 @@ export async function changeTemplateScopeAction(
         }
       }
 
-      // OCC fence — refuse if a concurrent edit changed the row.
-      if (existing.version !== data.version) {
-        throw new ConflictError(
-          "Template was changed by someone else. Refresh and try again.",
-        );
-      }
-
-      await db
+      // OCC fence — atomic. The version predicate lives in the UPDATE
+      // WHERE (not a separate in-memory compare) so a concurrent edit
+      // that bumps the row between the SELECT above and this UPDATE
+      // matches 0 rows rather than passing a stale snapshot. The
+      // isDeleted guard also catches a concurrent archive.
+      const updated = await db
         .update(marketingTemplates)
         .set({
           scope: data.newScope,
@@ -807,7 +826,21 @@ export async function changeTemplateScopeAction(
           updatedAt: new Date(),
           version: existing.version + 1,
         })
-        .where(eq(marketingTemplates.id, data.id));
+        .where(
+          and(
+            eq(marketingTemplates.id, data.id),
+            eq(marketingTemplates.isDeleted, false),
+            eq(marketingTemplates.version, data.version),
+          ),
+        )
+        .returning({ id: marketingTemplates.id });
+      // empty rows + row exists -> ConflictError (stale version);
+      // empty rows + row absent -> NotFoundError. Non-empty -> no-op.
+      await expectAffected(updated, {
+        table: marketingTemplates,
+        id: data.id,
+        entityLabel: "template",
+      });
 
       await writeAudit({
         actorId: user.id,

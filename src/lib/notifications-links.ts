@@ -47,7 +47,7 @@ import { logger } from "@/lib/logger";
  * 404 and are left untouched.
  */
 const DETAIL_LINK_RE =
-  /^\/(leads|contacts|accounts|opportunities)\/([0-9a-fA-F-]{36})$/;
+  /^\/(leads|contacts|accounts|opportunities)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
 
 const SEGMENTS = {
   // archivedStill404: does the detail route 404 a soft-deleted row?

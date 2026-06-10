@@ -7,6 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { users } from "./users";
 
 /**
  * domain_verification_status — external service URL configuration state
@@ -35,7 +36,10 @@ export const domainVerificationStatus = pgTable(
     /** "pending" | "verified" | "failed" — enforced by CHECK constraint. */
     status: text("status").notNull().default("pending"),
     errorDetail: jsonb("error_detail"),
-    manuallyConfirmedById: uuid("manually_confirmed_by_id"),
+    manuallyConfirmedById: uuid("manually_confirmed_by_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
     manuallyConfirmedAt: timestamp("manually_confirmed_at", {
       withTimezone: true,
     }),

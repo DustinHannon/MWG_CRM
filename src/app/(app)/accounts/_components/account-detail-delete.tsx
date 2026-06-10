@@ -27,8 +27,8 @@ export function AccountDetailDelete({
       restorePath={isAdmin ? "archive" : "notifications"}
       extraBody={
         <p>
-          Linked Contacts and Opportunities are not cascaded — they remain
-          visible but show an archived-account indicator.
+          Linked contacts and opportunities are archived with the account and
+          restored together.
         </p>
       }
       onConfirm={async (reason) => {

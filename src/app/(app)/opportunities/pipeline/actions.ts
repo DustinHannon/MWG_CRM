@@ -9,6 +9,7 @@ import { writeAudit } from "@/lib/audit";
 import { requireSession } from "@/lib/auth-helpers";
 import { expectAffected } from "@/lib/db/concurrent-update";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { closedAtForStage } from "@/lib/opportunities";
 import { versionField } from "@/lib/validation/primitives";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
@@ -57,10 +58,7 @@ export async function updateOpportunityStageAction(
         throw new ForbiddenError("You don't own that opportunity.");
       }
 
-      const closedAt =
-        parsed === "closed_won" || parsed === "closed_lost"
-          ? new Date()
-          : null;
+      const closedAt = closedAtForStage(parsed);
 
       const rows = await db
         .update(opportunities)
@@ -92,7 +90,7 @@ export async function updateOpportunityStageAction(
       await writeAudit({
         actorId: session.id,
         action: "opportunity.stage_change",
-        targetType: "opportunities",
+        targetType: "opportunity",
         targetId: id,
         before: before[0],
         after: { stage: parsed },

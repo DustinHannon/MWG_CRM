@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { importJobs } from "@/db/schema/imports";
 import { writeAudit } from "@/lib/audit";
@@ -264,17 +265,23 @@ export async function cancelImportAction(
     { action: "import.cancel", entityType: "import_job", entityId: jobId },
     async () => {
       const user = await requireSession();
-      const cached = getJob(jobId, user.id);
-      if (cached) deleteJob(jobId);
+      // Validate the id before it reaches the uuid column. Without this a
+      // non-UUID (stale URL, hand-edited client call) raises Postgres
+      // 22P02, which the error boundary maps to a generic INTERNAL 500
+      // instead of the intended clean 404; parsing here surfaces it as a
+      // VALIDATION envelope, matching the other lead actions.
+      const id = z.string().uuid().parse(jobId);
+      const cached = getJob(id, user.id);
+      if (cached) deleteJob(id);
       // DB-row ownership is now enforced.
       // Non-admins can only cancel jobs they themselves started; admins
       // can cancel anyone's. Without this WHERE filter, any signed-in
       // user who learned a job id (URL, log line) could cancel another
       // user's in-flight import.
       const whereExpr = user.isAdmin
-        ? eq(importJobs.id, jobId)
+        ? eq(importJobs.id, id)
         : and(
-            eq(importJobs.id, jobId),
+            eq(importJobs.id, id),
             eq(importJobs.userId, user.id),
           );
       const updated = await db

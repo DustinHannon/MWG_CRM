@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray, lt } from "drizzle-orm";
+import { and, asc, eq, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import { recentViews } from "@/db/schema/recent-views";
@@ -48,6 +48,12 @@ export async function GET(req: Request) {
         .where(
           and(eq(leads.isDeleted, true), lt(leads.deletedAt, cutoff)),
         )
+        // Deterministic ordering so candidateIds[0] is stable across runs:
+        // the blob-cleanup idempotency key below keys off candidateIds[0],
+        // and Postgres gives no stable row order without ORDER BY. A cron
+        // re-run that re-selects the same surviving batch must produce the
+        // same first id (and thus the same key) for the dedup to hold.
+        .orderBy(asc(leads.id))
         .limit(BATCH);
 
       if (candidates.length === 0) break;

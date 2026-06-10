@@ -542,9 +542,16 @@ export function buildReportColumnKinds(
   // Metric alias -> the kind the aggregated value should render as.
   // sum/avg/min/max preserve the source field's kind (currency stays
   // currency, number stays number); count is always a bare integer.
+  // On a collision (two metrics whose aliases escape to the same
+  // identifier) keep the first kind and skip the rest, mirroring the
+  // first-wins/reject-the-rest collision handling in access.ts so the
+  // two derivations stay aligned. access.ts throws before the query
+  // runs, so a colliding report can't actually execute; this guard only
+  // keeps the kind map self-consistent if that gate is ever bypassed.
   const aliasKind = new Map<string, FieldKind>();
   for (const m of metrics) {
     const alias = escapeIdent(m.alias || `${m.fn}_${m.field || "all"}`);
+    if (aliasKind.has(alias)) continue;
     if (m.fn === "count") {
       aliasKind.set(alias, "number");
       continue;

@@ -70,7 +70,17 @@ function shouldBypassGeoBlock(req: NextRequest): boolean {
   if (env.NODE_ENV === "development") return true;
 
   const { pathname } = req.nextUrl;
-  if (GEO_BYPASS_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`) || pathname.startsWith(p))) {
+  // Match on a real path-segment boundary, not a bare string prefix, so a
+  // bypass entry like "/blocked" can't exempt "/blockedanything". Prefixes
+  // that already end in "/" (e.g. "/api/v1/webhooks/") are inherently
+  // segment-bounded, so a plain startsWith is the correct test for them.
+  if (
+    GEO_BYPASS_PATH_PREFIXES.some((p) =>
+      p.endsWith("/")
+        ? pathname.startsWith(p)
+        : pathname === p || pathname.startsWith(`${p}/`),
+    )
+  ) {
     return true;
   }
   const ua = req.headers.get("user-agent") ?? "";
@@ -220,9 +230,13 @@ const PUBLIC_PATH_PREFIXES = [
   "/apihelp",
   // public health-check endpoint. Probes DB + Graph
   // + Blob; external uptime monitors need to reach it without a
-  // session cookie. No auth: failures are non-secret; success is
-  // non-secret. Rate-limit isn't necessary since the endpoint caches
-  // in-process for HEALTH_CHECK_CACHE_TTL_SECONDS (default 30s).
+  // session cookie. No auth: the public body is deliberately
+  // sanitized — per-dependency error detail (raw driver/host/role
+  // text) is stripped in route.ts and the body exposes only a coarse
+  // ok/code bucket, while the raw detail is retained server-side
+  // (audit + logger) only. Rate-limit isn't necessary since the
+  // endpoint caches in-process for HEALTH_CHECK_CACHE_TTL_SECONDS
+  // (default 30s).
   "/api/health",
   // geo-block destination page. Public so an
   // unauthenticated source from a non-allowlisted country sees the

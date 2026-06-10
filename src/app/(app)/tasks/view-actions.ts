@@ -295,6 +295,37 @@ export async function bulkReassignTasksAction(
     if (!session.isAdmin && !perms.canReassignTasks) {
       throw new ForbiddenError("You don't have permission to reassign tasks.");
     }
+    // Per-item authorization: canReassignTasks alone authorizes
+    // reassigning tasks the actor already controls, not arbitrary tasks.
+    // Admins / users with canEditOthersTasks may reassign any task;
+    // otherwise every selected task must be one the actor created or is
+    // assigned to (creator-OR-assignee, matching updateTaskAction's edit
+    // gate). Soft-deleted rows are excluded — an archived task must not be
+    // reassignable by replaying a captured {id, version}.
+    if (!session.isAdmin && !perms.canEditOthersTasks) {
+      const { db } = await import("@/db");
+      const { tasks: tasksTable } = await import("@/db/schema/tasks");
+      const { eq, inArray, and, or } = await import("drizzle-orm");
+      const ids = parsed.items.map((i) => i.id);
+      const own = await db
+        .select({ id: tasksTable.id })
+        .from(tasksTable)
+        .where(
+          and(
+            inArray(tasksTable.id, ids),
+            eq(tasksTable.isDeleted, false),
+            or(
+              eq(tasksTable.createdById, session.id),
+              eq(tasksTable.assignedToId, session.id),
+            ),
+          ),
+        );
+      if (own.length !== ids.length) {
+        throw new ForbiddenError(
+          "Some of the selected tasks belong to someone else.",
+        );
+      }
+    }
     const result = await bulkReassignTasks(
       parsed.items,
       parsed.newAssigneeId,

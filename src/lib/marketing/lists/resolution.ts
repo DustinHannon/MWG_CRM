@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
 import {
@@ -80,8 +80,12 @@ export async function resolveListRecipients(
   if (list.isDeleted) throw new ValidationError("List is archived.");
 
   // Build the suppressed-email subquery once — used by both branches.
+  // Compared case-insensitively (lower() on both sides): suppression rows
+  // and member emails are not guaranteed to share casing (D365-imported
+  // lead emails are case-preserved), so a raw text NOT IN would let a
+  // suppressed address through whenever the stored case differs.
   const suppressedSubq = db
-    .select({ email: marketingSuppressions.email })
+    .select({ email: sql<string>`lower(${marketingSuppressions.email})` })
     .from(marketingSuppressions);
 
   if (list.listType === "dynamic") {
@@ -108,7 +112,7 @@ export async function resolveListRecipients(
           eq(marketingListMembers.listId, listId),
           eq(leads.isDeleted, false),
           eq(leads.doNotEmail, false),
-          notInArray(marketingListMembers.email, suppressedSubq),
+          notInArray(sql`lower(${marketingListMembers.email})`, suppressedSubq),
         ),
       );
 
@@ -139,7 +143,7 @@ export async function resolveListRecipients(
     .where(
       and(
         eq(marketingStaticListMembers.listId, listId),
-        notInArray(marketingStaticListMembers.email, suppressedSubq),
+        notInArray(sql`lower(${marketingStaticListMembers.email})`, suppressedSubq),
       ),
     );
 

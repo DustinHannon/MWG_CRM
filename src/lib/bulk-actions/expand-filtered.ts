@@ -1,5 +1,9 @@
 import "server-only";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { db } from "@/db";
+import { userPreferences } from "@/db/schema/views";
+import { DEFAULT_TIME_PREFS } from "@/lib/format-time";
 import {
   LEAD_RATINGS,
   LEAD_SOURCES,
@@ -562,9 +566,36 @@ export async function expandTaskFilteredScope(args: {
   };
 
   const filters: TaskViewFilters = { ...view.filters, ...overlay };
-  if (filters.assignee === "any" && !args.canViewOthers) {
+  // Clamp any assignee that is not 'me' and not the caller's own id to
+  // 'me' when the caller lacks canViewOthersTasks. Mirrors the sibling
+  // list route (src/app/api/tasks/list/route.ts) — without this a
+  // non-admin lacking canViewOthersTasks could pass a peer user id as
+  // the assignee and listTasksForUser would filter by that uuid (no
+  // internal gate on a user-id assignee), over-collecting another
+  // user's task ids. Covers both the 'any' preset and explicit peer ids.
+  if (
+    !args.canViewOthers &&
+    filters.assignee &&
+    filters.assignee !== "me" &&
+    filters.assignee !== args.user.id
+  ) {
     filters.assignee = "me";
   }
+
+  // Resolve the acting user's timezone so a dueRange filter expands the
+  // same set the /tasks list shows. due_at is stored at the user's
+  // local-midnight and listTasksForUser buckets dueRange in `timezone`
+  // (defaulting to Central). The sibling list route passes the viewer's
+  // resolved tz; without threading it here, a non-Central user's
+  // "select all matching" with a dueRange filter would bucket in Central
+  // and diverge from their list during the ~5-6h window each day between
+  // Central midnight and their local midnight.
+  const [tzRow] = await db
+    .select({ timezone: userPreferences.timezone })
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, args.user.id))
+    .limit(1);
+  const timezone = tzRow?.timezone || DEFAULT_TIME_PREFS.timezone;
 
   const ids: string[] = [];
   let cursor: string | null = null;
@@ -580,6 +611,7 @@ export async function expandTaskFilteredScope(args: {
       relation: filters.relation,
       relatedEntity: filters.relatedEntity,
       dueRange: filters.dueRange,
+      timezone,
       q: filters.q,
       tags: filters.tags,
       sort: view.sort,

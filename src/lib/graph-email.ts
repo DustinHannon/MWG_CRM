@@ -15,6 +15,7 @@ import { checkMailboxKind } from "@/lib/email/preflight";
 import {
   graphFetchAs,
   GraphRequestError,
+  ReauthRequiredError,
 } from "@/lib/graph-token";
 
 const EMAIL_SEND_LOG_FEATURE = "lead.email_activity";
@@ -166,13 +167,27 @@ export async function sendEmailAndTrack(args: {
 
   // Short-window send idempotency. Mirror the jobs-queue pattern (nullable
   // dedupe column + partial unique index): a deterministic key over
-  // (feature, user, lead, recipient, subject, 2-min bucket). onConflictDoNothing
-  // + a 0-row return ⇒ a duplicate submit is already in flight / just
-  // completed — reject instead of issuing a second real Graph send.
+  // (feature, user, lead, recipient, subject, body, attachment fingerprint,
+  // 2-min bucket). onConflictDoNothing + a 0-row return ⇒ a duplicate submit
+  // is already in flight / just completed — reject instead of issuing a
+  // second real Graph send.
+  //
+  // Body + attachment fingerprint are folded into the key so two genuinely
+  // distinct messages that happen to share a subject (e.g. a templated
+  // "Follow up" sent twice with different bodies/attachments) do NOT collide
+  // and get the second one falsely suppressed; only a byte-identical resubmit
+  // (double-click / two-tab / retried server action) lands on the same key.
   const windowBucket = Math.floor(Date.now() / DEDUPE_WINDOW_MS);
+  const bodyHash = createHash("sha256").update(args.body).digest("hex");
+  // Order-preserving fingerprint of attachments (filename + byte length).
+  // Cheap and deterministic; distinguishes a resend with different files
+  // from a true duplicate without hashing the (potentially large) bytes.
+  const attachmentFingerprint = (args.attachments ?? [])
+    .map((a) => `${a.filename}:${a.bytes.byteLength}`)
+    .join(",");
   const dedupeKey = createHash("sha256")
     .update(
-      `${EMAIL_SEND_LOG_FEATURE}|${args.userId}|${args.leadId}|${args.to.toLowerCase()}|${args.subject}|${windowBucket}`,
+      `${EMAIL_SEND_LOG_FEATURE}|${args.userId}|${args.leadId}|${args.to.toLowerCase()}|${args.subject}|${bodyHash}|${attachmentFingerprint}|${windowBucket}`,
     )
     .digest("hex");
 
@@ -345,10 +360,38 @@ async function pollSentMessage(
         // Sent Items not found — non-fatal.
         return null;
       }
-      // Transient — retry.
+      // Non-retryable conditions: an expired Microsoft session
+      // (ReauthRequiredError) or an auth/permission/throttle response
+      // (401/403/429) will fail identically on every retry. The send was
+      // already accepted by Graph (HTTP 202) before polling, so this is only
+      // the Sent-Items backfill — break out immediately rather than burning
+      // ~2.8s of sequential delayed calls, and warn so the degraded activity
+      // row (no graphMessageId / no attachment backfill) is observable.
+      const status = err instanceof GraphRequestError ? err.status : null;
+      const nonRetryable =
+        err instanceof ReauthRequiredError ||
+        status === 401 ||
+        status === 403 ||
+        status === 429;
+      if (nonRetryable) {
+        logger.warn("graph_email.poll_sent_message_non_retryable", {
+          userId,
+          httpStatus: status,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      }
+      // Transient (5xx / network) — retry.
     }
     if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
   }
+  // Exhausted all retries without a hit (transient errors or the message just
+  // not surfacing in Sent Items yet). The email was sent; the activity row is
+  // backfilled from the request values. Warn so the gap is observable.
+  logger.warn("graph_email.poll_sent_message_exhausted", {
+    userId,
+    attempts,
+  });
   return null;
 }
 

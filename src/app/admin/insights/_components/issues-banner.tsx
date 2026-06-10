@@ -143,8 +143,10 @@ async function detectWafSurge(): Promise<IssueEntry[]> {
   if (!row) return [];
   const lastHour = Number(row.lastHour ?? 0);
   const sevenDay = Number(row.sevenDay ?? 0);
-  // Per-hour baseline over the prior 7 days = 168 hours.
-  const perHourBaseline = (sevenDay - lastHour) / 168;
+  // Per-hour baseline over the prior window [sevenDaysAgo, oneHourAgo),
+  // which spans 167 hours (the full 168-hour window minus the last hour
+  // already subtracted from the numerator).
+  const perHourBaseline = (sevenDay - lastHour) / 167;
   if (lastHour >= 5 && perHourBaseline > 0 && lastHour > perHourBaseline * 5) {
     return [
       {

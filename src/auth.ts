@@ -21,7 +21,7 @@ import { refreshUserPhotoIfStale } from "@/lib/graph-photo";
 import { checkMailboxKind } from "@/lib/email";
 import { writeAudit, writeSystemAudit } from "@/lib/audit";
 import { AUDIT_EVENTS, AUDIT_SYSTEM_ACTORS } from "@/lib/audit/events";
-import { rateLimit } from "@/lib/security/rate-limit";
+import { rateLimit, refundRateLimit } from "@/lib/security/rate-limit";
 
 /**
  * Auth.js v5 surface. The MicrosoftEntraID provider registers only when
@@ -114,6 +114,21 @@ const providers: Provider[] = [
 
       const ok = await verifyPassword(password, user.passwordHash);
       if (!ok) return null;
+
+      // Verified-password success — refund the attempt we counted above.
+      // The increment is kept on the failed/denied paths (brute-force
+      // defense), but a legitimate sign-in must not eat into the small
+      // 5-attempt budget. Breakglass is the emergency credential used
+      // precisely when Entra SSO is down, where an operator may sign in
+      // and out repeatedly during incident response; counting successful
+      // logins against the brute-force limit could lock the one credential
+      // that has to work during an outage. Best-effort: a refund failure
+      // only leaves the (already-allowed) attempt counted, never blocks
+      // the sign-in.
+      await refundRateLimit(
+        { kind: "breakglass", principal: username_lc },
+        BREAKGLASS_WINDOW_MS / 1000,
+      );
 
       return {
         id: user.id,

@@ -373,16 +373,24 @@ const accountUpdateSchema = z.object({
   postalCode: z.string().trim().max(20).optional().nullable(),
   country: z.string().trim().max(80).optional().nullable(),
   description: z.string().trim().max(4000).optional().nullable(),
+  // Empty select (— No parent — / — Not set —) submits "" under
+  // emptyMode:"keep", so transform "" → null FIRST, then validate the
+  // result is null or a real UUID. A non-empty non-UUID value (crafted
+  // FormData / API client) is rejected as a field-level ValidationError
+  // instead of reaching the DB and raising an untranslated 22P02. Mirrors
+  // accountCreateSchema's z.string().uuid() on the same two FK columns.
   parentAccountId: z
     .string()
     .optional()
     .nullable()
-    .transform((v) => (v && v.length > 0 ? v : null)),
+    .transform((v) => (v && v.length > 0 ? v : null))
+    .pipe(z.string().uuid("Not a valid id").nullable()),
   primaryContactId: z
     .string()
     .optional()
     .nullable()
-    .transform((v) => (v && v.length > 0 ? v : null)),
+    .transform((v) => (v && v.length > 0 ? v : null))
+    .pipe(z.string().uuid("Not a valid id").nullable()),
 });
 
 export async function updateAccountAction(

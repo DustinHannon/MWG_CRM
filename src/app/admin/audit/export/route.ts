@@ -39,27 +39,33 @@ export async function GET(req: NextRequest) {
 
   // Generous timeout — exporting 50k rows from a multi-million-row
   // table can be slow if filters are loose. 30s caps runaway queries.
-  await db.execute(sql`SET LOCAL statement_timeout = '30s'`);
-
-  const rows = await db
-    .select({
-      id: auditLog.id,
-      createdAt: auditLog.createdAt,
-      actorDisplayName: users.displayName,
-      actorEmail: auditLog.actorEmailSnapshot,
-      action: auditLog.action,
-      targetType: auditLog.targetType,
-      targetId: auditLog.targetId,
-      requestId: auditLog.requestId,
-      ipAddress: auditLog.ipAddress,
-      beforeJson: auditLog.beforeJson,
-      afterJson: auditLog.afterJson,
-    })
-    .from(auditLog)
-    .leftJoin(users, eq(auditLog.actorId, users.id))
-    .where(where)
-    .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
-    .limit(MAX_ROWS);
+  // SET LOCAL only applies inside a transaction, so the timeout-set and
+  // the SELECT must run in the same tx. set_config(..., true) is
+  // SET LOCAL with the value as a bind parameter (Supavisor-safe).
+  const rows = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT set_config('statement_timeout', '30s', true)`,
+    );
+    return tx
+      .select({
+        id: auditLog.id,
+        createdAt: auditLog.createdAt,
+        actorDisplayName: users.displayName,
+        actorEmail: auditLog.actorEmailSnapshot,
+        action: auditLog.action,
+        targetType: auditLog.targetType,
+        targetId: auditLog.targetId,
+        requestId: auditLog.requestId,
+        ipAddress: auditLog.ipAddress,
+        beforeJson: auditLog.beforeJson,
+        afterJson: auditLog.afterJson,
+      })
+      .from(auditLog)
+      .leftJoin(users, eq(auditLog.actorId, users.id))
+      .where(where)
+      .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+      .limit(MAX_ROWS);
+  });
 
   const headers = [
     "When (UTC)",

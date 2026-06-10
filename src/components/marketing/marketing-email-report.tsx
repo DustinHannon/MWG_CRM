@@ -57,7 +57,13 @@ export function MarketingEmailReport({
   // server-side filter for shareable links.
   const filtered = useMemo(() => {
     const fromTime = from ? new Date(from).getTime() : 0;
-    const toTime = to ? new Date(to).getTime() : Number.POSITIVE_INFINITY;
+    // Make the `to` bound inclusive of the entire selected end day so the
+    // in-page filter matches the server query, which pushes the upper bound
+    // to end-of-day (page.tsx). A bare `new Date("YYYY-MM-DD")` is UTC
+    // midnight, which would otherwise drop every campaign sent later that day.
+    const toTime = to
+      ? new Date(to).getTime() + 86_400_000 - 1
+      : Number.POSITIVE_INFINITY;
     return rows.filter((r) => {
       if (!r.sentAt) return false;
       const t = r.sentAt.getTime();

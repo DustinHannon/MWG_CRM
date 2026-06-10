@@ -125,10 +125,40 @@ export class D365Client {
     nextLink: string,
     signal?: AbortSignal,
   ): Promise<D365ODataPage<T>> {
+    this.assertSameOrigin(nextLink);
     return this.execWithAuth<D365ODataPage<T>>(nextLink, {
       includeAnnotations: false,
       signal,
     });
+  }
+
+  /**
+   * Defense-in-depth: refuse to follow a server-supplied @odata.nextLink
+   * (or any absolute URL) whose origin differs from the configured D365
+   * base URL. We attach the D365 bearer token to this request, so a
+   * nextLink pointing at a non-D365 host would leak the access token to
+   * that host. D365 is a trusted first-party Microsoft endpoint over
+   * TLS, but validating the origin closes the token-exfiltration / SSRF
+   * egress surface if a response is ever spoofed or altered.
+   */
+  private assertSameOrigin(absoluteUrl: string): void {
+    let target: URL;
+    try {
+      target = new URL(absoluteUrl);
+    } catch {
+      // invariant: nextLink is server-generated and absolute. A
+      // non-parseable URL is a contract violation, not a domain error.
+      throw new Error("D365 nextLink is not a valid absolute URL");
+    }
+    const expectedOrigin = new URL(this.env.baseUrl).origin;
+    if (target.origin !== expectedOrigin) {
+      // invariant: a nextLink whose origin differs from the configured
+      // D365 base URL must never be followed with the bearer token —
+      // bubble as a bare Error (security invariant, not app-domain).
+      throw new Error(
+        `D365 nextLink origin '${target.origin}' does not match configured D365 origin '${expectedOrigin}'`,
+      );
+    }
   }
 
   /**

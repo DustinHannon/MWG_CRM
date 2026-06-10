@@ -280,6 +280,7 @@ export async function updateStaticListMember(args: {
  * per-row).
  */
 export async function bulkUpdateStaticListMembers(args: {
+  listId: string;
   memberIds: string[];
   field: "name";
   value: string | null;
@@ -290,6 +291,11 @@ export async function bulkUpdateStaticListMembers(args: {
     typeof args.value === "string"
       ? args.value.trim() || null
       : args.value;
+  // Scope the UPDATE to the authorized list (mirrors
+  // `deleteStaticListMembersById`): the caller is authorized for
+  // `listId`, but `memberIds` are client-supplied and may name rows in
+  // other lists. ANDing the `listId` predicate ensures foreign IDs are
+  // ignored, so `updated` reflects only members of the authorized list.
   const rows = await db
     .update(marketingStaticListMembers)
     .set({
@@ -297,7 +303,12 @@ export async function bulkUpdateStaticListMembers(args: {
       updatedAt: sql`now()`,
       updatedById: args.actorId,
     })
-    .where(inArray(marketingStaticListMembers.id, args.memberIds))
+    .where(
+      and(
+        eq(marketingStaticListMembers.listId, args.listId),
+        inArray(marketingStaticListMembers.id, args.memberIds),
+      ),
+    )
     .returning({ id: marketingStaticListMembers.id });
   return { updated: rows.length };
 }

@@ -7,6 +7,7 @@ import {
   type MapResult,
   type ValidationWarning,
   extractCustomFields,
+  parseHttpUrl,
   parseODataDate,
   parseString,
 } from "./parsers";
@@ -143,7 +144,10 @@ export function mapD365Account(
   const mapped: NewAccount = {
     name,
     industry,
-    website: parseString(raw.websiteurl),
+    // Validate scheme: only http/https survives; a javascript:/data: or
+    // otherwise malformed source URL becomes null. Defense-in-depth so no
+    // account render path can ever emit a non-http(s) href.
+    website: parseHttpUrl(raw.websiteurl),
     phone: parseString(raw.telephone1),
     email: parseString(raw.emailaddress1),
     accountNumber: parseString(

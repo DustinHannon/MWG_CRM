@@ -64,9 +64,11 @@ interface GraphUserResponse {
  *
  * The JIT path performs a live Microsoft Graph `/users/{upn}` lookup
  * against the configured tenant. A batch whose default-owner
- * fallback count crosses the H-4 threshold (`detectOwnerJitFailure`,
- * keyed on the `owner_default_owner_used` warning map-batch emits)
- * pauses the run for explicit operator review.
+ * fallback rate crosses the H-4 proportion gate (`detectOwnerJitFailure`:
+ * more than 30% of the batch AND at least 5 rows fell back, keyed on the
+ * `owner_default_owner_used`/`owner_unresolvable` warnings map-batch emits)
+ * pauses the run for explicit operator review. A handful of legitimate
+ * former-employee fallbacks in an otherwise-clean batch does not halt.
  */
 
 export type OwnerResolutionSource =

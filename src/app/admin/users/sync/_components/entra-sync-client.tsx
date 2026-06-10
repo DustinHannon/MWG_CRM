@@ -13,7 +13,7 @@ import {
   type OffboardResult,
 } from "../actions";
 import { SyncCandidateList } from "./sync-candidate-list";
-import { OffboardList } from "./offboard-list";
+import { OffboardList, type OffboardDecision } from "./offboard-list";
 
 type Stage = "idle" | "review" | "done";
 
@@ -22,7 +22,7 @@ export function EntraSyncClient() {
   const [preview, setPreview] = useState<EntraSyncPreview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [offboardDecisions, setOffboardDecisions] = useState<
-    Map<string, string | null>
+    Map<string, OffboardDecision>
   >(new Map());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -47,10 +47,10 @@ export function EntraSyncClient() {
   }, []);
 
   const handleOffboardChange = useCallback(
-    (userId: string, reassignTo: string | null) => {
+    (userId: string, decision: OffboardDecision) => {
       setOffboardDecisions((prev) => {
         const next = new Map(prev);
-        next.set(userId, reassignTo);
+        next.set(userId, decision);
         return next;
       });
     },
@@ -74,7 +74,17 @@ export function EntraSyncClient() {
             .map((c) => c.entraOid),
         ),
       );
-      setOffboardDecisions(new Map());
+      // Default every missing user to deactivate so the primary offboard
+      // function runs without per-row interaction; the admin can uncheck
+      // anyone to leave them as-is, and optionally pick a reassign target.
+      setOffboardDecisions(
+        new Map(
+          p.offboard.map((o) => [
+            o.userId,
+            { deactivate: true, reassignTo: null },
+          ]),
+        ),
+      );
       setStage("review");
       if (p.permissionError) {
         setError(p.permissionError);
@@ -100,9 +110,12 @@ export function EntraSyncClient() {
         importRes.data;
       setImportFailures(failed);
 
-      const items = [...offboardDecisions.entries()].map(
-        ([userId, reassignTo]) => ({ userId, reassignTo }),
-      );
+      const items = [...offboardDecisions.entries()]
+        .filter(([, decision]) => decision.deactivate)
+        .map(([userId, decision]) => ({
+          userId,
+          reassignTo: decision.reassignTo,
+        }));
 
       let deactivated = 0;
       let reassigned = 0;

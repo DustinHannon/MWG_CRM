@@ -17,7 +17,7 @@ import type { importRecords } from "@/db/schema/d365-imports";
  * NOT a pure function (lives there).
  * H-2 UNMAPPED_PICKLIST — `detectUnmappedPicklist`
  * H-3 HIGH_VOLUME_CONFLICT — `detectHighVolumeConflict` (>30%)
- * H-4 OWNER_JIT_FAILURE — `detectOwnerJitFailure` (>=5 fail)
+ * H-4 OWNER_JIT_FAILURE — `detectOwnerJitFailure` (>30% & >=5)
  * H-5 VALIDATION_REGRESSION — `detectValidationRegression` (>=10 warn)
  *
  * All thresholds are defined here as named constants so future
@@ -30,7 +30,24 @@ import type { importRecords } from "@/db/schema/d365-imports";
  * -------------------------------------------------------------------------- */
 
 export const HIGH_VOLUME_CONFLICT_THRESHOLD_PERCENT = 30;
+/**
+ * Absolute floor for the owner-JIT-failure halt. A batch must carry at
+ * least this many default-owner / unresolvable rows before the halt can
+ * fire — below this, the sample is too small for the proportion to be
+ * informative (mirrors the per-batch garbage-volume sample gate).
+ */
 export const OWNER_JIT_FAILURE_THRESHOLD = 5;
+/**
+ * Proportion gate for the owner-JIT-failure halt. The halt fires only
+ * when MORE than this percentage of the batch fell back to the default
+ * owner (or was unresolvable) AND the absolute floor is met. A handful
+ * of legitimate former-employee fallbacks in an otherwise-clean batch
+ * is expected and must NOT halt the run; a batch DOMINATED by them
+ * signals a systemic problem (e.g. a regressed owner lookup or a
+ * known-bad import era) worth pausing for. Mirrors the ratio-based
+ * `shouldHaltOnGarbageVolume` precedent.
+ */
+export const OWNER_JIT_FAILURE_THRESHOLD_PERCENT = 30;
 export const VALIDATION_REGRESSION_THRESHOLD = 10;
 
 /* -------------------------------------------------------------------------- *
@@ -77,6 +94,11 @@ export interface HighVolumeConflictResult extends DetectorResult {
 
 export interface OwnerJitFailureResult extends DetectorResult {
   failureCount: number;
+  totalCount: number;
+  /** Percentage (0-100) of the batch that fell back to default owner. */
+  failurePercent: number;
+  /** Proportion gate (percent) that must be exceeded for the halt. */
+  thresholdPercent: number;
 }
 
 export interface ValidationRegressionResult extends DetectorResult {
@@ -142,22 +164,28 @@ export function detectHighVolumeConflict(
  * -------------------------------------------------------------------------- */
 
 /**
- * Counts records the mapper flagged with `code: 'owner_unresolvable'`
- * the marker `owner-mapping.ts` emits when neither an existing user,
- * a JIT-provisionable Entra account, nor the configured default owner
- * could resolve.
+ * Counts records that fell back to the default owner
+ * (`owner_default_owner_used`, the marker `map-batch` emits) or that a
+ * mapper flagged as truly `owner_unresolvable`.
  *
- * Note: routine fallback to the configured default-owner is NOT a
- * failure — that's a successful resolution per Q-05. Only true
- * unresolvable rows are counted here. Q-05 also locks in a separate
- * threshold on default-owner usage at §4.5 H-4 (≥5 fallbacks) which
- * surfaces via `code: 'owner_default_owner_used'` — we treat both
- * markers as equivalent triggers here so the threshold is enforced
- * regardless of which marker the mapper emits.
+ * Halt semantics (proportion-gated, not a bare count): a default-owner
+ * fallback is an EXPECTED, resolvable condition — former-employee-owned
+ * rows are common in legacy data and Q-05 deliberately routes them to
+ * the configured default owner. A handful of such fallbacks in a clean
+ * batch must NOT halt the run, so the halt fires only when the fallback
+ * rate exceeds `OWNER_JIT_FAILURE_THRESHOLD_PERCENT` AND the absolute
+ * floor `OWNER_JIT_FAILURE_THRESHOLD` is met (the floor avoids
+ * over-reacting to tiny batches). A batch DOMINATED by default-owner
+ * usage signals a systemic problem (e.g. a regressed owner lookup or a
+ * known-bad import era) worth pausing for. This mirrors the ratio-based
+ * `shouldHaltOnGarbageVolume` precedent and aligns with
+ * `detectValidationRegression`, which excludes the same marker from the
+ * regression count.
  */
 export function detectOwnerJitFailure(
   records: ImportRecordForDetect[],
 ): OwnerJitFailureResult {
+  const totalCount = records.length;
   const failureCount = records.reduce((acc, r) => {
     const codes = asWarnings(r.validationWarnings).map((w) => w.code);
     return codes.includes("owner_unresolvable") ||
@@ -165,10 +193,17 @@ export function detectOwnerJitFailure(
       ? acc + 1
       : acc;
   }, 0);
+  const failurePercent =
+    totalCount === 0 ? 0 : (failureCount / totalCount) * 100;
   return {
-    halt: failureCount >= OWNER_JIT_FAILURE_THRESHOLD,
+    halt:
+      failureCount >= OWNER_JIT_FAILURE_THRESHOLD &&
+      failurePercent > OWNER_JIT_FAILURE_THRESHOLD_PERCENT,
     failureCount,
+    totalCount,
+    failurePercent,
     threshold: OWNER_JIT_FAILURE_THRESHOLD,
+    thresholdPercent: OWNER_JIT_FAILURE_THRESHOLD_PERCENT,
   };
 }
 

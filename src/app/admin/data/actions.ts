@@ -88,8 +88,13 @@ export async function deleteAllLeadsAction(
     { action: "data.delete_all_leads" },
     async (): Promise<DangerSuccessData> => {
       const admin = await requireAdmin();
-      await guardDangerRate(admin.id);
+      // Validate the typed confirmation BEFORE consuming the danger-op
+      // rate budget. The limiter only rolls back on the blocked path, so
+      // a token spent here would stay consumed when a mistyped phrase
+      // throws below — three confirmation typos would otherwise lock a
+      // legitimate admin out of the real op for the rest of the hour.
       expectingConfirmation(formData, "DELETE ALL LEADS");
+      await guardDangerRate(admin.id);
 
       // Gather ALL lead-attachment blob pathnames BEFORE the delete.
       // After the first cascade batch the attachments -> activities ->
@@ -179,8 +184,10 @@ export async function deleteAllActivitiesAction(
     { action: "data.delete_all_activities" },
     async (): Promise<DangerSuccessData> => {
       const admin = await requireAdmin();
-      await guardDangerRate(admin.id);
+      // Validate the typed confirmation BEFORE consuming the danger-op
+      // rate budget — see deleteAllLeadsAction for why ordering matters.
       expectingConfirmation(formData, "DELETE ALL ACTIVITIES");
+      await guardDangerRate(admin.id);
 
       // Gather attachment blob pathnames BEFORE the delete — the
       // attachments rows vanish on the activities/attachments delete.
@@ -271,8 +278,10 @@ export async function deleteAllImportsAction(
     { action: "data.delete_all_imports" },
     async (): Promise<DangerSuccessData> => {
       const admin = await requireAdmin();
-      await guardDangerRate(admin.id);
+      // Validate the typed confirmation BEFORE consuming the danger-op
+      // rate budget — see deleteAllLeadsAction for why ordering matters.
       expectingConfirmation(formData, "DELETE ALL IMPORTS");
+      await guardDangerRate(admin.id);
 
       // import_jobs has no attachment/blob graph (only FK is
       // user_id SET NULL; leads.import_job_id SET NULL). No blob

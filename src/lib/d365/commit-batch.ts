@@ -267,19 +267,41 @@ export async function commitBatch(
       }
     }
 
-    // F-10: status reflects actual outcome. A batch with any failures
-    // is NOT 'committed' — it's 'failed', and the audit/admin UI must
-    // surface that so the operator can investigate the failed rows
+    // Reconcile the batch counters from the durable record statuses
+    // rather than the in-memory loop tallies. Per-record commits each
+    // persist `import_records.status` in their own tx; if a prior run
+    // of this loop crashed AFTER committing records but BEFORE this
+    // counter write, those records are skipped on retry (status !=
+    // 'approved' guard) and would never be re-counted by an increment.
+    // Deriving absolute counts via COUNT(*) GROUP BY status makes the
+    // write idempotent — a retry reconciles to the true totals.
+    const statusCounts = await db
+      .select({
+        status: importRecords.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(importRecords)
+      .where(eq(importRecords.batchId, batchId))
+      .groupBy(importRecords.status);
+    const countFor = (status: string): number =>
+      statusCounts.find((r) => r.status === status)?.count ?? 0;
+    const committedTotal = countFor("committed");
+    const failedTotal = countFor("failed");
+    const skippedTotal = countFor("skipped");
+
+    // F-10: status reflects actual outcome. A batch with any failed
+    // record is NOT 'committed' — it's 'failed', and the audit/admin UI
+    // must surface that so the operator can investigate the failed rows
     // instead of treating the batch as a clean commit.
-    // F-03: track skipped count via record_count_skipped (new column).
+    // F-03: track skipped count via record_count_skipped.
     await db
       .update(importBatches)
       .set({
-        status: failed > 0 ? "failed" : "committed",
+        status: failedTotal > 0 ? "failed" : "committed",
         committedAt: new Date(),
-        recordCountCommitted: sql`${importBatches.recordCountCommitted} + ${committed}`,
-        recordCountFailed: sql`${importBatches.recordCountFailed} + ${failed}`,
-        recordCountSkipped: sql`${importBatches.recordCountSkipped} + ${skipped}`,
+        recordCountCommitted: committedTotal,
+        recordCountFailed: failedTotal,
+        recordCountSkipped: skippedTotal,
       })
       .where(eq(importBatches.id, batchId));
 
@@ -876,10 +898,6 @@ async function commitActivity(
     typeof payload.occurredAt === "string" || payload.occurredAt instanceof Date
       ? new Date(payload.occurredAt as string | Date)
       : new Date();
-  const subject =
-    typeof payload.subject === "string" ? (payload.subject as string) : null;
-  const body =
-    typeof payload.body === "string" ? (payload.body as string) : null;
 
   if (existing[0]) {
     return {
@@ -889,31 +907,71 @@ async function commitActivity(
     };
   }
 
+  // Insert the FULL mapped activity (the stripped payload is already the
+  // NewActivity shape produced by the annotation/phonecall/appointment/
+  // email mappers), so every mapped column persists — `direction`,
+  // `durationMinutes`, `outcome`, `meetingLocation`, `meetingAttendees`,
+  // `importDedupKey`, the owning `userId`, and — per the §5.2 recency
+  // rule — `createdAt`/`updatedAt` carried from D365 createdon/modifiedon.
+  // Only the resolved parent FK columns, `kind`, `occurredAt` (with a
+  // notNull fallback), and the actor stamp are overridden; the
+  // exactly-one-parent CHECK is preserved by nulling the other three FKs.
+  // Narrowing to Partial<$inferInsert> (the payload genuinely matches the
+  // table) lets the literal overrides be typechecked, so a future stray
+  // key like `createdById` (no such column on activities) fails compile
+  // instead of being silently dropped.
+  const mappedActivity = payload as Partial<typeof activities.$inferInsert>;
   const inserted = await tx
     .insert(activities)
     .values({
+      ...mappedActivity,
       kind,
       leadId: parentEntityType === "lead" ? parentLocalId : null,
       contactId: parentEntityType === "contact" ? parentLocalId : null,
       accountId: parentEntityType === "account" ? parentLocalId : null,
       opportunityId: parentEntityType === "opportunity" ? parentLocalId : null,
       occurredAt,
-      subject,
-      body,
-      createdById: actorId,
       updatedById: actorId,
-    } as typeof activities.$inferInsert)
+    })
+    .onConflictDoNothing({
+      target: [activities.leadId, activities.importDedupKey],
+      where: sql`import_dedup_key is not null`,
+    })
     .returning({ id: activities.id });
-  const row = inserted[0];
+  let row = inserted[0];
+  // The (lead_id, import_dedup_key) partial UNIQUE arbiter can skip this insert
+  // when the same activity already exists — e.g. the CSV/XLSX import pipeline
+  // persisted it first under the shared import_dedup_key. Only a lead-parented
+  // activity carrying a non-null dedup key can collide (NULLs are distinct in the
+  // unique index). Recover the existing row so the D365 external-id mapping still
+  // points at it, and signal the re-import as already-existed.
+  let dedupSkipped = false;
   if (!row) {
-    throw new ConflictError("activity insert returned no row", {
-      entityType,
-      sourceId,
-    });
+    const dedupKey = mappedActivity.importDedupKey;
+    if (parentEntityType === "lead" && dedupKey != null) {
+      const dup = await tx
+        .select({ id: activities.id })
+        .from(activities)
+        .where(
+          and(
+            eq(activities.leadId, parentLocalId),
+            eq(activities.importDedupKey, dedupKey),
+          ),
+        )
+        .limit(1);
+      row = dup[0];
+      dedupSkipped = Boolean(row);
+    }
+    if (!row) {
+      throw new ConflictError("activity insert returned no row", {
+        entityType,
+        sourceId,
+      });
+    }
   }
 
   await upsertExternalId(tx, entityType, sourceId, row.id);
-  return { outcome: "committed", localId: row.id, alreadyExisted: false };
+  return { outcome: "committed", localId: row.id, alreadyExisted: dedupSkipped };
 }
 
 /* -------------------------------------------------------------------------- *

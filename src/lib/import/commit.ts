@@ -1,10 +1,12 @@
 // chunked commit pipeline. Takes the validated ParsedRow[]
 // and writes leads / activities / opportunities / lead_tags in 100-row
-// chunks, using concurrentUpdate for re-import paths so two users
-// can't trample each other's edits between preview and commit.
+// chunks. Each row commits in its own db.transaction so its lead and all
+// of its children are atomic, and re-import UPDATEs are version-gated so
+// two users can't trample each other's edits between preview and commit.
 //
-// Failures inside a chunk are caught and logged; processing continues
-// with the next chunk so partial success is preserved.
+// A row that fails rolls back only itself and is reported as a single
+// failed row; sibling rows and other chunks still commit, so partial
+// success is preserved without partial-write corruption.
 
 import "server-only";
 import { and, eq, ilike, sql, inArray } from "drizzle-orm";
@@ -15,7 +17,6 @@ import { opportunities } from "@/db/schema/crm-records";
 import { leadTags, tags } from "@/db/schema/tags";
 import { writeAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
-import { expectAffected } from "@/lib/db/concurrent-update";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { tagName } from "@/lib/validation/primitives";
 import { computeImportDedupKey } from "./dedup-key";
@@ -42,6 +43,13 @@ export interface CommitResult {
 }
 
 const CHUNK_SIZE = 100;
+
+// Drizzle's `db.transaction()` callback parameter is a PgTransaction
+// which is not assignable to PostgresJsDatabase. We accept either the
+// top-level `db` or the in-transaction `tx` on the per-row write path so
+// each row's lead + activities + opportunities + tags commit or roll
+// back as a unit. Mirrors the `Tx` alias in `@/lib/d365/commit-batch`.
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 interface CommitArgs {
   rows: ParsedRow[];
@@ -141,10 +149,16 @@ export async function commitImport({
     }
   }
 
-  // Process in chunks of CHUNK_SIZE rows. Each chunk is its own
-  // try/catch so a poison row doesn't kill the whole import.
+  // Process in chunks of CHUNK_SIZE rows. Each row commits in its own
+  // transaction (see processChunk), so a poison row rolls back only
+  // itself. The outer try/catch is a defense-in-depth net for a
+  // catastrophic whole-chunk failure (e.g. the transaction layer itself
+  // becoming unusable) — it marks only rows that processChunk has NOT
+  // already reached a terminal state for, so committed/failed rows are
+  // never double-counted.
   for (let start = 0; start < rows.length; start += CHUNK_SIZE) {
     const slice = rows.slice(start, start + CHUNK_SIZE);
+    const processedRows = new Set<number>();
     try {
       await processChunk({
         slice,
@@ -155,6 +169,7 @@ export async function commitImport({
         tagMap,
         existingByExt,
         result,
+        processedRows,
       });
     } catch (err) {
       logger.error("import.chunk_failed", {
@@ -162,9 +177,11 @@ export async function commitImport({
         size: slice.length,
         errorMessage: err instanceof Error ? err.message : String(err),
       });
-      // Mark every row in the failed chunk as failed.
+      // Mark only rows not already accounted for (committed, deduped, or
+      // individually failed) as failed — rows processChunk already
+      // resolved keep their real outcome.
       for (const r of slice) {
-        if (r.ok) {
+        if (r.ok && !processedRows.has(r.rowNumber)) {
           result.failedRows.push({
             rowNumber: r.rowNumber,
             reason:
@@ -219,6 +236,30 @@ export async function commitImport({
   return result;
 }
 
+// Per-row commit outcome, accumulated INSIDE the row's transaction and
+// only folded into the shared CommitResult AFTER that transaction
+// commits. This is what makes the chunk catch honest: a row is counted
+// inserted/updated only once its writes are durable, so a mid-row throw
+// rolls back its partial writes and the row is reported failed — never
+// both written and "failed".
+interface CommittedOutcome {
+  kind: "committed";
+  insertedLeadId?: string;
+  updatedLeadId?: string;
+  insertedActivityCount: number;
+  skippedActivityCount: number;
+  insertedOpportunityIds: string[];
+  tagsApplied: number;
+}
+
+type RowOutcome =
+  | CommittedOutcome
+  // OCC conflict / not-found on a re-import UPDATE: the transaction made
+  // no writes and commits cleanly. The reason is recorded as a failed row
+  // by the caller AFTER the transaction resolves, so result mutations
+  // never happen inside an open transaction.
+  | { kind: "conflict"; reason: string };
+
 async function processChunk(args: {
   slice: ParsedRow[];
   importerUserId: string;
@@ -228,9 +269,84 @@ async function processChunk(args: {
   tagMap: Map<string, string>;
   existingByExt: Map<string, { id: string; version: number }>;
   result: CommitResult;
+  // Row numbers that have reached a terminal state (committed, deduped,
+  // OCC-conflict, or individually failed). The outer chunk catch consults
+  // this so a catastrophic whole-chunk failure only fails the remainder.
+  processedRows: Set<number>;
 }): Promise<void> {
   for (const row of args.slice) {
     if (!row.ok) continue;
+    // Each row commits as its own transaction so its lead + activities +
+    // opportunities + tags are atomic. A failure inside the row rolls the
+    // row back and is reported as a single failed row; sibling rows in the
+    // chunk are unaffected. The shared result is mutated only after commit.
+    try {
+      const outcome = await db.transaction((tx) =>
+        commitRow({ ...args, row, tx }),
+      );
+      if (outcome.kind === "conflict") {
+        // OCC conflict / not-found: the row's transaction made no writes
+        // and committed cleanly. Record it as a failed row now, after the
+        // transaction resolved.
+        args.result.failedRows.push({
+          rowNumber: row.rowNumber,
+          reason: outcome.reason,
+        });
+        args.processedRows.add(row.rowNumber);
+        continue;
+      }
+      if (outcome.insertedLeadId)
+        args.result.insertedLeadIds.push(outcome.insertedLeadId);
+      if (outcome.updatedLeadId)
+        args.result.updatedLeadIds.push(outcome.updatedLeadId);
+      args.result.insertedActivityCount += outcome.insertedActivityCount;
+      args.result.skippedActivityCount += outcome.skippedActivityCount;
+      args.result.insertedOpportunityIds.push(...outcome.insertedOpportunityIds);
+      args.result.tagsApplied += outcome.tagsApplied;
+      args.processedRows.add(row.rowNumber);
+    } catch (err) {
+      // Any unexpected error rolled the row's transaction back, so no
+      // partial writes survive. Report exactly this row as failed and
+      // continue with the next row.
+      logger.error("import.row_failed", {
+        rowNumber: row.rowNumber,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      args.result.failedRows.push({
+        rowNumber: row.rowNumber,
+        reason: err instanceof Error ? err.message : "Unknown row failure",
+      });
+      args.processedRows.add(row.rowNumber);
+    }
+  }
+}
+
+// Commits a single validated row inside an open transaction `tx`.
+// Returns a `committed` outcome with the row's write counts on success,
+// or a `conflict` outcome when an OCC conflict / not-found made the
+// re-import UPDATE a no-op (the transaction made no writes and commits
+// cleanly; the caller records the failed row after it resolves). Any
+// other throw propagates so the caller rolls the transaction back and
+// marks the row failed.
+async function commitRow(args: {
+  row: ParsedRow;
+  tx: Tx;
+  importerUserId: string;
+  importJobId: string | null;
+  ownerMap: Map<string, string>;
+  byNameMap: Map<string, string>;
+  tagMap: Map<string, string>;
+  existingByExt: Map<string, { id: string; version: number }>;
+}): Promise<RowOutcome> {
+  const { row, tx } = args;
+  const outcome: CommittedOutcome = {
+    kind: "committed",
+    insertedActivityCount: 0,
+    skippedActivityCount: 0,
+    insertedOpportunityIds: [],
+    tagsApplied: 0,
+  };
+  {
     const ownerId = row.leadPatch.ownerEmail
       ? args.ownerMap.get(row.leadPatch.ownerEmail) ?? null
       : args.importerUserId;
@@ -246,13 +362,12 @@ async function processChunk(args: {
       isUpdate = true;
       leadId = existing.id;
       try {
-        // re-import UPDATE now goes through
-        // expectAffected so a stale `version` raises a real
-        // ConflictError instead of silently no-op'ing while the row id
-        // got pushed to updatedLeadIds. lastActivityAt is folded into
-        // the same UPDATE so we don't burn a second un-versioned write
-        // for it.
-        const updateRows = await db
+        // re-import UPDATE is version-gated: a stale `version` produces a
+        // 0-row update, which the inline check below turns into a real
+        // ConflictError instead of silently no-op'ing while the row id got
+        // pushed to updatedLeadIds. lastActivityAt is folded into the same
+        // UPDATE so we don't burn a second un-versioned write for it.
+        const updateRows = await tx
           .update(leads)
           .set({
             ownerId,
@@ -304,25 +419,41 @@ async function processChunk(args: {
             ),
           )
           .returning({ id: leads.id, version: leads.version });
-        await expectAffected(updateRows, {
-          table: leads,
-          id: existing.id,
-          entityLabel: "lead",
-        });
+        // Inline the affected-rows check against the open transaction
+        // `tx`. We can't reuse `expectAffected` here: it issues its
+        // existence probe on the top-level `db`, and with the
+        // pool's `max: 1` a second `db` query while this transaction
+        // holds the only connection would deadlock. A 0-row update means
+        // the row's `version` moved or it was deleted between preview and
+        // commit — both are concurrent-modification cases, reported as a
+        // ConflictError; a genuinely absent row is a NotFoundError.
+        if (updateRows.length === 0) {
+          const stillExists = await tx
+            .select({ id: leads.id })
+            .from(leads)
+            .where(eq(leads.id, existing.id))
+            .limit(1);
+          if (stillExists.length === 0) {
+            throw new NotFoundError("lead");
+          }
+          throw new ConflictError(
+            "This record was modified by someone else. Refresh to see their changes, then try again.",
+            { id: existing.id },
+          );
+        }
       } catch (err) {
         if (err instanceof ConflictError || err instanceof NotFoundError) {
-          args.result.failedRows.push({
-            rowNumber: row.rowNumber,
-            reason: err.publicMessage,
-          });
-          continue;
+          // Re-import OCC conflict / not-found made this a no-op (no
+          // writes), so the transaction can commit cleanly. Signal the
+          // caller to record the row as failed once the tx resolves.
+          return { kind: "conflict", reason: err.publicMessage };
         }
         throw err;
       }
-      args.result.updatedLeadIds.push(leadId);
+      outcome.updatedLeadId = leadId;
     } else {
       // INSERT new lead.
-      const inserted = await db
+      const inserted = await tx
         .insert(leads)
         .values({
           ownerId,
@@ -365,7 +496,7 @@ async function processChunk(args: {
         })
         .returning({ id: leads.id });
       leadId = inserted[0].id;
-      args.result.insertedLeadIds.push(leadId);
+      outcome.insertedLeadId = leadId;
     }
 
     // ---- Activities ---------------------------------------------------
@@ -376,8 +507,13 @@ async function processChunk(args: {
         occurredAt: act.occurredAt,
         body: act.body,
       });
-      // Dedup via partial index — skip if already present.
-      const existing = await db
+      // Cheap pre-check via the (lead_id, import_dedup_key) index — skips
+      // the INSERT for the common sequential re-import case. The INSERT
+      // below carries an ON CONFLICT DO NOTHING on the same partial-unique
+      // index, so this is an optimization, not the integrity guard: two
+      // concurrent imports that both pass this SELECT are still
+      // de-duplicated atomically at INSERT time.
+      const existing = await tx
         .select({ id: activities.id })
         .from(activities)
         .where(
@@ -388,7 +524,7 @@ async function processChunk(args: {
         )
         .limit(1);
       if (existing.length > 0) {
-        args.result.skippedActivityCount += 1;
+        outcome.skippedActivityCount += 1;
         continue;
       }
 
@@ -406,24 +542,43 @@ async function processChunk(args: {
           : act.metadata.direction === "incoming"
             ? "inbound"
             : null;
-      await db.insert(activities).values({
-        leadId,
-        kind: act.kind,
-        direction: dbDirection,
-        subject: act.subject ?? null,
-        body: act.body || null,
-        occurredAt: act.occurredAt,
-        durationMinutes: act.metadata.durationMin ?? null,
-        outcome: act.metadata.outcome ?? null,
-        meetingAttendees:
-          act.kind === "meeting" && act.metadata.attendees
-            ? act.metadata.attendees.map((name) => ({ name }))
-            : null,
-        userId: createdById,
-        importedByName,
-        importDedupKey: dedupKey,
-      });
-      args.result.insertedActivityCount += 1;
+      // ON CONFLICT DO NOTHING on the partial-unique
+      // (lead_id, import_dedup_key) index makes dedup atomic instead of
+      // check-then-act: a concurrent import that wrote the same activity
+      // between our SELECT and INSERT is skipped here rather than
+      // duplicated. .returning() distinguishes a real insert (one row)
+      // from a deduped skip (zero rows).
+      const insertedAct = await tx
+        .insert(activities)
+        .values({
+          leadId,
+          kind: act.kind,
+          direction: dbDirection,
+          subject: act.subject ?? null,
+          body: act.body || null,
+          occurredAt: act.occurredAt,
+          durationMinutes: act.metadata.durationMin ?? null,
+          outcome: act.metadata.outcome ?? null,
+          meetingAttendees:
+            act.kind === "meeting" && act.metadata.attendees
+              ? act.metadata.attendees.map((name) => ({ name }))
+              : null,
+          userId: createdById,
+          importedByName,
+          importDedupKey: dedupKey,
+        })
+        .onConflictDoNothing({
+          target: [activities.leadId, activities.importDedupKey],
+          // Matches the partial-unique index predicate so Postgres uses
+          // activities_import_dedup_idx as the arbiter.
+          where: sql`import_dedup_key IS NOT NULL`,
+        })
+        .returning({ id: activities.id });
+      if (insertedAct.length > 0) {
+        outcome.insertedActivityCount += 1;
+      } else {
+        outcome.skippedActivityCount += 1;
+      }
     }
 
     // ---- Opportunities -----------------------------------------------
@@ -431,7 +586,7 @@ async function processChunk(args: {
       // Skip if a non-deleted opportunity with this name + source_lead_id
       // already exists (idempotent re-import).
       if (isUpdate) {
-        const dup = await db
+        const dup = await tx
           .select({ id: opportunities.id })
           .from(opportunities)
           .where(
@@ -456,7 +611,7 @@ async function processChunk(args: {
         | "negotiation"
         | "closed_won"
         | "closed_lost";
-      const ins = await db
+      const ins = await tx
         .insert(opportunities)
         .values({
           name: opp.name,
@@ -474,7 +629,7 @@ async function processChunk(args: {
           // The lead-conversion flow links them later.
         })
         .returning({ id: opportunities.id });
-      args.result.insertedOpportunityIds.push(ins[0].id);
+      outcome.insertedOpportunityIds.push(ins[0].id);
     }
 
     // ---- Tags --------------------------------------------------------
@@ -494,7 +649,7 @@ async function processChunk(args: {
         // .returning() tells us whether the row was actually inserted
         // vs. skipped as a duplicate, so the import audit can report
         // accurate `tagsApplied` counts.
-        const ins = await db
+        const ins = await tx
           .insert(leadTags)
           .values({
             leadId,
@@ -503,7 +658,7 @@ async function processChunk(args: {
           })
           .onConflictDoNothing()
           .returning({ leadId: leadTags.leadId });
-        if (ins.length > 0) args.result.tagsApplied += 1;
+        if (ins.length > 0) outcome.tagsApplied += 1;
       }
     }
 
@@ -514,12 +669,13 @@ async function processChunk(args: {
     // so there is no concurrent writer to race with and a non-versioned
     // UPDATE is safe.
     if (!isUpdate && row.leadPatch.lastActivityAt) {
-      await db
+      await tx
         .update(leads)
         .set({ lastActivityAt: row.leadPatch.lastActivityAt })
         .where(eq(leads.id, leadId));
     }
   }
+  return outcome;
 }
 
 async function ensureTags(
@@ -608,8 +764,3 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 64);
 }
-
-// Tame unused warning on expectAffected for the typed-builder path
-// (we call it in lib/leads.ts; not used here directly but kept imported
-// to flag intent — the chunk path inlines the version check).
-void expectAffected;

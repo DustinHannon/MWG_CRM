@@ -156,14 +156,19 @@ export const PATCH = withApi<{ id: string }>(
     if (m.postal_code !== undefined) patch.postalCode = m.postal_code ?? null;
     if (m.country !== undefined) patch.country = m.country ?? null;
     if (m.birthdate !== undefined) patch.birthdate = m.birthdate ?? null;
-    if (m.do_not_email !== undefined) {
-      patch.doNotEmail = m.do_not_email;
-      // Keep doNotContact derivation consistent with the (app) action.
-      if (m.do_not_call !== undefined) {
-        patch.doNotContact = m.do_not_email && m.do_not_call;
-      }
-    }
+    // Derive doNotContact from the EFFECTIVE post-patch values (merge
+    // each incoming flag over the already-fetched row) so a partial
+    // update carrying only one of the two flags still recomputes it,
+    // matching the (app) action which always recomputes from the full
+    // record. Recomputing only when both were present left the derived
+    // flag inconsistent on single-flag PATCHes.
+    if (m.do_not_email !== undefined) patch.doNotEmail = m.do_not_email;
     if (m.do_not_call !== undefined) patch.doNotCall = m.do_not_call;
+    if (m.do_not_email !== undefined || m.do_not_call !== undefined) {
+      const newEmail = m.do_not_email ?? existing.doNotEmail;
+      const newCall = m.do_not_call ?? existing.doNotCall;
+      patch.doNotContact = newEmail && newCall;
+    }
     if (m.do_not_mail !== undefined) patch.doNotMail = m.do_not_mail;
     try {
       // `version` is schema-required (missing -> 422 above), so it
@@ -191,7 +196,7 @@ export const PATCH = withApi<{ id: string }>(
     await writeAudit({
       actorId: key.createdById,
       action: "contact.update",
-      targetType: "contacts",
+      targetType: "contact",
       targetId: params.id,
       after: { ...patch, source: "api" },
     });
@@ -225,7 +230,7 @@ export const DELETE = withApi<{ id: string }>(
       await writeAudit({
         actorId: key.createdById,
         action: "contact.hard_delete",
-        targetType: "contacts",
+        targetType: "contact",
         targetId: params.id,
         before: { source: "api" },
       });
@@ -234,7 +239,7 @@ export const DELETE = withApi<{ id: string }>(
       await writeAudit({
         actorId: key.createdById,
         action: "contact.archive",
-        targetType: "contacts",
+        targetType: "contact",
         targetId: params.id,
         after: { source: "api", reason: "API delete" },
       });

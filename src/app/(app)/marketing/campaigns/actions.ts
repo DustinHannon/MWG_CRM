@@ -104,6 +104,24 @@ const campaignTestSchema = z.object({
   recipientEmail: z.string().email().max(254),
 });
 
+// Canonical recipient-status allowlist — mirrors the
+// `campaign_recipient_status` enum on `campaignRecipients.status` and the
+// same list in [id]/page.tsx and the recipients API route. Used to reject
+// arbitrary client-supplied status filters before they reach the enum
+// column (an invalid value would otherwise raise a Postgres 22P02 cast
+// error surfaced as a generic INTERNAL failure).
+const recipientStatusSchema = z.enum([
+  "queued",
+  "sent",
+  "delivered",
+  "bounced",
+  "dropped",
+  "deferred",
+  "blocked",
+  "spamreport",
+  "unsubscribed",
+]);
+
 /* ------------------------------------------------------------------ */
 /* Permission helper */
 /* ------------------------------------------------------------------ */
@@ -543,6 +561,17 @@ export async function cancelCampaignAction(
 
 export async function sendCampaignNowAction(
   id: string,
+  options?: {
+    /**
+     * OCC: optional version the caller loaded. When supplied, the
+     * enqueue UPDATE additionally requires `version = expectedVersion`
+     * so a concurrent draft edit surfaces as a ConflictError rather
+     * than sending against a stale snapshot. Optional so existing
+     * callers (detail-page button, public API) keep the status-guard
+     * fallback that already prevents a double-send.
+     */
+    expectedVersion?: number;
+  },
 ): Promise<ActionResult<never>> {
   return withErrorBoundary(
     {
@@ -558,6 +587,7 @@ export async function sendCampaignNowAction(
         );
       }
       const parsedId = uuidSchema.parse(id);
+      const expectedVersion = options?.expectedVersion;
 
       // Per-user hourly limiter — the API route enforces too, but this
       // path is a separate surface so we re-check here.
@@ -612,6 +642,19 @@ export async function sendCampaignNowAction(
       // away. The cron picks up within ~60s and runs the SendGrid
       // batch; the campaign card's realtime subscription flips the
       // status as state advances.
+      // OCC: when the caller supplied `expectedVersion`, the UPDATE also
+      // requires `version = expectedVersion` and bumps it, so a
+      // concurrent draft edit surfaces as a ConflictError. When omitted,
+      // the status guard alone still prevents a double-send.
+      const whereClauses = [
+        eq(marketingCampaigns.id, parsedId),
+        eq(marketingCampaigns.isDeleted, false),
+        inArray(marketingCampaigns.status, ["draft", "scheduled"]),
+      ];
+      if (expectedVersion !== undefined) {
+        whereClauses.push(eq(marketingCampaigns.version, expectedVersion));
+      }
+
       const result = await db
         .update(marketingCampaigns)
         .set({
@@ -620,14 +663,9 @@ export async function sendCampaignNowAction(
           totalRecipients: stampedTotalRecipients,
           updatedAt: new Date(),
           updatedById: user.id,
+          version: sql`${marketingCampaigns.version} + 1`,
         })
-        .where(
-          and(
-            eq(marketingCampaigns.id, parsedId),
-            eq(marketingCampaigns.isDeleted, false),
-            inArray(marketingCampaigns.status, ["draft", "scheduled"]),
-          ),
-        )
+        .where(and(...whereClauses))
         .returning({
           id: marketingCampaigns.id,
           scheduledFor: marketingCampaigns.scheduledFor,
@@ -856,10 +894,24 @@ export async function getCampaignRecipientPageAction(input: {
       const pageSize = 50;
       const offset = (page - 1) * pageSize;
 
-      const where = input.status
+      // Validate the optional status filter against the canonical enum
+      // allowlist so an arbitrary value can't reach the Postgres enum
+      // column (a bad cast would surface as a generic INTERNAL failure).
+      // An empty/missing status means "no filter" (matches the prior
+      // truthiness guard); a non-empty value must be a known enum member.
+      let statusFilter: z.infer<typeof recipientStatusSchema> | undefined;
+      if (input.status) {
+        const parsedStatus = recipientStatusSchema.safeParse(input.status);
+        if (!parsedStatus.success) {
+          throw new ValidationError("Unknown recipient status filter.");
+        }
+        statusFilter = parsedStatus.data;
+      }
+
+      const where = statusFilter
         ? and(
             eq(campaignRecipients.campaignId, id),
-            eq(campaignRecipients.status, input.status as never),
+            eq(campaignRecipients.status, statusFilter),
           )
         : eq(campaignRecipients.campaignId, id);
 

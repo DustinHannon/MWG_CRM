@@ -394,6 +394,13 @@ export async function restoreActivity(
         // contract consistency).
         deleteReason: null,
         updatedAt: sql`now()`,
+        // OCC bump on restore mirrors archive + update; without it, a
+        // concurrent edit-from-stale-version after restore would silently
+        // win (updateActivity gates on version = expectedVersion AND
+        // is_deleted = false, both of which re-match after an
+        // archive->restore cycle that leaves version unchanged). Symmetric
+        // with restoreLeadsById.
+        version: sql`${activities.version} + 1`,
       })
       .where(eq(activities.id, activityId));
 

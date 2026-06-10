@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { formatInTimeZone } from "date-fns-tz";
 import { toast } from "sonner";
 import { TagSectionClient } from "@/components/tags/tag-section-client";
 import { useShowPicker } from "@/hooks/use-show-picker";
+import { parseDueDateInUserTz } from "@/lib/dates";
+import { type TimePrefs } from "@/lib/format-time";
 import type { TaskRow } from "@/lib/tasks";
 import {
   TASK_PRIORITY_VALUES,
@@ -36,6 +39,12 @@ interface TaskEditDialogProps {
   assignableUsers: { id: string; displayName: string; email: string }[];
   canReassign: boolean;
   /**
+   * User time preferences (timezone) — the due-date input is seeded and
+   * persisted in `timePrefs.timezone` so it matches the calendar day the
+   * list table renders via `formatUserTime(task.dueAt, prefs, "date")`.
+   */
+  timePrefs: TimePrefs;
+  /**
    * Whether the current user can apply / remove tags. Server gate
    * still enforces — these props only drive UI affordances.
    */
@@ -60,6 +69,7 @@ export function TaskEditDialog({
   task,
   assignableUsers,
   canReassign,
+  timePrefs,
   canApplyTags = false,
   canManageTagDefinitions = false,
   onClose,
@@ -72,7 +82,7 @@ export function TaskEditDialog({
     task.priority as TaskPriority,
   );
   const [dueAt, setDueAt] = useState<string>(
-    task.dueAt ? formatDateForInput(task.dueAt) : "",
+    task.dueAt ? formatDateForInput(task.dueAt, timePrefs.timezone) : "",
   );
   const [assignedToId, setAssignedToId] = useState<string>(
     task.assignedToId ?? "",
@@ -105,12 +115,13 @@ export function TaskEditDialog({
         description: description.trim() === "" ? null : description.trim(),
         status,
         priority,
-        // Append explicit local-midnight so `new Date("YYYY-MM-DD")`
-        // is not interpreted as UTC. With local-TZ parsing, the date
-        // round-trips through the input control (display + save) at
-        // the same calendar day; the bare ISO date string would
-        // shift one day west in negative-UTC zones at save time.
-        dueAt: dueAt ? new Date(`${dueAt}T00:00:00`) : null,
+        // Anchor the date-only input to 00:00 in the user's CRM
+        // timezone (not the browser's), matching the queue snooze path
+        // and the inverse of the `formatUserTime(..., "date")` display.
+        // This keeps the calendar day identical across input, save, and
+        // table render even when the browser TZ differs from the CRM
+        // preference (traveling rep / VPN / server-set profile).
+        dueAt: dueAt ? parseDueDateInUserTz(dueAt, timePrefs.timezone) : null,
         assignedToId: assignedToId ? assignedToId : null,
       });
       if (res.ok) {
@@ -293,13 +304,17 @@ export function TaskEditDialog({
 }
 
 /**
- * Format a Date as YYYY-MM-DD for an <input type="date">.
- * Uses the user's local TZ so the date control matches what they see
- * in the table cell.
+ * Format a Date as YYYY-MM-DD for an <input type="date">, rendering the
+ * calendar day the instant falls on in the user's CRM timezone (not the
+ * browser's). This matches the table cell, which renders the same value
+ * via `formatUserTime(task.dueAt, prefs, "date")` using `prefs.timezone`,
+ * and is the inverse of the `parseDueDateInUserTz` save path. Falls back
+ * to the UTC date slice on a bad timezone string.
  */
-function formatDateForInput(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+function formatDateForInput(d: Date, timeZone: string): string {
+  try {
+    return formatInTimeZone(d, timeZone, "yyyy-MM-dd");
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
 }

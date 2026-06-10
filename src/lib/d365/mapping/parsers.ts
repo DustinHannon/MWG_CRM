@@ -170,6 +170,31 @@ export function parseString(v: unknown): string | null {
   return t === "" ? null : t;
 }
 
+/**
+ * Coerce to a safe http/https URL string, or null.
+ *
+ * D365 source records (and the URL render sinks on the lead detail /
+ * print pages, which emit a raw `<a href>`) require that imported
+ * `website` / `linkedinUrl` values can never carry a `javascript:`,
+ * `data:`, or other non-http(s) scheme. This mirrors the canonical
+ * `urlField` / `optionalUrlField` protocol guard in
+ * `@/lib/validation/primitives` (the `^https?://` refine + `new URL`
+ * parse), but as a non-throwing coercion so a malformed source URL
+ * becomes null rather than failing the whole mapping.
+ */
+export function parseHttpUrl(v: unknown): string | null {
+  const s = parseString(v);
+  if (s == null) return null;
+  if (s.length > 2048) return null;
+  if (!/^https?:\/\//i.test(s)) return null;
+  try {
+    new URL(s);
+  } catch {
+    return null;
+  }
+  return s;
+}
+
 /** Coerce to a finite number or null; tolerant of D365's string-encoded numerics. */
 export function parseNumber(v: unknown): number | null {
   if (v == null || v === "") return null;

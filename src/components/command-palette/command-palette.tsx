@@ -94,29 +94,39 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
     return () => window.removeEventListener("mwg:command-palette-open", open);
   }, []);
 
-  // Debounced search.
+  // Debounced search. Each run owns an AbortController so a superseded
+  // fetch is cancelled on cleanup; the `controller.signal.aborted` guard
+  // before setHits prevents a slow earlier response ('ab') from
+  // overwriting a newer one ('abc') if it resolves after the abort.
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     if (query.trim().length === 0) {
       debounceRef.current = window.setTimeout(() => setHits([]), 0);
       return;
     }
+    const controller = new AbortController();
     debounceRef.current = window.setTimeout(async () => {
       try {
         const res = await fetch(
           `/api/search?q=${encodeURIComponent(query)}`,
-          { cache: "no-store" },
+          { cache: "no-store", signal: controller.signal },
         );
         if (!res.ok) {
-          setHits([]);
+          if (!controller.signal.aborted) setHits([]);
           return;
         }
         const data = (await res.json()) as { hits: SearchHit[] };
-        setHits(data.hits);
+        if (!controller.signal.aborted) setHits(data.hits);
       } catch {
-        setHits([]);
+        // AbortError from a superseded run is expected; only surface
+        // empties for a genuine failure of the still-current request.
+        if (!controller.signal.aborted) setHits([]);
       }
     }, 200);
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      controller.abort();
+    };
   }, [query]);
 
   function go(link: string) {

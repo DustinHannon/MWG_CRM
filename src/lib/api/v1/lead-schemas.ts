@@ -15,6 +15,42 @@ import { paginatedListSchema } from "./schemas";
  * names, emails, or UUIDs.
  */
 
+/**
+ * URL accepting only http/https. `z.string().url()` alone accepts
+ * `javascript:`, `data:`, and `vbscript:` URIs, which are then stored
+ * and rendered as a clickable href — a stored-XSS sink. This mirrors
+ * `urlField` in `@/lib/validation/primitives` so the public API enforces
+ * the same protocol allow-list the UI/lib path already does.
+ */
+const httpUrlField = z
+  .string()
+  .trim()
+  .url()
+  .max(2048)
+  .refine((u) => /^https?:\/\//i.test(u), {
+    message: "URL must use http or https",
+  });
+
+/**
+ * Do-not-contact invariant: when `do_not_contact` is true,
+ * `do_not_email` and `do_not_call` must not be false. Mirrors
+ * `dncRefinement` in `@/lib/leads` (camelCase there) so the public API
+ * enforces the identical server-side guarantee — the lib `createLead`/
+ * `updateLead` paths do not re-validate, so this schema is the only gate
+ * for API-origin writes.
+ */
+const dncRefinement = (data: {
+  do_not_contact?: boolean | null;
+  do_not_email?: boolean | null;
+  do_not_call?: boolean | null;
+}) => {
+  if (!data.do_not_contact) return true;
+  return data.do_not_email !== false && data.do_not_call !== false;
+};
+
+const DNC_REFINEMENT_MESSAGE =
+  "Do Not Contact implies Do Not Email and Do Not Call — both must be true.";
+
 export const LeadSchema = registry.register(
   "Lead",
   z.object({
@@ -141,9 +177,11 @@ export const LeadListQuerySchema = z.object({
     .openapi({ example: "00000000-0000-0000-0000-000000000111" }),
 });
 
-export const LeadCreateSchema = registry.register(
-  "LeadCreate",
-  z.object({
+// Unrefined object base. `.refine()` produces a ZodEffects that has no
+// `.partial()`, so LeadUpdateSchema is built from this base and the DNC
+// refinement is re-applied to each registered schema separately (same
+// pattern as `leadCreateSchemaBase` in @/lib/leads).
+const leadCreateObject = z.object({
     salutation: z.string().max(20).nullable().optional().openapi({ example: "Mr." }),
     first_name: z.string().min(1).openapi({ example: "Jane" }),
     last_name: z.string().nullable().optional().openapi({ example: "Doe" }),
@@ -171,8 +209,8 @@ export const LeadCreateSchema = registry.register(
       .openapi({ example: "+1-555-0101" }),
     job_title: z.string().max(200).nullable().optional(),
     industry: z.string().max(100).nullable().optional(),
-    website: z.string().url().nullable().optional(),
-    linkedin_url: z.string().url().nullable().optional(),
+    website: httpUrlField.nullable().optional(),
+    linkedin_url: httpUrlField.nullable().optional(),
     street1: z.string().max(200).nullable().optional(),
     street2: z.string().max(200).nullable().optional(),
     city: z.string().max(100).nullable().optional(),
@@ -205,28 +243,41 @@ export const LeadCreateSchema = registry.register(
       .nullable()
       .optional()
       .openapi({ example: "2026-06-30" }),
+  });
+
+export const LeadCreateSchema = registry.register(
+  "LeadCreate",
+  leadCreateObject.refine(dncRefinement, {
+    message: DNC_REFINEMENT_MESSAGE,
+    path: ["do_not_contact"],
   }),
 );
 
 export const LeadUpdateSchema = registry.register(
   "LeadUpdate",
-  LeadCreateSchema.partial().extend({
-    version: z
-      .number({
-        required_error: "version is required for updates",
-        invalid_type_error: "version must be a number",
-      })
-      .int()
-      .nonnegative()
-      .openapi({
-        description:
-          "Required optimistic-concurrency token. GET the resource " +
-          "first, then send back its current version value. If it " +
-          "no longer matches the stored row the request returns 409 " +
-          "CONFLICT; refetch and retry.",
-        example: 3,
-      }),
-  }),
+  leadCreateObject
+    .partial()
+    .extend({
+      version: z
+        .number({
+          required_error: "version is required for updates",
+          invalid_type_error: "version must be a number",
+        })
+        .int()
+        .nonnegative()
+        .openapi({
+          description:
+            "Required optimistic-concurrency token. GET the resource " +
+            "first, then send back its current version value. If it " +
+            "no longer matches the stored row the request returns 409 " +
+            "CONFLICT; refetch and retry.",
+          example: 3,
+        }),
+    })
+    .refine(dncRefinement, {
+      message: DNC_REFINEMENT_MESSAGE,
+      path: ["do_not_contact"],
+    }),
 );
 
 export type LeadListQuery = z.infer<typeof LeadListQuerySchema>;

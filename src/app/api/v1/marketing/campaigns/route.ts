@@ -24,10 +24,19 @@ export const runtime = "nodejs";
  * pending a separate surface for them).
  */
 
+const CAMPAIGN_STATUSES = [
+  "draft",
+  "scheduled",
+  "sending",
+  "sent",
+  "failed",
+  "cancelled",
+] as const;
+
 const ListQuery = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(25),
-  status: z.string().optional(),
+  status: z.enum(CAMPAIGN_STATUSES).optional(),
 });
 
 const CreateBody = z.object({
@@ -57,19 +66,7 @@ export const GET = withApi(
 
     const conditions = [eq(marketingCampaigns.isDeleted, false)];
     if (parsed.data.status) {
-      // Validate against the enum values from the schema.
-      conditions.push(
-        eq(
-          marketingCampaigns.status,
-          parsed.data.status as
-            | "draft"
-            | "scheduled"
-            | "sending"
-            | "sent"
-            | "failed"
-            | "cancelled",
-        ),
-      );
+      conditions.push(eq(marketingCampaigns.status, parsed.data.status));
     }
 
     const offset = (parsed.data.page - 1) * parsed.data.pageSize;

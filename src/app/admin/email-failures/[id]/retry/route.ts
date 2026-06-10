@@ -7,6 +7,8 @@ import { requireAdmin } from "@/lib/auth-helpers";
 import { writeAudit } from "@/lib/audit";
 import { sendEmailAs } from "@/lib/email";
 import { escapeHtml } from "@/lib/security/escape-html";
+import { rateLimit } from "@/lib/security/rate-limit";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -78,6 +80,36 @@ export async function POST(
         message: `Only 'failed' rows can be retried (this row is '${original.status}').`,
       },
       { status: 422 },
+    );
+  }
+
+  // Throttle real outbound sends. `sendEmailAs` below fires an actual
+  // Microsoft Graph message to `original.toEmail`; without a limit the
+  // same failed row can be retried in a tight loop, producing duplicate
+  // mail plus email_send_log / audit churn. Keyed on admin + row id so
+  // the budget bounds repeated retries of THIS row by THIS admin (a
+  // different row, or a different admin, has its own budget). Placed
+  // after the validation gates so a token is only spent on a row that
+  // would genuinely send — the limiter only rolls back on the blocked
+  // path, so spending it earlier on a 400/404/422 would leak budget.
+  const rl = await rateLimit(
+    { kind: "email_retry", principal: `${admin.id}:${original.id}` },
+    5,
+    3600,
+  );
+  if (!rl.allowed) {
+    logger.warn("email.retry.rate_limited", {
+      adminId: admin.id,
+      originalId: original.id,
+      retryAfter: rl.retryAfter,
+    });
+    return NextResponse.json(
+      {
+        error: "rate_limited",
+        message:
+          "Too many retries for this email. Wait before trying again.",
+      },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter ?? 3600) } },
     );
   }
 

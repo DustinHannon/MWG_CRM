@@ -40,6 +40,12 @@ export function CampaignActions({
   const [error, setError] = useState<string | null>(null);
 
   void status;
+  // Send-now is authorized solely by the `canMarketingCampaignsSendNow`
+  // permission in sendCampaignNowAction (the single authoritative gate),
+  // matching the wizard and the public API route. Visibility here tracks
+  // that permission only — gating the button additionally on isAdmin made
+  // the detail UI imply an admin-only rule the action never enforced.
+  void isAdmin;
 
   function callCancel() {
     if (!confirm("Cancel this campaign? Recipients will not receive it.")) {
@@ -111,7 +117,7 @@ export function CampaignActions({
             Cancel
           </button>
         ) : null}
-        {canSendNow && isAdmin ? (
+        {canSendNow ? (
           <button
             type="button"
             disabled={pending}

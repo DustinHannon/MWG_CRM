@@ -59,6 +59,14 @@ export interface BaseFetchOpts {
   /** When true, $expand the entity's parent / child links. Only valid
    * for the four primary entities; ignored for activities. */
   expand?: boolean;
+  /**
+   * Operator-selected statecode restriction (from the run scope's
+   * "Active records only" toggle). When provided, drives the statecode
+   * `$filter` clause and OVERRIDES the per-entity `activeStatecodeOnly`
+   * default. When omitted, the per-entity default applies. Ignored when
+   * `ids` is supplied (forced re-fetch drops the statecode gate so
+   * archived rows can be re-pulled). */
+  statecode?: number[];
   /** Optional caller-provided abort signal. */
   signal?: AbortSignal;
 }
@@ -278,8 +286,20 @@ interface BuildFilterArgs {
   /** Specific IDs to force-fetch. */
   ids?: string[];
   /**
-   * Restrict to active rows. When omitted no statecode clause is
-   * applied — useful for activities where statecode==1 means
+   * Operator-selected statecode codes from the run scope. Presence is
+   * authoritative and OVERRIDES the per-entity `activeStatecodeOnly`
+   * default:
+   *   - one code  → `statecode eq N`
+   *   - many codes → `statecode in (a,b,...)`
+   *   - empty array (`[]`) → explicit "all states": NO statecode clause
+   * When `undefined` (key absent), the per-entity `activeStatecodeOnly`
+   * default applies.
+   */
+  statecode?: number[];
+  /**
+   * Per-entity default: restrict to active rows when no explicit
+   * `statecode` is supplied. When both are omitted no statecode clause
+   * is applied — useful for activities where statecode==1 means
    * completed (still wanted) vs statecode==2 cancelled.
    */
   activeStatecodeOnly?: boolean;
@@ -290,7 +310,20 @@ function buildFilter(args: BuildFilterArgs): string | undefined {
   if (args.modifiedSince) {
     parts.push(`modifiedon ge ${odataDate(args.modifiedSince)}`);
   }
-  if (args.activeStatecodeOnly) {
+  // Operator-selected statecode (run scope) is authoritative when the
+  // key is present — it overrides the per-entity default. An empty
+  // array means "all states" (no clause). Only fall back to the
+  // per-entity `activeStatecodeOnly` default when no statecode key was
+  // supplied at all.
+  if (args.statecode !== undefined) {
+    const codes = args.statecode.filter((c) => Number.isInteger(c));
+    if (codes.length === 1) {
+      parts.push(`statecode eq ${codes[0]}`);
+    } else if (codes.length > 1) {
+      parts.push(`statecode in (${codes.join(",")})`);
+    }
+    // codes.length === 0 → explicit all-states, emit no clause.
+  } else if (args.activeStatecodeOnly) {
     parts.push("statecode eq 0");
   }
   if (args.ids?.length && args.pkColumn) {
@@ -335,8 +368,12 @@ async function fetchByQuery<T>(
     modifiedSince: opts.modifiedSince,
     pkColumn: spec.pkColumn,
     ids: opts.ids,
-    // When we're force-fetching by id, drop the statecode gate so
-    // archived rows can still be re-pulled for review.
+    // When we're force-fetching by id, drop the statecode gate entirely
+    // so archived rows can still be re-pulled for review. Otherwise the
+    // operator-selected statecode (run scope) overrides the per-entity
+    // default; if the operator didn't select any, fall back to the
+    // per-entity `activeStatecodeOnly` default.
+    statecode: opts.ids ? undefined : opts.statecode,
     activeStatecodeOnly: !opts.ids && spec.activeStatecodeOnly,
   });
 

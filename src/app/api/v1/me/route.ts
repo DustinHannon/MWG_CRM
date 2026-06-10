@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { apiKeys } from "@/db/schema/api-keys";
 import { users } from "@/db/schema/users";
 import { withApi } from "@/lib/api/handler";
+import { errorResponse } from "@/lib/api/errors";
 import { registry } from "@/lib/openapi/registry";
 import { ALL_SCOPES } from "@/lib/api/scopes";
 import { MeSchema } from "@/lib/api/v1/meta-schemas";
@@ -44,6 +45,9 @@ export const GET = withApi(
       .from(apiKeys)
       .where(eq(apiKeys.id, key.id))
       .limit(1);
+    if (!keyRow) {
+      return errorResponse(401, "KEY_REVOKED", "Key no longer exists");
+    }
     const [creatorRow] = await db
       .select({
         id: users.id,

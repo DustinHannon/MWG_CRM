@@ -62,6 +62,10 @@ export async function remapImportedByNameAction(
           userId: parsed.data.newUserId,
           importedByName: null,
           updatedAt: sql`now()`,
+          // Bump the OCC stamp so any concurrent inline edit holding the
+          // pre-remap version is invalidated (ConflictError), consistent
+          // with updateActivity().
+          version: sql`${activities.version} + 1`,
         })
         .where(
           and(

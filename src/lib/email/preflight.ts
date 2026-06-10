@@ -70,12 +70,29 @@ export async function checkMailboxKind(
   );
 
   let kind: MailboxKind = "unknown";
+  // `unknown` has two flavors: a definitive determination (user not found,
+  // disabled account, no Entra linkage) that's safe to cache for 24h, and a
+  // transient/inconclusive one (Graph timeout, network error, 5xx, or
+  // not-yet-configured Entra) that we must NOT persist — caching it would pin a
+  // healthy mailbox to a failing state until the next login re-probe. Default
+  // to non-transient and only flip when the failure is genuinely inconclusive.
+  let transient = false;
 
   if (!summary.ok || !summary.data) {
     if (summary.status === 404) {
       kind = "unknown";
-    } else if (summary.error?.code === "ENTRA_NOT_CONFIGURED") {
-      // Don't log this loudly — it's a config gap, not a user-facing failure.
+    } else if (summary.status === 0 || summary.status >= 500) {
+      // TIMEOUT / NETWORK_ERROR (status 0), Graph 5xx, or the synthetic 503
+      // from ENTRA_NOT_CONFIGURED — inconclusive, re-probe next time.
+      transient = true;
+      if (summary.error?.code !== "ENTRA_NOT_CONFIGURED") {
+        // Config gaps don't need a loud log; real transient blips do.
+        logger.warn("email_preflight.summary_failed", {
+          userId: user.userId,
+          status: summary.status,
+          errorCode: summary.error?.code,
+        });
+      }
       kind = "unknown";
     } else {
       logger.warn("email_preflight.summary_failed", {
@@ -104,6 +121,16 @@ export async function checkMailboxKind(
       kind = "on_premises";
     } else if (probe.status === 404) {
       kind = "on_premises";
+    } else if (probe.status === 0 || probe.status >= 500) {
+      // Same transient surface as the summary call — don't cache an
+      // inconclusive probe failure; re-probe on the next attempt.
+      transient = true;
+      logger.warn("email_preflight.probe_failed", {
+        userId: user.userId,
+        status: probe.status,
+        errorCode: probe.error?.code,
+      });
+      kind = "unknown";
     } else {
       logger.warn("email_preflight.probe_failed", {
         userId: user.userId,
@@ -114,6 +141,13 @@ export async function checkMailboxKind(
     }
   } else {
     kind = "on_premises";
+  }
+
+  if (transient) {
+    // Inconclusive determination (Graph timeout/network/5xx/not-configured):
+    // don't persist or audit. Leaving `mailboxCheckedAt` untouched means the
+    // next preflight re-probes Graph instead of serving a stale 24h failure.
+    return buildResult(kind, false);
   }
 
   await persistKind(user.userId, kind);

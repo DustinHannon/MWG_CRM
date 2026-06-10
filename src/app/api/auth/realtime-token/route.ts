@@ -6,6 +6,7 @@ import { permissions, users } from "@/db/schema/users";
 import { requireSession } from "@/lib/auth-helpers";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { rateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,24 +31,11 @@ export const dynamic = "force-dynamic";
  */
 const JWT_TTL_SECONDS = 60 * 60; // 1 hour
 
-// Per-process rate limit: 30 mints/min/user. Cold starts reset, which
-// is fine because the realtime client only refreshes once per ~55min.
-const MINT_LIMIT_WINDOW_MS = 60 * 1000;
+// Mint rate limit: 30/min/user via the canonical Postgres limiter so the
+// bound holds across Vercel instances and cold starts. The realtime client
+// only refreshes once per ~55min, so a legitimate user never approaches it.
 const MINT_LIMIT = 30;
-const mintAttempts = new Map<string, number[]>();
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const cutoff = now - MINT_LIMIT_WINDOW_MS;
-  const prev = (mintAttempts.get(userId) ?? []).filter((t) => t > cutoff);
-  if (prev.length >= MINT_LIMIT) {
-    mintAttempts.set(userId, prev);
-    return false;
-  }
-  prev.push(now);
-  mintAttempts.set(userId, prev);
-  return true;
-}
+const MINT_WINDOW_SECONDS = 60;
 
 export async function GET(): Promise<NextResponse> {
   const session = await requireSession();
@@ -61,7 +49,12 @@ export async function GET(): Promise<NextResponse> {
     );
   }
 
-  if (!checkRateLimit(session.id)) {
+  const rl = await rateLimit(
+    { kind: "realtime_token", principal: session.id },
+    MINT_LIMIT,
+    MINT_WINDOW_SECONDS,
+  );
+  if (!rl.allowed) {
     return NextResponse.json(
       { error: "rate-limited" },
       { status: 429 },

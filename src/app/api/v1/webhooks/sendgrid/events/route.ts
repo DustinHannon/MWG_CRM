@@ -8,6 +8,7 @@ import {
   parseEvents,
   processEvent,
   readSignatureHeaders,
+  releaseSgEventClaim,
   tryClaimSgEvent,
   verifySendGridSignature,
   verifyTimestampFreshness,
@@ -44,10 +45,14 @@ export const maxDuration = 60;
  * Every reject path emits a `marketing.security.webhook.*` audit row
  * via `writeSystemAudit` so SOC 2 has a forensic trail.
  *
- * Returns 200 quickly. SendGrid retries non-2xx responses for 24h, so
- * we want to ack fast and process inline. If processing partially fails
- * we still ack 200 — events are also reconciled by the hourly
- * suppression sync cron, so we don't need webhook-driven retry storms.
+ * Returns 200 when every event processed (or was a known duplicate). If
+ * one or more events fail transiently, their dedupe claim is released and
+ * the route returns a non-2xx so SendGrid re-delivers the batch within
+ * its 24h retry window — the already-succeeded events are skipped as
+ * duplicates on retry, so reprocessing only retries the failures. The
+ * hourly suppression sync cron only reconciles `marketing_suppressions`;
+ * it does NOT backfill `marketing_email_events` or campaign counters, so
+ * SendGrid retry is the only recovery path for those.
  */
 
 const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
@@ -249,9 +254,24 @@ async function handlePost(req: Request): Promise<Response> {
       succeeded++;
     } catch (err) {
       failed++;
-      // Don't let one bad event block the rest. The forensic event row
-      // is already inserted before reconcile runs, so failures here are
-      // just lost counter increments — caught by hourly resync.
+      // Don't let one bad event block the rest, but DO release this
+      // event's dedupe claim (when it was a real claim, not a bypass) so
+      // SendGrid's retry can reprocess it. The dedupe row was committed
+      // before processEvent ran; leaving it would permanently drop this
+      // event's forensic row + counter increment, and no cron backfills
+      // those. Releasing is best-effort — if the release itself fails we
+      // still surface the batch as non-2xx below so SendGrid retries.
+      if (!claim.bypassed) {
+        await releaseSgEventClaim(event.sg_event_id).catch((releaseErr) => {
+          logger.error("sendgrid.webhook.claim_release_failed", {
+            sgEventId: event.sg_event_id ?? null,
+            errorMessage:
+              releaseErr instanceof Error
+                ? releaseErr.message
+                : String(releaseErr),
+          });
+        });
+      }
       logger.error("sendgrid.webhook.event_failed", {
         event: event.event,
         sgMessageId: event.sg_message_id ?? null,
@@ -280,11 +300,21 @@ async function handlePost(req: Request): Promise<Response> {
     duplicates,
   });
 
-  return NextResponse.json({
-    ok: true,
-    received: events.length,
-    succeeded,
-    failed,
-    duplicates,
-  });
+  // If any event failed transiently, return a non-2xx so SendGrid
+  // re-delivers the batch within its 24h retry window. The failed events
+  // had their dedupe claim released above, so they reprocess; the
+  // succeeded events stay claimed and are skipped as duplicates on retry.
+  // Without this, a 2xx would ack the batch and the failures would be
+  // lost forever (no cron backfills events/counters).
+  const status = failed > 0 ? 503 : 200;
+  return NextResponse.json(
+    {
+      ok: failed === 0,
+      received: events.length,
+      succeeded,
+      failed,
+      duplicates,
+    },
+    { status },
+  );
 }

@@ -29,8 +29,8 @@ export function AccountRowActions({
       restorePath={isAdmin ? "archive" : "notifications"}
       extraBody={
         <p>
-          Linked Contacts and Opportunities remain visible but show an
-          archived-account indicator on their detail pages.
+          Linked contacts and opportunities are archived with the account and
+          restored together.
         </p>
       }
       onConfirm={async (reason) => {

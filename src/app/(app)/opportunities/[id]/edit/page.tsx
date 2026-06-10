@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { opportunities } from "@/db/schema/crm-records";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { requireSession } from "@/lib/auth-helpers";
 import { TagSection } from "@/components/tags/tag-section";
 import { OpportunityEditForm } from "./_components/opportunity-edit-form";
 
@@ -20,7 +20,6 @@ export default async function EditOpportunityPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireSession();
-  const perms = await getPermissions(user.id);
   const { id } = await params;
 
   const [opp] = await db
@@ -30,8 +29,7 @@ export default async function EditOpportunityPage({
     .limit(1);
   if (!opp || opp.isDeleted) notFound();
 
-  const canEdit =
-    user.isAdmin || opp.ownerId === user.id || perms.canViewAllRecords;
+  const canEdit = user.isAdmin || opp.ownerId === user.id;
   if (!canEdit) redirect(`/opportunities/${id}`);
 
   return (

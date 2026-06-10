@@ -1,15 +1,42 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { savedReports } from "@/db/schema/saved-reports";
+import {
+  MARKETING_REPORT_ENTITY_TYPES,
+  savedReports,
+} from "@/db/schema/saved-reports";
 import { writeAudit } from "@/lib/audit";
-import { requireSession } from "@/lib/auth-helpers";
+import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { env } from "@/lib/env";
 import { reportDefinitionSchema } from "@/lib/reports/request-schemas";
 import { isValidField } from "@/lib/reports/schemas";
+import { rateLimit } from "@/lib/security/rate-limit";
 import { withErrorBoundary } from "@/lib/server-action";
-import { ValidationError } from "@/lib/errors";
+import { ForbiddenError, RateLimitError, ValidationError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/**
+ * Report definitions are small; reject anything larger than this before
+ * parsing so a hostile client can't drive an unbounded JSON parse.
+ */
+const MAX_BODY_BYTES = 16 * 1024;
+
+async function readReportBody(req: Request): Promise<unknown> {
+  const len = Number(req.headers.get("content-length") ?? "0");
+  if (Number.isFinite(len) && len > MAX_BODY_BYTES) {
+    throw new ValidationError("Request body too large.");
+  }
+  const text = await req.text();
+  if (text.length > MAX_BODY_BYTES) {
+    throw new ValidationError("Request body too large.");
+  }
+  try {
+    return text.length === 0 ? {} : JSON.parse(text);
+  } catch {
+    throw new ValidationError("Request body must be valid JSON.");
+  }
+}
 
 /**
  * POST /api/reports
@@ -24,7 +51,6 @@ export const runtime = "nodejs";
  */
 export async function POST(req: Request) {
   const viewer = await requireSession();
-  const body = await req.json();
   const result = await withErrorBoundary(
     {
       action: "reports.create",
@@ -32,7 +58,39 @@ export async function POST(req: Request) {
       entityType: "report",
     },
     async () => {
+      // Per-user throttle on the report write path (shares the report
+      // builder's preview bucket — both are session-user report
+      // operations).
+      const rl = await rateLimit(
+        { kind: "filter_preview", principal: viewer.id },
+        env.RATE_LIMIT_FILTER_PREVIEW_PER_USER_PER_MINUTE,
+        60,
+      );
+      if (!rl.allowed) {
+        throw new RateLimitError(
+          `Too many requests. Retry in ${rl.retryAfter ?? 60}s.`,
+        );
+      }
+
+      const body = await readReportBody(req);
       const input = reportDefinitionSchema.parse(body);
+
+      // Marketing-entity reports may only be authored by admins or users
+      // with the marketing-reports permission — the same gate the
+      // view/edit paths apply. Without this a non-marketing user could
+      // create (and share) a marketing-typed report definition.
+      if (
+        (MARKETING_REPORT_ENTITY_TYPES as readonly string[]).includes(
+          input.entityType,
+        )
+      ) {
+        const perms = await getPermissions(viewer.id);
+        if (!viewer.isAdmin && perms.canMarketingReportsView !== true) {
+          throw new ForbiddenError(
+            "Marketing reports require admin or marketing manager role.",
+          );
+        }
+      }
 
       // Server-side whitelist check: even though the schema accepts any
       // string in `fields` / `groupBy`, those values must be real

@@ -9,7 +9,8 @@ import {
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { users } from "@/db/schema/users";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, writeSystemAudit } from "@/lib/audit";
+import { AUDIT_SYSTEM_ACTORS } from "@/lib/audit/events";
 import {
   SYSTEM_SENTINEL_USER_EMAIL,
   SYSTEM_SENTINEL_USER_ID,
@@ -327,9 +328,18 @@ export async function sendCampaign(
   // still in `queued`; rows already advanced to sent/bounced/dropped/
   // etc. by an earlier partial run are skipped — resume never re-emails.
   const recipientStatusByKey = new Map<string, string>();
+  // rowKey → the merge data captured at queue time. The send batch reads
+  // this in preference to live lead data so a lead edited between the
+  // original queue and a mid-batch-crash resume still receives the values
+  // recorded at queue time (the stated snapshot invariant). Falls back to
+  // freshly-resolved data only when a row has no snapshot.
+  const snapshotByKey = new Map<string, Record<string, string>>();
   for (const row of inserted) {
     recipientByLead.set(row.rowKey, row.id);
     recipientStatusByKey.set(row.rowKey, row.status);
+    if (row.snapshotMergeData) {
+      snapshotByKey.set(row.rowKey, row.snapshotMergeData);
+    }
   }
 
   let totalAccepted = 0;
@@ -357,6 +367,7 @@ export async function sendCampaign(
         template,
         recipients: slice,
         recipientByLead,
+        snapshotByKey,
       });
       totalAccepted += acceptedInBatch;
       failingSlice = null;
@@ -751,6 +762,10 @@ function readSendGridErrorDetail(body: unknown): string | null {
  * error is what matters. A future repair sweep or admin tool can
  * recover orphan-sending rows if the failure_reason update itself fails.
  *
+ * Also emits a CAMPAIGN_SEND_FAILED audit for the 'sending' -> 'failed'
+ * transition so the pre-batch failure class has the same forensic trail
+ * as the in-batch failure path. Best-effort, like the status flip.
+ *
  * `phase` is a short label distinguishing which pre-batch step threw
  * ("load" / "prepare") so operators can correlate the structured log
  * with the originating block.
@@ -786,6 +801,28 @@ async function markStuckSendingFailed(
         updateErr instanceof Error ? updateErr.message : String(updateErr),
     });
   }
+
+  // Record the lifecycle transition in the forensic trail. The in-batch
+  // failure path audits CAMPAIGN_SEND_FAILED for the equivalent
+  // 'sending' -> 'failed' move; the pre-batch path must do the same so a
+  // campaign that lands in the user-visible terminal 'failed' state (and
+  // surfaces on the failures dashboard) always has an audit_log record of
+  // who/what/why. System actor: the send runs from the scheduled-campaign
+  // cron, and in the 'load' phase the campaign row may not even be loaded,
+  // so there is no reliable user to attribute to (mirrors the
+  // stuck-sending recovery sweep, which audits with the same actor).
+  // No try/catch — writeSystemAudit is already best-effort.
+  await writeSystemAudit({
+    actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.CRON,
+    action: MARKETING_AUDIT_EVENTS.CAMPAIGN_SEND_FAILED,
+    targetType: "marketing_campaign",
+    targetId: campaignId,
+    after: {
+      batchId,
+      phase,
+      errorMessage: truncateForColumn(errorMessage, 500),
+    },
+  });
 }
 
 async function loadCampaignContext(
@@ -870,7 +907,14 @@ async function loadCampaignContext(
 async function insertRecipientRows(
   campaignId: string,
   candidates: RecipientCandidate[],
-): Promise<{ id: string; rowKey: string; status: string }[]> {
+): Promise<
+  {
+    id: string;
+    rowKey: string;
+    status: string;
+    snapshotMergeData: Record<string, string> | null;
+  }[]
+> {
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
     const slice = candidates.slice(i, i + BATCH_SIZE);
     // Recipients enter `queued` — the canonical pre-send state. Rolled
@@ -931,6 +975,7 @@ async function insertRecipientRows(
       leadId: campaignRecipients.leadId,
       email: campaignRecipients.email,
       status: campaignRecipients.status,
+      snapshotMergeData: campaignRecipients.snapshotMergeData,
     })
     .from(campaignRecipients)
     .where(eq(campaignRecipients.campaignId, campaignId));
@@ -939,7 +984,26 @@ async function insertRecipientRows(
     id: row.id,
     rowKey: recipientKey({ leadId: row.leadId, email: row.email }),
     status: row.status,
+    snapshotMergeData: coerceSnapshotMergeData(row.snapshotMergeData),
   }));
+}
+
+/**
+ * Narrow the jsonb `snapshot_merge_data` column (typed `unknown`) into
+ * the `Record<string, string>` shape `buildMergeData` produces. Returns
+ * `null` for a missing/invalid snapshot so the send path can fall back
+ * to live merge data. Coerces non-string leaf values defensively in
+ * case an older row stored a non-string (the column is schemaless jsonb).
+ */
+function coerceSnapshotMergeData(
+  raw: unknown,
+): Record<string, string> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    out[key] = typeof value === "string" ? value : String(value ?? "");
+  }
+  return out;
 }
 
 /**
@@ -995,16 +1059,27 @@ interface SendBatchInput {
   template: TemplateRow;
   recipients: RecipientCandidate[];
   recipientByLead: Map<string, string>;
+  /**
+   * rowKey → queue-time merge-data snapshot. Read in preference to live
+   * lead data so a resumed batch (after a mid-batch crash) sends the
+   * values captured when the campaign was queued, honoring the snapshot
+   * invariant. Missing entry falls back to `buildMergeData`.
+   */
+  snapshotByKey: Map<string, Record<string, string>>;
 }
 
 async function sendBatch(input: SendBatchInput): Promise<number> {
   if (input.recipients.length === 0) return 0;
   const { sgMail } = getSendGrid();
   const personalizations = input.recipients.map((r) => {
-    const recipientId = input.recipientByLead.get(recipientKey(r)) ?? "";
+    const key = recipientKey(r);
+    const recipientId = input.recipientByLead.get(key) ?? "";
+    // Use the queue-time snapshot when present; fall back to live merge
+    // data only for rows that never captured one (older rows / null).
+    const mergeData = input.snapshotByKey.get(key) ?? buildMergeData(r);
     return {
       to: [{ email: r.email }],
-      dynamic_template_data: buildMergeData(r),
+      dynamic_template_data: mergeData,
       custom_args: {
         campaign_id: input.campaign.id,
         recipient_id: recipientId,

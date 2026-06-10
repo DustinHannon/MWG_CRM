@@ -418,10 +418,16 @@ function Field({
   if (mailto) inner = <a href={`mailto:${value}`} className="hover:underline">{value}</a>;
   if (tel) inner = <a href={`tel:${value}`} className="hover:underline">{value}</a>;
   if (link)
-    inner = (
+    // Only emit a clickable href when the value is an http/https URL.
+    // A stored `javascript:`/`data:`/`vbscript:` value (e.g. persisted
+    // via the public API before its schema enforced the protocol) would
+    // otherwise become an executable link — render it as plain text.
+    inner = /^https?:\/\//i.test(value) ? (
       <a href={value} target="_blank" rel="noreferrer" className="hover:underline">
         {value}
       </a>
+    ) : (
+      value
     );
 
   return (

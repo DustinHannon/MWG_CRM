@@ -82,31 +82,39 @@ export async function GET(req: NextRequest) {
 
   const where = wheres.length > 0 ? and(...wheres) : undefined;
 
-  await db.execute(sql`SET LOCAL statement_timeout = '30s'`);
-
-  const rows = await db
-    .select({
-      id: apiUsageLog.id,
-      createdAt: apiUsageLog.createdAt,
-      apiKeyNameSnapshot: apiUsageLog.apiKeyNameSnapshot,
-      apiKeyPrefixSnapshot: apiUsageLog.apiKeyPrefixSnapshot,
-      method: apiUsageLog.method,
-      path: apiUsageLog.path,
-      action: apiUsageLog.action,
-      statusCode: apiUsageLog.statusCode,
-      responseTimeMs: apiUsageLog.responseTimeMs,
-      ipAddress: apiUsageLog.ipAddress,
-      userAgent: apiUsageLog.userAgent,
-      errorCode: apiUsageLog.errorCode,
-      errorMessage: apiUsageLog.errorMessage,
-      requestQuery: apiUsageLog.requestQuery,
-      requestBodySummary: apiUsageLog.requestBodySummary,
-      responseSummary: apiUsageLog.responseSummary,
-    })
-    .from(apiUsageLog)
-    .where(where)
-    .orderBy(desc(apiUsageLog.createdAt), desc(apiUsageLog.id))
-    .limit(MAX_ROWS);
+  // Exporting 50k rows from a multi-million-row table can be slow with
+  // loose filters. 30s caps runaway queries. SET LOCAL only applies
+  // inside a transaction, so the timeout-set and the SELECT must run in
+  // the same tx. set_config(..., true) is SET LOCAL with the value as a
+  // bind parameter (Supavisor-safe).
+  const rows = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT set_config('statement_timeout', '30s', true)`,
+    );
+    return tx
+      .select({
+        id: apiUsageLog.id,
+        createdAt: apiUsageLog.createdAt,
+        apiKeyNameSnapshot: apiUsageLog.apiKeyNameSnapshot,
+        apiKeyPrefixSnapshot: apiUsageLog.apiKeyPrefixSnapshot,
+        method: apiUsageLog.method,
+        path: apiUsageLog.path,
+        action: apiUsageLog.action,
+        statusCode: apiUsageLog.statusCode,
+        responseTimeMs: apiUsageLog.responseTimeMs,
+        ipAddress: apiUsageLog.ipAddress,
+        userAgent: apiUsageLog.userAgent,
+        errorCode: apiUsageLog.errorCode,
+        errorMessage: apiUsageLog.errorMessage,
+        requestQuery: apiUsageLog.requestQuery,
+        requestBodySummary: apiUsageLog.requestBodySummary,
+        responseSummary: apiUsageLog.responseSummary,
+      })
+      .from(apiUsageLog)
+      .where(where)
+      .orderBy(desc(apiUsageLog.createdAt), desc(apiUsageLog.id))
+      .limit(MAX_ROWS);
+  });
 
   const headers = [
     "When (UTC)",

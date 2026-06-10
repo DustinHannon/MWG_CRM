@@ -35,11 +35,6 @@ export function NotificationsSection({
   subscriptions: SubscriptionRow[];
 }) {
   const [pending, startTransition] = useTransition();
-  // version travels with every save and is updated from
-  // the server's reply so subsequent toggles use the latest value.
-  const [version, setVersion] = useState<number | undefined>(
-    prefs?.version ?? undefined,
-  );
   // local optimistic copy of the subscriptions list
   // so unsubscribe / frequency-update feel responsive. Server actions
   // revalidate /settings on success which refills from the DB.
@@ -48,9 +43,8 @@ export function NotificationsSection({
 
   function save(patch: PreferencesPatch) {
     startTransition(async () => {
-      const res = await updatePreferencesAction({ ...patch, version });
+      const res = await updatePreferencesAction(patch);
       if (res.ok) {
-        setVersion(res.data.version);
         toast.success("Saved");
       } else {
         toast.error(res.error, { duration: Infinity, dismissible: true });

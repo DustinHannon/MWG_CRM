@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
 import { ThemeControl } from "@/components/theme/theme-control";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -48,15 +48,11 @@ const LANDING_OPTIONS = [
 
 export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProps) {
   const [pending, startTransition] = useTransition();
-  const [version, setVersion] = useState<number | undefined>(
-    prefs?.version ?? undefined,
-  );
 
   function save(patch: PreferencesPatch) {
     startTransition(async () => {
-      const res = await updatePreferencesAction({ ...patch, version });
+      const res = await updatePreferencesAction(patch);
       if (res.ok) {
-        setVersion(res.data.version);
         toast.success("Saved");
       } else {
         toast.error(res.error, { duration: Infinity, dismissible: true });
@@ -86,12 +82,8 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
             <ThemeControl
               initial={theme as "system" | "light" | "dark"}
               onSave={async (next) => {
-                const res = await updatePreferencesAction({
-                  theme: next,
-                  version,
-                });
+                const res = await updatePreferencesAction({ theme: next });
                 if (res.ok) {
-                  setVersion(res.data.version);
                   return { ok: true };
                 }
                 return { ok: false, error: res.error };

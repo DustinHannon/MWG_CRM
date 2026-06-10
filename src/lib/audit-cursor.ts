@@ -128,34 +128,42 @@ export async function listAuditLogCursor(args: {
   // btree `audit_action_idx` and seq-scan a growing forensic table. 5s
   // cap matches the prior search surface; the category path has the
   // same scan profile so it shares the guard.
-  if (filters.search || filters.category) {
-    await db.execute(sql`SET LOCAL statement_timeout = '5s'`);
-  }
-
-  const [rowsRaw, totalRow] = await Promise.all([
-    db
-      .select({
-        id: auditLog.id,
-        actorId: auditLog.actorId,
-        actorDisplayName: users.displayName,
-        action: auditLog.action,
-        targetType: auditLog.targetType,
-        targetId: auditLog.targetId,
-        beforeJson: auditLog.beforeJson,
-        afterJson: auditLog.afterJson,
-        requestId: auditLog.requestId,
-        createdAt: auditLog.createdAt,
-      })
-      .from(auditLog)
-      .leftJoin(users, eq(auditLog.actorId, users.id))
-      .where(finalWhere)
-      .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
-      .limit(pageSize + 1),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(auditLog)
-      .where(baseWhere),
-  ]);
+  //
+  // SET LOCAL only applies inside a transaction, so the timeout-set and
+  // the list+count SELECTs must run in the same tx. set_config(..., true)
+  // is SET LOCAL with the value as a bind parameter (Supavisor-safe).
+  const needsTimeout = Boolean(filters.search || filters.category);
+  const [rowsRaw, totalRow] = await db.transaction(async (tx) => {
+    if (needsTimeout) {
+      await tx.execute(
+        sql`SELECT set_config('statement_timeout', '5s', true)`,
+      );
+    }
+    return Promise.all([
+      tx
+        .select({
+          id: auditLog.id,
+          actorId: auditLog.actorId,
+          actorDisplayName: users.displayName,
+          action: auditLog.action,
+          targetType: auditLog.targetType,
+          targetId: auditLog.targetId,
+          beforeJson: auditLog.beforeJson,
+          afterJson: auditLog.afterJson,
+          requestId: auditLog.requestId,
+          createdAt: auditLog.createdAt,
+        })
+        .from(auditLog)
+        .leftJoin(users, eq(auditLog.actorId, users.id))
+        .where(finalWhere)
+        .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+        .limit(pageSize + 1),
+      tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(auditLog)
+        .where(baseWhere),
+    ]);
+  });
 
   let nextCursor: string | null = null;
   let data = rowsRaw;

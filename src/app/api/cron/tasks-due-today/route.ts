@@ -35,22 +35,39 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: true, processed: 0 });
     }
 
-    await createNotifications(
+    // entityId/entityType stamp the originating task so a cron retry or
+    // double-trigger can be deduped per (assignee, task, kind, day) by
+    // listTasksDueTodayForCron's anti-join, and so the audit count below
+    // reflects rows actually inserted, not rows attempted.
+    const notificationsCreated = await createNotifications(
       tasks.map((t) => ({
         userId: t.assignedToId,
         kind: "task_due" as const,
         title: `Due today: ${t.title}`,
         link: t.leadId ? `/leads/${t.leadId}` : "/tasks",
+        entityType: "task" as const,
+        entityId: t.id,
       })),
     );
+
+    // createNotifications is best-effort and swallows its insert failure,
+    // so the audit records the COUNT actually inserted (0 on a swallowed
+    // failure), not tasks.length — the forensic row must not assert
+    // deliveries that did not happen.
+    if (notificationsCreated !== tasks.length) {
+      logger.warn("cron.tasks_due_today_partial_notifications", {
+        tasksDue: tasks.length,
+        notificationsCreated,
+      });
+    }
 
     await writeSystemAudit({
       actorEmailSnapshot: AUDIT_SYSTEM_ACTORS.CRON,
       action: AUDIT_EVENTS.SYSTEM_TASKS_DUE_TODAY,
-      after: { notificationsCreated: tasks.length, tasksDue: tasks.length },
+      after: { notificationsCreated, tasksDue: tasks.length },
     });
 
-    return NextResponse.json({ ok: true, processed: tasks.length });
+    return NextResponse.json({ ok: true, processed: notificationsCreated });
   } catch (err) {
     logger.error("cron.tasks_due_today_failed", {
       errorMessage: err instanceof Error ? err.message : String(err),

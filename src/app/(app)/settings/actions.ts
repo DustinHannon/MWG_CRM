@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
@@ -66,69 +66,103 @@ export interface PreferencesUpdateData {
   version: number;
 }
 
+// max attempts to re-read-and-update when a genuine concurrent
+// writer bumps the version between our read and our conditional update.
+// The settings page is single-owner, so true contention is rare and a
+// short bounded retry resolves it without surfacing a spurious conflict.
+const MAX_OCC_ATTEMPTS = 3;
+
 export async function updatePreferencesAction(
-  patch: PreferencesPatch & { version?: number },
+  patch: PreferencesPatch,
 ): Promise<ActionResult<PreferencesUpdateData>> {
   return withErrorBoundary(
     { action: "user_preferences.update" },
     async (): Promise<PreferencesUpdateData> => {
       const session = await requireSession();
 
-      // extract version from the patch before Zod validates the
-      // pref slice. Optional: a brand-new prefs row has no version yet, so
-      // first-save can omit it.
-      const expectedVersion = patch.version;
-      const cleanPatch: Record<string, unknown> = { ...patch };
-      delete cleanPatch.version;
+      const parsed = updatePreferencesSchema.parse(patch);
 
-      const parsed = updatePreferencesSchema.parse(cleanPatch);
+      // Re-read the current version server-side on each attempt rather
+      // than trusting a client-supplied cursor. The /settings page renders
+      // two independent sub-sections (Preferences + Notifications) that both
+      // write this single user_preferences row; a per-section client cursor
+      // desyncs after the first save and produces a false "modified in
+      // another tab" conflict on normal single-page use. Reading the version
+      // here keeps OCC honest against a genuine concurrent writer while never
+      // false-conflicting on a single owner's own page.
+      for (let attempt = 0; attempt < MAX_OCC_ATTEMPTS; attempt++) {
+        const beforeRows = await db
+          .select()
+          .from(userPreferences)
+          .where(eq(userPreferences.userId, session.id))
+          .limit(1);
+        const before = beforeRows[0] ?? null;
 
-      const beforeRows = await db
-        .select()
-        .from(userPreferences)
-        .where(eq(userPreferences.userId, session.id))
-        .limit(1);
+        if (before === null) {
+          // No row yet: INSERT. If a concurrent request inserts first, the
+          // ON CONFLICT DO NOTHING returns 0 rows and we loop to UPDATE it.
+          const inserted = await db
+            .insert(userPreferences)
+            .values({ userId: session.id, ...parsed })
+            .onConflictDoNothing({ target: userPreferences.userId })
+            .returning({ version: userPreferences.version });
 
-      const set: Record<string, unknown> = {
-        ...parsed,
-        updatedAt: sql`now()`,
-        version: sql`${userPreferences.version} + 1`,
-      };
-      // INSERT new prefs row OR conditionally UPDATE existing one. The
-      // ON CONFLICT DO UPDATE ... WHERE filters out conflicting writes:
-      // when expected version is provided, the update only fires if
-      // version matches. Empty rows = no row matched = conflict.
-      const rows = await db
-        .insert(userPreferences)
-        .values({ userId: session.id, ...parsed })
-        .onConflictDoUpdate({
-          target: userPreferences.userId,
-          set,
-          setWhere:
-            expectedVersion !== undefined
-              ? eq(userPreferences.version, expectedVersion)
-              : undefined,
-        })
-        .returning({ version: userPreferences.version });
+          if (inserted.length === 0) {
+            continue;
+          }
 
-      if (rows.length === 0) {
-        throw new ConflictError(
-          "Your preferences were modified in another tab. Refresh to see the latest, then try again.",
-          { userId: session.id, expectedVersion },
-        );
+          await writeAudit({
+            actorId: session.id,
+            action: "user_preferences.update",
+            targetType: "user_preferences",
+            targetId: session.id,
+            before: null,
+            after: parsed,
+          });
+
+          revalidatePath("/settings");
+          return { version: inserted[0].version };
+        }
+
+        // Existing row: conditionally UPDATE guarded by the version we just
+        // read. A 0-row result means another request bumped it in between;
+        // loop to re-read the fresh version and retry.
+        const updated = await db
+          .update(userPreferences)
+          .set({
+            ...parsed,
+            updatedAt: sql`now()`,
+            version: sql`${userPreferences.version} + 1`,
+          })
+          .where(
+            and(
+              eq(userPreferences.userId, session.id),
+              eq(userPreferences.version, before.version),
+            ),
+          )
+          .returning({ version: userPreferences.version });
+
+        if (updated.length === 0) {
+          continue;
+        }
+
+        await writeAudit({
+          actorId: session.id,
+          action: "user_preferences.update",
+          targetType: "user_preferences",
+          targetId: session.id,
+          before,
+          after: parsed,
+        });
+
+        revalidatePath("/settings");
+        return { version: updated[0].version };
       }
 
-      await writeAudit({
-        actorId: session.id,
-        action: "user_preferences.update",
-        targetType: "user_preferences",
-        targetId: session.id,
-        before: beforeRows[0] ?? null,
-        after: parsed,
-      });
-
-      revalidatePath("/settings");
-      return { version: rows[0].version };
+      throw new ConflictError(
+        "Your preferences were modified in another tab. Refresh to see the latest, then try again.",
+        { userId: session.id },
+      );
     },
   );
 }

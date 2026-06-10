@@ -103,10 +103,14 @@ export const activities = pgTable(
     index("activities_deleted_by_id_idx")
       .on(t.deletedById)
       .where(sql`deleted_by_id IS NOT NULL`),
-    // partial index on (lead_id, import_dedup_key) for the
+    // partial UNIQUE index on (lead_id, import_dedup_key) for the
     // re-import dedup lookup. Only indexes rows where dedup_key is set,
-    // i.e., imported activities.
-    index("activities_import_dedup_idx")
+    // i.e., imported activities. Unique so it serves as the arbiter for
+    // the import insert's ON CONFLICT (lead_id, import_dedup_key)
+    // WHERE import_dedup_key IS NOT NULL clause — without uniqueness
+    // Postgres rejects the upsert with 42P10 and concurrent imports
+    // would otherwise create duplicate activity rows.
+    uniqueIndex("activities_import_dedup_idx")
       .on(t.leadId, t.importDedupKey)
       .where(sql`import_dedup_key IS NOT NULL`),
     // Partial unique indexes prevent duplicate Graph imports.

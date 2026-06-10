@@ -95,11 +95,22 @@ const staticListCreateSchema = z.object({
     .transform((v) => (v === "" || v === undefined ? null : v)),
 });
 
-const staticMemberUpdateSchema = z.object({
-  memberId: z.string().uuid(),
-  field: z.enum(["name", "email"]),
-  value: z.string().trim().max(500),
-});
+// Field-aware so the inline editor enforces the same email validity as
+// the import path (`static-import-parse.ts` uses z.string().trim().email()).
+// Without this, the email cell could persist '' or arbitrary text into
+// the NOT NULL `email` column, feeding invalid SendGrid recipients.
+const staticMemberUpdateSchema = z.discriminatedUnion("field", [
+  z.object({
+    memberId: z.string().uuid(),
+    field: z.literal("name"),
+    value: z.string().trim().max(500),
+  }),
+  z.object({
+    memberId: z.string().uuid(),
+    field: z.literal("email"),
+    value: z.string().trim().email().max(500),
+  }),
+]);
 
 const staticMemberBulkUpdateSchema = z.object({
   memberIds: z.array(z.string().uuid()).min(1).max(5000),
@@ -406,17 +417,28 @@ export async function bulkAddLeadsToListAction(input: {
       const user = await requireListPermission("canMarketingListsBulkAdd");
       const data = parseJsonOrThrow(bulkAddSchema, input);
 
-      // Confirm the list exists and is active.
+      // Confirm the list exists, is active, and is a dynamic list.
       const [list] = await db
         .select({
           id: marketingLists.id,
           isDeleted: marketingLists.isDeleted,
+          listType: marketingLists.listType,
         })
         .from(marketingLists)
         .where(eq(marketingLists.id, data.listId))
         .limit(1);
       if (!list || list.isDeleted) {
         throw new NotFoundError("marketing list");
+      }
+      // Bulk-add writes to (and recomputes member_count from) the
+      // dynamic-list snapshot table. Static-imported lists keep their
+      // recipients in `marketing_static_list_members`; running this
+      // against one would insert ignored rows and clobber the real
+      // count. Mirror `requireStaticListEditAccess`'s type guard.
+      if (list.listType !== "dynamic") {
+        throw new ValidationError(
+          "Leads can only be bulk-added to a dynamic list.",
+        );
       }
 
       // Resolve eligible leads (active, not do-not-email, with an email).
@@ -683,7 +705,11 @@ export async function bulkUpdateStaticListMembersAction(input: {
       });
       const list = await requireStaticListEditAccess(user, input.listId);
 
+      // Scope the bulk UPDATE to the verified list (list.id from the
+      // access check, never the raw client input) so client-supplied
+      // memberIds belonging to other lists are ignored.
       const { updated } = await bulkUpdateStaticListMembers({
+        listId: list.id,
         memberIds: data.memberIds,
         field: "name",
         value: data.value ?? null,
@@ -697,6 +723,11 @@ export async function bulkUpdateStaticListMembersAction(input: {
         targetId: list.id,
         after: {
           fieldChanged: "name",
+          // `count` is now scoped to the authorized list (foreign
+          // member IDs are filtered out in the UPDATE); record the
+          // requested count alongside it so the forensic trail shows
+          // when client IDs named rows outside this list.
+          requestedCount: data.memberIds.length,
           count: updated,
         },
       });

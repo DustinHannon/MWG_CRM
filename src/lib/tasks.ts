@@ -18,6 +18,7 @@ import {
   encodeFromValues as encodeStandardCursor,
 } from "@/lib/cursors";
 import { expectAffected } from "@/lib/db/concurrent-update";
+import { ValidationError } from "@/lib/errors";
 import type { BulkRowVersion } from "@/lib/cascade-archive";
 
 /**
@@ -201,6 +202,19 @@ export async function listTasksForUser(args: {
   priority?: ("low" | "normal" | "high" | "urgent")[];
   relatedEntity?: "lead" | "account" | "contact" | "opportunity";
   dueRange?: "overdue" | "today" | "this_week" | "later" | "none" | "all";
+  /**
+   * IANA timezone the dueRange buckets are computed in. due_at is stored
+   * at the user's local-midnight (default America/Chicago), and both peer
+   * surfaces bucket in Central — the cron casts via `AT TIME ZONE
+   * 'America/Chicago'` and the queue classifies via `toZonedTime`. The
+   * DB session runs in UTC, so the boundary math must be pinned to the
+   * viewer's zone here too or the list filter disagrees with the queue
+   * and the due-today email for the ~5-6h window each day between Central
+   * midnight and UTC midnight. Defaults to America/Chicago to match those
+   * surfaces for the common (Central) viewer; callers that resolve the
+   * viewer's preference should pass it through.
+   */
+  timezone?: string;
   q?: string;
   /** explicit assignee filter for the new /tasks
    * redesign. `me` (default) preserves existing behavior; a specific
@@ -309,25 +323,30 @@ export async function listTasksForUser(args: {
     else if (args.relatedEntity === "opportunity")
       wheres.push(isNotNull(tasks.opportunityId));
   }
-  // due-date-range filter. Bucketed off the same
-  // boundaries the page UI used for grouping, so saved views show
-  // the same set the user picks via the chip row.
+  // due-date-range filter. Bucketed on the viewer's timezone so saved
+  // views and the chip row agree with the queue page and the due-today
+  // email cron. The DB session is UTC, so each boundary compares the
+  // task's due calendar-date and "today" both cast in the viewer's zone
+  // (default Central) rather than against raw UTC midnight.
   if (args.dueRange && args.dueRange !== "all") {
-    const now = sql`now()`;
-    const endOfToday = sql`date_trunc('day', now()) + interval '1 day' - interval '1 second'`;
-    const endOfWeek = sql`date_trunc('day', now()) + interval '7 days'`;
+    const tz = args.timezone || "America/Chicago";
+    // Both sides extract the calendar date in the viewer's zone.
+    const dueDate = sql`(${tasks.dueAt} AT TIME ZONE ${tz})::date`;
+    const today = sql`(now() AT TIME ZONE ${tz})::date`;
+    // End of the current calendar week (Sun–Sat, matching the queue's
+    // classifyBucket): today + (6 - dow) days, where dow is 0=Sunday.
+    // A Saturday viewer's "Later this week" is therefore empty by design.
+    const endOfWeek = sql`(${today} + ((6 - extract(dow from ${today})::int) * interval '1 day'))::date`;
     if (args.dueRange === "overdue") {
-      wheres.push(sql`${tasks.dueAt} IS NOT NULL AND ${tasks.dueAt} < ${now}`);
+      wheres.push(sql`${tasks.dueAt} IS NOT NULL AND ${dueDate} < ${today}`);
     } else if (args.dueRange === "today") {
-      wheres.push(
-        sql`${tasks.dueAt} IS NOT NULL AND ${tasks.dueAt} >= date_trunc('day', now()) AND ${tasks.dueAt} <= ${endOfToday}`,
-      );
+      wheres.push(sql`${tasks.dueAt} IS NOT NULL AND ${dueDate} = ${today}`);
     } else if (args.dueRange === "this_week") {
       wheres.push(
-        sql`${tasks.dueAt} IS NOT NULL AND ${tasks.dueAt} > ${endOfToday} AND ${tasks.dueAt} <= ${endOfWeek}`,
+        sql`${tasks.dueAt} IS NOT NULL AND ${dueDate} > ${today} AND ${dueDate} <= ${endOfWeek}`,
       );
     } else if (args.dueRange === "later") {
-      wheres.push(sql`${tasks.dueAt} IS NOT NULL AND ${tasks.dueAt} > ${endOfWeek}`);
+      wheres.push(sql`${tasks.dueAt} IS NOT NULL AND ${dueDate} > ${endOfWeek}`);
     } else if (args.dueRange === "none") {
       wheres.push(isNull(tasks.dueAt));
     }
@@ -595,6 +614,21 @@ export async function bulkReassignTasks(
   actorId: string,
 ): Promise<BulkTaskResult> {
   if (items.length === 0) return { updated: [], conflicts: [] };
+  // Reject a malformed/stale assignee before the transaction. A
+  // non-existent id would surface as a typed ConflictError via the FK
+  // mapping, but an existing-but-deactivated user passes the FK and would
+  // silently orphan the tasks out of every active queue — guard against
+  // both with one existence + active check.
+  const [assignee] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.id, newAssigneeId), eq(users.isActive, true)))
+    .limit(1);
+  if (!assignee) {
+    throw new ValidationError("Select an active user to reassign tasks to.", {
+      newAssigneeId,
+    });
+  }
   const updatedAt = new Date();
   const { updated, conflicts, updatedRows } = await db.transaction(async (tx) => {
     const updated: string[] = [];
@@ -880,19 +914,25 @@ export async function updateTask(
   } else if (patch.status === "open" || patch.status === "in_progress") {
     set.completedAt = null;
   }
-  // Capture the pre-update row so the audit records what changed. There
-  // is no prior read in this fn — OCC is enforced atomically by the
-  // version predicate on the UPDATE itself, not a read-then-write.
-  const beforeRows = await db
-    .select()
-    .from(tasks)
-    .where(eq(tasks.id, id))
-    .limit(1);
-  const rows = await db
-    .update(tasks)
-    .set(set)
-    .where(and(eq(tasks.id, id), eq(tasks.version, expectedVersion)))
-    .returning({ id: tasks.id, version: tasks.version });
+  // Capture the pre-update row so the audit records what changed, and
+  // run it in the same transaction as the OCC UPDATE so the recorded
+  // `before` is exactly the pre-image this UPDATE overwrites — a
+  // concurrent committed write cannot interleave between the read and
+  // the write and be mis-recorded as the prior state. OCC is still
+  // enforced by the version predicate on the UPDATE itself.
+  const { beforeRows, rows } = await db.transaction(async (tx) => {
+    const beforeRows = await tx
+      .select()
+      .from(tasks)
+      .where(eq(tasks.id, id))
+      .limit(1);
+    const rows = await tx
+      .update(tasks)
+      .set(set)
+      .where(and(eq(tasks.id, id), eq(tasks.version, expectedVersion)))
+      .returning({ id: tasks.id, version: tasks.version });
+    return { beforeRows, rows };
+  });
   await expectAffected(rows, { table: tasks, id, entityLabel: "task" });
   await writeAudit({
     actorId,
@@ -1006,9 +1046,18 @@ export async function listTasksDueTodayForCron(): Promise<
     WHERE t.status IN ('open', 'in_progress')
       AND t.assigned_to_id IS NOT NULL
       AND t.due_at IS NOT NULL
-      AND t.due_at::date = (now() AT TIME ZONE 'America/Chicago')::date
+      AND (t.due_at AT TIME ZONE 'America/Chicago')::date = (now() AT TIME ZONE 'America/Chicago')::date
       AND p.notify_tasks_due = true
       AND t.is_deleted = false
+      AND NOT EXISTS (
+        SELECT 1 FROM notifications n
+        WHERE n.user_id = t.assigned_to_id
+          AND n.kind = 'task_due'
+          AND n.entity_type = 'task'
+          AND n.entity_id = t.id::text
+          AND (n.created_at AT TIME ZONE 'America/Chicago')::date
+              = (now() AT TIME ZONE 'America/Chicago')::date
+      )
   `);
   return rows.map((r) => ({
     id: r.id,

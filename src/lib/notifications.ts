@@ -21,6 +21,8 @@ interface CreateNotificationInput {
   title: string;
   body?: string | null;
   link?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
 }
 
 /**
@@ -50,8 +52,8 @@ export async function createNotification(
 
 export async function createNotifications(
   list: CreateNotificationInput[],
-): Promise<void> {
-  if (list.length === 0) return;
+): Promise<number> {
+  if (list.length === 0) return 0;
   try {
     await db.insert(notifications).values(
       list.map((n) => ({
@@ -60,13 +62,19 @@ export async function createNotifications(
         title: n.title,
         body: n.body ?? null,
         link: n.link ?? null,
+        entityType: n.entityType ?? null,
+        entityId: n.entityId ?? null,
       })),
     );
+    // Single all-or-nothing bulk INSERT: on success every row landed,
+    // so list.length is the exact inserted count.
+    return list.length;
   } catch (err) {
     logger.error("notifications.bulk_create_failed", {
       count: list.length,
       errorMessage: err instanceof Error ? err.message : String(err),
     });
+    return 0;
   }
 }
 

@@ -100,6 +100,7 @@ export default async function DashboardPage() {
                AND ${ownerScope}) AS new_this_week,
             (SELECT count(*)::int FROM activities a
              WHERE a.occurred_at >= now() - interval '7 days'
+               AND a.is_deleted = false
                AND EXISTS (
                  SELECT 1 FROM leads l
                  WHERE l.id = a.lead_id
@@ -389,7 +390,9 @@ async function RecentActivity({
              l.first_name AS lead_first, l.last_name AS lead_last
       FROM activities a
       INNER JOIN leads l ON l.id = a.lead_id
-      WHERE ${ownerScope}
+      WHERE a.is_deleted = false
+        AND l.is_deleted = false
+        AND ${ownerScope}
       ORDER BY a.occurred_at DESC
       LIMIT 8
     `);

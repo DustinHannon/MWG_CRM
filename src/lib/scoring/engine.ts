@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import {
@@ -268,16 +268,15 @@ export async function rescoreAllLeads(): Promise<number> {
       .where(
         and(
           eq(leads.isDeleted, false),
-          lastId ? gte(leads.id, lastId) : undefined,
+          lastId ? gt(leads.id, lastId) : undefined,
         ),
       )
       .orderBy(leads.id)
-      .limit(101);
+      .limit(100);
 
-    const slice = lastId ? batch.slice(1, 101) : batch.slice(0, 100);
-    if (slice.length === 0) break;
+    if (batch.length === 0) break;
 
-    for (const r of slice) {
+    for (const r of batch) {
       try {
         await evaluateLead(r.id);
         processed++;
@@ -289,8 +288,8 @@ export async function rescoreAllLeads(): Promise<number> {
       }
     }
 
-    if (batch.length < 101) break;
-    lastId = batch[100].id;
+    if (batch.length < 100) break;
+    lastId = batch[batch.length - 1].id;
   }
   return processed;
 }

@@ -17,7 +17,7 @@ import {
 } from "@/lib/errors";
 import { D365_AUDIT_EVENTS, D365_HALT_REASONS } from "./audit-events";
 import { D365HttpError } from "./with-retry";
-import { getD365Client } from "./client";
+import { getD365Client, type D365Client } from "./client";
 import {
   fetchByEntityType,
   type BaseFetchOpts,
@@ -28,6 +28,7 @@ import {
   D365_ENTITY_TYPES,
   type D365EntityType,
   D365_ENTITY_PK,
+  type D365SystemUser,
 } from "./types";
 
 /**
@@ -96,7 +97,6 @@ interface RunScope {
     statecode?: number[];
     ids?: string[];
   };
-  fields?: string[];
   expand?: boolean | string[];
   includeChildren?: boolean;
 }
@@ -126,10 +126,11 @@ export async function pullNextBatch(
   });
 
   // fetch from D365 OUTSIDE the lock.
+  const client = getD365Client();
   const fetchOpts = scopeToFetchOpts(run.scope, run.cursor);
   let fetched: FetchPageResult<unknown>;
   try {
-    fetched = await fetchByEntityType(getD365Client(), entityType, fetchOpts);
+    fetched = await fetchByEntityType(client, entityType, fetchOpts);
   } catch (err) {
     await handleFetchFailure(runId, batchId, actorId, entityType, err);
     // handleFetchFailure throws — this is unreachable but keeps
@@ -140,6 +141,14 @@ export async function pullNextBatch(
   const records = fetched.records;
   const nextLink = fetched.nextLink ?? null;
   const isFinalPage = !nextLink;
+
+  // Enrich each raw record with the owner's UPN under the synthetic
+  // `_ownerid_value_email` key BEFORE persist. The $select allowlists
+  // only request the owner GUID (`_ownerid_value`), so without this the
+  // mapper's getOwnerEmailFromRaw can never resolve a real owner and
+  // every record falls back to the default owner. We resolve the GUIDs
+  // to systemuser `domainname` (Entra UPN) with a single batched lookup.
+  await enrichOwnerEmails(client, records, { runId, batchId, entityType });
 
   await broadcastRunEvent(runId, "fetching.progress", {
     batchId,
@@ -345,7 +354,103 @@ function scopeToFetchOpts(
   if (scope.filter?.ids?.length) {
     opts.ids = scope.filter.ids;
   }
+  // Operator-selected statecode restriction ("Active records only"
+  // toggle writes statecode=[0]; an explicit empty array means "all
+  // states"). Presence of the key is authoritative — pass it through so
+  // the query honors the requested scope instead of the per-entity
+  // hardcoded default. Absent key → per-entity default applies.
+  const statecode = scope.filter?.statecode;
+  if (Array.isArray(statecode)) {
+    opts.statecode = statecode.filter((c) => Number.isInteger(c));
+  }
   return opts;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Owner-email enrichment *
+ * -------------------------------------------------------------------------- */
+
+/** OData escaping for a GUID inside an `in (...)` clause. */
+function odataQuoteGuid(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Stamp each raw record with its owner's Entra UPN under the synthetic
+ * `_ownerid_value_email` key so the map-batch owner resolver
+ * (`getOwnerEmailFromRaw`) can resolve the real D365 owner instead of
+ * always falling back to the default owner.
+ *
+ * The pull queries only $select the owner GUID (`_ownerid_value`), so
+ * the UPN is not present on the wire. We collect the distinct owner
+ * GUIDs on this page (≤100 records → ≤100 GUIDs, well under D365's
+ * ~32k filter-length cap) and resolve them to `systemusers.domainname`
+ * in a single batched OData lookup. `domainname` is the canonical Entra
+ * UPN the owner resolver matches against `users.email`.
+ *
+ * Mutates the record objects in place. Best-effort: a failed systemuser
+ * lookup logs and leaves the records un-enriched (the resolver then
+ * falls back to the default owner for those rows, the prior behavior)
+ * rather than aborting the whole pull.
+ */
+async function enrichOwnerEmails(
+  client: D365Client,
+  records: unknown[],
+  ctx: { runId: string; batchId: string; entityType: D365EntityType },
+): Promise<void> {
+  if (records.length === 0) return;
+
+  const objs = records.filter(
+    (r): r is Record<string, unknown> => typeof r === "object" && r !== null,
+  );
+
+  const ownerIds = new Set<string>();
+  for (const obj of objs) {
+    const ownerId = obj["_ownerid_value"];
+    if (typeof ownerId === "string" && ownerId.length > 0) {
+      ownerIds.add(ownerId);
+    }
+  }
+  if (ownerIds.size === 0) return;
+
+  // GUID -> domainname (UPN). Owners with no domainname (application
+  // users, former employees) are omitted; those rows correctly fall
+  // back to the default owner downstream.
+  const guidToUpn = new Map<string, string>();
+  try {
+    const quoted = [...ownerIds].map(odataQuoteGuid).join(",");
+    const page = await client.fetchPage<D365SystemUser>("systemusers", {
+      select: ["systemuserid", "domainname"],
+      filter: `systemuserid in (${quoted})`,
+      top: ownerIds.size,
+      pageSize: ownerIds.size,
+    });
+    for (const u of page.value) {
+      const upn = u.domainname;
+      if (u.systemuserid && typeof upn === "string" && upn.trim().length > 0) {
+        guidToUpn.set(u.systemuserid, upn.trim());
+      }
+    }
+  } catch (err) {
+    // Non-fatal: leave records un-enriched and let the owner resolver
+    // fall back to the default owner. Surface for the operator trail.
+    logger.warn("d365.pull.owner_enrich_failed", {
+      runId: ctx.runId,
+      batchId: ctx.batchId,
+      entityType: ctx.entityType,
+      ownerCount: ownerIds.size,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+    return;
+  }
+
+  for (const obj of objs) {
+    const ownerId = obj["_ownerid_value"];
+    if (typeof ownerId === "string") {
+      const upn = guidToUpn.get(ownerId);
+      if (upn) obj["_ownerid_value_email"] = upn;
+    }
+  }
 }
 
 /* -------------------------------------------------------------------------- *

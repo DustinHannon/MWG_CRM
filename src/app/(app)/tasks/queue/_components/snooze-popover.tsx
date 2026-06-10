@@ -78,6 +78,20 @@ export function SnoozePopover({
 
   const [customDate, setCustomDate] = useState<string>(defaultCustomDate);
 
+  // Keep the "Pick a date" prefill in sync with the current task. The
+  // component instance is reused across queue cards (no per-task key in
+  // queue-client), so without this the input keeps the previous task's
+  // computed default. Re-derive during render (React's adjust-state-on-
+  // prop-change pattern) whenever `defaultCustomDate` changes — a
+  // different task's due date, or a fresh `now`/tz on the open edge — so
+  // the prefill always reflects the day after the current task's due date.
+  const [prevDefaultCustomDate, setPrevDefaultCustomDate] =
+    useState<string>(defaultCustomDate);
+  if (prevDefaultCustomDate !== defaultCustomDate) {
+    setPrevDefaultCustomDate(defaultCustomDate);
+    setCustomDate(defaultCustomDate);
+  }
+
   async function pick(target: Date) {
     onOpenChange(false);
     await onSelect(target);

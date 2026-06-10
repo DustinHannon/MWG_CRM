@@ -192,7 +192,11 @@ export async function sendEmailAs(opts: SendOptions): Promise<SendResult> {
     .update(emailSendLog)
     .set({
       status: finalStatus,
-      graphMessageId: result.ok ? result.requestId ?? null : null,
+      // App-permission sendMail returns 202 with no body, so no real
+      // message id is available. The HTTP correlation id is persisted
+      // separately in requestId below; leave graphMessageId null so the
+      // column consistently means a real message id across send paths.
+      graphMessageId: null,
       errorCode: result.error?.code ?? null,
       errorMessage: result.error?.message ?? null,
       httpStatus: result.status,

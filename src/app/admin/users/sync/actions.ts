@@ -535,25 +535,32 @@ export async function offboardMissingUsers(
                 );
               }
 
+              // Stamp updatedAt on every moved row so the ownership
+              // change is visible to updatedAt-based cache/realtime
+              // invalidation and 'last updated' ordering — matching the
+              // delete-user reassignment path (delete-user-actions.ts).
               await tx
                 .update(leads)
-                .set({ ownerId: item.reassignTo })
+                .set({ ownerId: item.reassignTo, updatedAt: sql`now()` })
                 .where(eq(leads.ownerId, item.userId));
               await tx
                 .update(crmAccounts)
-                .set({ ownerId: item.reassignTo })
+                .set({ ownerId: item.reassignTo, updatedAt: sql`now()` })
                 .where(eq(crmAccounts.ownerId, item.userId));
               await tx
                 .update(contacts)
-                .set({ ownerId: item.reassignTo })
+                .set({ ownerId: item.reassignTo, updatedAt: sql`now()` })
                 .where(eq(contacts.ownerId, item.userId));
               await tx
                 .update(opportunities)
-                .set({ ownerId: item.reassignTo })
+                .set({ ownerId: item.reassignTo, updatedAt: sql`now()` })
                 .where(eq(opportunities.ownerId, item.userId));
               await tx
                 .update(tasks)
-                .set({ assignedToId: item.reassignTo })
+                .set({
+                  assignedToId: item.reassignTo,
+                  updatedAt: sql`now()`,
+                })
                 .where(eq(tasks.assignedToId, item.userId));
               didReassign = true;
             }

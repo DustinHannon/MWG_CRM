@@ -33,6 +33,11 @@ export const savedSearchSubscriptions = pgTable(
     lastSeenMaxCreatedAt: timestamp("last_seen_max_created_at", {
       withTimezone: true,
     }),
+    // Companion keyset tiebreak to last_seen_max_created_at so the digest
+    // cursor is (created_at, id): rows sharing the boundary created_at (e.g. a
+    // bulk import committed in one transaction) are delivered on a later run
+    // instead of being skipped past the page boundary.
+    lastSeenMaxId: text("last_seen_max_id"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -7,7 +7,12 @@ import { db } from "@/db";
 import { contacts } from "@/db/schema/crm-records";
 import { recentViews } from "@/db/schema/recent-views";
 import { requireSession } from "@/lib/auth-helpers";
-import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "@/lib/errors";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   emitActivity,
@@ -56,11 +61,20 @@ export async function softDeleteContactAction(input: {
           ownerId: contacts.ownerId,
           firstName: contacts.firstName,
           lastName: contacts.lastName,
+          isDeleted: contacts.isDeleted,
         })
         .from(contacts)
         .where(eq(contacts.id, id))
         .limit(1);
       if (!row) throw new ForbiddenError("Contact not found.");
+      // Reject re-archiving an already-archived contact (double submit,
+      // stale detail page). The lib UPDATE has no isDeleted guard, so a
+      // second call would overwrite the original soft-delete attribution
+      // (who/when/why) and emit a duplicate audit row + owner
+      // notification. Guard here, before any mutation or side effect.
+      if (row.isDeleted) {
+        throw new ConflictError("This contact is already archived.");
+      }
       if (!canDeleteContact(user, row)) {
         await writeAudit({
           actorId: user.id,

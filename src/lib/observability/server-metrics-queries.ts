@@ -17,10 +17,13 @@ import {
  * state without a try/catch dance).
  * Picks the collection mix based on the requested time range:
  * 1h → hot collection only (sub-30-minute drain)
- * 6h → UNION ALL hot + s3 (overlap is fine; ClickHouse counts
- * each event once per row, and the s3 collection has a
- * `_row_type = 1` filter that excludes meta rows)
- * 24h → UNION ALL hot + s3
+ * 6h → UNION ALL hot + s3. Hot covers the trailing ~30 minutes and
+ * those same rows also exist in s3, so the s3 branch is bounded by
+ * `dt < now() - INTERVAL 30 MINUTE` to keep the two sources disjoint
+ * (UNION ALL would otherwise emit each overlap-window event twice and
+ * double-count it). The s3 branch also carries `_row_type = 1` to skip
+ * index-metadata rows.
+ * 24h → UNION ALL hot + s3 (same disjoint boundary as 6h)
  * 7d → s3 only (hot doesn't cover that window; using s3 alone
  * avoids paying the UNION cost on a 7-day scan)
  * Passes `auditFamily: "observability.server_logs"` so any query
@@ -59,11 +62,18 @@ function buildFromClause(range: ServerMetricsRange): string {
   // 6h and 24h — UNION ALL hot + cold via a derived subquery so
   // outer aggregations (count/min/max/multiIf) can operate on the
   // combined set. The cold collection needs `_row_type = 1` to skip
-  // index metadata rows.
+  // index metadata rows. The hot collection covers roughly the last
+  // 30 minutes and those same recent rows also physically exist in the
+  // cold collection, so the cold branch is bounded by
+  // `dt < now() - INTERVAL 30 MINUTE`: hot supplies the trailing ~30
+  // min, cold supplies everything older, and the two stay disjoint.
+  // Without that bound the UNION ALL emits each overlap-window event
+  // twice and double-counts it (mirrors insights-queries.ts).
   return `FROM (
     SELECT raw, _pattern, dt FROM remote(${hot})
     UNION ALL
-    SELECT raw, _pattern, dt FROM s3Cluster(primary, ${cold}) WHERE _row_type = 1
+    SELECT raw, _pattern, dt FROM s3Cluster(primary, ${cold})
+      WHERE _row_type = 1 AND dt < now() - INTERVAL 30 MINUTE
   )`;
 }
 

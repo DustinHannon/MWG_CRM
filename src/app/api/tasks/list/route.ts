@@ -21,6 +21,7 @@ import {
   type TaskViewSort,
 } from "@/lib/task-views";
 import { listTasksForUser } from "@/lib/tasks";
+import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -207,6 +208,12 @@ export const GET = withInternalListApi(
   const cursor = sp.get("cursor");
   const pageSize = 50;
 
+  // Resolve the viewer's timezone so dueRange buckets compute in their
+  // own zone instead of the Central default — keeps this surface in
+  // agreement with the queue page and the due-today email cron for
+  // non-Central viewers.
+  const prefs = await getCurrentUserTimePrefs();
+
   const { rows, nextCursor, total } = await listTasksForUser({
     userId: session.id,
     isAdmin: session.isAdmin,
@@ -216,6 +223,7 @@ export const GET = withInternalListApi(
     relation: filters.relation,
     relatedEntity: filters.relatedEntity,
     dueRange: filters.dueRange,
+    timezone: prefs.timezone,
     q: filters.q,
     tags: filters.tags,
     sort,

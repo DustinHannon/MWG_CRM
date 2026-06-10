@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   index,
   integer,
@@ -61,7 +62,10 @@ export const emailSendLog = pgTable(
       .default(sql`now()`),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     requestId: text("request_id"),
-    retryOfId: uuid("retry_of_id"),
+    retryOfId: uuid("retry_of_id").references(
+      (): AnyPgColumn => emailSendLog.id,
+      { onDelete: "set null" },
+    ),
     /**
      * Short-window send-idempotency key (sha256 of sender+recipient+
      * subject+feature within a ~2-minute bucket). NULL for paths that

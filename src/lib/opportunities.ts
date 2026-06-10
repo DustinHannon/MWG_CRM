@@ -14,12 +14,29 @@ import {
   encodeFromValues as encodeStandardCursor,
 } from "@/lib/cursors";
 import { expectAffected } from "@/lib/db/concurrent-update";
+import { ValidationError } from "@/lib/errors";
 import { optionalMoneyField } from "@/lib/validation/primitives";
 import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 
 // Re-export for server-side callers that previously imported the
 // constant from this module.
 export { OPPORTUNITY_STAGES };
+
+/**
+ * Derive the `closed_at` timestamp for a target stage. Closing a deal
+ * (closed_won/closed_lost) stamps now(); any other stage clears it so a
+ * reopened deal does not retain a stale close timestamp. Single source
+ * of truth shared by every stage-mutating write path so they cannot
+ * drift (the pipeline drag-and-drop action computes its own equivalent
+ * value at the time of writing — keep that in sync if this changes).
+ */
+export function closedAtForStage(
+  stage: (typeof OPPORTUNITY_STAGES)[number],
+): Date | null {
+  return stage === "closed_won" || stage === "closed_lost"
+    ? new Date()
+    : null;
+}
 
 /**
  * direct Opportunity creation, separate from
@@ -50,10 +67,72 @@ export const opportunityCreateSchema = z.object({
 
 export type OpportunityCreateInput = z.infer<typeof opportunityCreateSchema>;
 
+/**
+ * Validate the account/contact references on an opportunity before it is
+ * persisted. Both callers (the New Opportunity form action and the REST
+ * POST) only Zod-validate UUID *format*, so without this a syntactically
+ * valid but non-existent account_id reaches the FK and surfaces as a raw
+ * 500 instead of a clean 422/404, and a primary contact belonging to a
+ * different account silently corrupts the relationship.
+ *
+ * - `accountId` (when provided) must reference a live (not soft-deleted)
+ *   account, else ValidationError. (A bad reference is invalid request
+ *   input — kept distinct from a NotFoundError on the opportunity row
+ *   itself so the REST routes map it to 422, not 404.)
+ * - `primaryContactId` (when provided) must reference a live contact
+ *   whose account matches `accountId`, else ValidationError.
+ *
+ * API keys are intentionally org-wide (canViewAll), so this asserts
+ * existence + relationship integrity, not per-owner visibility.
+ */
+async function assertOpportunityRefsValid(refs: {
+  accountId?: string | null;
+  primaryContactId?: string | null;
+}): Promise<void> {
+  if (refs.accountId != null) {
+    const [account] = await db
+      .select({ id: crmAccounts.id })
+      .from(crmAccounts)
+      .where(
+        and(
+          eq(crmAccounts.id, refs.accountId),
+          eq(crmAccounts.isDeleted, false),
+        ),
+      )
+      .limit(1);
+    if (!account) throw new ValidationError("The account was not found.");
+  }
+  if (refs.primaryContactId != null) {
+    const [contact] = await db
+      .select({ accountId: contacts.accountId })
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.id, refs.primaryContactId),
+          eq(contacts.isDeleted, false),
+        ),
+      )
+      .limit(1);
+    if (!contact) {
+      throw new ValidationError("The primary contact was not found.");
+    }
+    if (refs.accountId != null && contact.accountId !== refs.accountId) {
+      throw new ValidationError(
+        "The primary contact must belong to the selected account.",
+      );
+    }
+  }
+}
+
 export async function createOpportunity(
   input: OpportunityCreateInput,
   actorId: string,
 ): Promise<{ id: string }> {
+  await assertOpportunityRefsValid({
+    accountId: input.accountId,
+    primaryContactId: input.primaryContactId,
+  });
+
   const inserted = await db
     .insert(opportunities)
     .values({
@@ -75,7 +154,7 @@ export async function createOpportunity(
   await writeAudit({
     actorId,
     action: "opportunity.create",
-    targetType: "opportunities",
+    targetType: "opportunity",
     targetId: inserted[0].id,
     after: {
       name: input.name,
@@ -153,6 +232,10 @@ export async function archiveOpportunitiesById(
         // actor stamping for skip-self in Supabase Realtime.
         updatedById: actorId,
         updatedAt: sql`now()`,
+        // OCC bump on archive mirrors bulk archive + restore; without
+        // it a concurrent edit-from-stale-version could silently win
+        // if a future edit path ever drops the is_deleted filter.
+        version: sql`${opportunities.version} + 1`,
       })
       .where(inArray(opportunities.id, ids));
     const cascadedTasks = await tx
@@ -347,7 +430,16 @@ export async function restoreOpportunitiesById(
         // silently win.
         version: sql`${opportunities.version} + 1`,
       })
-      .where(inArray(opportunities.id, ids));
+      // Only restore rows that are actually archived. Without this
+      // guard a replayed/double-submitted undo for an already-active
+      // row would clear a freshly-set delete_reason and needlessly
+      // bump version.
+      .where(
+        and(
+          inArray(opportunities.id, ids),
+          eq(opportunities.isDeleted, true),
+        ),
+      );
     let cascadedTasks = 0;
     let cascadedActivities = 0;
     // Cascaded children (tasks/activities) skip the OCC version
@@ -485,12 +577,38 @@ export async function updateOpportunityForApi(
   expectedVersion: number | undefined,
   actorId: string,
 ): Promise<{ id: string; version: number }> {
+  // Validate any changed account/contact reference before writing.
+  // When only the contact changes, resolve the effective account from
+  // the existing row so the contact-belongs-to-account check still
+  // holds; a bad reference becomes a typed 404/422, not a raw FK 500.
+  if (patch.accountId !== undefined || patch.primaryContactId !== undefined) {
+    let effectiveAccountId = patch.accountId;
+    if (effectiveAccountId === undefined && patch.primaryContactId != null) {
+      const [existing] = await db
+        .select({ accountId: opportunities.accountId })
+        .from(opportunities)
+        .where(eq(opportunities.id, id))
+        .limit(1);
+      effectiveAccountId = existing?.accountId ?? undefined;
+    }
+    await assertOpportunityRefsValid({
+      accountId: effectiveAccountId,
+      primaryContactId: patch.primaryContactId,
+    });
+  }
   const set: Record<string, unknown> = {
     ...patch,
     updatedById: actorId,
     updatedAt: sql`now()`,
     version: sql`${opportunities.version} + 1`,
   };
+  // A stage change must keep `closed_at` consistent: stamp it when the
+  // deal closes, clear it when reopened. Without this the edit form and
+  // REST PATCH leave closed_at NULL on close (sorting/reporting break)
+  // and stale on reopen — only the pipeline action handled it before.
+  if (patch.stage !== undefined) {
+    set.closedAt = closedAtForStage(patch.stage);
+  }
   const wheres = [eq(opportunities.id, id), eq(opportunities.isDeleted, false)];
   if (typeof expectedVersion === "number") {
     wheres.push(eq(opportunities.version, expectedVersion));

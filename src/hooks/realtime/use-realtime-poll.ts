@@ -24,6 +24,14 @@ interface PollOptions {
   /**
    * Optional callback fired with the changed-id sets when the response
    * carries new data. Default: just `router.refresh()`.
+   *
+   * Delivery is best-effort, not exhaustive. The changes endpoint caps each
+   * entity at 200 ids per response (newest-first). When more than 200 rows of
+   * one entity change within a single interval, the oldest overflow ids may be
+   * omitted from `changes`; those rows are still reflected in the data by the
+   * router.refresh() the hook performs on any change — they just may not get an
+   * individual row-flash. Treat the ids as "these changed recently", not a
+   * complete deduplicated set, and make per-id side effects idempotent.
    */
   onChange?: (changes: Partial<Record<RealtimeEntity, string[]>>) => void;
 }

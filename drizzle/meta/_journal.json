@@ -141,6 +141,20 @@
       "when": 1779220193167,
       "tag": "0019_fuzzy_doomsday",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1781064091136,
+      "tag": "0020_long_gladiator",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781068298835,
+      "tag": "0021_legal_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

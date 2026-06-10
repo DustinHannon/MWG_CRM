@@ -66,13 +66,21 @@ export async function listRecentForUser(
     label: string;
     sublabel: string | null;
   };
+  // Over-fetch so the LIMIT counts only rows that can resolve to a label.
+  // Archived/hard-deleted entities yield a NULL label and are dropped by the
+  // post-query filter below; without the over-fetch they would consume the
+  // top-N slots and the user would see fewer than `limit` items even when
+  // additional valid recent entities exist just below the cutoff. The
+  // recent_views table is trimmed to 50 rows/user in trackView, so this
+  // candidate window is bounded.
+  const candidateLimit = Math.min(limit * 4, 50);
   const rows = (await db.execute<Row>(sql`
     WITH r AS (
       SELECT entity_type, entity_id, viewed_at
       FROM recent_views
       WHERE user_id = ${userId}
       ORDER BY viewed_at DESC
-      LIMIT ${limit}
+      LIMIT ${candidateLimit}
     )
     SELECT
       r.entity_type,
@@ -103,6 +111,9 @@ export async function listRecentForUser(
     // is_deleted = false, so an archived entity yields a NULL label and
     // is excluded from Cmd+K instead of linking to a 404 / archived page).
     .filter((r) => r.label)
+    // Trim back to the requested count after dropping unresolvable rows; the
+    // query over-fetched candidates so the limit reflects resolvable entities.
+    .slice(0, limit)
     .map((r) => ({
       entityType: r.entity_type,
       entityId: r.entity_id,

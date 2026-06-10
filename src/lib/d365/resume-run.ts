@@ -1,8 +1,12 @@
 import "server-only";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { importRuns } from "@/db/schema/d365-imports";
+import {
+  importBatches,
+  importRecords,
+  importRuns,
+} from "@/db/schema/d365-imports";
 import { writeAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import {
@@ -100,6 +104,25 @@ const NEXT_STATUS: Record<
   open_for_review: "reviewing",
 };
 
+/**
+ * Translate the reviewer's chosen default conflict behavior (the
+ * `apply_dedup_default` payload) into the durable
+ * `import_records.conflict_resolution` enum that `commit-batch`
+ * consumes. Without this translation the choice is inert: dedup runs
+ * default to `dedup_merge`, and `commitParentEntity` only honors
+ * `dedup_skip` / `dedup_overwrite` when the record's stored resolution
+ * says so. Re-mapping does NOT re-derive these records (the conflicted
+ * rows are no longer `pending`), so the resolution must be written here.
+ */
+const DEDUP_DEFAULT_TO_RESOLUTION = {
+  skip: "dedup_skip",
+  overwrite: "dedup_overwrite",
+  merge: "dedup_merge",
+} as const satisfies Record<
+  Extract<ResumeResolution, { kind: "apply_dedup_default" }>["defaultBehavior"],
+  NonNullable<typeof importRecords.$inferSelect.conflictResolution>
+>;
+
 /* -------------------------------------------------------------------------- *
  * resumeRun *
  * -------------------------------------------------------------------------- */
@@ -151,13 +174,47 @@ export async function resumeRun(
 
   // Extra payload validation for the dedup choice.
   if (resolution.kind === "apply_dedup_default") {
-    const valid = new Set(["skip", "overwrite", "merge"]);
-    if (!valid.has(resolution.defaultBehavior)) {
+    if (!(resolution.defaultBehavior in DEDUP_DEFAULT_TO_RESOLUTION)) {
       throw new ValidationError(
         `Invalid defaultBehavior '${resolution.defaultBehavior}'.`,
-        { allowed: [...valid] },
+        { allowed: Object.keys(DEDUP_DEFAULT_TO_RESOLUTION) },
       );
     }
+
+    // Apply the chosen default to every still-actionable conflicting
+    // record in this run so `commit-batch` honors it. dispatchDedup
+    // always returns `dedup_merge` for a match, so without this write
+    // 'skip all' / 'overwrite all' would silently force-merge. Scope to
+    // records that (a) actually conflict (`conflict_with` set) and (b)
+    // have not yet been finalized — committed / skipped / rejected /
+    // failed records keep their resolved state; a reviewer's explicit
+    // per-record override (already approved) is also preserved.
+    const resolutionValue =
+      DEDUP_DEFAULT_TO_RESOLUTION[resolution.defaultBehavior];
+    const updated = await db
+      .update(importRecords)
+      .set({ conflictResolution: resolutionValue })
+      .where(
+        and(
+          isNotNull(importRecords.conflictWith),
+          inArray(importRecords.status, ["pending", "mapped", "review"]),
+          inArray(
+            importRecords.batchId,
+            db
+              .select({ id: importBatches.id })
+              .from(importBatches)
+              .where(eq(importBatches.runId, runId)),
+          ),
+        ),
+      )
+      .returning({ id: importRecords.id });
+
+    logger.info("d365.run.dedup_default_applied", {
+      runId,
+      defaultBehavior: resolution.defaultBehavior,
+      conflictResolution: resolutionValue,
+      recordsUpdated: updated.length,
+    });
   }
 
   const nextStatus = NEXT_STATUS[resolution.kind];

@@ -1,0 +1,1 @@
+ALTER TABLE "saved_search_subscriptions" ADD COLUMN "last_seen_max_id" text;

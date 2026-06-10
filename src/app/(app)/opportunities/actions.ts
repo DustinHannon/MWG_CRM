@@ -353,9 +353,10 @@ const opportunityUpdateSchema = z.object({
   amount: optionalMoneyField,
   expectedCloseDate: z
     .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/u, "Use YYYY-MM-DD")
     .optional()
     .nullable()
-    .transform((v) => (v && v.length > 0 ? v : null)),
+    .or(z.literal("").transform(() => null)),
   description: z.string().trim().max(4000).optional().nullable(),
 });
 

@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { db } from "@/db";
 import { marketingCampaigns } from "@/db/schema/marketing-campaigns";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { writeAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 
@@ -28,8 +29,18 @@ export async function GET(req: Request) {
   const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
-  const fromDate = fromParam ? new Date(fromParam) : thirtyDaysAgo;
-  const toDate = toParam ? new Date(toParam) : today;
+  // Guard against unparseable query params (stale bookmark, crafted value):
+  // an Invalid Date would propagate into the `gte` predicate and throw
+  // `RangeError: Invalid time value` from `.toISOString()` below. Fall back
+  // to the default window, mirroring admin/audit/export's NaN guard.
+  const fromDate =
+    fromParam && !Number.isNaN(new Date(fromParam).getTime())
+      ? new Date(fromParam)
+      : thirtyDaysAgo;
+  const toDate =
+    toParam && !Number.isNaN(new Date(toParam).getTime())
+      ? new Date(toParam)
+      : today;
   const toDateEnd = new Date(toDate);
   toDateEnd.setHours(23, 59, 59, 999);
 
@@ -112,6 +123,20 @@ export async function GET(req: Request) {
     rowCount: rows.length,
     from: fromDate.toISOString(),
     to: toDateEnd.toISOString(),
+  });
+
+  // Forensic record of the data egress (2yr audit_log plane), mirroring
+  // admin/audit/export. The logger feed alone (~90d Better Stack) is not
+  // the forensic plane, so the export writes an audit row.
+  await writeAudit({
+    actorId: user.id,
+    action: "marketing.report.export",
+    targetType: "marketing_report",
+    after: {
+      rowCount: rows.length,
+      from: fromDate.toISOString(),
+      to: toDateEnd.toISOString(),
+    },
   });
 
   const filename = `marketing-email-report-${fromDate

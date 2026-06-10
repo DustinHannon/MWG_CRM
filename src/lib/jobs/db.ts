@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 
 import * as schema from "@/db/schema";
 
@@ -41,6 +42,39 @@ import * as schema from "@/db/schema";
  */
 const url =
   env.JOBS_DATABASE_URL ?? env.POSTGRES_URL_NON_POOLING ?? env.POSTGRES_URL;
+
+// Guard the resolved target against the two known misconfigurations the
+// second client exists to avoid:
+//   1. Falling through to POSTGRES_URL means neither JOBS_DATABASE_URL nor
+//      POSTGRES_URL_NON_POOLING is set, so the worker shares the app's
+//      session pool — the exact pool-starvation the module was built to
+//      prevent. Warn loudly so it's visible in Better Stack; don't hard-fail
+//      (a shared pool still works, it just reintroduces the pressure).
+//   2. A :6543 target is the Supavisor TRANSACTION pooler, which wedges
+//      postgres-js's extended-query protocol at ClientRead (two prior
+//      production outages). That is never safe for this client, so fail fast.
+if (url === env.POSTGRES_URL && !env.JOBS_DATABASE_URL && !env.POSTGRES_URL_NON_POOLING) {
+  logger.warn("jobs.db.shared_app_pool", {
+    errorMessage:
+      "Job-queue worker is using POSTGRES_URL (app session pool): neither JOBS_DATABASE_URL nor POSTGRES_URL_NON_POOLING is set. Worker claim transactions count against the app's session-pool budget on every tick.",
+  });
+}
+{
+  // postgres:// URLs always carry an explicit host:port; URL parsing is
+  // robust to query params and credentials. If it ever fails to parse we
+  // leave the value untouched (postgres() will surface its own error).
+  let port: string | undefined;
+  try {
+    port = new URL(url).port;
+  } catch {
+    port = undefined;
+  }
+  if (port === "6543") {
+    throw new Error(
+      "Job-queue worker DB URL targets the Supavisor transaction pooler (:6543), which wedges postgres-js at ClientRead. Point JOBS_DATABASE_URL/POSTGRES_URL_NON_POOLING at a session pooler (:5432) or the direct connection.",
+    );
+  }
+}
 
 const client = postgres(url, {
   // Session-mode / direct connections support prepared statements, but

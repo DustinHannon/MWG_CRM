@@ -32,6 +32,28 @@ export interface ContactViewSummary {
   version?: number;
 }
 
+/**
+ * Live client filter state, owned by the contacts list client
+ * (TanStack Query migration). The toolbar reads this when building a
+ * saved-view payload because these filters live ONLY in client state —
+ * they are never written to the page URL, so useSearchParams can't see
+ * them. Shape mirrors the list client's `ContactFilters` exactly.
+ */
+export interface ContactFilters {
+  q: string;
+  owner: string; // comma-separated owner ids
+  account: string; // comma-separated account ids
+  doNotContact: boolean;
+  doNotEmail: boolean;
+  doNotCall: boolean;
+  doNotMail: boolean;
+  city: string;
+  state: string;
+  country: string;
+  recentlyUpdatedDays: string;
+  tag: string; // comma-separated tag names
+}
+
 export interface ContactViewToolbarProps {
   views: ContactViewSummary[];
   activeViewId: string;
@@ -47,6 +69,13 @@ export interface ContactViewToolbarProps {
   subscribedViewIds?: string[];
   /** "saved:<uuid>" of the user's default contact view, or null. */
   defaultViewId: string | null;
+  /**
+   * Live client-owned filter state. Required so "Save as new view"
+   * captures the active filters — they live only in the list client's
+   * useState (TanStack Query migration) and are never pushed to the
+   * page URL, so they can't be reconstructed from useSearchParams.
+   */
+  filters: ContactFilters;
   /**
    * Called when the user confirms the MODIFIED → Reset flow. The client
    * component owns filter state (TanStack Query migration),
@@ -68,6 +97,7 @@ export function ContactViewToolbar({
   modifiedFields,
   subscribedViewIds,
   defaultViewId,
+  filters,
   resetClientState,
 }: ContactViewToolbarProps) {
   const router = useRouter();
@@ -302,35 +332,42 @@ export function ContactViewToolbar({
           onClose={() => setSaveOpen(false)}
           namePlaceholder="e.g. Atlanta benefits contacts"
           buildPayloadJson={({ name, pin }) => {
+            // Filters live only in the list client's useState (TanStack
+            // Query migration) and are never written to the page URL, so
+            // read them from the live `filters` prop — NOT useSearchParams.
+            // Sort still lives in the URL, so it stays on `search`.
             const params = new URLSearchParams(search.toString());
-            const filters: Record<string, unknown> = {};
-            if (params.get("q")) filters.search = params.get("q");
-            if (params.get("owner"))
-              filters.owner = params.get("owner")!.split(",").filter(Boolean);
-            if (params.get("account"))
-              filters.account = params.get("account")!.split(",").filter(Boolean);
-            if (params.get("doNotContact") === "1") filters.doNotContact = true;
-            if (params.get("doNotEmail") === "1") filters.doNotEmail = true;
-            if (params.get("doNotCall") === "1") filters.doNotCall = true;
-            if (params.get("recentlyUpdatedDays")) {
-              const n = Number(params.get("recentlyUpdatedDays"));
-              if (Number.isFinite(n) && n > 0) filters.recentlyUpdatedDays = n;
+            const savedFilters: Record<string, unknown> = {};
+            if (filters.q) savedFilters.search = filters.q;
+            const ownerIds = filters.owner.split(",").filter(Boolean);
+            if (ownerIds.length > 0) savedFilters.owner = ownerIds;
+            const accountIds = filters.account.split(",").filter(Boolean);
+            if (accountIds.length > 0) savedFilters.account = accountIds;
+            if (filters.doNotContact) savedFilters.doNotContact = true;
+            if (filters.doNotEmail) savedFilters.doNotEmail = true;
+            if (filters.doNotCall) savedFilters.doNotCall = true;
+            if (filters.doNotMail) savedFilters.doNotMail = true;
+            if (filters.city) savedFilters.city = filters.city;
+            if (filters.state) savedFilters.state = filters.state;
+            if (filters.country) savedFilters.country = filters.country;
+            if (filters.recentlyUpdatedDays) {
+              const n = Number(filters.recentlyUpdatedDays);
+              if (Number.isFinite(n) && n > 0) {
+                savedFilters.recentlyUpdatedDays = n;
+              }
             }
-            if (params.get("tag")) {
-              const raw = params.get("tag") ?? "";
-              const list = raw
-                .split(",")
-                .map((s) => s.trim())
-                .filter((s) => s.length > 0);
-              if (list.length > 0) filters.tags = list;
-            }
+            const tagList = filters.tag
+              .split(",")
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0);
+            if (tagList.length > 0) savedFilters.tags = tagList;
             const sortField = params.get("sort") ?? "updatedAt";
             const sortDir = params.get("dir") === "asc" ? "asc" : "desc";
             return JSON.stringify({
               name,
               isPinned: pin,
               scope: activeViewId.includes("all") ? "all" : "mine",
-              filters,
+              filters: savedFilters,
               columns: activeColumns,
               sort: { field: sortField, direction: sortDir },
             });

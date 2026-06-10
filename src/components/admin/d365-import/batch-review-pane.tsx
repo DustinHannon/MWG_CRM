@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useShowPicker } from "@/hooks/use-show-picker";
 import {
   AlertCircle,
@@ -175,22 +176,36 @@ function RecordList({
 
   function bulkApprove(filter: (r: BatchRecordView) => boolean) {
     startTransition(async () => {
+      let failed = 0;
       for (const r of records.filter(filter)) {
         if (r.status === "approved") continue;
         const fd = new FormData();
         fd.set("recordId", r.id);
-        await approveRecordAction(fd);
+        const res = await approveRecordAction(fd);
+        if (!res.ok) failed += 1;
+      }
+      if (failed > 0) {
+        toast.error(
+          `${failed} record${failed === 1 ? "" : "s"} could not be approved.`,
+        );
       }
     });
   }
 
   function bulkReject() {
     startTransition(async () => {
+      let failed = 0;
       for (const r of records) {
         if (r.status === "rejected") continue;
         const fd = new FormData();
         fd.set("recordId", r.id);
-        await rejectRecordAction(fd);
+        const res = await rejectRecordAction(fd);
+        if (!res.ok) failed += 1;
+      }
+      if (failed > 0) {
+        toast.error(
+          `${failed} record${failed === 1 ? "" : "s"} could not be rejected.`,
+        );
       }
     });
   }

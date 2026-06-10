@@ -14,7 +14,7 @@ import {
 import { ErrorBodySchema } from "@/lib/api/v1/schemas";
 import { serializeOpportunity } from "@/lib/api/v1/serializers";
 import { writeAudit } from "@/lib/audit";
-import { ConflictError, NotFoundError } from "@/lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -171,6 +171,11 @@ export const PATCH = withApi<{ id: string }>(
       if (err instanceof NotFoundError) {
         return errorResponse(404, "NOT_FOUND", "Opportunity not found");
       }
+      // Bad account/contact reference in the patch (e.g. non-existent
+      // account_id, or a primary contact on a different account).
+      if (err instanceof ValidationError) {
+        return errorResponse(422, "VALIDATION_ERROR", err.publicMessage);
+      }
       throw err;
     }
     // `updateOpportunityForApi` lib helper does NOT emit
@@ -179,7 +184,7 @@ export const PATCH = withApi<{ id: string }>(
     await writeAudit({
       actorId: key.createdById,
       action: "opportunity.update",
-      targetType: "opportunities",
+      targetType: "opportunity",
       targetId: params.id,
       after: { ...patch, source: "api" },
     });
@@ -215,7 +220,7 @@ export const DELETE = withApi<{ id: string }>(
       await writeAudit({
         actorId: key.createdById,
         action: "opportunity.hard_delete",
-        targetType: "opportunities",
+        targetType: "opportunity",
         targetId: params.id,
         before: { source: "api" },
       });
@@ -224,7 +229,7 @@ export const DELETE = withApi<{ id: string }>(
       await writeAudit({
         actorId: key.createdById,
         action: "opportunity.archive",
-        targetType: "opportunities",
+        targetType: "opportunity",
         targetId: params.id,
         after: { source: "api", reason: "API delete" },
       });

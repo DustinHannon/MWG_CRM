@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { withInternalListApi } from "@/lib/api/internal-list";
+import { getPermissions } from "@/lib/auth-helpers";
 import { listReportsCursor } from "@/lib/reports/cursor";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,15 @@ export const GET = withInternalListApi(
   const scope: "all" | "mine" | "shared" =
     scopeRaw === "mine" || scopeRaw === "shared" ? scopeRaw : "all";
 
+  // Defense-in-depth marketing gate, matching the built-in filter in
+  // reports/page.tsx. Marketing-entity reports are gated to admins +
+  // canMarketingReportsView per src/lib/reports/access.ts; execution
+  // already 403s on click via assertCanViewReport. Pass the gate into the
+  // cursor query so marketing reports are excluded from the rows AND the
+  // total/nextCursor for a non-permitted viewer (not just post-filtered).
+  const canSeeMarketing =
+    user.isAdmin || (await getPermissions(user.id)).canMarketingReportsView === true;
+
   const result = await listReportsCursor({
     viewerId: user.id,
     filters: {
@@ -33,6 +43,7 @@ export const GET = withInternalListApi(
       scope,
     },
     cursor: sp.get("cursor"),
+    canSeeMarketing,
   });
 
   return NextResponse.json({

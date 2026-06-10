@@ -14,6 +14,8 @@
 // Pure function; no DB access. Caller resolves ParsedActivity.metadata.byName
 // to a CRM user separately (see resolve-users.ts).
 
+import { fromZonedTime } from "date-fns-tz";
+
 export type ActivityKind = "call" | "meeting" | "note" | "email";
 
 export interface ParsedActivity {
@@ -46,8 +48,10 @@ export interface ParseResult {
 
 const MAX_ACTIVITIES_PER_COLUMN = 200;
 
-// Allowed timezone abbreviations and their UTC offsets in minutes.
-// We normalise everything to a real Date by adding the offset back to UTC.
+// Unambiguous timezone abbreviations and their fixed UTC offsets in
+// minutes. These name one specific offset (standard OR daylight), so a
+// fixed offset is correct regardless of date. We normalise everything to
+// a real Date by adding the offset back to UTC.
 const TZ_OFFSET_MIN: Record<string, number> = {
   UTC: 0,
   GMT: 0,
@@ -55,16 +59,26 @@ const TZ_OFFSET_MIN: Record<string, number> = {
   EDT: -4 * 60,
   CST: -6 * 60,
   CDT: -5 * 60,
-  CT: -6 * 60, // ambiguous; assume CST and warn
   MST: -7 * 60,
   MDT: -6 * 60,
-  MT: -7 * 60,
   PST: -8 * 60,
   PDT: -7 * 60,
-  PT: -8 * 60,
   AKDT: -8 * 60,
   AKST: -9 * 60,
   HST: -10 * 60,
+};
+
+// Generic (DST-ambiguous) zone abbreviations map to an IANA zone so the
+// correct offset can be computed for the parsed wall-clock date, rather
+// than assuming standard time year-round. The CRM import template (see
+// xlsx-template.ts) instructs users to write "PM CT", so these are the
+// common real-world inputs; a summer "CT" timestamp is CDT (-5h), not
+// CST (-6h). HST has no DST, so it stays a fixed offset above.
+const TZ_GENERIC_IANA: Record<string, string> = {
+  ET: "America/New_York",
+  CT: "America/Chicago",
+  MT: "America/Denver",
+  PT: "America/Los_Angeles",
 };
 
 const TIMESTAMP_RE =
@@ -83,34 +97,104 @@ const TIMESTAMP_RE =
 const NOTE_INLINE_RE =
   /^\[(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})\s+(AM|PM)\s+([A-Z]{2,4})\]\s*[—-]\s*by\s+(\S+\s+\S+)(?:\s+(.+))?$/;
 
-interface ParsedTimestamp {
+// Days per month (non-leap baseline; February handled specially below).
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+interface BuiltDate {
   date: Date;
-  trailing: string;
   warning?: string;
 }
 
-function parseTimestamp(line: string): ParsedTimestamp | null {
-  const m = TIMESTAMP_RE.exec(line);
-  if (!m) return null;
-  const [, y, mo, d, h12, mi, ampm, tz, trailing] = m;
-  let hour = parseInt(h12, 10) % 12;
-  if (ampm === "PM") hour += 12;
+/**
+ * Build a UTC `Date` from the captured timestamp components, validating
+ * calendar ranges and resolving the timezone (DST-aware for generic
+ * abbreviations). Returns `null` when the components are out of range so
+ * the caller skips the malformed activity instead of accepting a
+ * silently rolled-over date (e.g. month 13 → next January).
+ *
+ * `h12` is the raw 1–2 digit 12-hour clock value; `ampm` is "AM"/"PM".
+ */
+function buildTimestampDate(
+  y: string,
+  mo: string,
+  d: string,
+  h12: string,
+  mi: string,
+  ampm: string,
+  tz: string,
+): BuiltDate | null {
+  const year = parseInt(y, 10);
+  const month = parseInt(mo, 10); // 1-12
+  const day = parseInt(d, 10);
+  const clockHour = parseInt(h12, 10);
   const minute = parseInt(mi, 10);
+
+  // Calendar-range validation — Date.UTC silently normalises out-of-range
+  // components into a wrong-but-valid date, so guard before constructing.
+  if (month < 1 || month > 12) return null;
+  if (clockHour < 1 || clockHour > 12) return null;
+  if (minute < 0 || minute > 59) return null;
+  const maxDay =
+    month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
+  if (day < 1 || day > maxDay) return null;
+
+  let hour = clockHour % 12;
+  if (ampm === "PM") hour += 12;
+
+  // Generic (DST-ambiguous) zone: resolve via its IANA zone so the offset
+  // matches the parsed date's actual standard/daylight period.
+  const ianaZone = TZ_GENERIC_IANA[tz];
+  if (ianaZone) {
+    const date = fromZonedTime(
+      // Wall-clock components as a naive local string; fromZonedTime
+      // interprets them in `ianaZone` and is DST-aware.
+      `${y}-${mo}-${d}T${String(hour).padStart(2, "0")}:${mi}:00`,
+      ianaZone,
+    );
+    if (Number.isNaN(date.getTime())) return null;
+    return { date };
+  }
+
   const offsetMin = TZ_OFFSET_MIN[tz];
-  const utcMs = Date.UTC(
-    parseInt(y, 10),
-    parseInt(mo, 10) - 1,
-    parseInt(d, 10),
-    hour,
-    minute,
-  );
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute);
   let warning: string | undefined;
   if (offsetMin === undefined) {
     warning = `Unknown timezone "${tz}" — interpreting as UTC.`;
   }
   // The timestamp text is local-to-tz. UTC = local - offset.
   const finalMs = utcMs - (offsetMin ?? 0) * 60_000;
-  return { date: new Date(finalMs), trailing: trailing.trim(), warning };
+  return { date: new Date(finalMs), warning };
+}
+
+interface ParsedTimestamp {
+  date: Date;
+  trailing: string;
+  warning?: string;
+  // True when the line matched the timestamp shape but the date was out
+  // of calendar range. The line is still a valid activity boundary (so it
+  // ends the previous activity), but the caller must NOT emit it as an
+  // activity — `date` is Invalid; the warning explains the skip.
+  invalid?: boolean;
+}
+
+function parseTimestamp(line: string): ParsedTimestamp | null {
+  const m = TIMESTAMP_RE.exec(line);
+  if (!m) return null;
+  const [, y, mo, d, h12, mi, ampm, tz, trailing] = m;
+  const built = buildTimestampDate(y, mo, d, h12, mi, ampm, tz);
+  if (!built) {
+    return {
+      date: new Date(NaN),
+      trailing: trailing.trim(),
+      warning: `Skipped activity with invalid date "${y}-${mo}-${d} ${h12}:${mi} ${ampm}".`,
+      invalid: true,
+    };
+  }
+  return { date: built.date, trailing: trailing.trim(), warning: built.warning };
 }
 
 function parseNoteInline(line: string): {
@@ -118,31 +202,26 @@ function parseNoteInline(line: string): {
   byName: string;
   body: string;
   warning?: string;
+  invalid?: boolean;
 } | null {
   const m = NOTE_INLINE_RE.exec(line);
   if (!m) return null;
   const [, y, mo, d, h12, mi, ampm, tz, byName, body] = m;
-  let hour = parseInt(h12, 10) % 12;
-  if (ampm === "PM") hour += 12;
-  const minute = parseInt(mi, 10);
-  const offsetMin = TZ_OFFSET_MIN[tz];
-  const utcMs = Date.UTC(
-    parseInt(y, 10),
-    parseInt(mo, 10) - 1,
-    parseInt(d, 10),
-    hour,
-    minute,
-  );
-  let warning: string | undefined;
-  if (offsetMin === undefined) {
-    warning = `Unknown timezone "${tz}" — interpreting as UTC.`;
+  const built = buildTimestampDate(y, mo, d, h12, mi, ampm, tz);
+  if (!built) {
+    return {
+      date: new Date(NaN),
+      byName: byName.trim(),
+      body: (body ?? "").trim(),
+      warning: `Skipped note with invalid date "${y}-${mo}-${d} ${h12}:${mi} ${ampm}".`,
+      invalid: true,
+    };
   }
-  const finalMs = utcMs - (offsetMin ?? 0) * 60_000;
   return {
-    date: new Date(finalMs),
+    date: built.date,
     byName: byName.trim(),
     body: (body ?? "").trim(),
-    warning,
+    warning: built.warning,
   };
 }
 
@@ -221,7 +300,12 @@ function parseMeetingMetaLine(line: string): MeetingMetaParse {
     const endMatch = /^End:\s*(.+)$/i.exec(seg);
     if (endMatch) {
       const ts = parseTimestamp(`[${endMatch[1].trim()}] `);
-      if (ts) result.endAt = ts.date;
+      if (ts) {
+        // Drop an out-of-range End date, but still surface its warning so a
+        // malformed meeting End is reported like every other invalid-date path.
+        if (!ts.invalid) result.endAt = ts.date;
+        if (ts.warning) result.warning = ts.warning;
+      }
       continue;
     }
     const durMatch = /^Duration:\s*(\d+)\s*min/i.exec(seg);
@@ -338,13 +422,17 @@ export function parseActivityColumn(
           bodyParts.push(stripBodyIndent(next).trim());
           j += 1;
         }
-        activities.push({
-          kind: "note",
-          occurredAt: inline.date,
-          subject: null,
-          body: bodyParts.join("\n"),
-          metadata: { byName: inline.byName },
-        });
+        // Invalid date (out-of-range components): the warning is already
+        // queued; skip the activity rather than store an Invalid Date.
+        if (!inline.invalid) {
+          activities.push({
+            kind: "note",
+            occurredAt: inline.date,
+            subject: null,
+            body: bodyParts.join("\n"),
+            metadata: { byName: inline.byName },
+          });
+        }
         i = j;
         continue;
       }
@@ -401,6 +489,7 @@ export function parseActivityColumn(
         if (m.endAt) metadata.endAt = m.endAt;
         if (m.durationMin !== undefined) metadata.durationMin = m.durationMin;
         if (m.byName) metadata.byName = m.byName;
+        if (m.warning) warnings.push({ message: m.warning, line: j + 1 });
         j += 1;
         continue;
       }
@@ -417,13 +506,17 @@ export function parseActivityColumn(
       j += 1;
     }
 
-    activities.push({
-      kind,
-      occurredAt: ts.date,
-      subject,
-      body: bodyParts.join("\n"),
-      metadata,
-    });
+    // Invalid date (out-of-range components): the warning is already
+    // queued; consume the activity's lines but do not store an Invalid Date.
+    if (!ts.invalid) {
+      activities.push({
+        kind,
+        occurredAt: ts.date,
+        subject,
+        body: bodyParts.join("\n"),
+        metadata,
+      });
+    }
     i = j;
   }
 

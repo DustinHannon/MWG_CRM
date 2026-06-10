@@ -1,7 +1,19 @@
 import "server-only";
-import { and, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  ilike,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/db";
-import { savedReports } from "@/db/schema/saved-reports";
+import {
+  MARKETING_REPORT_ENTITY_TYPES,
+  savedReports,
+} from "@/db/schema/saved-reports";
 import { users } from "@/db/schema/users";
 import {
   decodeCursor as decodeStandardCursor,
@@ -25,12 +37,19 @@ export interface ReportsCursorFilters {
  * - `mine`: owner = viewerId.
  * - `shared`: owner != viewerId AND is_shared = true.
  * - `all` (default): owner = viewerId OR is_shared = true.
+ *
+ * Marketing-entity gate: when `canSeeMarketing` is false, marketing-typed
+ * reports are excluded from BOTH the rows and the count query so a
+ * non-marketing viewer never sees (or is told the count of) reports they
+ * cannot open. Mirrors `assertCanViewReport` in `./access.ts`. Defaults to
+ * `true` so existing admin/marketing callers are unaffected.
  */
 export async function listReportsCursor(args: {
   viewerId: string;
   filters: ReportsCursorFilters;
   cursor: string | null;
   pageSize?: number;
+  canSeeMarketing?: boolean;
 }): Promise<{
   data: ReportListItem[];
   nextCursor: string | null;
@@ -38,11 +57,21 @@ export async function listReportsCursor(args: {
 }> {
   const pageSize = args.pageSize ?? 50;
   const { viewerId, filters } = args;
+  const canSeeMarketing = args.canSeeMarketing ?? true;
 
   const wheres: SQL[] = [
     eq(savedReports.isBuiltin, false),
     eq(savedReports.isDeleted, false),
   ];
+
+  if (!canSeeMarketing) {
+    wheres.push(
+      notInArray(
+        savedReports.entityType,
+        MARKETING_REPORT_ENTITY_TYPES as string[],
+      ),
+    );
+  }
 
   const scope = filters.scope ?? "all";
   if (scope === "mine") {

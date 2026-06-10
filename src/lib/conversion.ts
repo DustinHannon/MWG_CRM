@@ -130,7 +130,24 @@ export async function convertLead(
     let accountId: string;
     let accountCreated = false;
     if (input.existingAccountId) {
-      accountId = input.existingAccountId;
+      // Never trust a caller-supplied account id. Re-fetch and verify the
+      // account exists and is not archived before linking a contact /
+      // opportunity (and the lead's activities) to it; otherwise a crafted
+      // request could graft converted records onto a bogus/archived account.
+      // Owner/visibility access for the target account is enforced in the
+      // server action via requireOwnedEntityAccess before this runs.
+      const accountRow = await tx
+        .select({ id: crmAccounts.id })
+        .from(crmAccounts)
+        .where(
+          and(
+            eq(crmAccounts.id, input.existingAccountId),
+            eq(crmAccounts.isDeleted, false),
+          ),
+        )
+        .limit(1);
+      if (!accountRow[0]) throw new NotFoundError("account");
+      accountId = accountRow[0].id;
     } else if (input.newAccount) {
       const inserted = await tx
         .insert(crmAccounts)
@@ -212,12 +229,20 @@ export async function convertLead(
     // 5. Reassign lead's activities → opportunity (if created), else
     // leave them on the lead. The CHECK constraint requires
     // exactly-one-parent, so we set lead_id NULL when setting
-    // opportunity_id.
+    // opportunity_id. Only active activities are reparented — archived
+    // (soft-deleted) rows stay attached to the lead so a later lead
+    // restore can still find them by lead_id and the forensic chain is
+    // preserved.
     if (opportunityId) {
       await tx
         .update(activities)
         .set({ leadId: null, opportunityId })
-        .where(eq(activities.leadId, input.leadId));
+        .where(
+          and(
+            eq(activities.leadId, input.leadId),
+            eq(activities.isDeleted, false),
+          ),
+        );
     }
 
     return { accountId, contactId, opportunityId, accountCreated };
@@ -237,7 +262,7 @@ export async function convertLeadWithAudit(
   await writeAudit({
     actorId,
     action: "lead.convert",
-    targetType: "leads",
+    targetType: "lead",
     targetId: input.leadId,
     after: {
       accountId: result.accountId,

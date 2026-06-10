@@ -100,7 +100,7 @@ export async function createContact(
   await writeAudit({
     actorId,
     action: "contact.create",
-    targetType: "contacts",
+    targetType: "contact",
     targetId: inserted[0].id,
     after: {
       firstName: input.firstName,
@@ -157,7 +157,7 @@ export async function archiveContactsById(
         updatedById: actorId,
         updatedAt: sql`now()`,
       })
-      .where(inArray(contacts.id, ids));
+      .where(and(inArray(contacts.id, ids), eq(contacts.isDeleted, false)));
     const cascadedTasks = await tx
       .update(tasks)
       .set({

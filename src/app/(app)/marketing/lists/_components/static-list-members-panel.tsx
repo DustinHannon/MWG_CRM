@@ -25,8 +25,6 @@ import {
  * Behaviors:
  * • Selection toolbar (sticky bottom) when ≥1 row selected.
  * • Header checkbox: select all visible rows on the page.
- * • "Select all across pages" affordance when total > visible; opens
- * a count-confirmation alert above 50.
  * • Inline edit (click → input → blur saves; 600ms debounce).
  * • Bulk edit modal: one field across selected rows.
  * • Bulk remove via StandardConfirmDialog-like AlertDialog.
@@ -54,7 +52,6 @@ interface Props {
 }
 
 const INLINE_EDIT_DEBOUNCE_MS = 600;
-const SELECT_ALL_CONFIRMATION_THRESHOLD = 50;
 
 /**
  * Outer wrapper re-mounts the inner panel when the page / filter
@@ -90,18 +87,20 @@ function StaticListMembersPanelInner(props: Props) {
   // re-passes the prop.
   const rows = initialRows;
 
-  // Selection state: per-id Set + the "select all across pages" toggle.
-  // Reset implicitly via the outer key-based remount.
+  // Selection state: per-id Set scoped to the rows the user has
+  // explicitly checked on the current page (the outer key-based
+  // remount resets it on page/filter change). The server actions
+  // operate on an explicit member-id list, so a "select all across
+  // pages" mode would overstate the actioned set (the dialogs would
+  // confirm a count larger than the rows actually edited/removed).
+  // Counts and operations stay equal to this Set.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectAllAcrossPages, setSelectAllAcrossPages] = useState(false);
 
   const allVisibleSelected =
     rows.length > 0 && rows.every((r) => selectedIds.has(r.id));
   const someVisibleSelected = rows.some((r) => selectedIds.has(r.id));
 
-  const effectiveSelectedCount = selectAllAcrossPages
-    ? total
-    : selectedIds.size;
+  const effectiveSelectedCount = selectedIds.size;
 
   function toggleRow(id: string) {
     setSelectedIds((prev) => {
@@ -110,7 +109,6 @@ function StaticListMembersPanelInner(props: Props) {
       else next.add(id);
       return next;
     });
-    setSelectAllAcrossPages(false);
   }
 
   function toggleAllVisible() {
@@ -123,12 +121,10 @@ function StaticListMembersPanelInner(props: Props) {
       }
       return next;
     });
-    setSelectAllAcrossPages(false);
   }
 
   function clearSelection() {
     setSelectedIds(new Set());
-    setSelectAllAcrossPages(false);
   }
 
   // -------------------------------------------------------------------------
@@ -203,34 +199,13 @@ function StaticListMembersPanelInner(props: Props) {
   const [bulkEditValue, setBulkEditValue] = useState("");
   const [pendingBulk, startBulkTransition] = useTransition();
 
-  // "Select all across pages" is treated as the visible-only set unless
-  // confirmed — we surface a count check above the threshold.
-  const [pendingSelectAllAcrossConfirm, setPendingSelectAllAcrossConfirm] =
-    useState(false);
-
-  function requestSelectAllAcrossPages() {
-    if (total > SELECT_ALL_CONFIRMATION_THRESHOLD) {
-      setPendingSelectAllAcrossConfirm(true);
-      return;
-    }
-    setSelectAllAcrossPages(true);
-  }
-
   function applyBulkEdit() {
     if (bulkEditValue.trim().length === 0) {
       toast.error("Enter a value to apply.");
       return;
     }
     startBulkTransition(async () => {
-      const memberIds = selectAllAcrossPages
-        ? // Server doesn't yet expose a "select all matching filter"
-          // mode — bulk operations are scoped to the in-memory ID set.
-          // For the across-pages case we operate on every visible row
-          // page-by-page; here we limit to the current visible page
-          // when across-pages is active until a follow-up phase
-          // teaches the action layer to expand a filter into IDs.
-          rows.map((r) => r.id)
-        : Array.from(selectedIds);
+      const memberIds = Array.from(selectedIds);
       const result = await bulkUpdateStaticListMembersAction({
         listId,
         memberIds,
@@ -256,9 +231,7 @@ function StaticListMembersPanelInner(props: Props) {
   const [pendingRemove, startRemoveTransition] = useTransition();
 
   function applyRemove() {
-    const memberIds = selectAllAcrossPages
-      ? rows.map((r) => r.id)
-      : Array.from(selectedIds);
+    const memberIds = Array.from(selectedIds);
     startRemoveTransition(async () => {
       const result = await removeStaticListMembersAction({
         listId,
@@ -279,9 +252,7 @@ function StaticListMembersPanelInner(props: Props) {
   // Export CSV — client-side blob from in-memory rows.
   // -------------------------------------------------------------------------
   function exportSelectedCsv() {
-    const selectedRows = rows.filter((r) =>
-      selectAllAcrossPages ? true : selectedIds.has(r.id),
-    );
+    const selectedRows = rows.filter((r) => selectedIds.has(r.id));
     if (selectedRows.length === 0) {
       toast.error("Select at least one recipient to export.");
       return;
@@ -378,8 +349,7 @@ function StaticListMembersPanelInner(props: Props) {
               </thead>
               <tbody className="divide-y divide-border">
                 {rows.map((r) => {
-                  const isSelected =
-                    selectAllAcrossPages || selectedIds.has(r.id);
+                  const isSelected = selectedIds.has(r.id);
                   return (
                     <tr
                       key={r.id}
@@ -435,21 +405,14 @@ function StaticListMembersPanelInner(props: Props) {
         </div>
       )}
 
-      {/* Select-all-across-pages affordance */}
-      {someVisibleSelected &&
-      !selectAllAcrossPages &&
-      total > rows.length ? (
-        <p className="text-xs text-muted-foreground">
-          {selectedIds.size} on this page selected.{" "}
-          <button
-            type="button"
-            onClick={requestSelectAllAcrossPages}
-            className="font-medium text-primary hover:underline"
-          >
-            Select all {total.toLocaleString()} across pages
-          </button>
-        </p>
-      ) : null}
+      {/*
+        Selection is scoped to the rows the user has explicitly checked
+        on the current page (the outer key-based remount resets the Set
+        on page/filter change). Bulk edit/remove act on exactly that
+        Set because the server actions take an explicit member-id list,
+        so there is no "select all across pages" affordance — its count
+        would overstate what the operation actually touches.
+      */}
 
       {/* Pagination */}
       {totalPages > 1 ? (
@@ -521,49 +484,6 @@ function StaticListMembersPanelInner(props: Props) {
           </div>
         </div>
       ) : null}
-
-      {/* Confirmation: select all across pages */}
-      <AlertDialog.Root
-        open={pendingSelectAllAcrossConfirm}
-        onOpenChange={setPendingSelectAllAcrossConfirm}
-      >
-        <AlertDialog.Portal>
-          <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
-          <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-background p-6 shadow-xl">
-            <AlertDialog.Title className="text-base font-semibold text-foreground">
-              Select all {total.toLocaleString()} recipients?
-            </AlertDialog.Title>
-            <AlertDialog.Description asChild>
-              <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-                <p>
-                  This selection spans every page of the current list view.
-                  Confirm to continue.
-                </p>
-              </div>
-            </AlertDialog.Description>
-            <div className="mt-5 flex justify-end gap-2">
-              <AlertDialog.Cancel asChild>
-                <button
-                  type="button"
-                  className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted"
-                >
-                  Cancel
-                </button>
-              </AlertDialog.Cancel>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectAllAcrossPages(true);
-                  setPendingSelectAllAcrossConfirm(false);
-                }}
-                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-              >
-                Select all
-              </button>
-            </div>
-          </AlertDialog.Content>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
 
       {/* Bulk edit modal */}
       <Dialog.Root open={bulkEditOpen} onOpenChange={setBulkEditOpen}>

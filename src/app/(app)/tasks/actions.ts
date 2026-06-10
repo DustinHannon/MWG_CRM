@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import {
+  getPermissions,
+  requireLeadAccess,
+  requireOwnedEntityAccess,
+  requireSession,
+} from "@/lib/auth-helpers";
 import {
   archiveTasksById,
   createTask,
@@ -21,8 +26,9 @@ import {
 } from "@/lib/notifications";
 import { db } from "@/db";
 import { tasks } from "@/db/schema/tasks";
+import { users } from "@/db/schema/users";
 import { userPreferences } from "@/db/schema/views";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
@@ -49,6 +55,51 @@ export async function createTaskAction(
     async (): Promise<TaskIdData> => {
       const session = await requireSession();
       const parsed = taskCreateSchema.parse(raw);
+
+      // Authorize the linked parent before linking a task to it. The
+      // action is the trust boundary — the client passes the entity id
+      // straight through, so without this gate a caller could link a
+      // task to a lead/account/contact/opportunity they can't access
+      // (IDOR; leaks the parent's display name back via the task list).
+      // Re-fetches and authorizes the entity, mirroring addTaskAction.
+      if (parsed.leadId) {
+        await requireLeadAccess(session, parsed.leadId);
+      } else if (parsed.accountId) {
+        await requireOwnedEntityAccess(session, "account", parsed.accountId);
+      } else if (parsed.contactId) {
+        await requireOwnedEntityAccess(session, "contact", parsed.contactId);
+      } else if (parsed.opportunityId) {
+        await requireOwnedEntityAccess(
+          session,
+          "opportunity",
+          parsed.opportunityId,
+        );
+      }
+
+      // Authorize cross-user assignment. Assigning to anyone other than
+      // self requires admin or canReassignTasks (parity with
+      // bulkReassignTasksAction); the target must also be an existing,
+      // active user — otherwise a caller could fire a task_assigned
+      // notification carrying an attacker-controlled title to an
+      // arbitrary user id.
+      if (parsed.assignedToId && parsed.assignedToId !== session.id) {
+        const perms = await getPermissions(session.id);
+        if (!session.isAdmin && !perms.canReassignTasks) {
+          throw new ForbiddenError(
+            "You don't have permission to assign tasks to other users.",
+          );
+        }
+        const [assignee] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(
+            and(eq(users.id, parsed.assignedToId), eq(users.isActive, true)),
+          )
+          .limit(1);
+        if (!assignee) {
+          throw new ForbiddenError("Assignee not found.");
+        }
+      }
 
       const result = await createTask(parsed, session.id);
 
@@ -82,17 +133,26 @@ export async function createTaskAction(
   );
 }
 
-const updateActionSchema = taskUpdateSchema.extend({
-  id: z.string().uuid(),
-  // required so concurrentUpdate can reject stale writes.
-  version: z.coerce.number().int().positive(),
-  // Optional source discriminator so callers that capture user intent
-  // can tag the audit row with a distinct event name. Today only the
-  // queue Snooze passes `"snooze"` → `task.snooze` audit; every other
-  // caller (edit dialog, bulk reschedule, future surfaces) omits it
-  // and falls through to the generic `task.update`.
-  source: z.enum(["snooze"]).optional(),
-});
+const updateActionSchema = taskUpdateSchema
+  .extend({
+    id: z.string().uuid(),
+    // required so concurrentUpdate can reject stale writes.
+    version: z.coerce.number().int().positive(),
+    // Optional source discriminator so callers that capture user intent
+    // can tag the audit row with a distinct event name. Today only the
+    // queue Snooze passes `"snooze"` → `task.snooze` audit; every other
+    // caller (edit dialog, bulk reschedule, future surfaces) omits it
+    // and falls through to the generic `task.update`.
+    source: z.enum(["snooze"]).optional(),
+  })
+  // `source:"snooze"` must coincide with an actual due-date change,
+  // otherwise the audit row gets labelled `task.snooze` for a patch that
+  // never moved dueAt — polluting "show me all snoozes" forensic
+  // queries. Couple the discriminator to a defined dueAt.
+  .refine((v) => v.source !== "snooze" || v.dueAt !== undefined, {
+    message: "A snooze must include a new due date.",
+    path: ["dueAt"],
+  });
 
 export async function updateTaskAction(
   raw: z.infer<typeof updateActionSchema>,
@@ -108,13 +168,16 @@ export async function updateTaskAction(
       // Defence-in-depth access gate. Admin or canEditOthersTasks
       // can touch any task; otherwise the actor must be the
       // creator or assignee. This matches the canDeleteTask gate.
+      // Exclude soft-deleted rows: an archived task must not be mutable
+      // by replaying a captured {id, version}. A deleted row reads as
+      // not-found here, same leak-guard shape as the missing-row branch.
       const [row] = await db
         .select({
           createdById: tasks.createdById,
           assignedToId: tasks.assignedToId,
         })
         .from(tasks)
-        .where(eq(tasks.id, id))
+        .where(and(eq(tasks.id, id), eq(tasks.isDeleted, false)))
         .limit(1);
       if (!row) {
         throw new ForbiddenError("Task not found.");
@@ -131,6 +194,28 @@ export async function updateTaskAction(
           targetId: id,
         });
         throw new ForbiddenError("You can't edit this task.");
+      }
+
+      // Authorize cross-user (re)assignment and reject inactive assignees,
+      // mirroring createTaskAction: assigning to anyone other than self
+      // requires admin or canReassignTasks, and the target must be an
+      // existing, active user (not a deactivated or sentinel account).
+      if (patch.assignedToId && patch.assignedToId !== session.id) {
+        if (!session.isAdmin && !perms.canReassignTasks) {
+          throw new ForbiddenError(
+            "You don't have permission to assign tasks to other users.",
+          );
+        }
+        const [assignee] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(
+            and(eq(users.id, patch.assignedToId), eq(users.isActive, true)),
+          )
+          .limit(1);
+        if (!assignee) {
+          throw new ForbiddenError("Assignee not found.");
+        }
       }
 
       const result = await updateTask(
@@ -406,13 +491,15 @@ export async function toggleTaskCompleteAction(
       // entity-tasks-section, and the new /tasks/queue) can't mark
       // someone else's task complete just because the actor knows
       // its id+version. Admin or canEditOthersTasks bypass.
+      // Exclude soft-deleted rows: an archived task must not be
+      // completable by replaying a captured {id, version}.
       const [row] = await db
         .select({
           createdById: tasks.createdById,
           assignedToId: tasks.assignedToId,
         })
         .from(tasks)
-        .where(eq(tasks.id, id))
+        .where(and(eq(tasks.id, id), eq(tasks.isDeleted, false)))
         .limit(1);
       if (!row) {
         // Match updateTaskAction's leak-guard shape: a missing row

@@ -4,7 +4,7 @@ import { writeSystemAudit } from "@/lib/audit";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { dispatchJob, handlers } from "@/lib/jobs/handlers";
-import { NonRetryableJobError } from "@/lib/jobs/errors";
+import { JobTimeoutError, NonRetryableJobError } from "@/lib/jobs/errors";
 import {
   claimNextJobs,
   markJobSucceeded,
@@ -14,6 +14,7 @@ import {
 import {
   WORKER_BATCH_SIZE,
   WORKER_MAX_RUNTIME_MS,
+  type JobHandlerContext,
   type JobKind,
   type JobRecord,
 } from "@/lib/jobs/types";
@@ -36,17 +37,20 @@ export const maxDuration = 300;
  *      (queue library uses `SELECT ... FOR UPDATE SKIP LOCKED` — see
  *      STANDARDS §19 Supavisor-safe locking notes).
  *   4. Dispatches each claimed job to its registered handler via
- *      `dispatchJob(kind, payload, context)`. Outcomes:
+ *      `dispatchJob(kind, payload, context)`, bounded by a per-handler
+ *      execution budget (`HANDLER_TIMEOUT_MS`). Outcomes:
  *        - resolves   → `markJobSucceeded`.
  *        - `NonRetryableJobError` → `markJobFailed(retryable: false)` →
  *          row moves to `job_queue_dead_letter` immediately.
- *        - any other throw → `markJobFailed(retryable: true)` →
+ *        - `JobTimeoutError` (handler exceeded the per-handler budget) or
+ *          any other throw → `markJobFailed(retryable: true)` →
  *          row returns to `pending` with exponential backoff if attempts
  *          remain, or moves to dead-letter on exhaustion (queue lib
  *          enforces the budget; this route just reports the outcome).
  *   5. Stops claiming new work when the wall-clock budget drops below
- *      `RUNTIME_GUARD_MS`. In-flight handlers are NOT cancelled — they
- *      finish naturally and Vercel's hard 300s ceiling backstops them.
+ *      `RUNTIME_GUARD_MS`. The per-handler timeout abandons (does not
+ *      cancel) a hung handler so its row's outcome is still marked and the
+ *      loop continues; Vercel's hard 300s ceiling backstops everything.
  *   6. Emits a single aggregated audit row per invocation (per STANDARDS
  *      §19 high-frequency audit aggregation rule).
  *   7. Returns a JSON summary so cron monitoring can inspect the run
@@ -75,6 +79,28 @@ const RUNTIME_GUARD_MS = 30_000;
  * JSON serialization gone wrong) shouldn't bloat the row.
  */
 const MAX_ERROR_MESSAGE_CHARS = 2_000;
+
+/**
+ * Per-handler execution budget. A single `dispatchJob` call that exceeds
+ * this is abandoned with a `JobTimeoutError` and routed through
+ * `markJobFailed(retryable: true)` so it consumes the retry budget and
+ * eventually dead-letters instead of wedging the worker.
+ *
+ * Sized at 60s and deliberately well under Vercel's hard 300s `maxDuration`:
+ * the runtime guard lets a handler start as late as
+ * `WORKER_MAX_RUNTIME_MS - RUNTIME_GUARD_MS` (≈210s) into the run, so a
+ * timeout firing 60s later (≈270s) still leaves ≈30s for `markJobFailed`,
+ * the audit write, and the JSON flush before the platform force-kills the
+ * lambda. Raising this above `300 - 210 - RUNTIME_GUARD_MS` would let a hung
+ * handler eat that shutdown headroom — keep it conservative.
+ *
+ * NOTE: this is a *soft* timeout — the underlying handler promise is not
+ * cancelled (no `AbortController` is threaded through `dispatchJob` today),
+ * so a hung handler's work keeps running in the background until the lambda
+ * exits. The timeout's job is to unblock the worker loop and mark the row's
+ * outcome, not to reclaim the handler's resources.
+ */
+const HANDLER_TIMEOUT_MS = 60_000;
 
 interface RunSummary {
   workerId: string;
@@ -211,7 +237,7 @@ async function runOneJob(
   };
 
   try {
-    await dispatchJob(job.kind, job.payload, context);
+    await dispatchWithTimeout(job, context);
     await markJobSucceeded(job.id);
     summary.succeeded += 1;
     logger.info("jobs.worker.job_succeeded", {
@@ -265,6 +291,40 @@ async function runOneJob(
           markErr instanceof Error ? markErr.message : String(markErr),
       });
     }
+  }
+}
+
+/**
+ * Dispatch a job to its handler, bounded by `HANDLER_TIMEOUT_MS`.
+ *
+ * Races the handler promise against a timer that rejects with
+ * `JobTimeoutError`. If the handler wins, its result (resolve or reject)
+ * passes through unchanged. If the timer wins, the caller sees a
+ * `JobTimeoutError` (routed through `markJobFailed(retryable: true)` in
+ * `runOneJob`, since `JobTimeoutError` is not a `NonRetryableJobError`).
+ *
+ * The timer is always cleared in a `finally` so a fast handler does not
+ * leave a dangling timer holding the event loop / lambda open.
+ */
+async function dispatchWithTimeout(
+  job: JobRecord<JobKind>,
+  context: JobHandlerContext,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new JobTimeoutError(
+          `Handler for kind '${job.kind}' (job ${job.id}) exceeded the ${HANDLER_TIMEOUT_MS}ms per-handler budget`,
+        ),
+      );
+    }, HANDLER_TIMEOUT_MS);
+  });
+
+  try {
+    await Promise.race([dispatchJob(job.kind, job.payload, context), timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 

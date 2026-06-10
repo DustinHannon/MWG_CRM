@@ -88,6 +88,13 @@ function translatePgError(err: unknown): unknown {
       ? (cause as { code?: unknown }).code
       : undefined;
   const code = topCode ?? causeCode;
+  // The constraint name is wrapped the same way as the SQLSTATE — the
+  // postgres-js error exposes it as `constraint_name`, which sits on
+  // `.cause` for the Drizzle-wrapped path, so unwrap it the same way.
+  const causeConstraint =
+    cause && typeof cause === "object"
+      ? (cause as { constraint_name?: unknown }).constraint_name
+      : undefined;
   // Use the cause's message when the wrapper message is generic so the
   // audit `cause` field contains the actual postgres error detail.
   const causeMsg =
@@ -118,7 +125,9 @@ function translatePgError(err: unknown): unknown {
       "Cannot complete: a referenced record is missing or was just deleted.",
       {
         pgCode: "23503",
-        constraint: (err as { constraint_name?: unknown }).constraint_name,
+        constraint:
+          (err as { constraint_name?: unknown }).constraint_name ??
+          causeConstraint,
         cause: causeMsg,
       },
     );

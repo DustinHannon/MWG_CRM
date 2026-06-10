@@ -62,7 +62,15 @@ export async function GET(req: Request) {
   // surfaced soft-deleted rows as "duplicates" against fresh imports,
   // which the import flow then rejected, blocking re-creation of leads
   // whose archive was the actual user intent.
-  const where = and(or(...conditions), withActive(leads.isDeleted));
+  //
+  // Scope ownership in SQL (mirrors listLeads) so LIMIT applies to the
+  // actor-visible set. Filtering ownership after LIMIT 10 could strip
+  // every returned row and hide a duplicate the actor actually owns.
+  const where = and(
+    or(...conditions),
+    withActive(leads.isDeleted),
+    canViewAll ? undefined : eq(leads.ownerId, session.id),
+  );
 
   const rows = await db
     .select({
@@ -81,13 +89,8 @@ export async function GET(req: Request) {
     .where(where)
     .limit(10);
 
-  // Filter out leads the actor isn't allowed to see.
-  const filtered = canViewAll
-    ? rows
-    : rows.filter((r) => r.ownerId === session.id);
-
   return NextResponse.json({
-    matches: filtered.map((r) => ({
+    matches: rows.map((r) => ({
       id: r.id,
       name: formatPersonName(r),
       companyName: r.companyName,

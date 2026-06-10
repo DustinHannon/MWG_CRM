@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { contacts, crmAccounts } from "@/db/schema/crm-records";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
-import { getPermissions, requireSession } from "@/lib/auth-helpers";
+import { requireSession } from "@/lib/auth-helpers";
 import { TagSection } from "@/components/tags/tag-section";
 import { AccountEditForm } from "./_components/account-edit-form";
 
@@ -23,7 +23,6 @@ export default async function EditAccountPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireSession();
-  const perms = await getPermissions(user.id);
   const { id } = await params;
 
   const [account] = await db
@@ -33,10 +32,10 @@ export default async function EditAccountPage({
     .limit(1);
   if (!account || account.isDeleted) notFound();
 
-  // Owner-or-admin-or-canViewAll. Stricter than view because edits
-  // mutate state.
-  const canEdit =
-    user.isAdmin || account.ownerId === user.id || perms.canViewAllRecords;
+  // Owner-or-admin only. Stricter than view because edits mutate
+  // state; matches updateAccountAction and the detail-page Edit link,
+  // which both exclude canViewAllRecords.
+  const canEdit = user.isAdmin || account.ownerId === user.id;
   if (!canEdit) redirect(`/accounts/${id}`);
 
   return (

@@ -290,13 +290,16 @@ export function CampaignWizard({
         const res = await scheduleCampaignAction({
           id: campaignId,
           scheduledFor: at,
+          expectedVersion: campaignVersion ?? undefined,
         });
         if (!res.ok) {
           setError(res.error);
           return;
         }
       } else {
-        const res = await sendCampaignNowAction(campaignId);
+        const res = await sendCampaignNowAction(campaignId, {
+          expectedVersion: campaignVersion ?? undefined,
+        });
         if (!res.ok) {
           setError(res.error);
           return;

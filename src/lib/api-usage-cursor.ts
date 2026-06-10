@@ -127,41 +127,47 @@ export async function listApiUsageCursor(args: {
       : cursorWhere
     : baseWhere;
 
-  // Guard slow searches.
-  if (filters.search) {
-    await db.execute(sql`SET LOCAL statement_timeout = '5s'`);
-  }
-
-  const [rowsRaw, totalRow] = await Promise.all([
-    db
-      .select({
-        id: apiUsageLog.id,
-        createdAt: apiUsageLog.createdAt,
-        apiKeyId: apiUsageLog.apiKeyId,
-        apiKeyNameSnapshot: apiUsageLog.apiKeyNameSnapshot,
-        apiKeyPrefixSnapshot: apiUsageLog.apiKeyPrefixSnapshot,
-        method: apiUsageLog.method,
-        path: apiUsageLog.path,
-        action: apiUsageLog.action,
-        statusCode: apiUsageLog.statusCode,
-        responseTimeMs: apiUsageLog.responseTimeMs,
-        ipAddress: apiUsageLog.ipAddress,
-        userAgent: apiUsageLog.userAgent,
-        requestQuery: apiUsageLog.requestQuery,
-        requestBodySummary: apiUsageLog.requestBodySummary,
-        responseSummary: apiUsageLog.responseSummary,
-        errorCode: apiUsageLog.errorCode,
-        errorMessage: apiUsageLog.errorMessage,
-      })
-      .from(apiUsageLog)
-      .where(finalWhere)
-      .orderBy(desc(apiUsageLog.createdAt), desc(apiUsageLog.id))
-      .limit(pageSize + 1),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(apiUsageLog)
-      .where(baseWhere),
-  ]);
+  // Guard slow searches. SET LOCAL only applies inside a transaction, so
+  // the timeout-set and the SELECTs must run in the same tx.
+  // set_config(..., true) is SET LOCAL with the value as a bind parameter
+  // (Supavisor-safe).
+  const [rowsRaw, totalRow] = await db.transaction(async (tx) => {
+    if (filters.search) {
+      await tx.execute(
+        sql`SELECT set_config('statement_timeout', '5s', true)`,
+      );
+    }
+    return Promise.all([
+      tx
+        .select({
+          id: apiUsageLog.id,
+          createdAt: apiUsageLog.createdAt,
+          apiKeyId: apiUsageLog.apiKeyId,
+          apiKeyNameSnapshot: apiUsageLog.apiKeyNameSnapshot,
+          apiKeyPrefixSnapshot: apiUsageLog.apiKeyPrefixSnapshot,
+          method: apiUsageLog.method,
+          path: apiUsageLog.path,
+          action: apiUsageLog.action,
+          statusCode: apiUsageLog.statusCode,
+          responseTimeMs: apiUsageLog.responseTimeMs,
+          ipAddress: apiUsageLog.ipAddress,
+          userAgent: apiUsageLog.userAgent,
+          requestQuery: apiUsageLog.requestQuery,
+          requestBodySummary: apiUsageLog.requestBodySummary,
+          responseSummary: apiUsageLog.responseSummary,
+          errorCode: apiUsageLog.errorCode,
+          errorMessage: apiUsageLog.errorMessage,
+        })
+        .from(apiUsageLog)
+        .where(finalWhere)
+        .orderBy(desc(apiUsageLog.createdAt), desc(apiUsageLog.id))
+        .limit(pageSize + 1),
+      tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(apiUsageLog)
+        .where(baseWhere),
+    ]);
+  });
 
   let nextCursor: string | null = null;
   let data = rowsRaw;

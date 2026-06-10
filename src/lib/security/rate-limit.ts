@@ -58,6 +58,11 @@ export type RateLimitKey =
   // permanently destructive; the limit bounds a scripted or
   // double-submitted danger op from firing repeatedly.
   | { kind: "admin_danger_op"; principal: string }
+  // Email-failures admin retry endpoint. Principal is
+  // `${adminId}:${originalLogId}` so the limit bounds repeated retries
+  // of the same failed row by the same admin — each retry fires a real
+  // Microsoft Graph send to original.toEmail plus an email_send_log row.
+  | { kind: "email_retry"; principal: string }
   // Public REST API per-key limit. Principal is the API key id. Each
   // key carries its own `rate_limit_per_minute`; this replaces the
   // earlier count-then-act read of `api_usage_log` (which raced under
@@ -71,7 +76,17 @@ export type RateLimitKey =
   // (defeatable across Vercel instances / cold starts) with a durable
   // cross-instance Postgres counter. The username is a non-PII admin
   // handle, stored verbatim (same posture as `internal_list`).
-  | { kind: "breakglass"; principal: string };
+  | { kind: "breakglass"; principal: string }
+  // Bulk tag apply/remove server action (bulkTagAction). Principal is the
+  // user id. Bounds a single canApplyTags holder from looping a 5,000-record
+  // set-based op against the shared session pooler. Dedicated bucket (not
+  // internal_list) so it does not share budget with cursor scrolling.
+  | { kind: "bulk_tag"; principal: string }
+  // Supabase Realtime JWT mint endpoint. Principal is the session/user id.
+  // Replaces the per-process in-memory Map (defeatable across Vercel
+  // instances / cold starts) with the durable cross-instance Postgres
+  // counter, matching the breakglass posture.
+  | { kind: "realtime_token"; principal: string };
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -176,6 +191,42 @@ export async function rateLimit(
     remaining: Math.max(0, Math.floor(limit - sliding)),
     retryAfter: null,
   };
+}
+
+/**
+ * Refund one previously-counted attempt for the current window.
+ *
+ * rateLimit() increments the counter on every call (before the caller
+ * knows the outcome). Some surfaces want to NOT charge the budget for a
+ * legitimate success — e.g. breakglass sign-in only counts failed/denied
+ * attempts toward its brute-force limit, not successful logins. After a
+ * verified success the caller refunds the increment here. Decrements the
+ * current window's count by 1 (floored at 0), mirroring the rollback
+ * rateLimit() already performs on the denied path. Same window alignment
+ * so it targets the row just incremented. Best-effort, fail-open: a DB
+ * blip leaves the attempt counted (the safe direction) and never throws.
+ */
+export async function refundRateLimit(
+  key: RateLimitKey,
+  windowSeconds: number,
+): Promise<void> {
+  const windowMs = windowSeconds * 1000;
+  const windowStartMs = Math.floor(Date.now() / windowMs) * windowMs;
+  const windowStart = new Date(windowStartMs);
+  try {
+    await db
+      .update(rateLimitBuckets)
+      .set({ count: sql`GREATEST(${rateLimitBuckets.count} - 1, 0)` })
+      .where(
+        and(
+          eq(rateLimitBuckets.kind, key.kind),
+          eq(rateLimitBuckets.principal, key.principal),
+          eq(rateLimitBuckets.windowStart, windowStart),
+        ),
+      );
+  } catch {
+    // Fail-open: leave the attempt counted rather than add a failure path.
+  }
 }
 
 /**

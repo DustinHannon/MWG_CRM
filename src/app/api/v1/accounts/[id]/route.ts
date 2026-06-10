@@ -211,7 +211,7 @@ export const PATCH = withApi<{ id: string }>(
     await writeAudit({
       actorId: key.createdById,
       action: "account.update",
-      targetType: "crm_accounts",
+      targetType: "account",
       targetId: params.id,
       after: { ...patch, source: "api" },
     });
@@ -245,7 +245,7 @@ export const DELETE = withApi<{ id: string }>(
       await writeAudit({
         actorId: key.createdById,
         action: "account.hard_delete",
-        targetType: "crm_accounts",
+        targetType: "account",
         targetId: params.id,
         before: { source: "api" },
       });
@@ -254,7 +254,7 @@ export const DELETE = withApi<{ id: string }>(
       await writeAudit({
         actorId: key.createdById,
         action: "account.archive",
-        targetType: "crm_accounts",
+        targetType: "account",
         targetId: params.id,
         after: { source: "api", reason: "API delete" },
       });

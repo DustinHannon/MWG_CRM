@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   importBatches,
@@ -75,7 +75,11 @@ import {
  */
 function defaultQuickPullScope(_entityType: string): Record<string, unknown> {
   return {
-    filter: {},
+    // Explicit empty statecode = "all states". An ABSENT statecode key
+    // applies the per-entity active-only default in pull-batch/queries,
+    // which would silently exclude disqualified / lost / closed records
+    // and contradict quick-pull's documented "any statecode" intent.
+    filter: { statecode: [] },
     includeChildren: false,
   };
 }
@@ -149,7 +153,15 @@ export async function createRunAction(
       const scope: Record<string, unknown> = {
         filter: {
           modifiedSince: modifiedSinceIso,
-          ...(supportsActiveOnly && input.activeOnly ? { statecode: [0] } : {}),
+          // statecode presence is authoritative in pull-batch/queries: an
+          // absent key applies the per-entity active-only default, so for
+          // toggle-supporting entities we must write the key explicitly in
+          // BOTH states — [0] (active only) when checked, [] (all states)
+          // when unchecked — otherwise an unchecked box would still drop
+          // inactive rows via the per-entity default.
+          ...(supportsActiveOnly
+            ? { statecode: input.activeOnly ? [0] : [] }
+            : {}),
         },
         includeChildren: !!input.includeChildren,
       };
@@ -172,7 +184,7 @@ export async function createRunAction(
       await writeAudit({
         actorId: user.id,
         action: D365_AUDIT_EVENTS.RUN_CREATED,
-        targetType: "d365_import_run",
+        targetType: "import_run",
         targetId: row.id,
         after: { entityType: input.entityType, scope },
       });
@@ -237,7 +249,7 @@ export async function quickPullAction(
         await writeAudit({
           actorId: user.id,
           action: D365_AUDIT_EVENTS.RUN_CREATED,
-          targetType: "d365_import_run",
+          targetType: "import_run",
           targetId: runId,
           after: { entityType: input.entityType, viaQuickPull: true },
         });
@@ -308,7 +320,7 @@ export async function pullNextBatchAction(
         await writeAudit({
           actorId: user.id,
           action: AUDIT_EVENTS.D365_BATCH_PULL_NEXT,
-          targetType: "d365_import_run",
+          targetType: "import_run",
           targetId: runId,
           after: { batchId, priorStatus: run.status },
         });
@@ -358,7 +370,7 @@ export async function abortRunAction(
       await writeAudit({
         actorId: user.id,
         action: D365_AUDIT_EVENTS.RUN_ABORTED,
-        targetType: "d365_import_run",
+        targetType: "import_run",
         targetId: runId,
         before: { status: run.status },
         after: { status: "aborted" },
@@ -431,7 +443,7 @@ export async function markRunCompleteAction(
       await writeAudit({
         actorId: user.id,
         action: D365_AUDIT_EVENTS.RUN_COMPLETED,
-        targetType: "d365_import_run",
+        targetType: "import_run",
         targetId: runId,
         before: { status: run.status },
         after: { status: "completed" },
@@ -553,19 +565,13 @@ export async function resumeRunAction(
         input.reason,
         input.conflictResolution,
       );
+      // resumeRun writes the authoritative RUN_RESUMED audit row with
+      // the real resolved nextStatus (fetching/mapping/reviewing per
+      // resolution kind) and the full resolution object. No second
+      // audit here — the earlier action-layer row hardcoded
+      // after.status='reviewing', which contradicted the actual
+      // transition for every resolution except open_for_review.
       await resumeRun(input.runId, resolution, user.id);
-
-      await writeAudit({
-        actorId: user.id,
-        action: D365_AUDIT_EVENTS.RUN_RESUMED,
-        targetType: "d365_import_run",
-        targetId: input.runId,
-        before: { status: "paused_for_review", reason: input.reason },
-        after: {
-          status: "reviewing",
-          resolution: input.conflictResolution ?? null,
-        },
-      });
 
       revalidatePath("/admin/d365-import");
       revalidatePath(`/admin/d365-import/${input.runId}`);
@@ -603,6 +609,43 @@ async function loadRecord(recordId: string): Promise<{
   return row;
 }
 
+/**
+ * Recompute the batch's approved/rejected record counters from the
+ * authoritative `import_records.status` values and write them back to
+ * the batch row.
+ *
+ * These two counters (unlike fetched/committed/failed/skipped, which
+ * the pipeline helpers increment in place) only change via the
+ * reviewer's per-record approve/reject decisions in the action layer.
+ * Recomputing from the record rows — rather than applying a +1/-1
+ * delta — keeps the stored columns correct across re-decisions (an
+ * approved record later rejected, or vice-versa) and self-heals any
+ * pre-existing drift, so the run/batch pages that sum these columns
+ * (totalApproved / totalRejected) show the real numbers.
+ */
+async function recalcBatchDecisionCounts(batchId: string): Promise<void> {
+  const rows = await db
+    .select({ status: importRecords.status, n: count(importRecords.id) })
+    .from(importRecords)
+    .where(eq(importRecords.batchId, batchId))
+    .groupBy(importRecords.status);
+
+  let approved = 0;
+  let rejected = 0;
+  for (const r of rows) {
+    if (r.status === "approved") approved = Number(r.n);
+    else if (r.status === "rejected") rejected = Number(r.n);
+  }
+
+  await db
+    .update(importBatches)
+    .set({
+      recordCountApproved: approved,
+      recordCountRejected: rejected,
+    })
+    .where(eq(importBatches.id, batchId));
+}
+
 export async function approveRecordAction(
   formData: FormData,
 ): Promise<ActionResult<never>> {
@@ -625,6 +668,8 @@ export async function approveRecordAction(
           reviewedAt: new Date(),
         })
         .where(eq(importRecords.id, recordId));
+
+      await recalcBatchDecisionCounts(rec.batchId);
 
       await writeAudit({
         actorId: user.id,
@@ -662,6 +707,8 @@ export async function rejectRecordAction(
           error: reason ?? null,
         })
         .where(eq(importRecords.id, recordId));
+
+      await recalcBatchDecisionCounts(rec.batchId);
 
       await writeAudit({
         actorId: user.id,

@@ -103,9 +103,17 @@ export async function updateUserPermissions(
 
       const before = await getPermissions(parsed.data.userId);
 
+      // Build a complete permission map for the INSERT branch so that, if
+      // the target user has no permissions row yet, every column is written
+      // with the intended value (current state overlaid with the submitted
+      // changes) rather than silently falling back to schema defaults —
+      // several of which are `true`. The UPDATE branch still applies only
+      // the submitted keys so untouched columns are preserved.
+      const fullValues = { ...before, ...filtered };
+
       await db
         .insert(permissions)
-        .values({ userId: parsed.data.userId, ...filtered })
+        .values({ userId: parsed.data.userId, ...fullValues })
         .onConflictDoUpdate({
           target: permissions.userId,
           set: filtered,

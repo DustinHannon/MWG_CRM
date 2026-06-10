@@ -120,7 +120,18 @@ export default async function LeadPrintPage({
           <dd>{lead.mobilePhone ?? "—"}</dd>
           <dt>Website</dt>
           <dd>
-            {lead.website ? <a href={lead.website}>{lead.website}</a> : "—"}
+            {lead.website ? (
+              // Only link http/https values; a stored
+              // `javascript:`/`data:` value renders as plain text, not an
+              // executable href.
+              /^https?:\/\//i.test(lead.website) ? (
+                <a href={lead.website}>{lead.website}</a>
+              ) : (
+                lead.website
+              )
+            ) : (
+              "—"
+            )}
           </dd>
           <dt>Industry</dt>
           <dd>{lead.industry ?? "—"}</dd>

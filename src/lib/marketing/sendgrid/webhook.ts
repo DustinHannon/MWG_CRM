@@ -194,6 +194,31 @@ export async function tryClaimSgEvent(
 }
 
 /**
+ * Release a `sg_event_id` claim made by `tryClaimSgEvent`.
+ *
+ * The claim is committed before `processEvent` runs. If `processEvent`
+ * then fails transiently (DB blip, pool exhaustion, statement timeout),
+ * the committed claim would suppress SendGrid's retry of that event —
+ * permanently losing the forensic `marketing_email_events` row and the
+ * campaign counter increment, with no cron that backfills them (the
+ * hourly suppression sync only reconciles `marketing_suppressions`).
+ * Deleting the claim on failure lets SendGrid's 24h retry reprocess the
+ * event. Reprocessing is safe: counter UPDATEs gate on status
+ * transitions and open/click gate on the `*_count = 1` first-flag.
+ *
+ * Only call this for a real claim (`bypassed === false`); a bypassed
+ * (missing-`sg_event_id`) event never wrote a dedupe row.
+ */
+export async function releaseSgEventClaim(
+  sgEventId: string | undefined | null,
+): Promise<void> {
+  if (!sgEventId) return;
+  await db
+    .delete(webhookEventDedupe)
+    .where(sql`${webhookEventDedupe.sgEventId} = ${sgEventId}`);
+}
+
+/**
  * Parse the raw body as a JSON array of events. Keeps unknown event
  * shapes — we still want to record them so we don't lose forensics.
  */
@@ -311,7 +336,18 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
   } else if (eventType === "spamreport") {
     await upsertSuppression(event.email, "spamreport", null);
   } else if (eventType === "dropped") {
-    await upsertSuppression(event.email, "invalid", event.reason ?? null);
+    // SendGrid `dropped` carries several distinct reasons — "Bounced
+    // Address", "Unsubscribed Address", "Spam Reporting Address",
+    // "Invalid SMTPAPI header", "Spam Content", etc. — only some of which
+    // mean the address itself is invalid. The address is suppressed either
+    // way, but the suppression_type label feeds the suppressions
+    // source-filter UI and the audit provenance, so classify off the
+    // reason instead of unconditionally labelling every drop `invalid`.
+    await upsertSuppression(
+      event.email,
+      classifyDroppedSuppressionType(event.reason),
+      event.reason ?? null,
+    );
   }
 
   if (!recipientId || !campaignId) {
@@ -383,7 +419,11 @@ async function reconcileRecipientAndCampaign(
   // Map event → recipient updates. Each branch is idempotent — repeats
   // of the same event (SendGrid retries on non-2xx) don't double-bump
   // counters because the WHERE predicate filters out already-applied
-  // states.
+  // states. open/click gate the campaign counter on `*_count = 1` (the
+  // count just transitioned to 1 ⇒ this was the genuine first open/click)
+  // rather than on `first_*_at = ts`: two DISTINCT events (different
+  // sg_event_id) that share the same unix-SECOND timestamp would both
+  // satisfy the timestamp-equality form and double-count one first-open.
   const tsSql = sql`${ts.toISOString()}::timestamptz`;
   let counterField: keyof typeof marketingCampaigns | null = null;
 
@@ -401,7 +441,7 @@ async function reconcileRecipientAndCampaign(
           last_opened_at = ${tsSql},
           open_count = open_count + 1
       WHERE id = ${recipientId}
-      RETURNING (first_opened_at = ${tsSql})::int AS first_open_flag
+      RETURNING (open_count = 1)::int AS first_open_flag
     `);
     const rows = (reconcileResultRows(updated) as unknown[]) as Array<{
       first_open_flag?: number | string | null;
@@ -414,7 +454,7 @@ async function reconcileRecipientAndCampaign(
           last_clicked_at = ${tsSql},
           click_count = click_count + 1
       WHERE id = ${recipientId}
-      RETURNING (first_clicked_at = ${tsSql})::int AS first_click_flag
+      RETURNING (click_count = 1)::int AS first_click_flag
     `);
     const rows = (reconcileResultRows(updated) as unknown[]) as Array<{
       first_click_flag?: number | string | null;
@@ -467,8 +507,27 @@ async function reconcileRecipientAndCampaign(
   return false;
 }
 
+/**
+ * Choose a suppression type for a `dropped` event from its reason text.
+ * SendGrid's `dropped` reason is free-text; match the known phrasings to
+ * the closest provenance label and fall back to `invalid` (the historical
+ * default) when the reason is absent or unrecognized. Mapped onto the
+ * existing `marketing_suppressions.suppression_type` enum — there is no
+ * dedicated `dropped` value.
+ */
+function classifyDroppedSuppressionType(
+  reason: string | undefined | null,
+): "unsubscribe" | "bounce" | "spamreport" | "invalid" {
+  if (!reason) return "invalid";
+  const r = reason.toLowerCase();
+  if (r.includes("unsubscrib")) return "unsubscribe";
+  if (r.includes("spam")) return "spamreport";
+  if (r.includes("bounc")) return "bounce";
+  return "invalid";
+}
+
 async function upsertSuppression(
-  email: string,
+  rawEmail: string,
   type:
     | "unsubscribe"
     | "group_unsubscribe"
@@ -478,6 +537,14 @@ async function upsertSuppression(
     | "invalid",
   reason: string | null,
 ): Promise<void> {
+  // Canonicalize to lowercase so the webhook write path converges on the
+  // same primary-key value as the hourly sync (suppressions.ts lowercases
+  // every email). `marketing_suppressions.email` is the case-sensitive
+  // text PK; without this, 'John@x.com' (webhook) and 'john@x.com' (cron
+  // or a manual operator entry) produce two distinct rows and the
+  // `onConflictDoUpdate` manual-preservation CASE only fires on an
+  // exact-case match — silently defeating the "manual wins" contract.
+  const email = rawEmail.toLowerCase();
   await db
     .insert(marketingSuppressions)
     .values({ email, suppressionType: type, reason })

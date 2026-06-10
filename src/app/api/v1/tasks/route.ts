@@ -1,7 +1,9 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { tasks } from "@/db/schema/tasks";
+import { users } from "@/db/schema/users";
 import { writeAudit } from "@/lib/audit";
+import { verifyActivityParent, type ParentKind } from "@/lib/activities";
 import { getTaskForApi, listTasksForApi } from "@/lib/tasks";
 import { withApi } from "@/lib/api/handler";
 import { errorResponse } from "@/lib/api/errors";
@@ -111,6 +113,56 @@ export const POST = withApi(
       });
     }
     const m = parsed.data;
+
+    // Verify supplied FKs exist before insert so a stale/wrong id returns
+    // a recoverable 422 instead of an opaque 500 from a Postgres
+    // FK-violation (23503). Parent FKs reuse verifyActivityParent
+    // (existence + not-archived); assigned_to_id is a users FK
+    // (set-null on delete), so only existence is checked here.
+    const parentChecks: Array<{
+      kind: ParentKind;
+      id: string;
+      field: string;
+    }> = [];
+    if (m.lead_id) parentChecks.push({ kind: "lead", id: m.lead_id, field: "lead_id" });
+    if (m.account_id) parentChecks.push({ kind: "account", id: m.account_id, field: "account_id" });
+    if (m.contact_id) parentChecks.push({ kind: "contact", id: m.contact_id, field: "contact_id" });
+    if (m.opportunity_id) {
+      parentChecks.push({ kind: "opportunity", id: m.opportunity_id, field: "opportunity_id" });
+    }
+    for (const p of parentChecks) {
+      const verify = await verifyActivityParent(p.kind, p.id);
+      if (!verify.ok) {
+        return errorResponse(
+          422,
+          "VALIDATION_ERROR",
+          verify.reason === "archived"
+            ? "Parent record is archived"
+            : "Parent record not found",
+          {
+            details: [
+              {
+                field: p.field,
+                issue: verify.reason === "archived" ? "parent_archived" : "parent_missing",
+              },
+            ],
+          },
+        );
+      }
+    }
+    if (m.assigned_to_id) {
+      const [assignee] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, m.assigned_to_id))
+        .limit(1);
+      if (!assignee) {
+        return errorResponse(422, "VALIDATION_ERROR", "Assignee not found", {
+          details: [{ field: "assigned_to_id", issue: "assignee_missing" }],
+        });
+      }
+    }
+
     // Direct insert rather than `@/lib/tasks.createTask` (which also
     // handles all four parent FKs): the v1 contract has its own audit
     // and response shape. The canonical helper writes the full input as

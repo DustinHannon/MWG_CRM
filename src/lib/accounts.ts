@@ -98,7 +98,7 @@ export async function createAccount(
   await writeAudit({
     actorId,
     action: "account.create",
-    targetType: "crm_accounts",
+    targetType: "account",
     targetId: inserted[0].id,
     after: { name: input.name },
   });

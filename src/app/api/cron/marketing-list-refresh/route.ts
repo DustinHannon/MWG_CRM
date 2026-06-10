@@ -31,79 +31,91 @@ export async function GET(req: Request) {
   if (unauth) return unauth;
 
   const start = Date.now();
-  const lists = await db
-    .select({
-      id: marketingLists.id,
-      name: marketingLists.name,
-    })
-    .from(marketingLists)
-    .where(eq(marketingLists.isDeleted, false))
-    // ORDER BY lastRefreshedAt ASC NULLS FIRST — never-refreshed
-    // lists float to the top so a freshly created list gets membership
-    // in the next sweep even if a manual refresh wasn't triggered.
-    .orderBy(asc(marketingLists.lastRefreshedAt))
-    .limit(MAX_LISTS_PER_RUN);
 
-  let succeeded = 0;
-  let failed = 0;
-  let totalAdded = 0;
-  let totalRemoved = 0;
-  const failures: { id: string; name: string; error: string }[] = [];
+  try {
+    const lists = await db
+      .select({
+        id: marketingLists.id,
+        name: marketingLists.name,
+      })
+      .from(marketingLists)
+      .where(eq(marketingLists.isDeleted, false))
+      // ORDER BY lastRefreshedAt ASC NULLS FIRST — never-refreshed
+      // lists float to the top so a freshly created list gets membership
+      // in the next sweep even if a manual refresh wasn't triggered.
+      .orderBy(asc(marketingLists.lastRefreshedAt))
+      .limit(MAX_LISTS_PER_RUN);
 
-  for (const list of lists) {
-    try {
-      // null actor → cron-attributed; refreshList writes an audit row
-      // only when actorId is non-null, so we self-audit at the end of
-      // the run instead.
-      const result = await refreshList(list.id, null);
-      succeeded += 1;
-      totalAdded += result.added;
-      totalRemoved += result.removed;
-    } catch (err) {
-      failed += 1;
-      const message = err instanceof Error ? err.message : String(err);
-      failures.push({ id: list.id, name: list.name, error: message });
-      logger.error("cron.marketing_list_refresh.list_failed", {
-        listId: list.id,
-        listName: list.name,
-        errorMessage: message,
-      });
+    let succeeded = 0;
+    let failed = 0;
+    let totalAdded = 0;
+    let totalRemoved = 0;
+    const failures: { id: string; name: string; error: string }[] = [];
+
+    for (const list of lists) {
+      try {
+        // null actor → cron-attributed; refreshList writes an audit row
+        // only when actorId is non-null, so we self-audit at the end of
+        // the run instead.
+        const result = await refreshList(list.id, null);
+        succeeded += 1;
+        totalAdded += result.added;
+        totalRemoved += result.removed;
+      } catch (err) {
+        failed += 1;
+        const message = err instanceof Error ? err.message : String(err);
+        failures.push({ id: list.id, name: list.name, error: message });
+        logger.error("cron.marketing_list_refresh.list_failed", {
+          listId: list.id,
+          listName: list.name,
+          errorMessage: message,
+        });
+      }
     }
-  }
 
-  const durationMs = Date.now() - start;
-  logger.info("cron.marketing_list_refresh.completed", {
-    listsConsidered: lists.length,
-    succeeded,
-    failed,
-    totalAdded,
-    totalRemoved,
-    durationMs,
-  });
-
-  // Self-audit so the activity log records the cron run.
-  await writeSystemAudit({
-    actorEmailSnapshot: "system@cron",
-    action: "marketing.list.refresh_cron",
-    targetType: "system",
-    after: {
-      lists_considered: lists.length,
+    const durationMs = Date.now() - start;
+    logger.info("cron.marketing_list_refresh.completed", {
+      listsConsidered: lists.length,
       succeeded,
       failed,
-      total_added: totalAdded,
-      total_removed: totalRemoved,
-      duration_ms: durationMs,
-      failures: failures.slice(0, 20),
-    },
-  });
+      totalAdded,
+      totalRemoved,
+      durationMs,
+    });
 
-  return NextResponse.json({
-    ok: true,
-    listsConsidered: lists.length,
-    succeeded,
-    failed,
-    totalAdded,
-    totalRemoved,
-    durationMs,
-  });
+    // Self-audit so the activity log records the cron run.
+    await writeSystemAudit({
+      actorEmailSnapshot: "system@cron",
+      action: "marketing.list.refresh_cron",
+      targetType: "system",
+      after: {
+        lists_considered: lists.length,
+        succeeded,
+        failed,
+        total_added: totalAdded,
+        total_removed: totalRemoved,
+        duration_ms: durationMs,
+        failures: failures.slice(0, 20),
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      listsConsidered: lists.length,
+      succeeded,
+      failed,
+      totalAdded,
+      totalRemoved,
+      durationMs,
+    });
+  } catch (err) {
+    logger.error("cron.marketing_list_refresh.failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - start,
+    });
+    return NextResponse.json(
+      { ok: false, error: "Cron job failed" },
+      { status: 500 },
+    );
+  }
 }
