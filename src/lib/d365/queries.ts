@@ -176,7 +176,7 @@ const LEAD_SELECT = [
   "jobtitle",
   "companyname",
   "websiteurl",
-  "linkedinprofile",
+  "cdi_linkedin",
   "industrycode",
   "leadsourcecode",
   "leadqualitycode",
@@ -354,7 +354,6 @@ const APPOINTMENT_SELECT = [
 const EMAIL_SELECT = [
   ...ACTIVITY_BASE_SELECT,
   "sender",
-  "description_html",
   "directioncode",
   "messageid",
 ];

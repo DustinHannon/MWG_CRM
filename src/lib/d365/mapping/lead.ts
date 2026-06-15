@@ -247,7 +247,7 @@ const NATIVE_LEAD_FIELDS: ReadonlySet<string> = new Set([
   "_createdby_value",
   "_modifiedby_value",
   "_qualifyingopportunityid_value",
-  "linkedinprofile",
+  "cdi_linkedin",
 ]);
 
 /* -------------------------------------------------------------------------- *
@@ -352,7 +352,7 @@ export function mapD365Lead(
     // the raw <a href> render sink on the lead detail / print pages.
     website: parseHttpUrl(raw.websiteurl),
     linkedinUrl: parseHttpUrl(
-      (raw as Record<string, unknown>)["linkedinprofile"],
+      (raw as Record<string, unknown>)["cdi_linkedin"],
     ),
     street1: parseString(raw.address1_line1),
     street2: parseString(raw.address1_line2),

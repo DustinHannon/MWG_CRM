@@ -34,7 +34,6 @@ const NATIVE_EMAIL_FIELDS: ReadonlySet<string> = new Set([
   "activityid",
   "subject",
   "description",
-  "description_html",
   "scheduledstart",
   "scheduledend",
   "actualstart",
@@ -71,10 +70,10 @@ export function mapD365Email(
     ? "outbound"
     : "inbound";
 
-  // Prefer description_html when present (D365 stores rich body
-  // separately in some configurations); fall back to description.
-  const body =
-    parseString(raw.description_html) ?? parseString(raw.description);
+  // D365 email body lives in `description`. (`description_html` is not a
+  // real attribute on the activitypointer/email entity in this org — it
+  // 400s the $select — so we read the plain description field.)
+  const body = parseString(raw.description);
 
   const messageId = parseString(
     (raw as Record<string, unknown>)["messageid"],
