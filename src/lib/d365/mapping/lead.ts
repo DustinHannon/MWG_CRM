@@ -276,8 +276,14 @@ export function mapD365Lead(
   const sourceResult = SOURCE_MAP(raw.leadsourcecode ?? null);
   if (sourceResult.warning) warnings.push(sourceResult.warning);
 
+  // Lead status: `statecode` is the authoritative coarse lifecycle signal
+  // (0 = open, 1 = qualified, 2 = disqualified). `statuscode` is org-specific
+  // detail that is frequently a CUSTOM option-set value (100000xxx) we cannot
+  // enumerate, so an unrecognized statuscode does NOT emit the
+  // unmapped_picklist review flag — it defaults to "new" and the statecode
+  // override below resolves qualified/lost. The raw statuscode is preserved
+  // in raw_payload for reviewers.
   const statusResult = STATUS_MAP(raw.statuscode ?? null);
-  if (statusResult.warning) warnings.push(statusResult.warning);
 
   // statecode override: 1 = qualified, 2 = disqualified per default
   // metadata. Layer on top so we don't lose terminal-state semantics.

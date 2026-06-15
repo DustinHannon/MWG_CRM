@@ -601,21 +601,17 @@ export async function mapBatch(
       const rootUnmappedPicklists = warnings.filter(
         (w) => w.code === "unmapped_picklist" && !isChildWarning(w.field),
       );
-      const hasUnmappedPicklist =
-        nextStatus !== "skipped" && rootUnmappedPicklists.length > 0;
-      if (hasUnmappedPicklist) {
-        await haltRun({
-          runId,
-          actorId,
-          reason: D365_HALT_REASONS.UNMAPPED_PICKLIST,
-          detail: {
-            recordId: rec.id,
-            entityType,
-            unmappedFields: rootUnmappedPicklists.map((w) => w.field),
-          },
-        });
-        halted = true;
-        // Still persist this record's mapped payload so reviewer sees it.
+      // An unmapped ROOT picklist no longer halts the whole run. Real D365
+      // orgs use CUSTOM option-sets (e.g. lead statuscode 100000xxx) on
+      // essentially every record, so a run-wide halt paused the import on
+      // the first record of every batch — unusable (verified against the
+      // live org). Instead the record is routed to `review` so the operator
+      // resolves it per-record (the human-in-the-loop safety, without
+      // blocking the run); the raw picklist value is preserved in
+      // raw_payload. Child-origin picklist warnings are already excluded
+      // above per children.ts's contract.
+      if (nextStatus !== "skipped" && rootUnmappedPicklists.length > 0) {
+        nextStatus = "review";
       }
     } catch (err) {
       if (err instanceof MappingError) {
