@@ -21,6 +21,13 @@ export type NewAccount = InferInsertModel<typeof crmAccounts>;
 export interface AccountMapContext {
   resolvedOwnerId: string;
   /**
+   * Resolved D365 creator/modifier (`_createdby_value`/`_modifiedby_value`)
+   * -> local `users.id`, so created_by/updated_by reflect the real D365
+   * actor rather than the current owner. Falls back to `resolvedOwnerId`.
+   */
+  resolvedCreatedById?: string | null;
+  resolvedUpdatedById?: string | null;
+  /**
    * Nested raw child arrays grouped under `rawPayload.children` by
    * `pull-batch`. The account mapper runs each child mapper over these
    * and returns them in `result.attached`.
@@ -190,8 +197,8 @@ export function mapD365Account(
     deletedAt: isInactive ? updatedAt : null,
     deleteReason: isInactive ? "d365_inactive" : null,
     ownerId: ctx.resolvedOwnerId,
-    createdById: ctx.resolvedOwnerId,
-    updatedById: ctx.resolvedOwnerId,
+    createdById: ctx.resolvedCreatedById ?? ctx.resolvedOwnerId,
+    updatedById: ctx.resolvedUpdatedById ?? ctx.resolvedOwnerId,
     createdAt,
     updatedAt,
     metadata,

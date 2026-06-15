@@ -94,6 +94,22 @@ function getOwnerEmailFromRaw(
 }
 
 /**
+ * Resolve the D365 CREATOR email (`_createdby_value_email`, stamped by
+ * pull-batch's owner enrichment) so the imported record's created_by
+ * reflects the employee who actually created it in D365.
+ */
+function getCreatorEmailFromRaw(raw: Record<string, unknown>): string | null {
+  const v = raw["_createdby_value_email"];
+  return typeof v === "string" ? v : null;
+}
+
+/** D365 MODIFIER email (`_modifiedby_value_email`) -> updated_by. */
+function getModifierEmailFromRaw(raw: Record<string, unknown>): string | null {
+  const v = raw["_modifiedby_value_email"];
+  return typeof v === "string" ? v : null;
+}
+
+/**
  * Thin wrapper over `broadcastRunEvent`. Centralises the typed
  * event-name lookup so map-batch never references string literals
  * (every event flows through `D365_REALTIME_EVENTS`).
@@ -235,7 +251,8 @@ async function dispatchMap(
   root: Record<string, unknown>,
   ctx: {
     resolvedOwnerId: string;
-    resolvedUserId: string | null;
+    resolvedCreatedById: string | null;
+    resolvedUpdatedById: string | null;
     children: D365Children | undefined;
     resolveChildOwnerId?: ChildOwnerResolver;
   },
@@ -244,26 +261,32 @@ async function dispatchMap(
     case "lead":
       return mapD365Lead(root as unknown as D365Lead, {
         resolvedOwnerId: ctx.resolvedOwnerId,
+        resolvedCreatedById: ctx.resolvedCreatedById,
+        resolvedUpdatedById: ctx.resolvedUpdatedById,
         children: ctx.children,
         resolveChildOwnerId: ctx.resolveChildOwnerId,
       }) as MapResult<unknown>;
     case "contact":
       return mapD365Contact(root as unknown as D365Contact, {
         resolvedOwnerId: ctx.resolvedOwnerId,
-        resolvedCreatedById: ctx.resolvedUserId,
-        resolvedUpdatedById: ctx.resolvedUserId,
+        resolvedCreatedById: ctx.resolvedCreatedById,
+        resolvedUpdatedById: ctx.resolvedUpdatedById,
         children: ctx.children,
         resolveChildOwnerId: ctx.resolveChildOwnerId,
       }) as MapResult<unknown>;
     case "account":
       return mapD365Account(root as unknown as D365Account, {
         resolvedOwnerId: ctx.resolvedOwnerId,
+        resolvedCreatedById: ctx.resolvedCreatedById,
+        resolvedUpdatedById: ctx.resolvedUpdatedById,
         children: ctx.children,
         resolveChildOwnerId: ctx.resolveChildOwnerId,
       }) as MapResult<unknown>;
     case "opportunity":
       return mapD365Opportunity(root as unknown as D365Opportunity, {
         resolvedOwnerId: ctx.resolvedOwnerId,
+        resolvedCreatedById: ctx.resolvedCreatedById,
+        resolvedUpdatedById: ctx.resolvedUpdatedById,
         children: ctx.children,
         resolveChildOwnerId: ctx.resolveChildOwnerId,
       }) as MapResult<unknown>;
@@ -472,6 +495,18 @@ export async function mapBatch(
       // `resolvedCreatedById`/`resolvedUpdatedById` on the contact path.
       const ownerEmail = getOwnerEmailFromRaw(root);
       const owner = await resolveD365Owner(ownerEmail, actorId);
+      // Resolve the D365 CREATOR / MODIFIER to the same local employee so the
+      // imported record's created_by / updated_by reflects who actually
+      // created / last-touched it in D365 — not the current owner. Falls back
+      // to the owner when the creator/modifier UPN can't be resolved.
+      const creatorEmail = getCreatorEmailFromRaw(root);
+      const creator = creatorEmail
+        ? await resolveD365Owner(creatorEmail, actorId)
+        : owner;
+      const modifierEmail = getModifierEmailFromRaw(root);
+      const modifier = modifierEmail
+        ? await resolveD365Owner(modifierEmail, actorId)
+        : creator;
 
       // Pre-resolve each distinct child owner (async) into a Map and
       // hand the mapper a sync closure — `mapAttachedChildren` needs a
@@ -483,7 +518,8 @@ export async function mapBatch(
 
       const result = await dispatchMap(rootType, root, {
         resolvedOwnerId: owner.userId,
-        resolvedUserId: owner.userId,
+        resolvedCreatedById: creator.userId,
+        resolvedUpdatedById: modifier.userId,
         children,
         resolveChildOwnerId,
       });

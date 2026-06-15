@@ -44,6 +44,14 @@ export interface LeadMapContext {
    */
   resolvedOwnerId: string;
   /**
+   * mwg-crm `users.id` resolved from the D365 `_createdby_value` /
+   * `_modifiedby_value` so the imported record's created_by / updated_by
+   * reflects the employee who actually created / last-touched it in D365,
+   * not the current owner. Falls back to `resolvedOwnerId` when unresolved.
+   */
+  resolvedCreatedById?: string | null;
+  resolvedUpdatedById?: string | null;
+  /**
    * Nested raw child arrays (task / phonecall / appointment / email /
    * annotation) grouped under `rawPayload.children` by `pull-batch`.
    * The lead mapper runs each child mapper over these and returns them
@@ -381,8 +389,8 @@ export function mapD365Lead(
     convertedAt: null,
     lastActivityAt: null, // bumped at first counting activity, not import.
     createdVia: "imported",
-    createdById: ctx.resolvedOwnerId,
-    updatedById: ctx.resolvedOwnerId,
+    createdById: ctx.resolvedCreatedById ?? ctx.resolvedOwnerId,
+    updatedById: ctx.resolvedUpdatedById ?? ctx.resolvedOwnerId,
     createdAt,
     updatedAt,
     d365StateCode:

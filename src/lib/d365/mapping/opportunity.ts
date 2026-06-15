@@ -21,6 +21,13 @@ export type NewOpportunity = InferInsertModel<typeof opportunities>;
 
 export interface OpportunityMapContext {
   resolvedOwnerId: string;
+  /**
+   * Resolved D365 creator/modifier (`_createdby_value`/`_modifiedby_value`)
+   * -> local `users.id`, so created_by/updated_by reflect the real D365
+   * actor rather than the current owner. Falls back to `resolvedOwnerId`.
+   */
+  resolvedCreatedById?: string | null;
+  resolvedUpdatedById?: string | null;
   resolvedAccountId?: string | null;
   resolvedPrimaryContactId?: string | null;
   resolvedSourceLeadId?: string | null;
@@ -171,8 +178,8 @@ export function mapD365Opportunity(
     d365StatusCode:
       typeof raw.statuscode === "number" ? raw.statuscode : null,
     ownerId: ctx.resolvedOwnerId,
-    createdById: ctx.resolvedOwnerId,
-    updatedById: ctx.resolvedOwnerId,
+    createdById: ctx.resolvedCreatedById ?? ctx.resolvedOwnerId,
+    updatedById: ctx.resolvedUpdatedById ?? ctx.resolvedOwnerId,
     sourceLeadId: ctx.resolvedSourceLeadId ?? null,
     createdAt,
     updatedAt,

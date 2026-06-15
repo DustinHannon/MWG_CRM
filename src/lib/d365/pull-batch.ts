@@ -719,14 +719,22 @@ async function enrichOwnerEmails(
 ): Promise<void> {
   if (records.length === 0) return;
 
-  const ownerIds = new Set<string>();
+  // Collect every systemuser GUID we want a UPN for: the owner AND the D365
+  // creator/modifier, so the imported record's created_by/updated_by can
+  // reflect the employee who actually created/last-touched it in D365 (not
+  // the current owner). All three are systemuser-keyed lookups.
+  const userGuids = new Set<string>();
   for (const obj of records) {
-    const ownerId = obj["_ownerid_value"];
-    if (typeof ownerId === "string" && ownerId.length > 0) {
-      ownerIds.add(ownerId);
+    for (const key of [
+      "_ownerid_value",
+      "_createdby_value",
+      "_modifiedby_value",
+    ]) {
+      const v = obj[key];
+      if (typeof v === "string" && v.length > 0) userGuids.add(v);
     }
   }
-  if (ownerIds.size === 0) return;
+  if (userGuids.size === 0) return;
 
   // GUID -> domainname (UPN). Owners with no domainname (application
   // users, former employees) are omitted; those rows correctly fall back
@@ -737,7 +745,7 @@ async function enrichOwnerEmails(
   // (the exact attribution loss this enrichment exists to prevent).
   const guidToUpn = new Map<string, string>();
   try {
-    const ownerList = [...ownerIds];
+    const ownerList = [...userGuids];
     for (let i = 0; i < ownerList.length; i += OWNER_LOOKUP_CHUNK) {
       const chunk = ownerList.slice(i, i + OWNER_LOOKUP_CHUNK);
       const orChain = chunk.map((id) => `systemuserid eq ${id}`).join(" or ");
@@ -765,17 +773,23 @@ async function enrichOwnerEmails(
       runId: ctx.runId,
       batchId: ctx.batchId,
       entityType: ctx.entityType,
-      ownerCount: ownerIds.size,
+      userCount: userGuids.size,
       errorMessage: err instanceof Error ? err.message : String(err),
     });
     return;
   }
 
   for (const obj of records) {
-    const ownerId = obj["_ownerid_value"];
-    if (typeof ownerId === "string") {
-      const upn = guidToUpn.get(ownerId.toLowerCase());
-      if (upn) obj["_ownerid_value_email"] = upn;
+    for (const [guidKey, emailKey] of [
+      ["_ownerid_value", "_ownerid_value_email"],
+      ["_createdby_value", "_createdby_value_email"],
+      ["_modifiedby_value", "_modifiedby_value_email"],
+    ] as const) {
+      const guid = obj[guidKey];
+      if (typeof guid === "string") {
+        const upn = guidToUpn.get(guid.toLowerCase());
+        if (upn) obj[emailKey] = upn;
+      }
     }
   }
 }
