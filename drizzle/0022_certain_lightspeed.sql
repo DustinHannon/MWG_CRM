@@ -1,0 +1,3 @@
+CREATE UNIQUE INDEX "activities_import_dedup_account_idx" ON "activities" USING btree ("account_id","import_dedup_key") WHERE import_dedup_key IS NOT NULL AND account_id IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "activities_import_dedup_contact_idx" ON "activities" USING btree ("contact_id","import_dedup_key") WHERE import_dedup_key IS NOT NULL AND contact_id IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "activities_import_dedup_opportunity_idx" ON "activities" USING btree ("opportunity_id","import_dedup_key") WHERE import_dedup_key IS NOT NULL AND opportunity_id IS NOT NULL;

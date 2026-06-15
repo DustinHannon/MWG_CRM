@@ -122,19 +122,47 @@ function bandFor(
 
 function clauseMatches(c: Clause, fact: LeadFact): boolean {
   const left = fact[c.field];
+  // Numeric lead columns backed by Postgres `numeric` (e.g.
+  // estimatedValue) come back as JS strings because the postgres-js
+  // client runs with `fetch_types: false`. Coerce a string left
+  // operand to a number for the ordering operators so range rules on
+  // those columns actually fire; a non-finite result fails the guard
+  // and the clause returns false, exactly as a non-numeric value
+  // should.
+  const leftNum = typeof left === "string" ? Number(left) : left;
   switch (c.op) {
     case "eq":
       return left === c.value;
     case "neq":
       return left !== c.value;
     case "lt":
-      return typeof left === "number" && typeof c.value === "number" && left < c.value;
+      return (
+        typeof leftNum === "number" &&
+        Number.isFinite(leftNum) &&
+        typeof c.value === "number" &&
+        leftNum < c.value
+      );
     case "lte":
-      return typeof left === "number" && typeof c.value === "number" && left <= c.value;
+      return (
+        typeof leftNum === "number" &&
+        Number.isFinite(leftNum) &&
+        typeof c.value === "number" &&
+        leftNum <= c.value
+      );
     case "gt":
-      return typeof left === "number" && typeof c.value === "number" && left > c.value;
+      return (
+        typeof leftNum === "number" &&
+        Number.isFinite(leftNum) &&
+        typeof c.value === "number" &&
+        leftNum > c.value
+      );
     case "gte":
-      return typeof left === "number" && typeof c.value === "number" && left >= c.value;
+      return (
+        typeof leftNum === "number" &&
+        Number.isFinite(leftNum) &&
+        typeof c.value === "number" &&
+        leftNum >= c.value
+      );
     case "in":
       return Array.isArray(c.value) && c.value.includes(left as never);
     case "not_in":
@@ -161,14 +189,41 @@ function predicateMatches(p: Predicate, fact: LeadFact): boolean {
   return Boolean(p.all?.length || p.any?.length);
 }
 
+/** An active scoring rule as loaded for evaluation. */
+type ScoringRule = { id: string; predicate: unknown; points: number };
+
+/**
+ * Load the active scoring-rule set. Returned shape is the minimum the
+ * evaluator needs. Lifted out of `evaluateLead` so the batch rescore can
+ * load it ONCE per run and reuse it across every lead instead of
+ * re-scanning the table per lead (the app DB client is `max: 1`, so per-
+ * lead scans serialize on one connection and dominate the nightly run).
+ */
+async function loadActiveRules(): Promise<ScoringRule[]> {
+  return db
+    .select({
+      id: leadScoringRules.id,
+      predicate: leadScoringRules.predicate,
+      points: leadScoringRules.points,
+    })
+    .from(leadScoringRules)
+    .where(eq(leadScoringRules.isActive, true));
+}
+
 /**
  * Score a single lead. Loads the lead, joins activity stats, runs every
  * active rule, persists the score + band + scored_at.
  *
  * @param leadId UUID of the lead to score.
+ * @param rules Pre-loaded active rule set. Pass it from a batch caller
+ *   to avoid re-scanning `lead_scoring_rules` per lead; omit it for the
+ *   single-lead admin recompute path and the function self-loads.
  * @returns The new {score, band} or null if the lead doesn't exist.
  */
-export async function evaluateLead(leadId: string): Promise<
+export async function evaluateLead(
+  leadId: string,
+  rules?: ScoringRule[],
+): Promise<
   { score: number; band: ReturnType<typeof bandFor> } | null
 > {
   // Filter archived (soft-deleted) leads — a deleted lead should never
@@ -220,13 +275,10 @@ export async function evaluateLead(leadId: string): Promise<
     has_no_activity: activity_count === 0,
   };
 
-  const rules = await db
-    .select()
-    .from(leadScoringRules)
-    .where(eq(leadScoringRules.isActive, true));
+  const activeRules = rules ?? (await loadActiveRules());
 
   let total = 0;
-  for (const r of rules) {
+  for (const r of activeRules) {
     try {
       if (predicateMatches(r.predicate as Predicate, fact)) {
         total += r.points;
@@ -260,6 +312,10 @@ export async function evaluateLead(leadId: string): Promise<
 export async function rescoreAllLeads(): Promise<number> {
   let processed = 0;
   let lastId: string | null = null;
+  // Load the active rule set once for the whole run and reuse it across
+  // every lead — the set is identical for every lead in a run, and the
+  // `max: 1` pooler serializes a per-lead re-scan into the dominant cost.
+  const rules = await loadActiveRules();
   // Pageable cursor by ascending id so we don't re-process within the run.
   while (true) {
     const batch = await db
@@ -278,7 +334,7 @@ export async function rescoreAllLeads(): Promise<number> {
 
     for (const r of batch) {
       try {
-        await evaluateLead(r.id);
+        await evaluateLead(r.id, rules);
         processed++;
       } catch (err) {
         logger.warn("scoring.lead_eval_failed", {

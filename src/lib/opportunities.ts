@@ -206,6 +206,18 @@ export interface OpportunityCascadeResult {
 }
 
 /**
+ * Single-opportunity archive result. `flipped` reports whether the parent
+ * row's `isDeleted` actually transitioned false→true on THIS call (the
+ * UPDATE filters `isDeleted=false`, so a concurrent double-submit only
+ * flips the row once). The interactive caller short-circuits its audit /
+ * notification / activity / undo side effects when `flipped` is false so a
+ * losing double-submit doesn't emit a duplicate forensic row.
+ */
+export interface OpportunityArchiveResult extends OpportunityCascadeResult {
+  flipped: boolean;
+}
+
+/**
  * Cascade-archive opportunities and their dependent tasks/activities in
  * one transaction (STANDARDS 19.1.1). Cascaded children carry the
  * opportunity-scoped sentinel `__cascade__:opportunity:<id>` so restore
@@ -219,10 +231,12 @@ export async function archiveOpportunitiesById(
   ids: string[],
   actorId: string,
   reason?: string,
-): Promise<OpportunityCascadeResult> {
-  if (ids.length === 0) return { cascadedTasks: 0, cascadedActivities: 0 };
+): Promise<OpportunityArchiveResult> {
+  if (ids.length === 0) {
+    return { flipped: false, cascadedTasks: 0, cascadedActivities: 0 };
+  }
   return db.transaction(async (tx) => {
-    await tx
+    const flippedRows = await tx
       .update(opportunities)
       .set({
         isDeleted: true,
@@ -237,7 +251,16 @@ export async function archiveOpportunitiesById(
         // if a future edit path ever drops the is_deleted filter.
         version: sql`${opportunities.version} + 1`,
       })
-      .where(inArray(opportunities.id, ids));
+      // Guard isDeleted=false so a re-archive is a no-op on the parent
+      // row rather than clobbering the original soft-delete attribution
+      // (parity with archiveContactsById and the accounts path).
+      // `.returning()` reports which rows actually transitioned so a
+      // concurrent double-submit (both reads pass, only one UPDATE flips)
+      // can short-circuit its duplicate audit / notification side effects.
+      .where(
+        and(inArray(opportunities.id, ids), eq(opportunities.isDeleted, false)),
+      )
+      .returning({ id: opportunities.id });
     const cascadedTasks = await tx
       .update(tasks)
       .set({
@@ -272,6 +295,7 @@ export async function archiveOpportunitiesById(
       )
       .returning({ id: activities.id });
     return {
+      flipped: flippedRows.length > 0,
       cascadedTasks: cascadedTasks.length,
       cascadedActivities: cascadedActivities.length,
     };

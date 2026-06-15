@@ -458,8 +458,19 @@ export async function commitStaticListImportAction(
           inserted += result.inserted;
         }
 
-        const failed = Math.max(0, okRows.length - inserted);
-        const status = failed === 0 ? "success" : "partial_failure";
+        // Any ok-row not inserted was deduped by the
+        // (list_id, lower(email)) unique index via onConflictDoNothing
+        // (an intra-file duplicate the per-file dedup missed, or an
+        // address added to the list between preview and commit) — the
+        // address is correctly already present, NOT a failure.
+        // createStaticListMembers throws on a genuine insert error, so a
+        // shortfall here can only be a no-op dedup; fold it into skipped
+        // and keep failed at 0 so the run status, operator summary, and
+        // audit row don't false-alarm on a successful re-run.
+        const dedupedAtCommit = Math.max(0, okRows.length - inserted);
+        const totalSkipped = skipped + dedupedAtCommit;
+        const failed = 0;
+        const status = "success";
 
         await db
           .update(listImportRuns)
@@ -483,7 +494,7 @@ export async function commitStaticListImportAction(
             total: parsedRows.length,
             successful: inserted,
             failed,
-            skipped,
+            skipped: totalSkipped,
             fileName: run.filename,
           },
         });
@@ -493,7 +504,7 @@ export async function commitStaticListImportAction(
         return {
           runId,
           inserted,
-          skipped,
+          skipped: totalSkipped,
           failed,
           total: parsedRows.length,
         };

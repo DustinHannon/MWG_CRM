@@ -40,6 +40,8 @@ export async function createNotification(
       title: input.title,
       body: input.body ?? null,
       link: input.link ?? null,
+      entityType: input.entityType ?? null,
+      entityId: input.entityId ?? null,
     });
   } catch (err) {
     logger.error("notifications.create_failed", {

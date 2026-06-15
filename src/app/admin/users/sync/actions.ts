@@ -449,6 +449,33 @@ export async function offboardMissingUsers(
 
       const data = parseJsonOrThrow(offboardSchema, input);
 
+      // Authoritative re-pull (TOCTOU guard). The client-supplied list was
+      // captured at preview time; between then and now a user may have been
+      // re-enabled or re-added to Entra. Re-confirm absence against the live
+      // directory before deactivating, mirroring commitEntraUserImport. A
+      // failed or truncated pull means we cannot prove anyone is absent — the
+      // same fail-closed rule the preview uses to disable offboarding —
+      // so refuse the whole batch rather than deactivate a valid employee.
+      const dir = await fetchEntraDirectoryUsers();
+      if (!dir.ok) {
+        throw new ValidationError(
+          dir.permissionError ?? "Could not read the Entra directory.",
+        );
+      }
+      if (dir.truncated === true) {
+        throw new ValidationError(
+          "The Entra directory listing was incomplete — offboarding is disabled until a full listing is available.",
+        );
+      }
+      const liveEnabledOids = new Set<string>();
+      const liveEnabledEmails = new Set<string>();
+      for (const u of dir.users) {
+        if (u.accountEnabled === false) continue;
+        liveEnabledOids.add(u.id);
+        const e = (u.mail ?? u.userPrincipalName ?? "").toLowerCase();
+        if (e.length > 0) liveEnabledEmails.add(e);
+      }
+
       let deactivated = 0;
       let reassigned = 0;
       const failed: { userId: string; error: string }[] = [];
@@ -483,6 +510,7 @@ export async function offboardMissingUsers(
                 id: users.id,
                 isBreakglass: users.isBreakglass,
                 email: users.email,
+                entraOid: users.entraOid,
               })
               .from(users)
               .where(eq(users.id, item.userId))
@@ -494,6 +522,19 @@ export async function offboardMissingUsers(
             if (target.isBreakglass) {
               throw new ValidationError(
                 "Cannot offboard the breakglass account",
+              );
+            }
+            // Re-confirm against the live directory: if this user now maps
+            // to an enabled Entra entry (by oid or email), they are NOT
+            // absent and must not be offboarded.
+            const stillPresent =
+              (target.entraOid !== null &&
+                liveEnabledOids.has(target.entraOid)) ||
+              (target.email.length > 0 &&
+                liveEnabledEmails.has(target.email.toLowerCase()));
+            if (stillPresent) {
+              throw new ValidationError(
+                "User is present and enabled in the Entra directory",
               );
             }
 

@@ -61,6 +61,16 @@ export interface ResolveListRecipientsResult {
   listId: string;
   listType: "dynamic" | "static_imported";
   recipients: ResolvedRecipient[];
+  /**
+   * Count of list members at send time BEFORE the suppression /
+   * do-not-email / soft-delete filters are applied — the same source
+   * rows `recipients` is derived from, but unfiltered. Lets the send
+   * path report the number actually filtered out at send time
+   * (`totalBeforeFilter - recipients.length`) instead of diffing against
+   * the stale schedule-time `member_count` snapshot, which under-reports
+   * when membership changed between schedule and send.
+   */
+  totalBeforeFilter: number;
 }
 
 export async function resolveListRecipients(
@@ -116,6 +126,16 @@ export async function resolveListRecipients(
         ),
       );
 
+    // Pre-filter member count at send time: the same membership joined to
+    // a backing lead row, BEFORE the suppression / do-not-email /
+    // soft-delete exclusions above. The difference from `rows.length` is
+    // exactly what those filters removed at send time.
+    const [beforeFilter] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(marketingListMembers)
+      .innerJoin(leads, eq(leads.id, marketingListMembers.leadId))
+      .where(eq(marketingListMembers.listId, listId));
+
     return {
       listId,
       listType: "dynamic",
@@ -129,6 +149,7 @@ export async function resolveListRecipients(
         city: r.city,
         state: r.state,
       })),
+      totalBeforeFilter: beforeFilter?.count ?? rows.length,
     };
   }
 
@@ -147,9 +168,18 @@ export async function resolveListRecipients(
       ),
     );
 
+  // Pre-filter member count at send time: all imported members, BEFORE
+  // the suppression exclusion above. The difference from `rows.length`
+  // is what suppression removed at send time.
+  const [staticBeforeFilter] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(marketingStaticListMembers)
+    .where(eq(marketingStaticListMembers.listId, listId));
+
   return {
     listId,
     listType: "static_imported",
+    totalBeforeFilter: staticBeforeFilter?.count ?? rows.length,
     recipients: rows.map((r) => {
       const trimmed = r.name?.trim() ?? "";
       const [firstName, ...rest] = trimmed.length > 0 ? trimmed.split(/\s+/) : [""];

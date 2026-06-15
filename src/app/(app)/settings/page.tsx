@@ -1,8 +1,8 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { savedSearchSubscriptions } from "@/db/schema/saved-search-subscriptions";
 import { savedViews, userPreferences } from "@/db/schema/views";
-import { users } from "@/db/schema/users";
+import { accounts, users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -90,6 +90,26 @@ export default async function SettingsPage() {
     )
     .orderBy(desc(savedSearchSubscriptions.createdAt));
 
+  // Microsoft 365 connection state. The integration is "connected" when
+  // the user's accounts row still holds a Graph token; disconnectGraphAction
+  // nulls access_token/refresh_token, so a non-null token means connected.
+  // A breakglass user never has a Graph account row, which the section
+  // renders as its own disabled state.
+  const [graphAccount] = await db
+    .select({ userId: accounts.userId })
+    .from(accounts)
+    .where(
+      and(
+        eq(accounts.userId, session.id),
+        or(
+          isNotNull(accounts.access_token),
+          isNotNull(accounts.refresh_token),
+        ),
+      ),
+    )
+    .limit(1);
+  const isGraphConnected = Boolean(graphAccount);
+
   if (!profile) {
     return (
       <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -151,7 +171,7 @@ export default async function SettingsPage() {
           subscriptions={activeSubscriptions}
         />
         <GraphConnectionSection
-          userId={session.id}
+          isConnected={isGraphConnected}
           isBreakglass={profile.isBreakglass}
         />
         <AccountInfoSection

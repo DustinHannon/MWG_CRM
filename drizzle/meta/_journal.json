@@ -155,6 +155,13 @@
       "when": 1781068298835,
       "tag": "0021_legal_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1781500718294,
+      "tag": "0022_certain_lightspeed",
+      "breakpoints": true
     }
   ]
 }

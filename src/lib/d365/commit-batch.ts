@@ -1,15 +1,19 @@
 import "server-only";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
 import { contacts, crmAccounts, opportunities } from "@/db/schema/crm-records";
-import { externalIds, importBatches, importRecords } from "@/db/schema/d365-imports";
+import {
+  externalIds,
+  importBatches,
+  importRecords,
+} from "@/db/schema/d365-imports";
 import { leads } from "@/db/schema/leads";
+import { tasks } from "@/db/schema/tasks";
 import { writeAudit } from "@/lib/audit";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { D365_AUDIT_EVENTS } from "./audit-events";
-import type { D365EntityType } from "./types";
 
 /**
  * Drizzle's `db.transaction()` callback parameter is a PgTransaction
@@ -18,35 +22,49 @@ import type { D365EntityType } from "./types";
  * accept either the top-level `db` or the in-transaction `tx`.
  *
  * Using `Parameters<typeof db.transaction>[0]` would be ideal but TS
- * narrows the union poorly here — the lighter `any`-shaped alias keeps
- * the call sites readable while letting the caller pass either kind.
+ * narrows the union poorly here — the lighter alias keeps the call
+ * sites readable while letting the caller pass either kind.
  */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 
 /**
- * commit batch helper.
+ * commit batch helper — root-aggregate model.
  *
- * Loads all approved records for a batch and, per-record, transactionally:
- * 1. Resolves the local row id via existing dedup metadata
- * (`conflictWith`) or a fresh `external_ids` lookup.
- * 2. Applies the chosen `conflictResolution`:
- * `dedup_skip` → no-op, mark record as skipped.
- * `dedup_overwrite` → UPDATE every non-null mapped column.
- * `dedup_merge` → UPDATE only fields that are NULL/empty
- * in the local row.
- * `dedup_none` / null → INSERT new row.
- * 3. Upserts an `external_ids` row.
- * 4. Stamps `import_records.localId` + `status='committed'`.
+ * Every approved `import_records` row is a ROOT entity (lead / contact
+ * / account / opportunity) carrying its full child graph (tasks /
+ * phonecalls / appointments / emails / notes) in
+ * `mappedPayload.attached`. CHILD types are never imported standalone.
  *
- * Per-record failures isolate (status='failed', error stored) — they
- * do NOT roll back the batch. After all records process we update the
- * batch counters + status='committed' and audit.
+ * Per approved root, ONE `db.transaction`:
+ *  1. RE-HYDRATE every date string back to `Date` for the root and
+ *     every child (createdAt / updatedAt / closedAt / dueAt /
+ *     completedAt / birthdate / occurredAt). The mapped payloads
+ *     round-trip through `import_records.mapped_payload` (plain JSONB)
+ *     and come back as strings; Drizzle's timestamp driver calls
+ *     `.toISOString()` on them, so without this every insert throws a
+ *     `TypeError`. This is the universal-commit-crash fix.
+ *  2. Resolve the root's cross-root FKs from `external_ids`
+ *     (contact→account; account→parentAccount/primaryContact;
+ *     opportunity→account/primaryContact/originatingLead), then upsert
+ *     the root into its table and write/upsert its `external_ids` row,
+ *     capturing the in-memory local UUID.
+ *  3. For each attached child: insert with the parent FK
+ *     (leadId/accountId/contactId/opportunityId) set to that in-memory
+ *     root UUID — NO external_ids lookup, so the FK can never miss.
+ *     Tasks → `tasks` table (dedup via external_ids, no dedup column on
+ *     tasks); phonecall/appointment/email/annotation → `activities`
+ *     with per-parent `ON CONFLICT (<parentFk>, import_dedup_key)`.
+ *     Write each child's `external_ids` row.
+ *  4. All-or-nothing per root: one bad root isolates (status='failed',
+ *     error stored) and the batch continues.
  *
- * Called from `commitBatchAction`. The mapped-payload shape persisted
- * by the entity mappers (`NewLead`, `NewContact`, `NewAccount`,
- * `NewOpportunity`, etc.) is what we insert. Activities insert into
- * the unified `activities` table with the parent FK resolved from the
- * parent entity's `external_ids` row.
+ * Recency preservation (§5.2) rides through the mapped payloads
+ * verbatim (createdAt/updatedAt = D365 createdon/modifiedon). The
+ * cross-root dependency order account→contact→lead→opportunity makes
+ * a root's parents exist in `external_ids` before it commits; any
+ * still-null cross-root FK is swept by `reconcileRunFks` after the run.
+ *
+ * Called from `commitBatchAction`.
  */
 
 export interface CommitBatchResult {
@@ -64,25 +82,89 @@ const PARENT_ENTITY_TABLES = {
 
 type ParentTable = (typeof PARENT_ENTITY_TABLES)[keyof typeof PARENT_ENTITY_TABLES];
 
-const ACTIVITY_KIND: Record<string, "email" | "call" | "meeting" | "note" | "task"> = {
+type RootEntityType = "lead" | "contact" | "account" | "opportunity";
+
+/**
+ * mwg-crm `activities.kind` for each non-task D365 child source type.
+ * Tasks route into the `tasks` table instead, so they are excluded.
+ */
+const ACTIVITY_KIND: Record<string, "email" | "call" | "meeting" | "note"> = {
   annotation: "note",
-  task: "task",
   phonecall: "call",
   appointment: "meeting",
   email: "email",
 };
 
+/** Parent-FK column name on `activities` / `tasks` per root entity type. */
+const PARENT_FK_COLUMN: Record<RootEntityType, "leadId" | "accountId" | "contactId" | "opportunityId"> = {
+  lead: "leadId",
+  account: "accountId",
+  contact: "contactId",
+  opportunity: "opportunityId",
+};
+
+/**
+ * Date-bearing keys across every insertable shape we commit. The mapped
+ * payloads produce real `Date`s, but they round-trip through JSONB and
+ * arrive back as ISO strings; Drizzle's timestamp driver requires a
+ * `Date`. We re-hydrate exactly these keys (a string that parses to a
+ * valid date becomes a `Date`; anything else is left untouched so the
+ * column's own coercion / NOT-NULL handling applies).
+ */
+const DATE_KEYS: readonly string[] = [
+  "createdAt",
+  "updatedAt",
+  "closedAt",
+  "dueAt",
+  "completedAt",
+  "occurredAt",
+  "deletedAt",
+];
+
+/**
+ * Cap on the number of child rows embedded in a RECORD_COMMITTED audit
+ * `after.children` array, so a root with a pathological child fan-out
+ * can't bloat a single forensic audit row to multiple megabytes. The
+ * true total always rides on `childCount`; `childrenTruncated` flags when
+ * the embedded list was capped (§12 aggregate-with-sample contract).
+ */
+const RECORD_COMMITTED_CHILDREN_CAP = 100;
+
+/**
+ * Re-hydrate ISO date strings back to `Date` for the known timestamp
+ * columns. Mutates a shallow copy — the caller's object is untouched.
+ *
+ * `birthdate` is intentionally NOT in {@link DATE_KEYS}: it is a
+ * `date` (date-only) column whose Drizzle driver accepts the
+ * `YYYY-MM-DD` string the contact mapper emits, and re-hydrating it to
+ * a `Date` would reintroduce a timezone-shift bug. We leave it as the
+ * string it already is.
+ */
+function rehydrateDates(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...payload };
+  for (const key of DATE_KEYS) {
+    const v = out[key];
+    if (typeof v === "string" && v.length > 0) {
+      const d = new Date(v);
+      if (!Number.isNaN(d.getTime())) out[key] = d;
+    }
+  }
+  return out;
+}
+
 export async function commitBatch(
   batchId: string,
   actorId: string,
 ): Promise<CommitBatchResult> {
-  // Deterministic commit order so FK lookups via `lookupLocalId`
-  // succeed on the first pass:
-  //   account → contact → opportunity → activities → other
-  // Within a tier, ordered by createdAt so a parent account commits
-  // before any child account that lists it as `_parentaccountid_value`.
-  // If ordering still doesn't resolve (e.g., parent in a different
-  // batch entirely), the FK stays null and a re-import picks it up.
+  // Deterministic commit order so cross-root FK lookups via
+  // `lookupLocalId` succeed on the first pass:
+  //   account → contact → lead → opportunity
+  // Within a tier, ordered by id for a stable run-to-run sequence so a
+  // parent account commits before any child account that lists it as
+  // `_parentaccountid_value`. A cross-root parent in a different batch
+  // entirely stays null until `reconcileRunFks` sweeps it.
   const records = await db
     .select({
       id: importRecords.id,
@@ -99,43 +181,30 @@ export async function commitBatch(
       sql`CASE ${importRecords.sourceEntityType}
             WHEN 'account' THEN 1
             WHEN 'contact' THEN 2
-            WHEN 'opportunity' THEN 3
-            WHEN 'lead' THEN 4
+            WHEN 'lead' THEN 3
+            WHEN 'opportunity' THEN 4
             ELSE 5
           END`,
-      // Stable secondary order so identical-tier records commit in a
-      // consistent sequence run-to-run. importRecords.id is a UUID;
-      // ascending order is deterministic if not chronological.
       asc(importRecords.id),
     );
 
-  // F-05: atomic state transition guards against concurrent commits.
-  // Two simultaneous commitBatchAction clicks both pass the action-
-  // level `status === "committed"` gate (read outside any lock), then
-  // both enter `commitBatch` and process the same `approved` records,
-  // producing duplicate entity rows. Session-scoped pg_advisory_lock
-  // is unreliable under Supavisor transaction-mode pooling (the
-  // underlying backend session changes between queries, so the lock
-  // can be acquired but never blocks the second click). Instead we
-  // flip `import_batches.status` from its review state to
-  // `'committing'` via a conditional UPDATE: if zero rows changed,
-  // another run already took the slot and we bounce with
-  // ConflictError. The terminal status ('committed' or 'failed') is
-  // set at the end of the loop.
+  // Atomic state transition guards against concurrent commits. Two
+  // simultaneous commitBatchAction clicks both pass the action-level
+  // `status === "committed"` gate (read outside any lock), then both
+  // enter `commitBatch` and process the same `approved` records,
+  // producing duplicate entity rows. Session-scoped pg_advisory_lock is
+  // unreliable under Supavisor transaction-mode pooling, so instead we
+  // flip `import_batches.status` from its review state to `committing`
+  // via a conditional UPDATE: if zero rows changed, another run already
+  // took the slot and we bounce with ConflictError. The terminal status
+  // ('committed' or 'failed') is set at the end of the loop.
   const lockResult = await db
     .update(importBatches)
     .set({ status: "committing" })
     .where(
       and(
         eq(importBatches.id, batchId),
-        inArray(importBatches.status, [
-          "reviewing",
-          "approved",
-          // F-12: a previously-failed batch is allowed to retry; this
-          // matches the action-layer rule that already throws on
-          // `status === "failed"` (admin must explicitly re-review),
-          // so reaching here means status is reviewing/approved.
-        ]),
+        inArray(importBatches.status, ["reviewing", "approved"]),
       ),
     )
     .returning({ id: importBatches.id });
@@ -168,26 +237,28 @@ export async function commitBatch(
             targetId: rec.id,
             after: {
               sourceEntityType: rec.sourceEntityType,
-              // Forensic linkage: name the CRM row this staged record
-              // wrote and whether it was an INSERT or an UPDATE.
-              // targetType/targetId stay the staging-record identity
-              // (still useful); this enriches `after` only.
+              // Forensic linkage: name the CRM row this staged root
+              // wrote and whether it was an INSERT or an UPDATE, plus
+              // the child activities/tasks that rode in with it (id +
+              // type + source) so the full graph this commit produced is
+              // reconstructible from audit_log alone (§12). The child
+              // list is capped (childCount carries the true total) so a
+              // pathological fan-out can't bloat a single audit row —
+              // mirrors §12's aggregate-with-sample contract.
               crmEntityType: result.crmEntityType,
               crmEntityId: result.crmEntityId,
               operation: result.operation,
-              // F-08: surface activity-reuse via subkind so a no-op
-              // re-import (external_id already mapped) doesn't look
-              // like a fresh write in the audit trail.
-              ...(result.subkind ? { subkind: result.subkind } : {}),
+              childCount: result.childCount,
+              children: result.children.slice(0, RECORD_COMMITTED_CHILDREN_CAP),
+              childrenTruncated:
+                result.children.length > RECORD_COMMITTED_CHILDREN_CAP,
               ...(result.before ? { before: result.before } : {}),
             },
           });
-          // F-02: emit FK_UNRESOLVED audit AFTER the per-record tx
-          // committed successfully. The prior in-tx emit ran via the
-          // global `db` connection (writeAudit doesn't accept a tx
-          // handle), so a tx that rolled back left orphan
-          // FK_UNRESOLVED audit rows asserting events that never
-          // actually happened.
+          // Emit FK_UNRESOLVED audit AFTER the per-record tx committed
+          // successfully. Emitting inside the tx via the global `db`
+          // connection (writeAudit doesn't accept a tx handle) would
+          // leave orphan FK_UNRESOLVED rows if the tx rolled back.
           for (const u of result.unresolvedFks ?? []) {
             await writeAudit({
               actorId,
@@ -201,7 +272,7 @@ export async function commitBatch(
                 foreignEntity: u.targetEntity,
                 foreignSourceId: u.sourceId,
                 remediation:
-                  "re-import after the foreign record lands, or set manually via the edit form",
+                  "resolved automatically by the post-run reconcile sweep once the foreign record lands, or set manually via the edit form",
               },
             });
           }
@@ -212,11 +283,7 @@ export async function commitBatch(
             action: D365_AUDIT_EVENTS.RECORD_SKIPPED,
             targetType: "d365_import_record",
             targetId: rec.id,
-            // F-07/F-09: emit the SPECIFIC reason instead of always
-            // claiming "dedup_skip". A missing-parent activity skip
-            // is forensically distinct from a reviewer-driven dedup
-            // skip and audit consumers must be able to tell them apart.
-            after: { reason: result.reason ?? "dedup_skip" },
+            after: { reason: result.reason },
           });
         }
       } catch (err) {
@@ -227,11 +294,10 @@ export async function commitBatch(
           sourceEntityType: rec.sourceEntityType,
           errorMessage: message,
         });
-        // F-12: wrap the failure-state update so a transient DB error
-        // here can't leave the record in `approved` state (which would
-        // cause it to be re-processed and double-write at the entity
-        // level on the next click). If the row update itself fails we
-        // log a structured marker that admins can grep for.
+        // Wrap the failure-state update so a transient DB error here
+        // can't leave the record in `approved` state (which would cause
+        // it to be re-processed and double-write on the next click). If
+        // the row update itself fails we log a structured marker.
         try {
           await db
             .update(importRecords)
@@ -251,9 +317,9 @@ export async function commitBatch(
                 : String(updateErr),
           });
         }
-        // pair the row's status='failed' update with
-        // a forensic audit row. writeAudit is best-effort; an audit
-        // outage cannot block the commit-batch loop's remaining work.
+        // Pair the row's status='failed' update with a forensic audit
+        // row. writeAudit is best-effort; an audit outage cannot block
+        // the commit-batch loop's remaining work.
         await writeAudit({
           actorId,
           action: D365_AUDIT_EVENTS.RECORD_COMMIT_FAILED,
@@ -289,11 +355,10 @@ export async function commitBatch(
     const failedTotal = countFor("failed");
     const skippedTotal = countFor("skipped");
 
-    // F-10: status reflects actual outcome. A batch with any failed
-    // record is NOT 'committed' — it's 'failed', and the audit/admin UI
-    // must surface that so the operator can investigate the failed rows
-    // instead of treating the batch as a clean commit.
-    // F-03: track skipped count via record_count_skipped.
+    // Status reflects actual outcome. A batch with any failed record is
+    // NOT 'committed' — it's 'failed', and the audit/admin UI surfaces
+    // that so the operator investigates the failed rows instead of
+    // treating the batch as a clean commit.
     await db
       .update(importBatches)
       .set({
@@ -307,12 +372,11 @@ export async function commitBatch(
 
     return { committed, skipped, failed };
   } catch (err) {
-    // F-05: if the loop crashes catastrophically (typecheck would
-    // catch most paths but a runtime DB error could land here), put
-    // the batch back into `reviewing` so a re-click can retry.
-    // Otherwise the batch stays in `committing` forever and admin has
-    // to manually unstick it. The actual per-record failures already
-    // wrote `RECORD_COMMIT_FAILED` audit rows for forensics.
+    // If the loop crashes catastrophically (typecheck would catch most
+    // paths but a runtime DB error could land here), put the batch back
+    // into `reviewing` so a re-click can retry. Otherwise the batch
+    // stays in `committing` forever and admin has to manually unstick
+    // it. Per-record failures already wrote RECORD_COMMIT_FAILED rows.
     await db
       .update(importBatches)
       .set({ status: "reviewing" })
@@ -327,24 +391,38 @@ interface UnresolvedFk {
   targetEntity: string;
 }
 
+/**
+ * One committed child's forensic linkage: the local CRM row it wrote
+ * (`crmEntityType` = `activity` | `task`, `crmEntityId` = that row's
+ * UUID) and its D365 source (`sourceEntityType` / `sourceId`). Recorded
+ * on the root's RECORD_COMMITTED audit `after.children` so a re-import or
+ * an orphan investigation can reconstruct exactly which child rows a root
+ * commit produced (§12 — meaningful mutations are auditable).
+ */
+interface CommittedChild {
+  crmEntityType: "activity" | "task";
+  crmEntityId: string;
+  sourceEntityType: AttachedChild["sourceEntityType"];
+  sourceId: string;
+}
+
 type CommitOneResult =
   | {
       outcome: "committed";
-      subkind?: "already_existed";
       unresolvedFks?: UnresolvedFk[];
       before?: { version?: number };
-      // Forensic linkage: which CRM row the staged record resolved to,
-      // and whether it was a fresh INSERT or an UPDATE of an existing
-      // row. Without this the RECORD_COMMITTED audit can only name the
-      // staging-record id, not the lead/contact/account/opportunity it
-      // actually wrote.
-      crmEntityType: "lead" | "contact" | "account" | "opportunity" | "activity";
+      // Forensic linkage: which CRM root row the staged record resolved
+      // to, whether it was a fresh INSERT or an UPDATE, and the child
+      // activities/tasks that were attached.
+      crmEntityType: RootEntityType;
       crmEntityId: string;
       operation: "created" | "updated";
+      childCount: number;
+      children: CommittedChild[];
     }
   | {
       outcome: "skipped";
-      reason: "dedup_skip" | "missing_parent";
+      reason: "dedup_skip";
     };
 
 interface RecordRow {
@@ -356,6 +434,25 @@ interface RecordRow {
   conflictWith: string | null;
 }
 
+/**
+ * One attached child as map-batch persisted it under
+ * `mappedPayload.attached`. Mirrors `AttachedActivity` from
+ * `./mapping`, but the JSONB round-trip means `payload`'s date fields
+ * arrive as strings (re-hydrated below).
+ */
+interface AttachedChild {
+  kind: "note" | "call" | "meeting" | "email" | "task";
+  sourceId: string;
+  sourceEntityType: "task" | "phonecall" | "appointment" | "email" | "annotation";
+  payload: Record<string, unknown>;
+}
+
+function isRootEntityType(v: string): v is RootEntityType {
+  return (
+    v === "lead" || v === "contact" || v === "account" || v === "opportunity"
+  );
+}
+
 async function commitOneRecord(
   rec: RecordRow,
   actorId: string,
@@ -363,73 +460,53 @@ async function commitOneRecord(
   if (!rec.mappedPayload || typeof rec.mappedPayload !== "object") {
     throw new ValidationError("missing mappedPayload", { recordId: rec.id });
   }
+  const entityType = rec.sourceEntityType;
+  if (!isRootEntityType(entityType)) {
+    // The root-aggregate model only stages root records; a child type
+    // here means the staged row predates the redesign or pull-batch
+    // regressed. Fail loudly rather than mis-route into a parent table.
+    throw new ValidationError(
+      `import record is a child type (${entityType}); only root types commit in the aggregate model`,
+      { recordId: rec.id, sourceEntityType: entityType },
+    );
+  }
+
   const wrapper = rec.mappedPayload as Record<string, unknown>;
-  // map-batch persists mappedPayload as `{ mapped, attached, customFields }`
-  // (see map-batch.ts). The actual insertable object lives at `wrapper.mapped`;
-  // `wrapper.attached` and `wrapper.customFields` are sibling metadata that
-  // must NOT flow to Drizzle. Defensive fallback: if upstream changes the
-  // shape and writes the insertable object directly at the top, we still
-  // unwrap correctly.
+  // map-batch persists mappedPayload as `{ mapped, attached, customFields }`.
+  // The root insertable lives at `wrapper.mapped`; `wrapper.attached` is
+  // the child-activity array; `customFields` is sibling metadata that
+  // must NOT flow to Drizzle. Defensive fallback: if upstream wrote the
+  // insertable directly at the top, we still unwrap correctly.
   const mappedRaw =
     wrapper.mapped && typeof wrapper.mapped === "object"
       ? (wrapper.mapped as Record<string, unknown>)
       : wrapper;
 
-  // Extract `_`-prefixed virtuals BEFORE strip — commit-batch reads the
-  // parent FK from these for the activity path AND for account/contact
-  // FK resolution against external_ids.
-  const parentEntityType =
-    typeof mappedRaw._parentEntityType === "string"
-      ? (mappedRaw._parentEntityType as string)
-      : null;
-  const parentSourceId =
-    typeof mappedRaw._parentSourceId === "string"
-      ? (mappedRaw._parentSourceId as string)
-      : null;
-  // Contact mapper stashes the D365 parent-customer GUID here; resolved
-  // to a local crm_accounts.id below.
-  const accountSourceId =
-    typeof mappedRaw._accountSourceId === "string"
-      ? (mappedRaw._accountSourceId as string)
-      : null;
-  // Account mapper stashes these for the two account-level FKs.
-  const parentAccountSourceId =
-    typeof mappedRaw._parentAccountSourceId === "string"
-      ? (mappedRaw._parentAccountSourceId as string)
-      : null;
-  const primaryContactSourceId =
-    typeof mappedRaw._primaryContactSourceId === "string"
-      ? (mappedRaw._primaryContactSourceId as string)
-      : null;
-  // Opportunity mapper stashes the originating-lead GUID here; the
-  // account/primary-contact GUIDs reuse the shared
-  // `_accountSourceId` / `_primaryContactSourceId` virtuals above.
-  const sourceLeadSourceId =
-    typeof mappedRaw._sourceLeadSourceId === "string"
-      ? (mappedRaw._sourceLeadSourceId as string)
-      : null;
+  const attached = parseAttachedChildren(wrapper.attached);
 
-  // Strip every `_`-prefixed virtual (`_meta`, `_parentEntityType`,
-  // `_parentSourceId`, `_qualityVerdict`, `_qualityReasons`,
-  // `_accountSourceId`, `_parentAccountSourceId`,
-  // `_primaryContactSourceId`, etc.) before Drizzle insert.
-  const cleanPayload: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(mappedRaw)) {
-    if (k.startsWith("_")) continue;
-    cleanPayload[k] = v;
-  }
+  // Cross-root FK source GUIDs stashed by the mappers as `_`-prefixed
+  // virtuals, read BEFORE the strip.
+  const accountSourceId = readVirtual(mappedRaw, "_accountSourceId");
+  const parentAccountSourceId = readVirtual(
+    mappedRaw,
+    "_parentAccountSourceId",
+  );
+  const primaryContactSourceId = readVirtual(
+    mappedRaw,
+    "_primaryContactSourceId",
+  );
+  const sourceLeadSourceId = readVirtual(mappedRaw, "_sourceLeadSourceId");
 
-  const entityType = rec.sourceEntityType as D365EntityType;
+  // Strip every `_`-prefixed virtual and re-hydrate date strings to
+  // `Date` for the root payload before Drizzle insert.
+  const cleanPayload = rehydrateDates(stripVirtuals(mappedRaw));
 
   return await db.transaction(async (tx): Promise<CommitOneResult> => {
-    // Resolve account/contact FKs from D365 source GUIDs into the
-    // local rows that have been previously imported. If the foreign
-    // record hasn't been imported yet, the FK stays null — the user
-    // can either re-run the import (which will resolve on second pass)
-    // or set the FK manually via the edit form. F-02: the
-    // RECORD_FK_UNRESOLVED audit emission is DEFERRED to the outer
-    // success branch in `commitBatch` so a tx rollback doesn't leave
-    // false-positive audit rows asserting events that never happened.
+    // Resolve cross-root FKs from D365 source GUIDs into already-imported
+    // local rows. If the foreign record isn't imported yet the FK stays
+    // null; the post-run reconcile sweep fills it once the parent lands.
+    // The RECORD_FK_UNRESOLVED audit emission is DEFERRED to the outer
+    // success branch so a tx rollback doesn't leave false-positive rows.
     const unresolvedFks: UnresolvedFk[] = [];
     if (entityType === "contact" && accountSourceId) {
       const localAccountId = await lookupLocalId(tx, "account", accountSourceId);
@@ -472,13 +549,6 @@ async function commitOneRecord(
       }
     }
     if (entityType === "opportunity") {
-      // `accountSourceId` / `primaryContactSourceId` are the shared
-      // virtuals (also consumed by the contact/account branches); the
-      // per-entityType guards make these branches mutually exclusive
-      // so reuse is safe. `_customerid_value` polymorphism is handled
-      // in the opportunity mapper (it seeds both source-id virtuals);
-      // a wrong-type GUID simply fails its lookup and records a
-      // forensic unresolved-FK entry rather than corrupting data.
       if (accountSourceId) {
         const localAccountId = await lookupLocalId(
           tx,
@@ -508,11 +578,7 @@ async function commitOneRecord(
           });
       }
       if (sourceLeadSourceId) {
-        const localLeadId = await lookupLocalId(
-          tx,
-          "lead",
-          sourceLeadSourceId,
-        );
+        const localLeadId = await lookupLocalId(tx, "lead", sourceLeadSourceId);
         if (localLeadId) cleanPayload.sourceLeadId = localLeadId;
         else
           unresolvedFks.push({
@@ -523,69 +589,7 @@ async function commitOneRecord(
       }
     }
 
-    // Activities path — insert into `activities` and link parent FK.
-    if (
-      entityType === "annotation" ||
-      entityType === "task" ||
-      entityType === "phonecall" ||
-      entityType === "appointment" ||
-      entityType === "email"
-    ) {
-      const result = await commitActivity(
-        tx,
-        entityType,
-        rec.sourceId,
-        cleanPayload,
-        { entityType: parentEntityType, sourceId: parentSourceId },
-        actorId,
-      );
-      if (result.outcome === "missing_parent") {
-        // F-07: this is NOT a dedup skip — caller's audit must surface
-        // the actual reason so operators distinguish missing-parent
-        // skips from reviewer-driven dedup skips.
-        await tx
-          .update(importRecords)
-          .set({
-            status: "skipped",
-            committedAt: new Date(),
-            error: "parent entity not found locally",
-          })
-          .where(eq(importRecords.id, rec.id));
-        return { outcome: "skipped", reason: "missing_parent" };
-      }
-      await tx
-        .update(importRecords)
-        .set({
-          status: "committed",
-          committedAt: new Date(),
-          localId: result.localId,
-        })
-        .where(eq(importRecords.id, rec.id));
-      // F-08: an idempotent re-import (external_id already mapped)
-      // is forensically distinct from a fresh activity insert. Surface
-      // via subkind so audit consumers can filter no-op re-runs. The
-      // CRM row written is an `activities` row; `alreadyExisted` is the
-      // existing created-vs-updated signal (re-import maps to an
-      // already-present row → "updated"; fresh insert → "created").
-      return result.alreadyExisted
-        ? {
-            outcome: "committed",
-            subkind: "already_existed",
-            unresolvedFks,
-            crmEntityType: "activity",
-            crmEntityId: result.localId,
-            operation: "updated",
-          }
-        : {
-            outcome: "committed",
-            unresolvedFks,
-            crmEntityType: "activity",
-            crmEntityId: result.localId,
-            operation: "created",
-          };
-    }
-
-    // Parent entity path (lead / contact / account / opportunity).
+    // --- 1. Commit the ROOT entity -------------------------------------
     const parentResult = await commitParentEntity(
       tx,
       entityType,
@@ -595,8 +599,11 @@ async function commitOneRecord(
       rec.conflictResolution,
       actorId,
     );
+
     if (parentResult.outcome === "dedup_skip") {
-      // dedup_skip path
+      // The reviewer chose to skip this root entirely. Its children are
+      // NOT committed — a child is never orphaned by a skip; the whole
+      // root-aggregate is the unit of decision.
       await tx
         .update(importRecords)
         .set({
@@ -607,37 +614,56 @@ async function commitOneRecord(
       return { outcome: "skipped", reason: "dedup_skip" };
     }
 
+    const rootLocalId = parentResult.localId;
+
+    // --- 2. Commit each attached child with the root's in-memory UUID --
+    // No external_ids lookup for the parent FK — it is the UUID we just
+    // captured, so it can never miss. Collect each child's local row id +
+    // source linkage for the root's RECORD_COMMITTED audit `after`.
+    const committedChildren: CommittedChild[] = [];
+    for (const child of attached) {
+      const childResult = await commitAttachedChild(
+        tx,
+        entityType,
+        rootLocalId,
+        child,
+        actorId,
+      );
+      committedChildren.push({
+        crmEntityType: child.sourceEntityType === "task" ? "task" : "activity",
+        crmEntityId: childResult.localId,
+        sourceEntityType: child.sourceEntityType,
+        sourceId: child.sourceId,
+      });
+    }
+
     await tx
       .update(importRecords)
       .set({
         status: "committed",
         committedAt: new Date(),
-        localId: parentResult.localId,
+        localId: rootLocalId,
       })
       .where(eq(importRecords.id, rec.id));
+
     return {
       outcome: "committed",
       unresolvedFks,
-      // `entityType` is narrowed to a parent type here (activities
-      // returned earlier). `beforeVersion` is set only on the
-      // `conflictWith` UPDATE path (`commitParentEntity` returns it
-      // from the existing-row branch); its absence means the INSERT
-      // path ran — so it is the existing created-vs-updated signal.
       crmEntityType: entityType,
-      crmEntityId: parentResult.localId,
+      crmEntityId: rootLocalId,
+      // `beforeVersion` is set only on the `conflictWith` UPDATE path;
+      // its absence means the INSERT path ran — the created-vs-updated
+      // signal.
       operation:
         parentResult.beforeVersion !== undefined ? "updated" : "created",
+      childCount: attached.length,
+      children: committedChildren,
       // capture pre-update version on the audit `before` payload so a
-      // concurrent user edit's OCC interaction is reconstructible from
-      // the forensic trail. The D365 import is the documented
-      // authoritative writer for D365-sourced records; the OCC
-      // `WHERE version = $expected` clause is intentionally absent.
-      // For `dedup_overwrite` resolution: a concurrent user write that
-      // landed between the SELECT and the UPDATE is clobbered (by
-      // design — overwrite means overwrite). For `dedup_merge`
-      // resolution: the SET clause uses SQL-level `COALESCE` per
-      // F-72 / STANDARDS §19.8, so concurrent user writes that filled
-      // a previously-empty column are preserved.
+      // concurrent user edit's OCC interaction is reconstructible. The
+      // D365 import is the documented authoritative writer for
+      // D365-sourced records; the OCC `WHERE version = $expected` clause
+      // is intentionally absent (overwrite means overwrite; merge uses
+      // SQL-level COALESCE to preserve concurrent user writes).
       ...(parentResult.beforeVersion !== undefined
         ? { before: { version: parentResult.beforeVersion } }
         : {}),
@@ -646,7 +672,66 @@ async function commitOneRecord(
 }
 
 /* -------------------------------------------------------------------------- *
- * Parent entity commit *
+ * Attached-child parsing *
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Coerce the persisted `mappedPayload.attached` array into typed
+ * `AttachedChild`s, dropping any malformed entry defensively. A child
+ * with no usable `payload` object is skipped (logged by the caller's
+ * failure path only if its insert later throws).
+ */
+function parseAttachedChildren(raw: unknown): AttachedChild[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AttachedChild[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const kind = e.kind;
+    const sourceId = e.sourceId;
+    const sourceEntityType = e.sourceEntityType;
+    const payload = e.payload;
+    if (
+      typeof kind !== "string" ||
+      typeof sourceId !== "string" ||
+      typeof sourceEntityType !== "string" ||
+      !payload ||
+      typeof payload !== "object"
+    ) {
+      continue;
+    }
+    out.push({
+      kind: kind as AttachedChild["kind"],
+      sourceId,
+      sourceEntityType: sourceEntityType as AttachedChild["sourceEntityType"],
+      payload: payload as Record<string, unknown>,
+    });
+  }
+  return out;
+}
+
+function readVirtual(
+  obj: Record<string, unknown>,
+  key: string,
+): string | null {
+  const v = obj[key];
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/** Drop every `_`-prefixed virtual; return a fresh object. */
+function stripVirtuals(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k.startsWith("_")) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Parent (root) entity commit *
  * -------------------------------------------------------------------------- */
 
 type ParentCommitResult =
@@ -655,7 +740,7 @@ type ParentCommitResult =
 
 async function commitParentEntity(
   tx: Tx,
-  entityType: "lead" | "contact" | "account" | "opportunity",
+  entityType: RootEntityType,
   sourceId: string,
   payload: Record<string, unknown>,
   conflictWith: string | null,
@@ -664,7 +749,8 @@ async function commitParentEntity(
 ): Promise<ParentCommitResult> {
   const table = PARENT_ENTITY_TABLES[entityType];
 
-  // dedup_skip — don't touch the local row.
+  // dedup_skip — don't touch the local row, but still link external_ids
+  // so a re-import is idempotent.
   if (conflictResolution === "dedup_skip" && conflictWith) {
     await upsertExternalId(tx, entityType, sourceId, conflictWith);
     return { outcome: "dedup_skip" };
@@ -696,34 +782,24 @@ async function commitParentEntity(
         ? buildOverwriteUpdate(payload)
         : buildMergeUpdate(payload, existingRow, table);
 
-    // F-04: capture pre-update version (if the table tracks OCC) so the
-    // audit `before` payload records the version the D365 import
-    // clobbered. The import is the authoritative writer for D365-sourced
-    // records — concurrent user edits lose silently, which is the
-    // documented design, but the forensic trail needs to surface what
-    // was clobbered.
+    // Capture pre-update version (if the table tracks OCC) so the audit
+    // `before` payload records the version the D365 import clobbered.
     const beforeVersion =
       typeof existingRow.version === "number"
         ? (existingRow.version as number)
         : undefined;
 
     if (Object.keys(update).length > 0) {
-      // Bump updated_by_id and updated_at where the columns exist; the
-      // `version` column is bumped via SQL increment for OCC.
       const enriched: Record<string, unknown> = {
         ...update,
         updatedById: actorId,
         updatedAt: new Date(),
       };
-      // Some tables track `version` for OCC — bump it via SQL.
       const versioned = table as unknown as { version?: unknown };
       if (versioned.version) {
         enriched.version = sql`${versioned.version as never} + 1`;
       }
-      await tx
-        .update(table)
-        .set(enriched)
-        .where(eq(table.id, conflictWith));
+      await tx.update(table).set(enriched).where(eq(table.id, conflictWith));
     }
     await upsertExternalId(tx, entityType, sourceId, conflictWith);
     return { outcome: "committed", localId: conflictWith, beforeVersion };
@@ -742,7 +818,7 @@ async function commitParentEntity(
 
 async function insertParentEntity(
   tx: Tx,
-  entityType: "lead" | "contact" | "account" | "opportunity",
+  entityType: RootEntityType,
   sourceId: string,
   payload: Record<string, unknown>,
   actorId: string,
@@ -751,9 +827,8 @@ async function insertParentEntity(
   const clean: Record<string, unknown> = { ...payload };
   if (!clean.createdById) clean.createdById = actorId;
   if (!clean.updatedById) clean.updatedById = actorId;
-  // The mapped payloads already match each table's NewX shape
-  // (NewLead, NewContact, …). The cast keeps TS from demanding the
-  // union narrow at the call site.
+  // The mapped payloads already match each table's NewX shape; the cast
+  // keeps TS from demanding the union narrow at the call site.
   const inserted = await tx
     .insert(table)
     .values(clean)
@@ -771,7 +846,7 @@ async function insertParentEntity(
 
 /**
  * Build a `set` payload for dedup_overwrite — every non-undefined
- * mapped column overrides the local. Drops `_meta` already.
+ * mapped column overrides the local.
  */
 function buildOverwriteUpdate(
   payload: Record<string, unknown>,
@@ -787,24 +862,16 @@ function buildOverwriteUpdate(
 
 /**
  * Build a `set` payload for dedup_merge (Q-03 default) — only fill
- * fields where the existing local value is null/undefined/empty
- * string.
+ * fields where the existing local value is null/undefined/empty string.
  *
- * Concurrent-write safety (F-72): the `existing` snapshot is read at
- * the top of `commitParentEntity`. Between that SELECT and the UPDATE
- * fired here, a CRM user can have edited the same row. Emitting a
- * plain `SET first_name = $new` would clobber that edit silently. The
- * merge contract specifies the opposite — preserve user data — so we
- * wrap each value in `COALESCE(<column>, $new)`. The DB engine decides
- * at UPDATE time whether the column is still empty; concurrent fills
- * are preserved.
- *
- * The JS-side `isEmpty` snapshot check stays — it gates which columns
- * even enter the SET clause, so the UPDATE's write-set stays minimal.
- * The COALESCE wrapping handles the race within that already-narrow
- * set.
- *
- * STANDARDS §19.8 governs the sync pipeline idempotency contract.
+ * Concurrent-write safety: the `existing` snapshot is read at the top of
+ * `commitParentEntity`. Between that SELECT and the UPDATE a CRM user
+ * can have edited the same row; a plain `SET col = $new` would clobber
+ * that edit silently. The merge contract preserves user data, so each
+ * value is wrapped in `COALESCE(<column>, $new)` — the DB decides at
+ * UPDATE time whether the column is still empty; concurrent fills are
+ * preserved. The JS-side `isEmpty` snapshot check stays to keep the
+ * write-set minimal. STANDARDS §19.8 governs the idempotency contract.
  */
 function buildMergeUpdate(
   payload: Record<string, unknown>,
@@ -824,164 +891,272 @@ function buildMergeUpdate(
     if (!isEmpty) continue;
     const col = tableCols[k];
     if (col === undefined) continue;
-    // F-72: SQL-level COALESCE so a concurrent user write that landed
-    // between the SELECT and this UPDATE is preserved by the DB engine
-    // at apply-time. Without this, the merge contract is violated
-    // silently when a user edits the same row during the D365 import's
-    // commit window.
     out[k] = sql`COALESCE(${col as never}, ${v})`;
   }
   return out;
 }
 
 /* -------------------------------------------------------------------------- *
- * Activities path *
+ * Attached-child commit *
  * -------------------------------------------------------------------------- */
 
-type ActivityCommitResult =
-  | { outcome: "missing_parent" }
-  | { outcome: "committed"; localId: string; alreadyExisted: boolean };
-
-async function commitActivity(
+/**
+ * Insert one attached child under its root's freshly-captured local
+ * UUID. Tasks land in the `tasks` table (dedup via external_ids since
+ * `tasks` has no import-dedup column); every other kind lands in
+ * `activities` with a per-parent `ON CONFLICT (<parentFk>,
+ * import_dedup_key)` upsert. Each child gets its own `external_ids` row.
+ *
+ * The parent FK is the in-memory `rootLocalId` — never an external_ids
+ * lookup — so it can never miss.
+ */
+async function commitAttachedChild(
   tx: Tx,
-  entityType: "annotation" | "task" | "phonecall" | "appointment" | "email",
+  parentEntityType: RootEntityType,
+  rootLocalId: string,
+  child: AttachedChild,
+  actorId: string,
+): Promise<{ localId: string }> {
+  const fkColumn = PARENT_FK_COLUMN[parentEntityType];
+  // Re-hydrate the child's date strings (createdAt/updatedAt/dueAt/
+  // completedAt/occurredAt) back to `Date`, then strip any `_`-prefixed
+  // virtuals (`_parentEntityType` / `_parentSourceId`) before insert.
+  const childPayload = rehydrateDates(stripVirtuals(child.payload));
+
+  if (child.sourceEntityType === "task") {
+    return commitTaskChild(
+      tx,
+      fkColumn,
+      rootLocalId,
+      child.sourceId,
+      childPayload,
+      actorId,
+    );
+  }
+
+  return commitActivityChild(
+    tx,
+    parentEntityType,
+    fkColumn,
+    rootLocalId,
+    child,
+    childPayload,
+    actorId,
+  );
+}
+
+/**
+ * Task child → `tasks` table. `tasks` has no import-dedup column, so
+ * idempotency rides on `external_ids` (source='d365',
+ * sourceEntityType='task', sourceId=activityid): if the activity is
+ * already mapped, skip the insert and keep the existing row.
+ *
+ * Race tolerance: the SELECT-then-INSERT can lose the race under READ
+ * COMMITTED — two overlapping txns could both miss the SELECT and both
+ * INSERT, then the `external_ids` upsert collides. The collision is
+ * absorbed by `upsertExternalId`'s `ON CONFLICT DO UPDATE` (the second
+ * writer wins idempotently) rather than throwing a unique violation that
+ * would abort the surrounding transaction — so we do NOT catch here (a
+ * catch around an aborted Postgres transaction can't recover without a
+ * SAVEPOINT, and the upsert means there is no violation to catch). The
+ * narrow residual — a duplicate `tasks` ROW from the lost race — would
+ * need a unique constraint on `tasks` to fully prevent (a migration,
+ * out of scope here); in practice batch commits are serialized by the
+ * `import_batches` status lock, so two commits of the same task don't
+ * overlap.
+ *
+ * Returns the local `tasks.id` for the committed/existing row.
+ */
+async function commitTaskChild(
+  tx: Tx,
+  fkColumn: "leadId" | "accountId" | "contactId" | "opportunityId",
+  rootLocalId: string,
   sourceId: string,
   payload: Record<string, unknown>,
-  parentRef: { entityType: string | null; sourceId: string | null },
   actorId: string,
-): Promise<ActivityCommitResult> {
-  // Parent FK resolution — caller passes the parent reference
-  // explicitly (extracted from the unwrapped mapped object's
-  // `_parentEntityType` / `_parentSourceId` virtuals before the
-  // `_*` strip).
-  const parentEntityType = parentRef.entityType;
-  const parentSourceId = parentRef.sourceId;
-
-  let parentLocalId: string | null = null;
-  if (parentEntityType && parentSourceId) {
-    const rows = await tx
-      .select({ localId: externalIds.localId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.source, "d365"),
-          eq(externalIds.sourceEntityType, parentEntityType),
-          eq(externalIds.sourceId, parentSourceId),
-        ),
-      )
-      .limit(1);
-    parentLocalId = rows[0]?.localId ?? null;
-  }
-
-  if (!parentLocalId) {
-    return { outcome: "missing_parent" };
-  }
-
-  // Idempotent: if external_ids already maps this activity, update
-  // its existing row; otherwise insert. F-08: signal the
-  // already-existed case so the caller's audit can flag the re-import
-  // as a no-op instead of claiming a fresh write.
+): Promise<{ localId: string }> {
   const existing = await tx
     .select({ localId: externalIds.localId })
     .from(externalIds)
     .where(
       and(
         eq(externalIds.source, "d365"),
-        eq(externalIds.sourceEntityType, entityType),
+        eq(externalIds.sourceEntityType, "task"),
         eq(externalIds.sourceId, sourceId),
       ),
     )
     .limit(1);
-
-  const kind = ACTIVITY_KIND[entityType];
-  const occurredAt =
-    typeof payload.occurredAt === "string" || payload.occurredAt instanceof Date
-      ? new Date(payload.occurredAt as string | Date)
-      : new Date();
-
   if (existing[0]) {
-    return {
-      outcome: "committed",
-      localId: existing[0].localId,
-      alreadyExisted: true,
-    };
+    // Already imported — keep the mapping fresh, do not duplicate.
+    await upsertExternalId(tx, "task", sourceId, existing[0].localId);
+    return { localId: existing[0].localId };
   }
 
-  // Insert the FULL mapped activity (the stripped payload is already the
-  // NewActivity shape produced by the annotation/phonecall/appointment/
-  // email mappers), so every mapped column persists — `direction`,
-  // `durationMinutes`, `outcome`, `meetingLocation`, `meetingAttendees`,
-  // `importDedupKey`, the owning `userId`, and — per the §5.2 recency
-  // rule — `createdAt`/`updatedAt` carried from D365 createdon/modifiedon.
-  // Only the resolved parent FK columns, `kind`, `occurredAt` (with a
-  // notNull fallback), and the actor stamp are overridden; the
-  // exactly-one-parent CHECK is preserved by nulling the other three FKs.
-  // Narrowing to Partial<$inferInsert> (the payload genuinely matches the
-  // table) lets the literal overrides be typechecked, so a future stray
-  // key like `createdById` (no such column on activities) fails compile
-  // instead of being silently dropped.
-  const mappedActivity = payload as Partial<typeof activities.$inferInsert>;
+  const insertValues: Record<string, unknown> = {
+    ...payload,
+    // Pin the parent FK to the root's in-memory UUID; null the other
+    // three so the tasks at-most-one-parent CHECK holds.
+    leadId: null,
+    accountId: null,
+    contactId: null,
+    opportunityId: null,
+    [fkColumn]: rootLocalId,
+  };
+  if (!insertValues.assignedToId) insertValues.assignedToId = actorId;
+  if (!insertValues.createdById) insertValues.createdById = actorId;
+  if (!insertValues.updatedById) insertValues.updatedById = actorId;
+
+  const inserted = await tx
+    .insert(tasks)
+    .values(insertValues as typeof tasks.$inferInsert)
+    .returning({ id: tasks.id });
+  const row = inserted[0];
+  if (!row) {
+    throw new ConflictError("task insert returned no row", { sourceId });
+  }
+  await upsertExternalId(tx, "task", sourceId, row.id);
+  return { localId: row.id };
+}
+
+/**
+ * Activity child (note / call / meeting / email) → `activities` table.
+ * Idempotent via the per-parent partial UNIQUE arbiter
+ * `(<parentFk>, import_dedup_key) WHERE import_dedup_key IS NOT NULL`
+ * (added by the dedup-generalize migration). The mappers always set a
+ * non-null `importDedupKey` (`d365-<source>:<activityid>`), so the
+ * arbiter is active; on conflict we preserve the row's D365-sourced
+ * recency (`updatedAt` = source `modifiedon`) rather than stamping the
+ * wall-clock import time, then re-point its external_ids mapping. The
+ * sync time is recorded separately on `external_ids.importedAt` /
+ * `lastSyncedAt`, so overwriting `updatedAt` with `now()` would corrupt
+ * the activity's D365 recency on every re-import.
+ */
+async function commitActivityChild(
+  tx: Tx,
+  parentEntityType: RootEntityType,
+  fkColumn: "leadId" | "accountId" | "contactId" | "opportunityId",
+  rootLocalId: string,
+  child: AttachedChild,
+  payload: Record<string, unknown>,
+  actorId: string,
+): Promise<{ localId: string }> {
+  const kind = ACTIVITY_KIND[child.sourceEntityType];
+  if (!kind) {
+    throw new ValidationError(
+      `unknown activity child source type: ${child.sourceEntityType}`,
+      { sourceId: child.sourceId },
+    );
+  }
+
+  // occurredAt is NOT NULL on activities; the mappers always emit it
+  // (re-hydrated above), but fall back to now() defensively rather than
+  // crashing the whole root graph on a single malformed child.
+  const occurredAt =
+    payload.occurredAt instanceof Date ? payload.occurredAt : new Date();
+
+  const importDedupKey =
+    typeof payload.importDedupKey === "string" ? payload.importDedupKey : null;
+
+  // D365-sourced recency for the conflict-path SET. `updatedAt` rides
+  // through the mapped payload as the source `modifiedon` (rehydrated to
+  // a Date above); preserve it on re-import instead of stamping the
+  // wall-clock import time. Fall back to occurredAt only if it is
+  // somehow absent so the column never goes null.
+  const sourceUpdatedAt =
+    payload.updatedAt instanceof Date ? payload.updatedAt : occurredAt;
+
+  const insertValues = {
+    ...(payload as Partial<typeof activities.$inferInsert>),
+    kind,
+    leadId: null,
+    accountId: null,
+    contactId: null,
+    opportunityId: null,
+    [fkColumn]: rootLocalId,
+    occurredAt,
+    // FRESH insert only: stamp the import actor so realtime skip-self
+    // works. On the CONFLICT path (a re-import) the `set` below writes
+    // only updatedAt (= source modifiedon) and leaves updatedById on the
+    // existing row untouched.
+    updatedById: actorId,
+  } as typeof activities.$inferInsert;
+
+  const parentFkCol = activities[fkColumn];
+
+  // The arbiter's `targetWhere` MUST match the partial-index predicate
+  // exactly or Postgres rejects the upsert with 42P10. The legacy
+  // lead-parent index (`activities_import_dedup_idx`, migration 0020) is
+  // partial ONLY on `import_dedup_key IS NOT NULL`; the generalized
+  // account/contact/opportunity indexes add `AND <fk> IS NOT NULL`.
+  const targetWhere =
+    parentEntityType === "lead"
+      ? sql`import_dedup_key is not null`
+      : parentEntityType === "account"
+        ? sql`import_dedup_key is not null and account_id is not null`
+        : parentEntityType === "contact"
+          ? sql`import_dedup_key is not null and contact_id is not null`
+          : sql`import_dedup_key is not null and opportunity_id is not null`;
+
   const inserted = await tx
     .insert(activities)
-    .values({
-      ...mappedActivity,
-      kind,
-      leadId: parentEntityType === "lead" ? parentLocalId : null,
-      contactId: parentEntityType === "contact" ? parentLocalId : null,
-      accountId: parentEntityType === "account" ? parentLocalId : null,
-      opportunityId: parentEntityType === "opportunity" ? parentLocalId : null,
-      occurredAt,
-      updatedById: actorId,
-    })
-    .onConflictDoNothing({
-      target: [activities.leadId, activities.importDedupKey],
-      where: sql`import_dedup_key is not null`,
+    .values(insertValues)
+    .onConflictDoUpdate({
+      target: [parentFkCol, activities.importDedupKey],
+      targetWhere,
+      set: {
+        // Preserve D365-sourced recency on re-import — set updatedAt from
+        // the incoming payload's source `modifiedon`, NOT the wall-clock
+        // import time. Stamping now() here corrupted the activity's D365
+        // recency on every sync. The sync time is recorded separately on
+        // external_ids (lastSyncedAt / importedAt). updatedById is left
+        // as the existing row's value (not overwritten with the import
+        // actor). The dedup key + parent stay put.
+        updatedAt: sourceUpdatedAt,
+      },
     })
     .returning({ id: activities.id });
+
   let row = inserted[0];
-  // The (lead_id, import_dedup_key) partial UNIQUE arbiter can skip this insert
-  // when the same activity already exists — e.g. the CSV/XLSX import pipeline
-  // persisted it first under the shared import_dedup_key. Only a lead-parented
-  // activity carrying a non-null dedup key can collide (NULLs are distinct in the
-  // unique index). Recover the existing row so the D365 external-id mapping still
-  // points at it, and signal the re-import as already-existed.
-  let dedupSkipped = false;
   if (!row) {
-    const dedupKey = mappedActivity.importDedupKey;
-    if (parentEntityType === "lead" && dedupKey != null) {
+    // ON CONFLICT can return zero rows when the arbiter's predicate
+    // (`import_dedup_key IS NOT NULL`) excludes the row — i.e. the
+    // mapper produced a null dedup key. Recover the existing row by
+    // (parentFk, dedup key) so the external_ids mapping still points at
+    // it; if there genuinely is none, this is a hard failure.
+    if (importDedupKey != null) {
       const dup = await tx
         .select({ id: activities.id })
         .from(activities)
         .where(
           and(
-            eq(activities.leadId, parentLocalId),
-            eq(activities.importDedupKey, dedupKey),
+            eq(parentFkCol, rootLocalId),
+            eq(activities.importDedupKey, importDedupKey),
           ),
         )
         .limit(1);
       row = dup[0];
-      dedupSkipped = Boolean(row);
     }
     if (!row) {
       throw new ConflictError("activity insert returned no row", {
-        entityType,
-        sourceId,
+        sourceEntityType: child.sourceEntityType,
+        sourceId: child.sourceId,
+        parentEntityType,
       });
     }
   }
 
-  await upsertExternalId(tx, entityType, sourceId, row.id);
-  return { outcome: "committed", localId: row.id, alreadyExisted: dedupSkipped };
+  await upsertExternalId(tx, child.sourceEntityType, child.sourceId, row.id);
+  return { localId: row.id };
 }
 
 /* -------------------------------------------------------------------------- *
- * external_ids upsert *
+ * external_ids lookup + upsert *
  * -------------------------------------------------------------------------- */
 
 /**
- * Resolve a D365 GUID for a related record to the local UUID using
- * the external_ids table. Returns null when the foreign record hasn't
- * been imported yet — callers leave the FK null in that case.
+ * Resolve a D365 GUID for a related record to the local UUID via the
+ * external_ids table. Returns null when the foreign record hasn't been
+ * imported yet — callers leave the FK null (the reconcile sweep fills it).
  */
 async function lookupLocalId(
   tx: Tx,
@@ -1004,27 +1179,28 @@ async function lookupLocalId(
 
 async function upsertExternalId(
   tx: Tx,
-  entityType: D365EntityType,
+  entityType: RootEntityType | "task" | "phonecall" | "appointment" | "email" | "annotation",
   sourceId: string,
   localId: string,
 ): Promise<void> {
+  // Local entity type the external_ids row points at: roots map to
+  // themselves; D365 `task` lands in the `tasks` table (localEntityType
+  // 'task'); every other child activity lands in `activities`.
   const localEntityType =
-    entityType === "annotation" ||
-    entityType === "task" ||
-    entityType === "phonecall" ||
-    entityType === "appointment" ||
-    entityType === "email"
-      ? "activity"
-      : entityType === "account"
-        ? "account"
+    entityType === "task"
+      ? "task"
+      : entityType === "phonecall" ||
+          entityType === "appointment" ||
+          entityType === "email" ||
+          entityType === "annotation"
+        ? "activity"
         : entityType;
 
-  // F-01: atomic upsert against `extid_source_sourceid_idx` unique
-  // constraint. The prior check-then-insert pattern lost the race
-  // under READ COMMITTED — two concurrent commit-batch runs could
-  // both miss the SELECT and both attempt INSERT, throwing a unique
-  // violation. ON CONFLICT DO UPDATE makes the second writer win
-  // idempotently while still refreshing localId + lastSyncedAt.
+  // Atomic upsert against `extid_source_sourceid_idx`. The prior
+  // check-then-insert lost the race under READ COMMITTED — two
+  // concurrent runs could both miss the SELECT and both INSERT, throwing
+  // a unique violation. ON CONFLICT DO UPDATE makes the second writer
+  // win idempotently while refreshing localId + lastSyncedAt.
   await tx
     .insert(externalIds)
     .values({
@@ -1045,4 +1221,373 @@ async function upsertExternalId(
         lastSyncedAt: new Date(),
       },
     });
+}
+
+/* -------------------------------------------------------------------------- *
+ * Post-run cross-root FK reconcile sweep *
+ * -------------------------------------------------------------------------- */
+
+export interface ReconcileRunFksResult {
+  /** Local entity rows with ≥1 still-null cross-root FK that were scanned. */
+  scanned: number;
+  /** Rows that had ≥1 FK resolved + updated by this sweep. */
+  resolved: number;
+  /** Individual FK fields still unresolved (parent not yet imported). */
+  stillUnresolved: number;
+  /**
+   * Rows with a NULL cross-root FK but no D365 provenance to resolve
+   * from (no staged rawPayload). Left untouched.
+   */
+  noSourceProvenance: number;
+}
+
+const RECONCILE_PAGE = 200;
+
+function str(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t === "" ? null : t;
+}
+
+/**
+ * Re-resolve any still-null cross-root FK on the entities a run
+ * committed, from their retained `import_records.rawPayload`, after the
+ * whole run finishes. Replaces the manual opportunity-FK backfill
+ * button: the same quarantine-then-reconcile pattern, but generalized to
+ * every cross-root edge (opportunity→account/contact/originatingLead;
+ * contact→account; account→parentAccount/primaryContact) and scoped to
+ * the records of one run.
+ *
+ * Idempotent: only fills a column that is currently NULL, only when
+ * resolution succeeds. Safe to re-run after a later root import lands.
+ *
+ * Children FKs never need reconciling — they are pinned to the root's
+ * in-memory UUID at commit time and cannot miss. This sweep is for the
+ * cross-ROOT edges only, where a parent root may live in a later batch.
+ */
+export async function reconcileRunFks(
+  runId: string,
+  actorId: string,
+): Promise<ReconcileRunFksResult> {
+  const result: ReconcileRunFksResult = {
+    scanned: 0,
+    resolved: 0,
+    stillUnresolved: 0,
+    noSourceProvenance: 0,
+  };
+
+  // The records this run committed, with their retained raw payloads, in
+  // dependency order so a still-null edge has the best chance of
+  // resolving in a single pass (account → contact → opportunity; leads
+  // have no cross-root parent edge to reconcile here).
+  let offset = 0;
+  for (;;) {
+    const page = await db
+      .select({
+        sourceEntityType: importRecords.sourceEntityType,
+        localId: importRecords.localId,
+        rawPayload: importRecords.rawPayload,
+      })
+      .from(importRecords)
+      .innerJoin(importBatches, eq(importBatches.id, importRecords.batchId))
+      .where(
+        and(
+          eq(importBatches.runId, runId),
+          eq(importRecords.status, "committed"),
+          inArray(importRecords.sourceEntityType, [
+            "contact",
+            "account",
+            "opportunity",
+          ]),
+        ),
+      )
+      .orderBy(
+        sql`CASE ${importRecords.sourceEntityType}
+              WHEN 'account' THEN 1
+              WHEN 'contact' THEN 2
+              WHEN 'opportunity' THEN 3
+              ELSE 4
+            END`,
+        asc(importRecords.id),
+      )
+      .limit(RECONCILE_PAGE)
+      .offset(offset);
+
+    if (page.length === 0) break;
+
+    for (const row of page) {
+      if (!row.localId) continue;
+      const raw =
+        row.rawPayload && typeof row.rawPayload === "object"
+          ? extractRootRaw(row.rawPayload as Record<string, unknown>)
+          : null;
+      if (!raw) {
+        result.noSourceProvenance += 1;
+        continue;
+      }
+
+      const resolvedAny = await reconcileOneRow(
+        row.sourceEntityType as "contact" | "account" | "opportunity",
+        row.localId,
+        raw,
+        actorId,
+        result,
+        runId,
+      );
+      result.scanned += 1;
+      if (resolvedAny) result.resolved += 1;
+    }
+
+    if (page.length < RECONCILE_PAGE) break;
+    offset += RECONCILE_PAGE;
+  }
+
+  logger.info("d365.reconcile.run_fks.summary", {
+    runId,
+    actorId,
+    scanned: result.scanned,
+    resolved: result.resolved,
+    stillUnresolved: result.stillUnresolved,
+    noSourceProvenance: result.noSourceProvenance,
+  });
+
+  await writeAudit({
+    actorId,
+    action: D365_AUDIT_EVENTS.BACKFILL_OPPORTUNITY_FK,
+    targetType: "import_run",
+    targetId: runId,
+    after: {
+      scanned: result.scanned,
+      resolved: result.resolved,
+      stillUnresolved: result.stillUnresolved,
+      noSourceProvenance: result.noSourceProvenance,
+      scope: "run_reconcile_sweep",
+    },
+  });
+
+  return result;
+}
+
+/**
+ * Unwrap the root raw record from the persisted root-aggregate payload
+ * (`{ root, children, _sourceOwnerId }`). Falls back to the object
+ * itself for any legacy flat payload.
+ */
+function extractRootRaw(
+  rawPayload: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (rawPayload.root && typeof rawPayload.root === "object") {
+    return rawPayload.root as Record<string, unknown>;
+  }
+  // Legacy flat shape.
+  return rawPayload;
+}
+
+/**
+ * Reconcile a single committed row's cross-root FKs. Only NULL columns
+ * are touched. Returns true if ≥1 FK was resolved + written.
+ *
+ * Each table is handled with a concrete `db.update(<table>)` call (not a
+ * union-typed helper) because Drizzle's builder methods don't narrow
+ * cleanly over a union of table types. The shared logic — "resolve the
+ * foreign GUID or emit an unresolved-FK audit row" — lives in
+ * `resolveForeignFk`; the concrete UPDATE stays per-table.
+ */
+async function reconcileOneRow(
+  entityType: "contact" | "account" | "opportunity",
+  localId: string,
+  raw: Record<string, unknown>,
+  actorId: string,
+  result: ReconcileRunFksResult,
+  runId: string,
+): Promise<boolean> {
+  if (entityType === "contact") {
+    const accountSourceId =
+      str(raw._parentcustomerid_value) ?? str(raw._accountid_value);
+    if (!accountSourceId) return false;
+    const id = await resolveForeignFk(
+      "accountId",
+      "account",
+      accountSourceId,
+      localId,
+      actorId,
+      result,
+      runId,
+    );
+    if (!id) return false;
+    await db
+      .update(contacts)
+      .set({ accountId: id })
+      .where(and(eq(contacts.id, localId), isNull(contacts.accountId)));
+    return true;
+  }
+
+  if (entityType === "account") {
+    let any = false;
+    const parentAccountSourceId = str(raw._parentaccountid_value);
+    if (parentAccountSourceId) {
+      const id = await resolveForeignFk(
+        "parentAccountId",
+        "account",
+        parentAccountSourceId,
+        localId,
+        actorId,
+        result,
+        runId,
+      );
+      if (id) {
+        await db
+          .update(crmAccounts)
+          .set({ parentAccountId: id })
+          .where(
+            and(eq(crmAccounts.id, localId), isNull(crmAccounts.parentAccountId)),
+          );
+        any = true;
+      }
+    }
+    const primaryContactSourceId = str(raw._primarycontactid_value);
+    if (primaryContactSourceId) {
+      const id = await resolveForeignFk(
+        "primaryContactId",
+        "contact",
+        primaryContactSourceId,
+        localId,
+        actorId,
+        result,
+        runId,
+      );
+      if (id) {
+        await db
+          .update(crmAccounts)
+          .set({ primaryContactId: id })
+          .where(
+            and(
+              eq(crmAccounts.id, localId),
+              isNull(crmAccounts.primaryContactId),
+            ),
+          );
+        any = true;
+      }
+    }
+    return any;
+  }
+
+  // opportunity
+  let any = false;
+  const customerSourceId = str(raw._customerid_value);
+  const accountSourceId = str(raw._parentaccountid_value) ?? customerSourceId;
+  if (accountSourceId) {
+    const id = await resolveForeignFk(
+      "accountId",
+      "account",
+      accountSourceId,
+      localId,
+      actorId,
+      result,
+      runId,
+    );
+    if (id) {
+      await db
+        .update(opportunities)
+        .set({ accountId: id })
+        .where(
+          and(eq(opportunities.id, localId), isNull(opportunities.accountId)),
+        );
+      any = true;
+    }
+  }
+  const primaryContactSourceId =
+    str(raw._parentcontactid_value) ?? customerSourceId;
+  if (primaryContactSourceId) {
+    const id = await resolveForeignFk(
+      "primaryContactId",
+      "contact",
+      primaryContactSourceId,
+      localId,
+      actorId,
+      result,
+      runId,
+    );
+    if (id) {
+      await db
+        .update(opportunities)
+        .set({ primaryContactId: id })
+        .where(
+          and(
+            eq(opportunities.id, localId),
+            isNull(opportunities.primaryContactId),
+          ),
+        );
+      any = true;
+    }
+  }
+  const sourceLeadSourceId = str(raw._originatingleadid_value);
+  if (sourceLeadSourceId) {
+    const id = await resolveForeignFk(
+      "sourceLeadId",
+      "lead",
+      sourceLeadSourceId,
+      localId,
+      actorId,
+      result,
+      runId,
+    );
+    if (id) {
+      await db
+        .update(opportunities)
+        .set({ sourceLeadId: id })
+        .where(
+          and(eq(opportunities.id, localId), isNull(opportunities.sourceLeadId)),
+        );
+      any = true;
+    }
+  }
+  return any;
+}
+
+/**
+ * Resolve a foreign D365 GUID to its local UUID via external_ids.
+ * Returns the local id when found; on a miss, increments
+ * `stillUnresolved`, emits a forensic RECORD_FK_UNRESOLVED audit row,
+ * and returns null. The caller does the concrete (currently-NULL-guarded)
+ * UPDATE only when a local id comes back.
+ *
+ * Audit target pair is consistent: `targetType='import_run'` +
+ * `targetId=runId` (the sweep is run-scoped); the specific CRM row that
+ * still has the null FK rides in the detail body (`localEntityId`) so the
+ * (type, id) pair always agrees. Previously this used
+ * `targetType='import_run'` with `targetId` set to a CRM entity row id —
+ * a mismatch that broke target_type/target_id audit filtering.
+ */
+async function resolveForeignFk(
+  fieldName: string,
+  foreignEntity: "account" | "contact" | "lead",
+  foreignSourceId: string,
+  localId: string,
+  actorId: string,
+  result: ReconcileRunFksResult,
+  runId: string,
+): Promise<string | null> {
+  const foreignLocalId = await lookupLocalId(db, foreignEntity, foreignSourceId);
+  if (foreignLocalId) return foreignLocalId;
+
+  result.stillUnresolved += 1;
+  await writeAudit({
+    actorId,
+    action: D365_AUDIT_EVENTS.RECORD_FK_UNRESOLVED,
+    targetType: "import_run",
+    targetId: runId,
+    after: {
+      // The local CRM row that still has the null FK (moved into the body
+      // so the targetType/targetId pair stays consistent).
+      localEntityId: localId,
+      field: fieldName,
+      foreignEntity,
+      foreignSourceId,
+      viaReconcile: true,
+      remediation:
+        "re-run the import (or the reconcile sweep) after the parent record lands",
+    },
+  });
+  return null;
 }

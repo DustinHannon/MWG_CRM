@@ -32,10 +32,15 @@ import {
  * the Supavisor pooler). Owner scope is parameterised via `${userId}`
  * for non-admins, or interpolated as the literal `true` for admins.
  *
- * revalidate=60 caps DB load; empty state when no leads exist.
+ * Fully dynamic: the queries are owner-scoped per user, so the page
+ * cannot be ISR-cached (a shared cache entry would leak one user's
+ * metrics to another). The mounted realtime/poll components drive live
+ * refresh; maxDuration bounds the multi-query render so a wedged pooler
+ * connection can't hang the request indefinitely. Empty state when no
+ * leads exist.
  */
-export const revalidate = 60;
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type RowMap = Record<string, unknown>;
 
@@ -268,6 +273,19 @@ export default async function DashboardPage() {
     open_count: r.open_count,
   }));
 
+  // Guard the tasks query the same way as the KPI/chart queries above: a
+  // transient pooler/DB error degrades to an empty widget (which handles
+  // the empty case) instead of escaping to the full-page error boundary.
+  let openTasks: Awaited<ReturnType<typeof listOpenTasksForUser>> = [];
+  try {
+    openTasks = await listOpenTasksForUser(user.id, 5);
+  } catch (err) {
+    logger.error("dashboard.open_tasks_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+    openTasks = [];
+  }
+
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Dashboard" }]} />
@@ -299,7 +317,7 @@ export default async function DashboardPage() {
           shown inline with click-through. Footer link surfaces the
           full list at /tasks?assignee=me&status=open. */}
       <div className="mt-8">
-        <MyOpenTasksWidget tasks={await listOpenTasksForUser(user.id, 5)} />
+        <MyOpenTasksWidget tasks={openTasks} />
       </div>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">

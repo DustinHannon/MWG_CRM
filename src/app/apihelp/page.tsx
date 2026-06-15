@@ -145,7 +145,7 @@ export default function ApiHelpPage() {
               header.
             </p>
             <pre className="mt-3 overflow-x-auto rounded-md border border-border bg-card p-3 font-mono text-xs leading-relaxed">
-              <code>{`curl https://crm.morganwhite.com/v1/leads \\\n  -H "Authorization: Bearer mwg_live_..."`}</code>
+              <code>{`curl https://crm.morganwhite.com/api/v1/leads \\\n  -H "Authorization: Bearer mwg_live_..."`}</code>
             </pre>
             <p className="mt-3 text-sm text-muted-foreground">
               Keys are scoped per-environment. Treat them like passwords —
@@ -192,8 +192,8 @@ export default function ApiHelpPage() {
               <code>{`{
   "error": {
     "code": "VALIDATION_ERROR",
-    "message": "Field 'email' is invalid.",
-    "details": { "field": "email" }
+    "message": "Invalid query parameters",
+    "details": [{ "field": "email", "issue": "Invalid email" }]
   }
 }`}</code>
             </pre>
@@ -246,8 +246,9 @@ export default function ApiHelpPage() {
   "data": [ ... ],
   "meta": {
     "page": 1,
-    "pageSize": 50,
-    "total": 1287
+    "page_size": 50,
+    "total": 1287,
+    "total_pages": 26
   }
 }`}</code>
             </pre>
@@ -257,15 +258,16 @@ export default function ApiHelpPage() {
             <p>
               Every endpoint is namespaced under{" "}
               <code className="rounded bg-muted px-1 font-mono text-[0.85em]">
-                /v1
+                /api/v1
               </code>
               . MWG commits to{" "}
               <strong className="font-medium text-foreground">
                 12 months notice
               </strong>{" "}
-              before deprecating any /v1 endpoint. Breaking changes ship as{" "}
+              before deprecating any /api/v1 endpoint. Breaking changes ship
+              as{" "}
               <code className="rounded bg-muted px-1 font-mono text-[0.85em]">
-                /v2
+                /api/v2
               </code>
               ; the old contract continues to work during the deprecation
               window.

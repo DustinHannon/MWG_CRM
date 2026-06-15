@@ -269,28 +269,18 @@ export async function processEvent(event: SendGridEvent): Promise<void> {
   const eventType = event.event;
   const eventTimestamp = new Date(event.timestamp * 1000);
 
-  // Resolve recipient — by custom_args first (most reliable), fall back
-  // to sg_message_id lookup.
-  let recipientId: string | null = event.recipient_id ?? null;
-  let leadId: string | null = event.lead_id ?? null;
-  let campaignId: string | null = event.campaign_id ?? null;
-
-  if (!recipientId && event.sg_message_id) {
-    const [match] = await db
-      .select({
-        id: campaignRecipients.id,
-        campaignId: campaignRecipients.campaignId,
-        leadId: campaignRecipients.leadId,
-      })
-      .from(campaignRecipients)
-      .where(sql`${campaignRecipients.sendgridMessageId} = ${event.sg_message_id}`)
-      .limit(1);
-    if (match) {
-      recipientId = match.id;
-      campaignId = campaignId ?? match.campaignId;
-      leadId = leadId ?? match.leadId;
-    }
-  }
+  // Resolve recipient — `custom_args.recipient_id` (set on every send
+  // personalization) is the ONLY reconciliation key. The campaign send
+  // path inserts recipient rows with `sendgridMessageId: null` and never
+  // back-fills it (the batched /v3/mail/send response carries one
+  // x-message-id for the whole batch, not per recipient), so a lookup by
+  // sendgrid_message_id can never match a recipient row. An event whose
+  // custom_args were stripped or never set has no recipient row to
+  // reconcile; it still lands in the forensic events table below, and
+  // terminal events still reach marketing_suppressions via email.
+  const recipientId: string | null = event.recipient_id ?? null;
+  const leadId: string | null = event.lead_id ?? null;
+  const campaignId: string | null = event.campaign_id ?? null;
 
   // 1. Forensic record (always).
   await db.insert(marketingEmailEvents).values({
@@ -428,10 +418,17 @@ async function reconcileRecipientAndCampaign(
   let counterField: keyof typeof marketingCampaigns | null = null;
 
   if (eventType === "delivered") {
+    // Accept the pre-`sent` `queued` state too: the send loop inserts
+    // recipients as `queued` and flips them to `sent` only after the
+    // SendGrid API call returns, so a `delivered` event can arrive
+    // before that flip (send-time race). Gating solely on `= 'sent'`
+    // dropped those events and undercounted `total_delivered`. Both
+    // states are valid pre-delivery; the predicate still excludes
+    // already-`delivered` and terminal rows so the counter bumps once.
     const updated = await db
       .update(campaignRecipients)
       .set({ status: "delivered", deliveredAt: ts })
-      .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.status} = 'sent'`)
+      .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.status} IN ('sent','queued')`)
       .returning({ id: campaignRecipients.id });
     if (updated.length > 0) counterField = "totalDelivered";
   } else if (eventType === "open") {
@@ -477,10 +474,15 @@ async function reconcileRecipientAndCampaign(
       .set({ status: "dropped", bounceReason: event.reason ?? null })
       .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.status} NOT IN ('bounced','dropped','blocked')`);
   } else if (eventType === "deferred") {
+    // Same send-time race as `delivered`: a `deferred` event can land
+    // before the send loop flips the row `queued` → `sent`. Accept the
+    // `queued` pre-state so the transient-defer status is recorded
+    // instead of dropped. Still scoped to pre-delivery states so a
+    // later `delivered`/terminal event isn't clobbered back to deferred.
     await db
       .update(campaignRecipients)
       .set({ status: "deferred" })
-      .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.status} = 'sent'`);
+      .where(sql`${campaignRecipients.id} = ${recipientId} AND ${campaignRecipients.status} IN ('sent','queued')`);
   } else if (eventType === "unsubscribe" || eventType === "group_unsubscribe") {
     const updated = await db
       .update(campaignRecipients)

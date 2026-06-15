@@ -156,6 +156,18 @@ export interface AccountCascadeResult {
 }
 
 /**
+ * Single-account archive result. `flipped` reports whether the parent
+ * row's `isDeleted` actually transitioned false→true on THIS call (the
+ * UPDATE filters `isDeleted=false`, so a concurrent double-submit only
+ * flips the row once). The caller short-circuits its audit / notification
+ * / activity / undo side effects when `flipped` is false so a losing
+ * double-submit doesn't emit a duplicate forensic row.
+ */
+export interface AccountArchiveResult extends AccountCascadeResult {
+  flipped: boolean;
+}
+
+/**
  * Cascade-archive accounts and their full dependent closure.
  *
  * Keeps the `string[]` signature for non-OCC callers (single-record
@@ -183,9 +195,10 @@ export async function archiveAccountsById(
   ids: string[],
   actorId: string,
   reason?: string,
-): Promise<AccountCascadeResult> {
+): Promise<AccountArchiveResult> {
   if (ids.length === 0) {
     return {
+      flipped: false,
       cascadedContacts: 0,
       cascadedOpportunities: 0,
       cascadedTasks: 0,
@@ -193,7 +206,7 @@ export async function archiveAccountsById(
     };
   }
   return db.transaction(async (tx) => {
-    await tx
+    const flippedRows = await tx
       .update(crmAccounts)
       .set({
         isDeleted: true,
@@ -204,8 +217,16 @@ export async function archiveAccountsById(
         updatedById: actorId,
         updatedAt: sql`now()`,
       })
-      .where(inArray(crmAccounts.id, ids));
-    return cascadeArchiveAccountClosure(tx, ids, actorId);
+      // Guard isDeleted=false so a re-archive is a no-op on the parent
+      // row rather than clobbering the original soft-delete attribution
+      // (parity with archiveContactsById and the bulk OCC path).
+      // `.returning()` reports which rows actually transitioned so a
+      // concurrent double-submit (both reads pass, only one UPDATE flips)
+      // can short-circuit its duplicate audit / notification side effects.
+      .where(and(inArray(crmAccounts.id, ids), eq(crmAccounts.isDeleted, false)))
+      .returning({ id: crmAccounts.id });
+    const cascade = await cascadeArchiveAccountClosure(tx, ids, actorId);
+    return { flipped: flippedRows.length > 0, ...cascade };
   });
 }
 
@@ -651,6 +672,15 @@ export async function getAccountForApi(
  * When omitted, last-write-wins semantics apply.
  */
 /**
+ * Either the pooled app client or an open transaction handle. Lets the
+ * cycle walk and the parent UPDATE share one transaction so the check
+ * and the write observe the same snapshot (closes the re-parent TOCTOU).
+ */
+type DbOrTx =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
  * Walk the parent_account_id chain starting from `proposedParentId`
  * and throw `ConflictError` if `selfId` appears anywhere in the chain.
  * Blocks multi-hop cycles like A→B→A (single-hop A→A is already
@@ -658,16 +688,23 @@ export async function getAccountForApi(
  *
  * Bounded at 64 hops as a safety net against runaway loops; in
  * practice the chain length is far smaller.
+ *
+ * Pass `executor` (a tx) to run the walk inside the same transaction as
+ * the subsequent parent UPDATE; when running in a tx each visited row is
+ * locked `FOR UPDATE` so a concurrent re-parent of the same hierarchy
+ * serializes instead of racing the check against pre-change state.
  */
 export async function assertNoParentCycle(
   selfId: string,
   proposedParentId: string | null,
+  executor: DbOrTx = db,
 ): Promise<void> {
   if (proposedParentId == null) return;
   if (proposedParentId === selfId) {
     // Defense-in-depth — the DB CHECK already catches this.
     throw new ConflictError("An account cannot be its own parent.");
   }
+  const inTx = executor !== db;
   let cursor: string | null = proposedParentId;
   for (let hop = 0; hop < 64 && cursor != null; hop++) {
     if (cursor === selfId) {
@@ -675,11 +712,22 @@ export async function assertNoParentCycle(
         "Parent assignment would create a cycle in the account hierarchy.",
       );
     }
-    const [row] = await db
-      .select({ parent: crmAccounts.parentAccountId })
-      .from(crmAccounts)
-      .where(eq(crmAccounts.id, cursor))
-      .limit(1);
+    // Lock the visited row while walking inside a transaction so the
+    // ancestor chain can't be re-parented out from under the check
+    // before this transaction's own UPDATE commits.
+    const rows: Array<{ parent: string | null }> = inTx
+      ? await executor
+          .select({ parent: crmAccounts.parentAccountId })
+          .from(crmAccounts)
+          .where(eq(crmAccounts.id, cursor))
+          .limit(1)
+          .for("update")
+      : await executor
+          .select({ parent: crmAccounts.parentAccountId })
+          .from(crmAccounts)
+          .where(eq(crmAccounts.id, cursor))
+          .limit(1);
+    const row = rows[0];
     if (!row) return;
     cursor = row.parent;
   }
@@ -709,7 +757,8 @@ export async function updateAccountForApi(
   }>,
   expectedVersion: number | undefined,
   actorId: string,
-): Promise<{ id: string; version: number }> {
+  executor: DbOrTx = db,
+): Promise<typeof crmAccounts.$inferSelect> {
   const set: Record<string, unknown> = {
     ...patch,
     updatedById: actorId,
@@ -720,12 +769,24 @@ export async function updateAccountForApi(
   if (typeof expectedVersion === "number") {
     wheres.push(eq(crmAccounts.version, expectedVersion));
   }
-  const rows = await db
+  // Full-row `.returning()` so callers can use the persisted post-update
+  // snapshot for the audit `after` payload — atomic with the mutation,
+  // not a separate post-commit re-SELECT that a concurrent writer could
+  // drift before it runs.
+  const rows = await executor
     .update(crmAccounts)
     .set(set)
     .where(and(...wheres))
-    .returning({ id: crmAccounts.id, version: crmAccounts.version });
-  await expectAffected(rows, { table: crmAccounts, id, entityLabel: "account" });
+    .returning();
+  // Pass the same executor so the existence probe runs on the open
+  // transaction (not the pooled client, which under the `max:1` app pool
+  // would contend with this tx for the single connection).
+  await expectAffected(rows, {
+    table: crmAccounts,
+    id,
+    entityLabel: "account",
+    executor: executor === db ? undefined : executor,
+  });
   return rows[0];
 }
 

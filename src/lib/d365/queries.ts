@@ -7,34 +7,59 @@ import type {
   D365Appointment,
   D365Contact,
   D365Email,
-  D365EntityType,
   D365Lead,
   D365Opportunity,
   D365PhoneCall,
   D365Task,
+  D365RootType,
+  AnnotationRootType,
 } from "./types";
-import { D365_ENTITY_PK, D365_ENTITY_SET } from "./types";
+import {
+  D365_ENTITY_PK,
+  D365_ENTITY_SET,
+  D365_ROOT_TYPES,
+  isD365RootType,
+} from "./types";
 
 /**
- * per-entity OData query builders.
+ * per-entity OData query builders for the root-aggregate import.
  *
- * Each builder enforces:
+ * The unit of work is one ROOT entity (lead | contact | account |
+ * opportunity) with its full child graph (task / phonecall / appointment
+ * / email / annotation). Roots are fetched with the per-root fetchers
+ * below; children are fetched separately and stitched to their parent in
+ * code by `pull-batch.ts`.
+ *
+ * Each root builder enforces:
  *
  * explicit `$select` allowlist (NEVER `*` — we keep payload size
- * bounded and avoid surprise picklists landing in raw_payload)
+ * bounded and avoid surprise picklists landing in raw_payload). The
+ * allowlists are WIDENED to cover every native field the mappers read
+ * plus the org's real business custom fields with a destination;
+ * everything else still flows through `extractCustomFields`.
  * `$filter` for incremental pulls (`modifiedon ge X` AND active
  * `statecode` where applicable)
  * `$orderby modifiedon asc` for stable cursoring
  * page size 100 (matches `D365_IMPORT_BATCH_SIZE`)
- * $expand only on Lead/Contact/Account/Opportunity (activity
- * entities don't expand further per D365 metadata)
  *
- * When `nextLink` is supplied, we delegate to `client.followNextLink`.
- * The OData server bakes all $select/$filter/$top/$orderby into the
- * server-generated link, so we don't re-apply them.
+ * D365 mechanics that are NON-NEGOTIABLE here (verified live):
  *
- * When `ids` is supplied we build an `in (...)` filter for forced
- * re-fetch (used by retry-style resume after `dedup_overwrite`).
+ * NO `$expand` for activities — collection nav names are
+ * case-sensitive and the result set is capped and does not page.
+ * NO OData `in` operator — Dataverse rejects it with
+ * `501 The query node In is not supported`. Forced re-fetch by id
+ * and child fetch both use `or`-chains instead.
+ * Children are fetched by an `or`-chain on the parent reference
+ * (`_regardingobjectid_value` for activities, `_objectid_value` +
+ * `objecttypecode` for notes, `_originatingleadid_value` for the
+ * lead→opportunity graft). GUID literals for lookup `_value` filters
+ * are UNQUOTED.
+ *
+ * When `nextLink` is supplied to a single-page fetch, we delegate to
+ * `client.followNextLink`. The OData server bakes all
+ * $select/$filter/$top/$orderby into the server-generated link, so we
+ * don't re-apply them. The child-fetch helpers drain `@odata.nextLink`
+ * internally until the collection is exhausted.
  */
 
 /* -------------------------------------------------------------------------- *
@@ -47,6 +72,18 @@ export interface FetchPageResult<T> {
   totalCount?: number;
 }
 
+/**
+ * Result of a child-collection fetch. The helper drains the collection
+ * fully via `@odata.nextLink`, so there is no cursor to hand back.
+ * `truncated` is true ONLY when a hard safety cap was hit before the
+ * collection was exhausted — the caller MUST treat that as a halt
+ * condition (never silently lose call history).
+ */
+export interface ChildFetchResult<T> {
+  records: T[];
+  truncated: boolean;
+}
+
 export interface BaseFetchOpts {
   /** Inclusive `modifiedon ge` cutoff for incremental pulls. */
   modifiedSince?: Date;
@@ -54,11 +91,12 @@ export interface BaseFetchOpts {
   top?: number;
   /** Server-generated next-link from a prior page. */
   nextLink?: string;
-  /** Forced re-fetch by primary-key IDs (max ~100 per page). */
+  /**
+   * Forced re-fetch by primary-key IDs (used by retry-style resume after
+   * `dedup_overwrite`). Built as an `or`-chain on the PK column — the
+   * `in` operator is unsupported by Dataverse.
+   */
   ids?: string[];
-  /** When true, $expand the entity's parent / child links. Only valid
-   * for the four primary entities; ignored for activities. */
-  expand?: boolean;
   /**
    * Operator-selected statecode restriction (from the run scope's
    * "Active records only" toggle). When provided, drives the statecode
@@ -71,17 +109,64 @@ export interface BaseFetchOpts {
   signal?: AbortSignal;
 }
 
+/** Options for a child-collection fetch (task / phonecall / … / annotation). */
+export interface ChildFetchOpts {
+  /** Page size per OData request (defaults to 100). */
+  pageSize?: number;
+  /**
+   * Hard safety cap on the total number of child records returned across
+   * all pages of a single helper call. If the collection would exceed
+   * this, the helper stops and reports `truncated: true` so the caller
+   * can halt rather than silently drop records. Defaults to
+   * `CHILD_FETCH_HARD_CAP`.
+   */
+  hardCap?: number;
+  /** Optional caller-provided abort signal. */
+  signal?: AbortSignal;
+}
+
 const DEFAULT_PAGE_SIZE = 100;
+
+/**
+ * Maximum GUIDs to put in a single `or`-chain `$filter`. Dataverse
+ * rejects filters longer than ~32k chars; each `_x_value eq <guid>` term
+ * is ~60 chars including the ` or ` joiner, so 200 terms (~12k chars)
+ * stays well under the limit with headroom for the rest of the clause.
+ * Root batches are 100, so a single chunk covers a normal batch; the
+ * chunking is defensive for callers that pass larger id sets.
+ */
+const OR_CHAIN_CHUNK_SIZE = 200;
+
+/**
+ * Safety cap on total child records drained per helper call. The biggest
+ * known fan-out is phonecalls (≈38.6k org-wide across ≈118k leads, i.e.
+ * a fraction per root); a 100-root batch is nowhere near this, so hitting
+ * the cap signals a pathological parent and the caller halts.
+ */
+const CHILD_FETCH_HARD_CAP = 50_000;
 
 /* -------------------------------------------------------------------------- *
  * Field allowlists *
  * -------------------------------------------------------------------------- */
+
+/**
+ * Root field allowlists.
+ *
+ * Each list = every native field the corresponding mapper reads PLUS the
+ * org's real business custom fields (insurance `new_*` / agent-hierarchy
+ * `ali_*`) that have a destination or are load-bearing downstream.
+ * Custom fields not listed here still flow through `extractCustomFields`
+ * (they match the `new_*` / `cr<hex>_*` / `mwg_*` prefix); listing the
+ * key ones explicitly guarantees they are requested on the wire even if
+ * the prefix scan ever changes, and documents intent.
+ */
 
 const LEAD_SELECT = [
   "leadid",
   "firstname",
   "lastname",
   "fullname",
+  "salutation",
   "emailaddress1",
   "emailaddress2",
   "emailaddress3",
@@ -91,8 +176,10 @@ const LEAD_SELECT = [
   "jobtitle",
   "companyname",
   "websiteurl",
+  "linkedinprofile",
   "industrycode",
   "leadsourcecode",
+  "leadqualitycode",
   "subject",
   "description",
   "donotemail",
@@ -109,6 +196,8 @@ const LEAD_SELECT = [
   "address1_postalcode",
   "address1_country",
   "address1_telephone1",
+  "estimatedamount",
+  "estimatedclosedate",
   "statecode",
   "statuscode",
   "createdon",
@@ -124,6 +213,7 @@ const CONTACT_SELECT = [
   "firstname",
   "lastname",
   "fullname",
+  "salutation",
   "emailaddress1",
   "emailaddress2",
   "emailaddress3",
@@ -135,6 +225,9 @@ const CONTACT_SELECT = [
   "donotemail",
   "donotphone",
   "donotpostalmail",
+  "donotbulkemail",
+  "donotfax",
+  "donotsendmm",
   "address1_line1",
   "address1_line2",
   "address1_city",
@@ -191,6 +284,7 @@ const OPPORTUNITY_SELECT = [
   "actualclosedate",
   "closeprobability",
   "stepname",
+  "salesstagecode",
   "statecode",
   "statuscode",
   "createdon",
@@ -246,12 +340,15 @@ const PHONECALL_SELECT = [
   ...ACTIVITY_BASE_SELECT,
   "phonenumber",
   "directioncode",
+  "actualdurationminutes",
 ];
 
 const APPOINTMENT_SELECT = [
   ...ACTIVITY_BASE_SELECT,
   "location",
   "isalldayevent",
+  "scheduleddurationminutes",
+  "actualdurationminutes",
 ];
 
 const EMAIL_SELECT = [
@@ -259,19 +356,12 @@ const EMAIL_SELECT = [
   "sender",
   "description_html",
   "directioncode",
+  "messageid",
 ];
 
 /* -------------------------------------------------------------------------- *
  * Filter builders *
  * -------------------------------------------------------------------------- */
-
-/**
- * Quote a string literal for an OData `$filter` clause. D365 escapes
- * single quotes by doubling them.
- */
-function odataQuote(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
 
 /** Format a Date for OData `modifiedon ge ...` comparisons. */
 function odataDate(d: Date): string {
@@ -279,18 +369,59 @@ function odataDate(d: Date): string {
   return d.toISOString();
 }
 
+/**
+ * Quote a string literal for an OData `$filter` clause (e.g. an
+ * `objecttypecode` text value). D365 escapes single quotes by doubling
+ * them. NOTE: lookup `_value` GUID filters are UNQUOTED — do not use
+ * this for those.
+ */
+function odataQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Build an `or`-chain `$filter` clause over one column for a set of
+ * values, e.g. `(_regardingobjectid_value eq G1 or _regardingobjectid_value eq G2)`.
+ * Used everywhere Dataverse's unsupported `in` operator would otherwise
+ * be the natural choice. `format` controls per-value rendering: GUID
+ * lookup `_value` filters pass values UNQUOTED; text columns quote.
+ */
+function buildOrChain(
+  column: string,
+  values: readonly string[],
+  format: (v: string) => string,
+): string {
+  const terms = values.map((v) => `${column} eq ${format(v)}`);
+  const clause = terms.join(" or ");
+  return terms.length > 1 ? `(${clause})` : clause;
+}
+
+/** Render a GUID literal for a lookup `_value` filter — UNQUOTED. */
+function guidLiteral(v: string): string {
+  return v;
+}
+
+/** Split an id set into chunks small enough for a single `or`-chain. */
+function chunkIds(ids: readonly string[], size: number): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
+  }
+  return chunks;
+}
+
 interface BuildFilterArgs {
   modifiedSince?: Date;
-  /** PK column name to use with `id in (...)` clauses. */
+  /** PK column name to use with the forced-id `or`-chain clause. */
   pkColumn?: string;
-  /** Specific IDs to force-fetch. */
+  /** Specific IDs to force-fetch (rendered as an `or`-chain, not `in`). */
   ids?: string[];
   /**
    * Operator-selected statecode codes from the run scope. Presence is
    * authoritative and OVERRIDES the per-entity `activeStatecodeOnly`
    * default:
    *   - one code  → `statecode eq N`
-   *   - many codes → `statecode in (a,b,...)`
+   *   - many codes → an `or`-chain `(statecode eq a or statecode eq b)`
    *   - empty array (`[]`) → explicit "all states": NO statecode clause
    * When `undefined` (key absent), the per-entity `activeStatecodeOnly`
    * default applies.
@@ -320,31 +451,34 @@ function buildFilter(args: BuildFilterArgs): string | undefined {
     if (codes.length === 1) {
       parts.push(`statecode eq ${codes[0]}`);
     } else if (codes.length > 1) {
-      parts.push(`statecode in (${codes.join(",")})`);
+      // Dataverse rejects `in` — express multi-code as an `or`-chain.
+      parts.push(buildOrChain("statecode", codes.map(String), (c) => c));
     }
     // codes.length === 0 → explicit all-states, emit no clause.
   } else if (args.activeStatecodeOnly) {
     parts.push("statecode eq 0");
   }
   if (args.ids?.length && args.pkColumn) {
-    // OData supports `<col> in ('a','b','c')`. Defensive cap at 100
-    // since Dynamics will reject filters > ~32k chars.
-    const quoted = args.ids.slice(0, 100).map(odataQuote).join(",");
-    parts.push(`${args.pkColumn} in (${quoted})`);
+    // Forced re-fetch by id. The `in` operator is unsupported by
+    // Dataverse (501), so build an `or`-chain on the PK column. PK
+    // columns are GUID-typed; lookup-style GUID literals are UNQUOTED.
+    // Defensive cap mirrors the chunk size so the clause stays well
+    // under Dynamics' ~32k filter-length limit.
+    const capped = args.ids.slice(0, OR_CHAIN_CHUNK_SIZE);
+    parts.push(buildOrChain(args.pkColumn, capped, guidLiteral));
   }
   if (!parts.length) return undefined;
   return parts.join(" and ");
 }
 
 /* -------------------------------------------------------------------------- *
- * Generic page fetch *
+ * Generic single-page root fetch *
  * -------------------------------------------------------------------------- */
 
 interface FetchSpec {
   entitySet: string;
   pkColumn: string;
   select: string[];
-  expand?: string;
   /** When true and `ids` is not provided, restrict to active records. */
   activeStatecodeOnly: boolean;
 }
@@ -380,7 +514,6 @@ async function fetchByQuery<T>(
   const page = await client.fetchPage<T>(spec.entitySet, {
     select: spec.select,
     filter,
-    expand: spec.expand,
     top: opts.top ?? DEFAULT_PAGE_SIZE,
     pageSize: opts.top ?? DEFAULT_PAGE_SIZE,
     orderby: "modifiedon asc",
@@ -396,7 +529,75 @@ async function fetchByQuery<T>(
 }
 
 /* -------------------------------------------------------------------------- *
- * Per-entity public API *
+ * Generic child-collection drain *
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Fetch a child collection filtered by an `or`-chain over `rootIds`,
+ * draining every page via `@odata.nextLink`. Chunks large id sets so each
+ * `$filter` stays under Dataverse's length cap; concatenates the results.
+ *
+ * `truncated` is set true ONLY if the hard cap is hit before the
+ * collection is exhausted — the caller treats that as a halt condition.
+ * Normal exhaustion returns `truncated: false`.
+ *
+ * `extraFilter` is `and`-ed onto each chunk's `or`-chain (used by
+ * annotations for `objecttypecode eq '<root>'`).
+ */
+async function drainChildCollection<T>(
+  client: D365Client,
+  args: {
+    entitySet: string;
+    select: string[];
+    filterColumn: string;
+    rootIds: readonly string[];
+    extraFilter?: string;
+  },
+  opts: ChildFetchOpts,
+): Promise<ChildFetchResult<T>> {
+  const ids = args.rootIds.filter((id) => typeof id === "string" && id.length > 0);
+  if (ids.length === 0) return { records: [], truncated: false };
+
+  const pageSize = opts.pageSize ?? DEFAULT_PAGE_SIZE;
+  const hardCap = opts.hardCap ?? CHILD_FETCH_HARD_CAP;
+  const records: T[] = [];
+
+  for (const chunk of chunkIds(ids, OR_CHAIN_CHUNK_SIZE)) {
+    const orChain = buildOrChain(args.filterColumn, chunk, guidLiteral);
+    const filter = args.extraFilter
+      ? `${orChain} and ${args.extraFilter}`
+      : orChain;
+
+    // First page of this chunk.
+    let page = await client.fetchPage<T>(args.entitySet, {
+      select: args.select,
+      filter,
+      orderby: "modifiedon asc",
+      top: pageSize,
+      pageSize,
+      count: false,
+      signal: opts.signal,
+    });
+
+    for (;;) {
+      for (const rec of page.value) {
+        records.push(rec);
+        if (records.length >= hardCap) {
+          // Stop immediately — never drop records silently. The caller
+          // halts on `truncated: true`.
+          return { records, truncated: true };
+        }
+      }
+      if (!page.nextLink) break;
+      page = await client.followNextLink<T>(page.nextLink, opts.signal);
+    }
+  }
+
+  return { records, truncated: false };
+}
+
+/* -------------------------------------------------------------------------- *
+ * Per-root single-page fetchers *
  * -------------------------------------------------------------------------- */
 
 export type LeadFetchOpts = BaseFetchOpts;
@@ -411,9 +612,6 @@ export function fetchLeads(
       entitySet: D365_ENTITY_SET.lead,
       pkColumn: D365_ENTITY_PK.lead,
       select: LEAD_SELECT,
-      expand: opts.expand
-        ? "lead_tasks($select=activityid,subject,modifiedon),lead_phonecalls($select=activityid,subject,modifiedon),lead_appointments($select=activityid,subject,modifiedon),lead_emails($select=activityid,subject,modifiedon),Lead_Annotation($select=annotationid,subject,modifiedon)"
-        : undefined,
       activeStatecodeOnly: true,
     },
     opts,
@@ -432,9 +630,6 @@ export function fetchContacts(
       entitySet: D365_ENTITY_SET.contact,
       pkColumn: D365_ENTITY_PK.contact,
       select: CONTACT_SELECT,
-      expand: opts.expand
-        ? "Contact_Tasks($select=activityid,subject,modifiedon),Contact_Phonecalls($select=activityid,subject,modifiedon),Contact_Appointments($select=activityid,subject,modifiedon),Contact_Emails($select=activityid,subject,modifiedon),Contact_Annotation($select=annotationid,subject,modifiedon)"
-        : undefined,
       activeStatecodeOnly: true,
     },
     opts,
@@ -453,9 +648,6 @@ export function fetchAccounts(
       entitySet: D365_ENTITY_SET.account,
       pkColumn: D365_ENTITY_PK.account,
       select: ACCOUNT_SELECT,
-      expand: opts.expand
-        ? "Account_Tasks($select=activityid,subject,modifiedon),Account_Phonecalls($select=activityid,subject,modifiedon),Account_Appointments($select=activityid,subject,modifiedon),Account_Emails($select=activityid,subject,modifiedon),Account_Annotation($select=annotationid,subject,modifiedon)"
-        : undefined,
       activeStatecodeOnly: true,
     },
     opts,
@@ -474,9 +666,6 @@ export function fetchOpportunities(
       entitySet: D365_ENTITY_SET.opportunity,
       pkColumn: D365_ENTITY_PK.opportunity,
       select: OPPORTUNITY_SELECT,
-      expand: opts.expand
-        ? "Opportunity_Tasks($select=activityid,subject,modifiedon),Opportunity_Phonecalls($select=activityid,subject,modifiedon),Opportunity_Appointments($select=activityid,subject,modifiedon),Opportunity_Emails($select=activityid,subject,modifiedon),Opportunity_Annotation($select=annotationid,subject,modifiedon)"
-        : undefined,
       // Opportunities have closed states (won=2/lost=3); we do NOT
       // want to silently exclude those — let the mapper decide.
       activeStatecodeOnly: false,
@@ -485,118 +674,151 @@ export function fetchOpportunities(
   );
 }
 
-export type AnnotationFetchOpts = BaseFetchOpts;
+/* -------------------------------------------------------------------------- *
+ * Child-graph fetchers (or-chain on the parent reference) *
+ * -------------------------------------------------------------------------- */
 
-export function fetchAnnotations(
+/**
+ * The polymorphic activity → parent reference. Tasks, phonecalls,
+ * appointments, and emails all attach to a root via this lookup.
+ */
+const ACTIVITY_PARENT_REF = "_regardingobjectid_value";
+
+/** The note → parent reference. Annotations attach via this lookup. */
+const ANNOTATION_PARENT_REF = "_objectid_value";
+
+/**
+ * Fetch every D365 `task` regarding one of `rootIds`, draining all
+ * pages. Filter: `(_regardingobjectid_value eq G1 or … )` (GUIDs
+ * unquoted). Because the roots are all one known type, the parent type
+ * is implied by the caller — no `lookuplogicalname` needed for the root
+ * path. Tasks land in the local `tasks` table at commit.
+ */
+export function fetchTasksForRoots(
   client: D365Client,
-  opts: AnnotationFetchOpts = {},
-): Promise<FetchPageResult<D365Annotation>> {
-  return fetchByQuery<D365Annotation>(
-    client,
-    {
-      entitySet: D365_ENTITY_SET.annotation,
-      pkColumn: D365_ENTITY_PK.annotation,
-      select: ANNOTATION_SELECT,
-      // Annotations don't expand to a polymorphic parent in OData; we
-      // resolve the parent reference (`_objectid_value`) at map time.
-      expand: undefined,
-      activeStatecodeOnly: false,
-    },
-    opts,
-  );
-}
-
-export type TaskFetchOpts = BaseFetchOpts;
-
-export function fetchTasks(
-  client: D365Client,
-  opts: TaskFetchOpts = {},
-): Promise<FetchPageResult<D365Task>> {
-  return fetchByQuery<D365Task>(
+  rootIds: string[],
+  opts: ChildFetchOpts = {},
+): Promise<ChildFetchResult<D365Task>> {
+  return drainChildCollection<D365Task>(
     client,
     {
       entitySet: D365_ENTITY_SET.task,
-      pkColumn: D365_ENTITY_PK.task,
       select: TASK_SELECT,
-      // Activity entities are not $expand-able per the brief.
-      expand: undefined,
-      activeStatecodeOnly: false,
+      filterColumn: ACTIVITY_PARENT_REF,
+      rootIds,
     },
     opts,
   );
 }
 
-export type PhoneCallFetchOpts = BaseFetchOpts;
-
-export function fetchPhoneCalls(
+/** Fetch every `phonecall` regarding one of `rootIds`, draining all pages. */
+export function fetchPhonecallsForRoots(
   client: D365Client,
-  opts: PhoneCallFetchOpts = {},
-): Promise<FetchPageResult<D365PhoneCall>> {
-  return fetchByQuery<D365PhoneCall>(
+  rootIds: string[],
+  opts: ChildFetchOpts = {},
+): Promise<ChildFetchResult<D365PhoneCall>> {
+  return drainChildCollection<D365PhoneCall>(
     client,
     {
       entitySet: D365_ENTITY_SET.phonecall,
-      pkColumn: D365_ENTITY_PK.phonecall,
       select: PHONECALL_SELECT,
-      expand: undefined,
-      activeStatecodeOnly: false,
+      filterColumn: ACTIVITY_PARENT_REF,
+      rootIds,
     },
     opts,
   );
 }
 
-export type AppointmentFetchOpts = BaseFetchOpts;
-
-export function fetchAppointments(
+/** Fetch every `appointment` regarding one of `rootIds`, draining all pages. */
+export function fetchAppointmentsForRoots(
   client: D365Client,
-  opts: AppointmentFetchOpts = {},
-): Promise<FetchPageResult<D365Appointment>> {
-  return fetchByQuery<D365Appointment>(
+  rootIds: string[],
+  opts: ChildFetchOpts = {},
+): Promise<ChildFetchResult<D365Appointment>> {
+  return drainChildCollection<D365Appointment>(
     client,
     {
       entitySet: D365_ENTITY_SET.appointment,
-      pkColumn: D365_ENTITY_PK.appointment,
       select: APPOINTMENT_SELECT,
-      expand: undefined,
-      activeStatecodeOnly: false,
+      filterColumn: ACTIVITY_PARENT_REF,
+      rootIds,
     },
     opts,
   );
 }
 
-export type EmailFetchOpts = BaseFetchOpts;
-
-export function fetchEmails(
+/** Fetch every `email` regarding one of `rootIds`, draining all pages. */
+export function fetchEmailsForRoots(
   client: D365Client,
-  opts: EmailFetchOpts = {},
-): Promise<FetchPageResult<D365Email>> {
-  return fetchByQuery<D365Email>(
+  rootIds: string[],
+  opts: ChildFetchOpts = {},
+): Promise<ChildFetchResult<D365Email>> {
+  return drainChildCollection<D365Email>(
     client,
     {
       entitySet: D365_ENTITY_SET.email,
-      pkColumn: D365_ENTITY_PK.email,
       select: EMAIL_SELECT,
-      expand: undefined,
-      activeStatecodeOnly: false,
+      filterColumn: ACTIVITY_PARENT_REF,
+      rootIds,
+    },
+    opts,
+  );
+}
+
+/**
+ * Fetch every `annotation` (note) attached to one of `rootIds` for a
+ * given root type, draining all pages. Filter:
+ * `(_objectid_value eq G1 or …) and objecttypecode eq '<rootType>'`.
+ * `_objectid_value` GUIDs are UNQUOTED; `objecttypecode` is a text value
+ * and IS quoted.
+ *
+ * The `objecttypecode` filter already pins the parent type, and the root
+ * is stitched under a known type via `parentContext` — so the polymorphic
+ * `_objectid_value@…lookuplogicalname` disambiguator is not needed and we
+ * do NOT request OData annotations for it.
+ */
+export function fetchAnnotationsForRoots(
+  client: D365Client,
+  rootIds: string[],
+  rootType: AnnotationRootType,
+  opts: ChildFetchOpts = {},
+): Promise<ChildFetchResult<D365Annotation>> {
+  return drainChildCollection<D365Annotation>(
+    client,
+    {
+      entitySet: D365_ENTITY_SET.annotation,
+      select: ANNOTATION_SELECT,
+      filterColumn: ANNOTATION_PARENT_REF,
+      rootIds,
+      extraFilter: `objecttypecode eq ${odataQuote(rootType)}`,
     },
     opts,
   );
 }
 
 /* -------------------------------------------------------------------------- *
- * Entity-type dispatch helper *
+ * Root-type dispatch helper *
  * -------------------------------------------------------------------------- */
 
+// D365RootType, AnnotationRootType, D365_ROOT_TYPES, and isD365RootType are
+// defined in ./types (client-safe — no `server-only`) so the import wizard
+// client component can import the root-type list. Re-exported here for
+// server-side callers that import the query surface.
+export type { D365RootType, AnnotationRootType };
+export { D365_ROOT_TYPES, isD365RootType };
+
 /**
- * Single dispatch point used by the orchestrator (`pull-batch.ts`).
- * Picks the correct typed builder based on `entityType`.
+ * Single dispatch point used by the orchestrator (`pull-batch.ts`) to
+ * fetch one page of a ROOT type. Children are NEVER pulled standalone —
+ * they travel with their root via the `*ForRoots` helpers above — so this
+ * dispatch only accepts the four root types and rejects child types.
  */
-export function fetchByEntityType(
+export function fetchRootByType(
   client: D365Client,
-  entityType: D365EntityType,
+  rootType: D365RootType,
   opts: BaseFetchOpts,
 ): Promise<FetchPageResult<unknown>> {
-  switch (entityType) {
+  switch (rootType) {
     case "lead":
       return fetchLeads(client, opts);
     case "contact":
@@ -605,23 +827,12 @@ export function fetchByEntityType(
       return fetchAccounts(client, opts);
     case "opportunity":
       return fetchOpportunities(client, opts);
-    case "annotation":
-      return fetchAnnotations(client, opts);
-    case "task":
-      return fetchTasks(client, opts);
-    case "phonecall":
-      return fetchPhoneCalls(client, opts);
-    case "appointment":
-      return fetchAppointments(client, opts);
-    case "email":
-      return fetchEmails(client, opts);
     default: {
-      const _exhaustive: never = entityType;
+      const _exhaustive: never = rootType;
       void _exhaustive;
-      // invariant: TypeScript exhaustive-check above guarantees
-      // this branch is unreachable. A new D365EntityType added
-      // without a query builder lands here.
-      throw new Error(`Unsupported D365 entity type: ${String(entityType)}`);
+      // invariant: TypeScript exhaustive-check above guarantees this is
+      // unreachable. A new root type added without a fetcher lands here.
+      throw new Error(`Unsupported D365 root type: ${String(rootType)}`);
     }
   }
 }

@@ -127,18 +127,18 @@ export async function getDeleteUserPreflight(
   );
 }
 
-const deleteSchema = z
-  .object({
-    userId: z.string().uuid(),
-    disposition: z.enum(["reassign", "delete_leads"]),
-    /** required when disposition='reassign' */
-    reassignTo: z.string().uuid().optional(),
-    confirm: z.string(),
-  })
-  .refine(
-    (d) => d.disposition !== "reassign" || Boolean(d.reassignTo),
-    { message: "Pick a user to reassign to.", path: ["reassignTo"] },
-  );
+const deleteSchema = z.object({
+  userId: z.string().uuid(),
+  disposition: z.enum(["reassign", "delete_leads"]),
+  /**
+   * Optional. When present the user's owned records move to this successor.
+   * When absent (the zero-leads case, where the UI sends `reassign` with no
+   * target) the records are re-attributed to the system account instead — see
+   * the reassign branch below.
+   */
+  reassignTo: z.string().uuid().optional(),
+  confirm: z.string(),
+});
 
 /**
  * Single transaction. The full set of FK relationships pointing at
@@ -263,31 +263,61 @@ export async function deleteUserAction(
       let businessSuccessor: string;
 
       if (disposition === "reassign") {
-        if (!reassignTo) throw new ValidationError("reassignTo missing");
-        const newOwner = await tx
-          .select({
-            id: users.id,
-            isActive: users.isActive,
-            isBreakglass: users.isBreakglass,
-          })
-          .from(users)
-          .where(eq(users.id, reassignTo))
-          .limit(1);
-        if (
-          !newOwner[0] ||
-          !newOwner[0].isActive ||
-          newOwner[0].isBreakglass ||
-          newOwner[0].id === userId ||
-          newOwner[0].id === SYSTEM_SENTINEL_USER_ID
-        ) {
-          throw new ValidationError(
-            "Reassign target must be an active non-breakglass user other than the user being deleted.",
-          );
+        if (reassignTo) {
+          const newOwner = await tx
+            .select({
+              id: users.id,
+              isActive: users.isActive,
+              isBreakglass: users.isBreakglass,
+            })
+            .from(users)
+            .where(eq(users.id, reassignTo))
+            .limit(1);
+          if (
+            !newOwner[0] ||
+            !newOwner[0].isActive ||
+            newOwner[0].isBreakglass ||
+            newOwner[0].id === userId ||
+            newOwner[0].id === SYSTEM_SENTINEL_USER_ID
+          ) {
+            throw new ValidationError(
+              "Reassign target must be an active non-breakglass user other than the user being deleted.",
+            );
+          }
+          businessSuccessor = reassignTo;
+        } else {
+          // No successor chosen. This is only legitimate for the
+          // zero-records case (the UI sends `reassign` with no target when
+          // the user owns nothing, so there is nobody to reassign to). If
+          // the user DOES own reassignable records, silently routing them
+          // to the system account would re-attribute real customer-owned
+          // work to a sentinel account — make the admin pick a human.
+          // Count inside the tx (consistent with the leads/accounts/
+          // contacts/opportunities/tasks the delete reassigns) so the
+          // guard sees the same rows the UPDATE below would move.
+          const [owned] = await tx
+            .select({
+              total: sql<number>`(
+                (SELECT count(*) FROM ${leads} WHERE owner_id = ${userId})
+                + (SELECT count(*) FROM ${crmAccounts} WHERE owner_id = ${userId})
+                + (SELECT count(*) FROM ${contacts} WHERE owner_id = ${userId})
+                + (SELECT count(*) FROM ${opportunities} WHERE owner_id = ${userId})
+                + (SELECT count(*) FROM ${tasks} WHERE assigned_to_id = ${userId})
+              )::int`,
+            })
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+          if ((owned?.total ?? 0) > 0) {
+            throw new ValidationError("Pick a user to reassign records to.");
+          }
+          // Genuinely zero reassignable records: fall back to the system
+          // account so the (empty) reassign still completes the delete.
+          businessSuccessor = SYSTEM_SENTINEL_USER_ID;
         }
-        businessSuccessor = reassignTo;
         await tx
           .update(leads)
-          .set({ ownerId: reassignTo, updatedAt: sql`now()` })
+          .set({ ownerId: businessSuccessor, updatedAt: sql`now()` })
           .where(eq(leads.ownerId, userId));
       } else {
         // disposition === 'delete_leads' — explicit DELETE of the user's

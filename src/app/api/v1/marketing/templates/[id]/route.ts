@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
@@ -173,10 +173,13 @@ export const PUT = withApi<{ id: string }>(
 
     // Mass-assignment guard — only the documented fields can be
     // patched via this surface. updatedAt + version are stamped here.
+    // The version bump is a SQL-side expression so the OCC fence in the
+    // UPDATE WHERE (eq version = existing.version) is the only thing
+    // advancing the counter — two concurrent PUTs can't both compute
+    // and write the same N+1.
     const patch: Partial<typeof marketingTemplates.$inferInsert> = {
       updatedById: key.createdById,
       updatedAt: new Date(),
-      version: existing.version + 1,
     };
     if (parsed.data.name !== undefined) patch.name = parsed.data.name;
     if (parsed.data.description !== undefined) {
@@ -194,13 +197,26 @@ export const PUT = withApi<{ id: string }>(
     }
     if (parsed.data.status !== undefined) patch.status = parsed.data.status;
 
+    // OCC fence: match on the version read above so a concurrent PUT
+    // that already advanced the row makes this UPDATE a no-op. Mirrors
+    // the campaigns /schedule route's version guard so all marketing
+    // write surfaces share one lost-update contract.
     const [updated] = await db
       .update(marketingTemplates)
-      .set(patch)
-      .where(eq(marketingTemplates.id, params.id))
+      .set({ ...patch, version: sql`${marketingTemplates.version} + 1` })
+      .where(
+        and(
+          eq(marketingTemplates.id, params.id),
+          eq(marketingTemplates.version, existing.version),
+        ),
+      )
       .returning();
     if (!updated) {
-      return errorResponse(500, "INTERNAL_ERROR", "Failed to update template");
+      return errorResponse(
+        409,
+        "CONFLICT",
+        "This template was modified by someone else. Refresh and try again.",
+      );
     }
     // audit parity with the (app)/marketing/templates server
     // action. Diff captured as before/after of the patched fields only;

@@ -300,6 +300,48 @@ export const D365_ENTITY_TYPES = [
 
 export type D365EntityType = (typeof D365_ENTITY_TYPES)[number];
 
+/**
+ * The four ROOT entity types — the only valid units of work for an import
+ * run. Child types (task/phonecall/appointment/email/annotation) are
+ * imported automatically with their root, never standalone.
+ *
+ * Defined here (NOT in queries.ts) because queries.ts is `server-only`,
+ * and the import wizard (a client component) needs the root-type list for
+ * its radio options. queries.ts re-exports these for server callers.
+ */
+export type D365RootType = "lead" | "contact" | "account" | "opportunity";
+
+/**
+ * Root-entity logical name as it appears in `annotation.objecttypecode`.
+ * D365 uses the singular logical entity name, which matches our root-type
+ * strings.
+ */
+export type AnnotationRootType = D365RootType;
+
+/**
+ * The four root types in cross-root dependency order:
+ * account → contact → lead → opportunity. Importing in this order lets a
+ * root's cross-root parents (contact→account; opportunity→account/
+ * contact/originatingLead) already have an `external_ids` row by the time
+ * the dependent root commits, so its FKs resolve on the first pass.
+ * commit-batch's per-batch commit order and `reconcileRunFks`'s sweep
+ * order mirror this; the "import all roots" action seeds runs in this
+ * order. Single source of truth for the order — do not re-list it inline.
+ */
+export const D365_ROOT_TYPES: readonly D365RootType[] = [
+  "account",
+  "contact",
+  "lead",
+  "opportunity",
+] as const;
+
+/** Type guard: is this entity-type a root (importable standalone)? */
+export function isD365RootType(t: D365EntityType): t is D365RootType {
+  return (
+    t === "lead" || t === "contact" || t === "account" || t === "opportunity"
+  );
+}
+
 /** Map from our entity-type string to the D365 OData entity-set name. */
 export const D365_ENTITY_SET: Record<D365EntityType, string> = {
   lead: "leads",

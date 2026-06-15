@@ -4,6 +4,7 @@ import type { tasks } from "@/db/schema/tasks";
 import type { D365Task } from "../types";
 import {
   type AttachedActivity,
+  type ChildParentContext,
   type MapResult,
   type ValidationWarning,
   extractCustomFields,
@@ -22,6 +23,16 @@ export interface TaskMapContext {
   resolvedContactId?: string | null;
   resolvedOpportunityId?: string | null;
   resolvedCreatedById?: string | null;
+  /**
+   * Explicit ROOT parent context — the type/GUID of the root this task
+   * was stitched under in `pull-batch`. Drives the `_parentEntityType`
+   * / `_parentSourceId` virtuals so commit-batch links the task to the
+   * correct in-memory root UUID, instead of trusting the polymorphic
+   * `_regardingobjectid_value@…lookuplogicalname` annotation (which is
+   * not requested and so unreliable). Optional only for backward
+   * compatibility; the ROOT mapper always supplies it.
+   */
+  parentContext?: ChildParentContext;
 }
 
 const NATIVE_TASK_FIELDS: ReadonlySet<string> = new Set([
@@ -114,18 +125,19 @@ export function mapD365Task(
     NATIVE_TASK_FIELDS,
   );
 
-  // Parent linkage — _regardingobjectid_value + its OData lookup
-  // logical name annotation. commit-batch resolves to local FK
-  // via external_ids and strips before Drizzle insert.
-  const lookupLogicalName = (raw as Record<string, unknown>)[
-    "_regardingobjectid_value@Microsoft.Dynamics.CRM.lookuplogicalname"
-  ];
-  const parentEntityType =
-    typeof lookupLogicalName === "string" ? lookupLogicalName : null;
+  // Parent linkage — driven by the ROOT context (the root this task was
+  // stitched under during pull), NOT the polymorphic
+  // `_regardingobjectid_value@…lookuplogicalname` annotation (which is
+  // not requested). commit-batch reads these `_`-prefixed virtuals to
+  // link the task to the root's in-memory local UUID, then strips them
+  // before the Drizzle insert. Falls back to the raw regarding GUID
+  // only when no ROOT context is supplied (legacy standalone call).
+  const parentEntityType = ctx.parentContext?.parentEntityType ?? null;
   const parentSourceId =
-    typeof raw._regardingobjectid_value === "string"
+    ctx.parentContext?.parentSourceId ??
+    (typeof raw._regardingobjectid_value === "string"
       ? raw._regardingobjectid_value
-      : null;
+      : null);
 
   const mapped: NewTask & {
     _parentEntityType?: string | null;

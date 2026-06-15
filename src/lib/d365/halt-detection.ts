@@ -1,6 +1,9 @@
 import "server-only";
 
 import type { importRecords } from "@/db/schema/d365-imports";
+// Imported from the leaf `./mapping/children` (not the `./mapping` barrel)
+// so this stays import-cycle-free with the mappers/orchestrator.
+import { isChildWarning } from "./mapping/children";
 
 /**
  * pure-function halt detectors for the import pipeline.
@@ -126,6 +129,20 @@ function asWarnings(raw: unknown): ValidationWarning[] {
   );
 }
 
+/**
+ * ROOT-scoped warnings only — drops CHILD-origin warnings (their `field`
+ * is prefixed with `CHILD_WARNING_FIELD_PREFIX`). The run-wide halt gates
+ * (unmapped-picklist, validation-regression) must NOT fire on a bad child
+ * (an unmapped activity picklist, an "Untitled task" default): a child is
+ * persisted/visible non-fatally but never halts the run — children.ts's
+ * "a bad child must not sink the root graph" contract.
+ */
+function rootWarnings(record: ImportRecordForDetect): ValidationWarning[] {
+  return asWarnings(record.validationWarnings).filter(
+    (w) => typeof w.field !== "string" || !isChildWarning(w.field),
+  );
+}
+
 function hasWarningCode(record: ImportRecordForDetect, code: string): boolean {
   return asWarnings(record.validationWarnings).some((w) => w.code === code);
 }
@@ -226,7 +243,9 @@ export function detectValidationRegression(
   records: ImportRecordForDetect[],
 ): ValidationRegressionResult {
   const warningCount = records.reduce((acc, r) => {
-    const warnings = asWarnings(r.validationWarnings).filter(
+    // Root-scoped warnings only — child warnings are non-fatal and must
+    // not inflate the regression count (see rootWarnings).
+    const warnings = rootWarnings(r).filter(
       (w) => w.code !== "owner_default_owner_used",
     );
     return warnings.length > 0 ? acc + 1 : acc;
@@ -255,7 +274,8 @@ export function detectValidationRegression(
 export function detectUnmappedPicklist(
   record: ImportRecordForDetect,
 ): UnmappedPicklistResult {
-  const warnings = asWarnings(record.validationWarnings);
+  // Root-scoped only: a child's unmapped picklist must not halt the run.
+  const warnings = rootWarnings(record);
   const hit = warnings.find((w) => w.code === "unmapped_picklist");
   if (!hit) return { halt: false };
   return {

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { and, asc, eq, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema/leads";
+import { activities, attachments } from "@/db/schema/activities";
 import { recentViews } from "@/db/schema/recent-views";
-import { gatherBlobsForLeads } from "@/lib/blob-cleanup";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
@@ -59,13 +59,34 @@ export async function GET(req: Request) {
       if (candidates.length === 0) break;
       const candidateIds = candidates.map((c) => c.id);
 
-      // 024 — gather attachment blob pathnames BEFORE the DB delete;
+      // Gather attachment blob pathnames per lead BEFORE the DB delete;
       // after CASCADE the join rows are gone and the blobs become
-      // unrecoverable orphans. Gather runs on the candidate superset
-      // (pre-delete); gather failure is non-fatal — purge proceeds.
-      let blobPathnames: string[] = [];
+      // unrecoverable orphans. We must gather on the candidate superset
+      // (pre-delete) for timing, but key the result by lead id so that
+      // — after the DELETE re-asserts the purge predicate — we enqueue
+      // blob deletes ONLY for leads that were actually hard-deleted. A
+      // lead restored (is_deleted=false) between this batch's SELECT and
+      // the DELETE survives with its attachments rows intact; deleting
+      // its blob bytes would leave a live record with dead download
+      // links. gatherBlobsForLeads returns pathnames without the parent
+      // lead association needed for that filter, so the join is run
+      // inline here. Gather failure is non-fatal — purge proceeds.
+      const blobsByLead = new Map<string, string[]>();
       try {
-        blobPathnames = await gatherBlobsForLeads(candidateIds);
+        const blobRows = await db
+          .select({
+            leadId: activities.leadId,
+            pathname: attachments.blobPathname,
+          })
+          .from(attachments)
+          .innerJoin(activities, eq(activities.id, attachments.activityId))
+          .where(inArray(activities.leadId, candidateIds));
+        for (const r of blobRows) {
+          if (!r.leadId) continue;
+          const bucket = blobsByLead.get(r.leadId) ?? [];
+          bucket.push(r.pathname);
+          blobsByLead.set(r.leadId, bucket);
+        }
       } catch (err) {
         logger.error("blob_cleanup_gather_failure_purge_archived", {
           leadCount: candidateIds.length,
@@ -77,13 +98,15 @@ export async function GET(req: Request) {
       // RETURNING gives the rows that were actually deleted. A lead
       // restored (is_deleted=false) between this batch's SELECT and the
       // DELETE is excluded by the predicate AND was id-targeted, so the
-      // audit set below is built from `deleted` (the real delete set),
-      // not the candidate snapshot. This closes the restore-during-
-      // purge stray-audit skew (§19.5.3 — intentional-race contract:
-      // a restored-mid-purge lead produces NO lead.purge audit and is
-      // not deleted; the blob gather superset for it is harmless
-      // because its blobs were not deleted and the handler is
-      // 404-tolerant). Hard-delete cascades through activities, tasks,
+      // audit set below, the recent_views cleanup, AND the blob-cleanup
+      // enqueue are all built from `deleted` (the real delete set), not
+      // the candidate snapshot. This closes the restore-during-purge
+      // stray-audit skew (§19.5.3 — intentional-race contract: a
+      // restored-mid-purge lead produces NO lead.purge audit, is not
+      // deleted, and its live attachment blobs are NOT enqueued for
+      // deletion — the blob-cleanup handler deletes by pathname
+      // unconditionally, so it must only ever receive deleted leads'
+      // pathnames). Hard-delete cascades through activities, tasks,
       // lead_tags, attachments.
       const deleted = await db
         .delete(leads)
@@ -173,29 +196,42 @@ export async function GET(req: Request) {
         }
       }
 
+      // Build the cleanup set from `deleted` (the RETURNING set that
+      // exactly matches what was hard-deleted), not the candidate
+      // superset, so a lead restored between SELECT and DELETE keeps
+      // its live blobs. The blob-cleanup handler deletes by pathname
+      // unconditionally, so the pathname list must be the real
+      // delete set. Sort the ids so deletedIds[0] is stable across a
+      // re-run that deletes the same survivors — DELETE ... RETURNING
+      // gives no row order, and the idempotency key below keys off it.
+      const deletedIds = deleted.map((d) => d.id).sort();
+      const blobPathnames = deletedIds.flatMap(
+        (id) => blobsByLead.get(id) ?? [],
+      );
+
       // Durable async cleanup via the job queue (F-Ω-8). Per-batch
-      // idempotency key: a cron re-run that re-selects the same
-      // not-yet-deleted batch produces the same key and dedupes the
-      // duplicate cleanup job. No `origin` — the purge runs across N
-      // leads, not one entity.
+      // idempotency key keyed off the first deleted id: a cron re-run
+      // that re-selects the same batch and deletes the same survivors
+      // produces the same key and dedupes the duplicate cleanup job. No
+      // `origin` — the purge runs across N leads, not one entity.
       if (blobPathnames.length > 0) {
         try {
           await enqueueJob(
             "blob-cleanup",
             { pathnames: blobPathnames },
             {
-              idempotencyKey: `blob-cleanup:cron.purge_archived:${candidateIds[0]}:${candidateIds.length}`,
+              idempotencyKey: `blob-cleanup:cron.purge_archived:${deletedIds[0]}:${deletedIds.length}`,
               metadata: {
                 originAction: "cron.purge_archived",
-                leadCount: candidateIds.length,
-                sampleLeadIds: candidateIds.slice(0, 10),
+                leadCount: deletedIds.length,
+                sampleLeadIds: deletedIds.slice(0, 10),
                 blobCount: blobPathnames.length,
               },
             },
           );
         } catch (err) {
           logger.error("blob_cleanup_enqueue_failure_purge_archived", {
-            leadCount: candidateIds.length,
+            leadCount: deletedIds.length,
             blobCount: blobPathnames.length,
             errorMessage: err instanceof Error ? err.message : String(err),
           });

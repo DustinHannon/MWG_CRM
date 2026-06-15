@@ -164,14 +164,25 @@ async function withTimeout<T>(
 async function checkDb(): Promise<CheckResult> {
   const start = Date.now();
   try {
-    // Promise.race only races the
-    // promise; the underlying query keeps running until completion,
-    // which under sustained DB hang leaks a connection from the
-    // Supavisor max:1 pool. Setting `statement_timeout` server-side
-    // forces Postgres to cancel the SELECT once 5s elapses so the
-    // client connection is actually released.
+    // `withTimeout` (Promise.race) only races the JS promise; the
+    // underlying query keeps running until completion, so under a
+    // sustained DB hang it can leak a connection from the Supavisor
+    // max:1 pool. Setting `statement_timeout` server-side lets Postgres
+    // cancel the query so the connection is released. `SET LOCAL` /
+    // `set_config(..., true)` only scope to a transaction, so the
+    // timeout-set and the probe SELECT must run in the SAME tx — the
+    // canonical pattern used across the codebase (audit-cursor.ts,
+    // api-usage-cursor.ts, supabase-metrics queries, admin export
+    // routes). The outer `withTimeout` still bounds the case
+    // statement_timeout cannot cover: connection acquisition against a
+    // wedged Supavisor backend.
     await withTimeout(
-      db.execute(sql`SET LOCAL statement_timeout = '5s'; SELECT 1`),
+      db.transaction(async (tx) => {
+        await tx.execute(
+          sql`SELECT set_config('statement_timeout', '5s', true)`,
+        );
+        await tx.execute(sql`SELECT 1`);
+      }),
       PROBE_TIMEOUT_MS + 500,
       "db",
     );

@@ -52,9 +52,14 @@ export async function signInBreakglassAction(
 
 /**
  * Only allow same-origin relative paths. Prevents open-redirect attacks.
+ *
+ * Must start with a single "/" followed by a non-slash, non-backslash
+ * character. Rejecting both "//" and "/\" closes the protocol-relative
+ * bypass: browsers normalize backslashes to forward slashes, so a value
+ * like "/\evil.com" would otherwise be treated as "//evil.com".
  */
 function safeCallback(callback: string | undefined): string {
   if (!callback) return "/dashboard";
-  if (!callback.startsWith("/") || callback.startsWith("//")) return "/dashboard";
+  if (!/^\/[^/\\]/.test(callback)) return "/dashboard";
   return callback;
 }

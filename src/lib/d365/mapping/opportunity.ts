@@ -3,7 +3,6 @@ import type { InferInsertModel } from "drizzle-orm";
 import type { opportunities } from "@/db/schema/crm-records";
 import type { D365Opportunity } from "../types";
 import {
-  type AttachedActivity,
   type MapResult,
   type ValidationWarning,
   extractCustomFields,
@@ -12,6 +11,11 @@ import {
   parseString,
   picklistMapper,
 } from "./parsers";
+import {
+  mapAttachedChildren,
+  type ChildOwnerResolver,
+  type D365Children,
+} from "./children";
 
 export type NewOpportunity = InferInsertModel<typeof opportunities>;
 
@@ -20,6 +24,18 @@ export interface OpportunityMapContext {
   resolvedAccountId?: string | null;
   resolvedPrimaryContactId?: string | null;
   resolvedSourceLeadId?: string | null;
+  /**
+   * Nested raw child arrays grouped under `rawPayload.children` by
+   * `pull-batch`. The opportunity mapper runs each child mapper over
+   * these and returns them in `result.attached`.
+   */
+  children?: D365Children;
+  /**
+   * Optional resolver mapping a child's enriched owner email to a local
+   * `users.id`. When omitted (or null) children ride on
+   * `resolvedOwnerId`.
+   */
+  resolveChildOwnerId?: ChildOwnerResolver;
 }
 
 const NATIVE_OPPORTUNITY_FIELDS: ReadonlySet<string> = new Set([
@@ -198,6 +214,18 @@ export function mapD365Opportunity(
       sourceLeadSourceId;
   }
 
-  const attached: AttachedActivity[] = [];
+  // Aggregate the nested child graph into `attached`, with this
+  // opportunity as the ROOT driving each child's parent linkage.
+  const { attached, warnings: childWarnings } = mapAttachedChildren({
+    children: ctx.children,
+    parentContext: {
+      parentEntityType: "opportunity",
+      parentSourceId: raw.opportunityid,
+    },
+    fallbackUserId: ctx.resolvedOwnerId,
+    resolveChildOwnerId: ctx.resolveChildOwnerId,
+  });
+  warnings.push(...childWarnings);
+
   return { mapped, attached, customFields, warnings };
 }

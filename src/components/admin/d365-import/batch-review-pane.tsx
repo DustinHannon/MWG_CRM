@@ -61,6 +61,28 @@ export interface ValidationWarning {
   message: string;
 }
 
+/**
+ * Field-name prefix that marks a warning as CHILD-origin (mirrors
+ * `CHILD_WARNING_FIELD_PREFIX` in `@/lib/d365/mapping/children`, which is
+ * server-only and can't be imported into this client component). A child
+ * warning (an unmapped picklist on a call, an "Untitled task" default) is
+ * non-fatal: the backend never escalates the root to review or halts on
+ * it. The review UI mirrors that — child warnings don't count toward the
+ * root's warning badge or block the "Approve all (no warnings)" bulk
+ * action — but they are still surfaced (see childWarningCount) so the
+ * reviewer sees them.
+ */
+const CHILD_WARNING_FIELD_PREFIX = "__child__:";
+
+function isChildWarning(w: ValidationWarning): boolean {
+  return typeof w.field === "string" && w.field.startsWith(CHILD_WARNING_FIELD_PREFIX);
+}
+
+/** Root-scoped warnings only (drops child-origin warnings). */
+function rootWarningsOf(r: BatchRecordView): ValidationWarning[] {
+  return r.validationWarnings.filter((w) => !isChildWarning(w));
+}
+
 export interface BatchRecordView {
   id: string;
   sourceEntityType: string;
@@ -82,12 +104,52 @@ export interface BatchRecordView {
   error: string | null;
 }
 
+export type BatchChildKind = "note" | "call" | "meeting" | "email" | "task";
+
 export interface BatchChildView {
   id: string;
   sourceEntityType: string;
   sourceId: string;
   summary: string;
   status: RecordStatus;
+  /** Activity kind, used to group the per-record child rollup. */
+  kind?: BatchChildKind;
+}
+
+/**
+ * Build a short child rollup like "12 calls · 3 notes · 1 task" from a
+ * record's attached children, grouped by activity kind in a stable order.
+ * Returns null when the record has no children.
+ */
+function buildChildRollup(children: BatchChildView[] | undefined): string | null {
+  if (!children || children.length === 0) return null;
+  const counts = new Map<BatchChildKind, number>();
+  for (const c of children) {
+    const kind = c.kind;
+    if (!kind) continue;
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  // Children with a recognised kind drive the rollup; if none carried a
+  // kind, fall back to a plain count so the badge is never empty.
+  if (counts.size === 0) {
+    const n = children.length;
+    return `${n} activit${n === 1 ? "y" : "ies"}`;
+  }
+  const LABELS: Record<BatchChildKind, [string, string]> = {
+    call: ["call", "calls"],
+    meeting: ["appointment", "appointments"],
+    email: ["email", "emails"],
+    note: ["note", "notes"],
+    task: ["task", "tasks"],
+  };
+  const ORDER: BatchChildKind[] = ["call", "meeting", "email", "note", "task"];
+  return ORDER.filter((k) => counts.has(k))
+    .map((k) => {
+      const n = counts.get(k)!;
+      const [one, many] = LABELS[k];
+      return `${n} ${n === 1 ? one : many}`;
+    })
+    .join(" · ");
 }
 
 interface BatchReviewPaneProps {
@@ -217,7 +279,7 @@ function RecordList({
           <button
             type="button"
             disabled={pending}
-            onClick={() => bulkApprove((r) => r.validationWarnings.length === 0)}
+            onClick={() => bulkApprove((r) => rootWarningsOf(r).length === 0)}
             className="rounded border border-border bg-background px-2 py-0.5 hover:bg-muted/60 disabled:opacity-50"
           >
             Approve all (no warnings)
@@ -248,47 +310,60 @@ function RecordList({
         </div>
       ) : null}
       <ul className="flex-1 overflow-y-auto">
-        {records.map((r) => (
-          <li key={r.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(r.id)}
-              className={cn(
-                "flex w-full items-start gap-2 border-b border-border px-3 py-2 text-left text-xs hover:bg-muted/40",
-                selectedId === r.id && "bg-muted/60",
-              )}
-            >
-              <RecordStatusIcon status={r.status} />
-              <div className="grow truncate">
-                <div className="truncate font-medium text-foreground">
-                  {r.summary.primary}
-                </div>
-                {r.summary.secondary ? (
-                  <div className="truncate text-muted-foreground">
-                    {r.summary.secondary}
+        {records.map((r) => {
+          const childRollup = buildChildRollup(r.children);
+          // Root warnings drive the warning badge + bulk-approve gate;
+          // child warnings are non-fatal and shown as a separate,
+          // lower-weight badge so they stay visible without blocking.
+          const rootWarningCount = rootWarningsOf(r).length;
+          const childWarningCount =
+            r.validationWarnings.length - rootWarningCount;
+          return (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(r.id)}
+                className={cn(
+                  "flex w-full items-start gap-2 border-b border-border px-3 py-2 text-left text-xs hover:bg-muted/40",
+                  selectedId === r.id && "bg-muted/60",
+                )}
+              >
+                <RecordStatusIcon status={r.status} />
+                <div className="grow truncate">
+                  <div className="truncate font-medium text-foreground">
+                    {r.summary.primary}
                   </div>
-                ) : null}
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {r.validationWarnings.length > 0 ? (
-                    <Badge tone="warn">
-                      {r.validationWarnings.length} warning
-                      {r.validationWarnings.length === 1 ? "" : "s"}
-                    </Badge>
+                  {r.summary.secondary ? (
+                    <div className="truncate text-muted-foreground">
+                      {r.summary.secondary}
+                    </div>
                   ) : null}
-                  {r.conflictWith ? <Badge tone="conflict">Conflict</Badge> : null}
-                  {r.resolvedFromDefaultOwner ? (
-                    <Badge tone="info">Default owner</Badge>
-                  ) : null}
-                  {r.children && r.children.length > 0 ? (
-                    <Badge tone="info">
-                      {r.children.length} activit{r.children.length === 1 ? "y" : "ies"}
-                    </Badge>
-                  ) : null}
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {rootWarningCount > 0 ? (
+                      <Badge tone="warn">
+                        {rootWarningCount} warning
+                        {rootWarningCount === 1 ? "" : "s"}
+                      </Badge>
+                    ) : null}
+                    {childWarningCount > 0 ? (
+                      <Badge tone="info">
+                        {childWarningCount} activity warning
+                        {childWarningCount === 1 ? "" : "s"}
+                      </Badge>
+                    ) : null}
+                    {r.conflictWith ? (
+                      <Badge tone="conflict">Conflict</Badge>
+                    ) : null}
+                    {r.resolvedFromDefaultOwner ? (
+                      <Badge tone="info">Default owner</Badge>
+                    ) : null}
+                    {childRollup ? <Badge tone="info">{childRollup}</Badge> : null}
+                  </div>
                 </div>
-              </div>
-            </button>
-          </li>
-        ))}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -454,8 +529,12 @@ function MappedFieldsEditor({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  // Only ROOT warnings annotate the mapped-fields editor — child
+  // warnings carry a prefixed field that never matches a root field and
+  // are surfaced separately on the record-list badge / Activities tab.
   const warningsByField = new Map<string, ValidationWarning[]>();
   for (const w of record.validationWarnings) {
+    if (isChildWarning(w)) continue;
     const arr = warningsByField.get(w.field) ?? [];
     arr.push(w);
     warningsByField.set(w.field, arr);

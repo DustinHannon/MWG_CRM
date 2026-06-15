@@ -10,7 +10,7 @@ import { PageRealtime } from "@/components/realtime/page-realtime";
 import { RowRealtime } from "@/components/realtime/row-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
 import { StatusPill } from "@/components/ui/status-pill";
-import { UserTime } from "@/components/ui/user-time";
+import { getCurrentUserTimePrefs, UserTime } from "@/components/ui/user-time";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { canDeleteOpportunity } from "@/lib/access/can-delete";
@@ -29,6 +29,7 @@ export default async function OpportunityDetailPage({
   const session = await requireSession();
   const perms = await getPermissions(session.id);
   const canViewAll = session.isAdmin || perms.canViewAllRecords;
+  const prefs = await getCurrentUserTimePrefs();
   const { id } = await params;
 
   const [opp] = await db
@@ -181,6 +182,7 @@ export default async function OpportunityDetailPage({
             entityId={opp.id}
             tasks={await listTasksForOpportunity(opp.id)}
             currentUserId={session.id}
+            timezone={prefs.timezone}
             viewerCanEditOthers={
               session.isAdmin || perms.canEditOthersTasks
             }

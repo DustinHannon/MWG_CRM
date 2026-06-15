@@ -929,12 +929,15 @@ export async function getCampaignRecipientPageAction(input: {
         .limit(pageSize)
         .offset(offset);
 
-      const totalRow = await db
-        .select({ id: campaignRecipients.id })
+      // Aggregate count — a recipient set runs up to MAX_LIST_SIZE
+      // (50,000) rows, so loading every id just to take `.length` on each
+      // page navigation would pull the whole set over the `max:1` pooler.
+      const [{ n: total }] = await db
+        .select({ n: sql<number>`count(*)::int` })
         .from(campaignRecipients)
         .where(where);
 
-      return { rows, total: totalRow.length };
+      return { rows, total };
     },
   );
 }

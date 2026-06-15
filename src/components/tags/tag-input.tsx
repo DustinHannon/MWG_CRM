@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import { TagChip } from "./tag-chip";
 import {
   applyTagAction,
@@ -82,19 +83,9 @@ export function TagInput(props: TagInputProps) {
     return () => clearTimeout(handle);
   }, [query, value]);
 
-  // Click outside closes the dropdown.
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  // Click outside closes the dropdown (canonical hook; listener only
+  // attached while open).
+  useClickOutside(containerRef, () => setOpen(false), open);
 
   const exactMatch = results.some(
     (r) => r.name.toLowerCase() === query.trim().toLowerCase(),

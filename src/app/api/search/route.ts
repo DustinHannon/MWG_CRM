@@ -233,6 +233,10 @@ export async function GET(req: Request) {
     logger.error("search.failed", {
       errorMessage: err instanceof Error ? err.message : String(err),
     });
+    // Return a non-200 envelope so the client can distinguish a backend
+    // failure from a genuine empty result and show a "search unavailable"
+    // state, rather than presenting a partial/empty set as success.
+    return NextResponse.json({ error: "Search is unavailable." }, { status: 500 });
   }
 
   return NextResponse.json({ hits });

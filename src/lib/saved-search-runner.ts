@@ -318,6 +318,16 @@ async function matchLeads(
     keysetAfter(leads.createdAt, leads.id, cutoff, sub.lastSeenMaxId),
     eq(leads.isDeleted, false),
   ];
+  if (filters.search) {
+    // Mirror the leads list builder (runView) so the digest surfaces
+    // exactly the rows the list page would: ILIKE OR across the same
+    // five columns. Without this a saved view with a text term emailed
+    // and notified on leads that don't match the term.
+    const pattern = `%${filters.search}%`;
+    wheres.push(
+      sql`(${leads.firstName} ILIKE ${pattern} OR ${leads.lastName} ILIKE ${pattern} OR ${leads.email} ILIKE ${pattern} OR ${leads.companyName} ILIKE ${pattern} OR ${leads.phone} ILIKE ${pattern})`,
+    );
+  }
   if (filters.status && filters.status.length > 0) {
     // status enum, raw cast
     wheres.push(

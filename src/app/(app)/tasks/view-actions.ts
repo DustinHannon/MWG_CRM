@@ -259,11 +259,16 @@ export async function bulkCompleteTasksAction(
       revalidatePath("/tasks");
       return result;
     }
-    // Non-privileged user: require every selected task to be theirs
-    // (safer than silent partial-success).
+    // Non-privileged user: require every selected task to be one the
+    // actor created or is assigned to (creator-OR-assignee), matching the
+    // single-row toggleTaskCompleteAction (isOwnerOrAssignee) and
+    // bulkReassignTasksAction so all paths share one rule. Soft-deleted
+    // rows are excluded — an archived task must not be completable by
+    // replaying a captured {id, version}. Safer than silent
+    // partial-success.
     const { db } = await import("@/db");
     const { tasks: tasksTable } = await import("@/db/schema/tasks");
-    const { eq, inArray, and } = await import("drizzle-orm");
+    const { eq, inArray, and, or } = await import("drizzle-orm");
     const ids = parsed.items.map((i) => i.id);
     const own = await db
       .select({ id: tasksTable.id })
@@ -271,12 +276,16 @@ export async function bulkCompleteTasksAction(
       .where(
         and(
           inArray(tasksTable.id, ids),
-          eq(tasksTable.assignedToId, session.id),
+          eq(tasksTable.isDeleted, false),
+          or(
+            eq(tasksTable.createdById, session.id),
+            eq(tasksTable.assignedToId, session.id),
+          ),
         ),
       );
     if (own.length !== ids.length) {
       throw new ForbiddenError(
-        "Some of the selected tasks are assigned to someone else.",
+        "Some of the selected tasks belong to someone else.",
       );
     }
     const result = await bulkCompleteTasks(parsed.items, session.id);
@@ -344,10 +353,14 @@ export async function bulkDeleteTasksAction(
     const parsed = bulkRowVersionsSchema.parse(raw);
     const perms = await getPermissions(session.id);
     if (!session.isAdmin && !perms.canDeleteOthersTasks) {
-      // Non-privileged users can still bulk-delete tasks they own.
+      // Non-privileged users can still bulk-delete tasks they control:
+      // creator-OR-assignee, matching the single-row deleteTaskAction
+      // (canDeleteTask) and bulkReassignTasksAction so all paths share
+      // one rule. Soft-deleted rows are excluded — an archived task must
+      // not be deletable by replaying a captured {id, version}.
       const { db } = await import("@/db");
       const { tasks: tasksTable } = await import("@/db/schema/tasks");
-      const { eq, inArray, and } = await import("drizzle-orm");
+      const { eq, inArray, and, or } = await import("drizzle-orm");
       const ids = parsed.items.map((i) => i.id);
       const own = await db
         .select({ id: tasksTable.id })
@@ -355,12 +368,16 @@ export async function bulkDeleteTasksAction(
         .where(
           and(
             inArray(tasksTable.id, ids),
-            eq(tasksTable.assignedToId, session.id),
+            eq(tasksTable.isDeleted, false),
+            or(
+              eq(tasksTable.createdById, session.id),
+              eq(tasksTable.assignedToId, session.id),
+            ),
           ),
         );
       if (own.length !== ids.length) {
         throw new ForbiddenError(
-          "Some of the selected tasks are assigned to someone else.",
+          "Some of the selected tasks belong to someone else.",
         );
       }
     }

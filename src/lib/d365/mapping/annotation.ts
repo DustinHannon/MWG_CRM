@@ -4,6 +4,7 @@ import type { activities } from "@/db/schema/activities";
 import type { D365Annotation } from "../types";
 import {
   type AttachedActivity,
+  type ChildParentContext,
   type MapResult,
   type ValidationWarning,
   extractCustomFields,
@@ -14,10 +15,10 @@ import {
 /**
  * D365 `annotation` → mwg-crm `activities` (kind='note').
  *
- * Annotations always attach to a parent (objecttypecode +
- * _objectid_value). The orchestrator stitches the parent FK in
- * after the parent record commits — the mapper itself returns a
- * payload with no parent IDs set.
+ * Annotations always attach to a parent. The ROOT this note was
+ * stitched under (by `_objectid_value` + the per-root `objecttypecode`
+ * filter in pull-batch) is passed in as `parentContext`; commit-batch
+ * links the note to the root's in-memory local UUID at insert time.
  */
 
 export type NewActivity = InferInsertModel<typeof activities>;
@@ -29,6 +30,14 @@ export interface AnnotationMapContext {
   resolvedAccountId?: string | null;
   resolvedContactId?: string | null;
   resolvedOpportunityId?: string | null;
+  /**
+   * Explicit ROOT parent context (type + GUID of the root this note was
+   * stitched under). Drives the `_parentEntityType` / `_parentSourceId`
+   * virtuals authoritatively — pull-batch already filtered annotations
+   * by `objecttypecode eq '<root>'`, so the parent type is known and we
+   * never depend on the (unrequested) lookuplogicalname annotation.
+   */
+  parentContext?: ChildParentContext;
 }
 
 const NATIVE_ANNOTATION_FIELDS: ReadonlySet<string> = new Set([
@@ -74,21 +83,18 @@ export function mapD365Annotation(
     NATIVE_ANNOTATION_FIELDS,
   );
 
-  // Parent linkage — annotations attach via _objectid_value with
-  // objecttypecode declaring the parent entity. commit-batch reads
-  // these `_`-prefixed virtuals to resolve the local FK via
-  // external_ids, then strips them before Drizzle insert.
-  const lookupLogicalName = (raw as Record<string, unknown>)[
-    "_objectid_value@Microsoft.Dynamics.CRM.lookuplogicalname"
-  ];
+  // Parent linkage — driven by the ROOT context (pull-batch filtered
+  // annotations by `objecttypecode eq '<root>'`, so the root type is
+  // authoritative). commit-batch reads these `_`-prefixed virtuals to
+  // link the note to the root's in-memory local UUID, then strips them
+  // before the Drizzle insert. Falls back to the raw objecttypecode /
+  // _objectid_value only when no ROOT context is supplied.
   const parentEntityType =
-    typeof lookupLogicalName === "string"
-      ? lookupLogicalName
-      : typeof raw.objecttypecode === "string"
-        ? raw.objecttypecode
-        : null;
+    ctx.parentContext?.parentEntityType ??
+    (typeof raw.objecttypecode === "string" ? raw.objecttypecode : null);
   const parentSourceId =
-    typeof raw._objectid_value === "string" ? raw._objectid_value : null;
+    ctx.parentContext?.parentSourceId ??
+    (typeof raw._objectid_value === "string" ? raw._objectid_value : null);
 
   const mapped: NewActivity & {
     _parentEntityType?: string | null;

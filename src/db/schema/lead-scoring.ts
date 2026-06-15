@@ -42,7 +42,12 @@ export const leadScoringRules = pgTable(
 
 /**
  * single-row settings table holding the score band thresholds.
- * Constrained server-side via CHECK to enforce hot > warm > cool ordering.
+ * The hot > warm > cool ordering is enforced in application code by
+ * setScoringThresholdsAction (src/app/admin/scoring/actions.ts), which
+ * rejects out-of-order values with a ValidationError. There is no DB
+ * CHECK constraint backing this invariant, so any write path that
+ * bypasses that action (a direct SQL fix or seed) can persist an
+ * out-of-order set — route threshold writes through the action.
  * The engine reads this table on every evaluation; admins edit via the
  * /admin/scoring sliders.
  */

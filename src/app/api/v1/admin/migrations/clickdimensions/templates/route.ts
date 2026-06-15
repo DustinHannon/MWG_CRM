@@ -201,6 +201,9 @@ export const POST = withApi(
     // insert a new row and capture its id back.
     let importedTemplateId: string | null = existing?.importedTemplateId ?? null;
     if (p.status === "extracted" && p.rawHtml && p.rawHtml.length > 0) {
+      // Hoist the narrowed value: TS loses the truthiness narrowing of
+      // p.rawHtml inside the db.transaction async closure below.
+      const rawHtml: string = p.rawHtml;
       const displayName = buildImportedTemplateName(p.cdTemplateName);
       const designJson = buildPlaceholderUnlayerDesign(p.rawHtml);
       const subject =
@@ -216,47 +219,55 @@ export const POST = withApi(
             name: displayName,
             subject,
             unlayerDesignJson: designJson,
-            renderedHtml: p.rawHtml,
+            renderedHtml: rawHtml,
             updatedById: user.id,
             updatedAt: now,
           })
           .where(eq(marketingTemplates.id, importedTemplateId));
       } else {
-        const insertedTpl = await db
-          .insert(marketingTemplates)
-          .values({
-            name: displayName,
-            description: p.cdCategory
-              ? `Imported from ClickDimensions (category: ${p.cdCategory})`
-              : "Imported from ClickDimensions",
-            subject,
-            preheader: null,
-            unlayerDesignJson: designJson,
-            renderedHtml: p.rawHtml,
-            sendgridTemplateId: null,
-            sendgridVersionId: null,
-            status: "draft",
-            // Sub-agent A added scope + source. We tag
-            // source so the worklist UI can pivot back to this
-            // migration row; scope='global' makes the imported row
-            // visible to all marketing users.
-            scope: "global",
-            source: "clickdimensions_migration",
-            createdById: user.id,
-            updatedById: user.id,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning({ id: marketingTemplates.id });
-        importedTemplateId = insertedTpl[0]!.id;
-        await db
-          .update(clickdimensionsMigrations)
-          .set({
-            importedTemplateId,
-            status: "imported",
-            updatedAt: now,
-          })
-          .where(eq(clickdimensionsMigrations.id, migrationRowId));
+        // Promote atomically: the marketing_templates insert and the
+        // migration-row cross-reference update commit together. Without
+        // the transaction, a crash between them leaves importedTemplateId
+        // null, so a retry on the same cd_template_id inserts a SECOND
+        // template row — an orphaned duplicate global template.
+        importedTemplateId = await db.transaction(async (tx) => {
+          const insertedTpl = await tx
+            .insert(marketingTemplates)
+            .values({
+              name: displayName,
+              description: p.cdCategory
+                ? `Imported from ClickDimensions (category: ${p.cdCategory})`
+                : "Imported from ClickDimensions",
+              subject,
+              preheader: null,
+              unlayerDesignJson: designJson,
+              renderedHtml: rawHtml,
+              sendgridTemplateId: null,
+              sendgridVersionId: null,
+              status: "draft",
+              // Sub-agent A added scope + source. We tag
+              // source so the worklist UI can pivot back to this
+              // migration row; scope='global' makes the imported row
+              // visible to all marketing users.
+              scope: "global",
+              source: "clickdimensions_migration",
+              createdById: user.id,
+              updatedById: user.id,
+              createdAt: now,
+              updatedAt: now,
+            })
+            .returning({ id: marketingTemplates.id });
+          const newTemplateId = insertedTpl[0]!.id;
+          await tx
+            .update(clickdimensionsMigrations)
+            .set({
+              importedTemplateId: newTemplateId,
+              status: "imported",
+              updatedAt: now,
+            })
+            .where(eq(clickdimensionsMigrations.id, migrationRowId));
+          return newTemplateId;
+        });
       }
 
       // Audit the import.

@@ -120,7 +120,17 @@ export type PermissionKey =
 
 /**
  * Admin bypasses all per-feature permission checks.
- * Throws via redirect on miss.
+ *
+ * Throws via `redirect("/dashboard")` on miss — i.e. it does NOT throw a
+ * typed `ForbiddenError`. Use this ONLY for page / server-component
+ * gating, where a redirect is the desired UX. Do NOT call it inside a
+ * `withErrorBoundary` server action: a permission miss would bounce the
+ * user to /dashboard mid-action (losing in-flight form state) instead of
+ * returning a `{ ok: false }` envelope the form can render. In server
+ * actions, gate with an inline typed `ForbiddenError` instead (see
+ * `getOrCreateTagAction` in `src/components/tags/actions.ts` for the
+ * pattern), mirroring `requireLeadEditAccess` / `requireOwnedEntityAccess`
+ * / `requireTaskAccess`, which all throw `ForbiddenError`.
  */
 export async function requirePermission(
   user: SessionUser,
@@ -143,20 +153,23 @@ export async function requirePermission(
  * data but does not check whether the actor owns it or has the
  * canViewAllRecords flag. Admin always passes.
  *
- * Throws `NotFoundError` if the lead doesn't exist and `ForbiddenError`
- * if the user can't access it. Returns the lead row's owner_id on success
- * so callers don't need to re-fetch.
+ * Throws `NotFoundError` if the lead doesn't exist OR is soft-deleted
+ * (archived leads read as not-found, matching requireOwnedEntityAccess /
+ * requireTaskAccess so an archived lead can't accumulate activities or
+ * email through a side-effect action) and `ForbiddenError` if the user
+ * can't access it. Returns the lead row's owner_id on success so callers
+ * don't need to re-fetch.
  */
 export async function requireLeadAccess(
   user: SessionUser,
   leadId: string,
 ): Promise<{ ownerId: string | null }> {
   const row = await db
-    .select({ ownerId: leads.ownerId })
+    .select({ ownerId: leads.ownerId, isDeleted: leads.isDeleted })
     .from(leads)
     .where(eq(leads.id, leadId))
     .limit(1);
-  if (!row[0]) throw new NotFoundError("lead");
+  if (!row[0] || row[0].isDeleted) throw new NotFoundError("lead");
 
   if (user.isAdmin) return { ownerId: row[0].ownerId };
 

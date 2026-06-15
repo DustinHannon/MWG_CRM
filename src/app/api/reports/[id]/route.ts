@@ -12,7 +12,7 @@ import { getReportByIdOrThrow } from "@/lib/reports/repository";
 import { reportUpdateSchema } from "@/lib/reports/request-schemas";
 import { isValidField } from "@/lib/reports/schemas";
 import { withErrorBoundary } from "@/lib/server-action";
-import { ValidationError } from "@/lib/errors";
+import { NotFoundError, ValidationError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -62,6 +62,11 @@ export async function PATCH(
     },
     async () => {
       const report = await getReportByIdOrThrow(id);
+      // A soft-deleted report is logically gone — editing it would mutate
+      // and bump the version of a row that stays archived. Treat it as
+      // absent (the list endpoints already exclude deleted reports, so a
+      // normal UI cannot reach this; a stale/guessed id can).
+      if (report.isDeleted) throw new NotFoundError("report");
 
       const body = await readReportBody(req);
       const input = reportUpdateSchema.parse(body);
@@ -176,6 +181,10 @@ export async function DELETE(
     },
     async () => {
       const report = await getReportByIdOrThrow(id);
+      // Already soft-deleted — a second delete would re-stamp
+      // deletedAt/deletedById/deleteReason and emit a duplicate
+      // reports.delete audit event. Treat it as absent (idempotent 404).
+      if (report.isDeleted) throw new NotFoundError("report");
       await assertCanDeleteReport(report, viewer);
 
       await db

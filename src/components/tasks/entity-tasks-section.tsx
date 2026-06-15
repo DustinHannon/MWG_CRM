@@ -29,6 +29,13 @@ export interface EntityTasksSectionProps {
   /** Current viewer — used for the assignee default in quick-add. */
   currentUserId: string;
   /**
+   * Viewer's CRM timezone (`getCurrentUserTimePrefs().timezone`).
+   * Threaded to the quick-add so the date-only due input is anchored
+   * in the user's zone, not the browser's. Required so every call site
+   * supplies it — no browser-timezone fallback.
+   */
+  timezone: string;
+  /**
    * Render the quick-add affordance. Default true. Set false on
    * detail pages whose chrome already exposes a canonical task
    * creation path (currently /leads/[id], whose tabbed activity
@@ -51,6 +58,7 @@ export function EntityTasksSection({
   entityId,
   tasks,
   currentUserId,
+  timezone,
   showQuickAdd = true,
   viewerCanEditOthers = false,
 }: EntityTasksSectionProps) {
@@ -66,6 +74,7 @@ export function EntityTasksSection({
           entityType={entityType}
           entityId={entityId}
           defaultAssigneeId={currentUserId}
+          timezone={timezone}
         />
       ) : null}
 

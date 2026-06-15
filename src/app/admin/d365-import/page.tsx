@@ -7,10 +7,8 @@ import { UserTime, getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { adminCrumbs } from "@/lib/navigation/breadcrumbs";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { isD365Configured } from "@/lib/d365";
-import { QuickPullButtons } from "@/components/admin/d365-import/quick-pull-buttons";
 import { NewRunModal } from "./_components/new-run-modal";
 import { D365RunsListClient } from "./_components/d365-runs-list-client";
-import { BackfillOpportunityFksButton } from "./_components/backfill-opportunity-fks-button";
 
 export const dynamic = "force-dynamic";
 
@@ -52,19 +50,25 @@ export default async function D365ImportPage({
     <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={adminCrumbs.d365Import()} />
 
-      <header className="space-y-2">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-          Admin
-        </p>
-        <h1 className="text-2xl font-semibold text-foreground font-display">
-          D365 CRM import
-        </h1>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Import from Dynamics 365 Sales in 100-record batches. Review and
-          approve each batch before commit. Source <code>createdon</code> /{" "}
-          <code>modifiedon</code> timestamps are preserved so historical
-          records do not surface as new in recency reports.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            Admin
+          </p>
+          <h1 className="text-2xl font-semibold text-foreground font-display">
+            D365 CRM import
+          </h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Import a record type from Dynamics 365 Sales — leads, contacts,
+            accounts, or opportunities. Each record&apos;s related tasks, calls,
+            appointments, emails, and notes come with it automatically. Review
+            and approve each record before it commits. Source{" "}
+            <code>createdon</code> / <code>modifiedon</code> timestamps are
+            preserved so historical records do not surface as new in recency
+            reports.
+          </p>
+        </div>
+        <NewRunModal disabled={!configured} />
       </header>
 
       {!configured ? (
@@ -74,28 +78,12 @@ export default async function D365ImportPage({
           </h2>
           <p className="text-sm text-muted-foreground">
             D365 credentials are not yet configured. Add{" "}
-            <code>D365_CLIENT_ID</code>, <code>D365_CLIENT_SECRET</code>, and
-            <code>D365_BASE_URL</code> to Vercel envs (production) and
-            redeploy. Quick-pull buttons below will be disabled until
-            configuration is detected.
+            <code>D365_CLIENT_ID</code>, <code>D365_CLIENT_SECRET</code>, and{" "}
+            <code>D365_BASE_URL</code> to Vercel envs (production) and redeploy.
+            Importing is disabled until configuration is detected.
           </p>
         </GlassCard>
       ) : null}
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-foreground">
-            Pull next 100 of an entity
-          </h2>
-          <NewRunModal />
-        </div>
-        <QuickPullButtons disabled={!configured} />
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium text-foreground">Maintenance</h2>
-        <BackfillOpportunityFksButton />
-      </section>
 
       <D365RunsListClient
         timePrefs={timePrefs}

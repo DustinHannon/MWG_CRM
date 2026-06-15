@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { createTaskAction } from "@/app/(app)/tasks/actions";
 import { useShowPicker } from "@/hooks/use-show-picker";
+import { parseDueDateInUserTz } from "@/lib/dates";
 
 /**
  * entity-detail Tasks tab quick-add. Auto-sets the
@@ -20,10 +21,20 @@ export function EntityTasksQuickAdd({
   entityType,
   entityId,
   defaultAssigneeId,
+  timezone,
 }: {
   entityType: "lead" | "account" | "contact" | "opportunity";
   entityId: string;
   defaultAssigneeId: string;
+  /**
+   * User's CRM timezone (from `getCurrentUserTimePrefs().timezone`).
+   * The date-only due input is anchored to 00:00 in this zone via
+   * `parseDueDateInUserTz`, matching the task edit dialog and queue
+   * snooze paths and the inverse of the `formatUserTime(..., "date")`
+   * display — so the calendar day is identical across input, save, and
+   * render even when the browser timezone differs from the CRM one.
+   */
+  timezone: string;
 }) {
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -52,10 +63,13 @@ export function EntityTasksQuickAdd({
       const res = await createTaskAction({
         title: trimmed,
         priority,
-        // Date-only input. Append explicit local-midnight so
-        // `new Date("YYYY-MM-DD")` is not interpreted as UTC, which
-        // would shift one calendar day west in negative-UTC zones.
-        dueAt: dueDate ? new Date(`${dueDate}T00:00:00`) : null,
+        // Anchor the date-only input to 00:00 in the user's CRM
+        // timezone (not the browser's), matching the task edit dialog
+        // and queue snooze paths and the inverse of the
+        // `formatUserTime(..., "date")` display, so the calendar day is
+        // identical across input, save, and table render even when the
+        // browser timezone differs from the CRM preference.
+        dueAt: dueDate ? parseDueDateInUserTz(dueDate, timezone) : null,
         assignedToId: defaultAssigneeId,
         ...fkPatch,
       });

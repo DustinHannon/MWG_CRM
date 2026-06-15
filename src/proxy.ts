@@ -62,6 +62,25 @@ const GEO_BYPASS_USER_AGENT_PATTERNS: readonly RegExp[] = [
   /vercel-edge-bot/i,
 ];
 
+/**
+ * Match a pathname against a prefix list on real path-segment
+ * boundaries, not a bare string prefix, so an entry like "/blocked"
+ * can't match "/blockedanything". Prefixes that already end in "/"
+ * (e.g. "/api/v1/webhooks/") are inherently segment-bounded, so a plain
+ * startsWith is the correct test for them. Shared by the geo-bypass and
+ * the auth-redirect public-path checks so the two cannot drift.
+ */
+function matchesPathPrefix(
+  pathname: string,
+  prefixes: readonly string[],
+): boolean {
+  return prefixes.some((p) =>
+    p.endsWith("/")
+      ? pathname.startsWith(p)
+      : pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
 function shouldBypassGeoBlock(req: NextRequest): boolean {
   // Preview + local-dev are always bypassed so engineers in non-US
   // regions don't lock themselves out and so `next dev` works.
@@ -70,17 +89,7 @@ function shouldBypassGeoBlock(req: NextRequest): boolean {
   if (env.NODE_ENV === "development") return true;
 
   const { pathname } = req.nextUrl;
-  // Match on a real path-segment boundary, not a bare string prefix, so a
-  // bypass entry like "/blocked" can't exempt "/blockedanything". Prefixes
-  // that already end in "/" (e.g. "/api/v1/webhooks/") are inherently
-  // segment-bounded, so a plain startsWith is the correct test for them.
-  if (
-    GEO_BYPASS_PATH_PREFIXES.some((p) =>
-      p.endsWith("/")
-        ? pathname.startsWith(p)
-        : pathname === p || pathname.startsWith(`${p}/`),
-    )
-  ) {
+  if (matchesPathPrefix(pathname, GEO_BYPASS_PATH_PREFIXES)) {
     return true;
   }
   const ua = req.headers.get("user-agent") ?? "";
@@ -354,8 +363,10 @@ export async function proxy(req: NextRequest) {
   const blocked = await geoBlockIfDisallowed(req);
   if (blocked) return blocked;
 
-  // Auth redirect (skip for public paths).
-  const isPublic = PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p));
+  // Auth redirect (skip for public paths). Uses the same
+  // segment-boundary match as the geo-bypass check so a dotless path like
+  // "/apihelp-foo" or "/api/healthcheck" can't be misclassified as public.
+  const isPublic = matchesPathPrefix(pathname, PUBLIC_PATH_PREFIXES);
   if (!isPublic) {
     const hasSessionCookie = req.cookies
       .getAll()

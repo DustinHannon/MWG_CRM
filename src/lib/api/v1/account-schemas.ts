@@ -10,6 +10,24 @@ import { paginatedListSchema } from "./schemas";
  * API surfaces them as "accounts".
  */
 
+/**
+ * URL accepting only http/https. `z.string().url()` alone accepts
+ * `javascript:`, `data:`, and `vbscript:` URIs, which are then stored
+ * and rendered as a clickable href — a stored-XSS sink. Mirrors
+ * `httpUrlField` in `lead-schemas.ts` and `urlField` in
+ * `@/lib/validation/primitives` so the public API enforces the same
+ * protocol allow-list. `createAccount` (src/lib/accounts.ts) does NOT
+ * re-validate input, so this schema is the only gate for API-origin writes.
+ */
+const httpUrlField = z
+  .string()
+  .trim()
+  .url()
+  .max(2048)
+  .refine((u) => /^https?:\/\//i.test(u), {
+    message: "URL must use http or https",
+  });
+
 export const AccountSchema = registry.register(
   "Account",
   z.object({
@@ -100,9 +118,7 @@ export const AccountCreateSchema = registry.register(
       .nullable()
       .optional()
       .openapi({ example: "Insurance" }),
-    website: z
-      .string()
-      .url()
+    website: httpUrlField
       .nullable()
       .optional()
       .openapi({ example: "https://acme.example" }),

@@ -113,6 +113,27 @@ export const activities = pgTable(
     uniqueIndex("activities_import_dedup_idx")
       .on(t.leadId, t.importDedupKey)
       .where(sql`import_dedup_key IS NOT NULL`),
+    // Generalized per-parent dedup arbiters mirroring
+    // activities_import_dedup_idx for the other three root parents.
+    // D365 activities now attach to account / contact / opportunity
+    // roots (not just leads), and commit-batch upserts each child with
+    // ON CONFLICT (<parentFk>, import_dedup_key) WHERE import_dedup_key
+    // IS NOT NULL. Without a UNIQUE arbiter on each (parent, dedup_key)
+    // pair Postgres rejects the upsert with 42P10. Partial on the parent
+    // being non-null too so a NULL parent never collides (NULLs are
+    // distinct in a unique index regardless, but the predicate keeps the
+    // index tight to imported rows). The SQL migration that creates
+    // these in production (`*_d365_activity_dedup_generalize.sql`) ships
+    // in its own slice and must apply before per-parent upserts run.
+    uniqueIndex("activities_import_dedup_account_idx")
+      .on(t.accountId, t.importDedupKey)
+      .where(sql`import_dedup_key IS NOT NULL AND account_id IS NOT NULL`),
+    uniqueIndex("activities_import_dedup_contact_idx")
+      .on(t.contactId, t.importDedupKey)
+      .where(sql`import_dedup_key IS NOT NULL AND contact_id IS NOT NULL`),
+    uniqueIndex("activities_import_dedup_opportunity_idx")
+      .on(t.opportunityId, t.importDedupKey)
+      .where(sql`import_dedup_key IS NOT NULL AND opportunity_id IS NOT NULL`),
     // Partial unique indexes prevent duplicate Graph imports.
     uniqueIndex("activities_graph_message_uniq")
       .on(t.graphMessageId)

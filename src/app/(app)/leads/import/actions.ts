@@ -184,51 +184,20 @@ export async function commitImportAction(
         );
       }
 
+      // Filter to OK rows only — failed rows already surfaced in the
+      // preview's errors list and are recorded in the audit log.
+      const okRows = cached.parseRows.filter(
+        (r): r is Extract<typeof r, { ok: true }> => r.ok,
+      );
+
+      let result: CommitResult;
       try {
-        // Filter to OK rows only — failed rows already surfaced in the
-        // preview's errors list and are recorded in the audit log.
-        const okRows = cached.parseRows.filter(
-          (r): r is Extract<typeof r, { ok: true }> => r.ok,
-        );
-        const result = await commitImport({
+        result = await commitImport({
           rows: okRows,
           importerUserId: user.id,
           importJobId: jobId,
           importFileName: cached.fileName,
         });
-
-        await db
-          .update(importJobs)
-          .set({
-            status: "completed",
-            completedAt: sql`now()`,
-            successfulRows:
-              result.insertedLeadIds.length + result.updatedLeadIds.length,
-            failedRows: result.failedRows.length,
-            errors: result.failedRows as unknown as object,
-          })
-          .where(sql`id = ${jobId}::uuid`);
-
-        await writeAudit({
-          actorId: user.id,
-          action: "leads.import",
-          targetType: "import_job",
-          targetId: jobId,
-          after: {
-            fileName: cached.fileName,
-            smartDetect: cached.smartDetect,
-            inserted: result.insertedLeadIds.length,
-            updated: result.updatedLeadIds.length,
-            activitiesInserted: result.insertedActivityCount,
-            activitiesSkipped: result.skippedActivityCount,
-            opportunitiesInserted: result.insertedOpportunityIds.length,
-            failedRows: result.failedRows.length,
-          },
-        });
-
-        deleteJob(jobId);
-        revalidatePath("/leads");
-        return { result, jobId };
       } catch (err) {
         // sanitize: full err only
         // to logger; DB row carries a generic public message tagged
@@ -254,6 +223,58 @@ export async function commitImportAction(
           .where(sql`id = ${jobId}::uuid`);
         throw err;
       }
+
+      // Leads/activities/opportunities/tags are now durably committed.
+      // Drop the cached job immediately so a retry of this same jobId
+      // cannot replay the parsed rows and re-insert the new leads (the
+      // INSERT branch has no idempotency key). Everything below this
+      // point is bookkeeping that must NOT re-throw — failing it would
+      // misreport a successful import as failed.
+      deleteJob(jobId);
+
+      // Post-commit status UPDATE is bookkeeping on already-durable data.
+      // A transient pooler error here must not surface as "Import failed"
+      // because every lead has already been created; log and move on.
+      try {
+        await db
+          .update(importJobs)
+          .set({
+            status: "completed",
+            completedAt: sql`now()`,
+            successfulRows:
+              result.insertedLeadIds.length + result.updatedLeadIds.length,
+            failedRows: result.failedRows.length,
+            errors: result.failedRows as unknown as object,
+          })
+          .where(sql`id = ${jobId}::uuid`);
+      } catch (statusErr) {
+        logger.error("import_commit_status_update_failure", {
+          jobId,
+          errorMessage:
+            statusErr instanceof Error ? statusErr.message : String(statusErr),
+          errorStack: statusErr instanceof Error ? statusErr.stack : undefined,
+        });
+      }
+
+      await writeAudit({
+        actorId: user.id,
+        action: "leads.import",
+        targetType: "import_job",
+        targetId: jobId,
+        after: {
+          fileName: cached.fileName,
+          smartDetect: cached.smartDetect,
+          inserted: result.insertedLeadIds.length,
+          updated: result.updatedLeadIds.length,
+          activitiesInserted: result.insertedActivityCount,
+          activitiesSkipped: result.skippedActivityCount,
+          opportunitiesInserted: result.insertedOpportunityIds.length,
+          failedRows: result.failedRows.length,
+        },
+      });
+
+      revalidatePath("/leads");
+      return { result, jobId };
     },
   );
 }

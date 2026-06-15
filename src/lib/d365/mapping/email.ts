@@ -4,6 +4,7 @@ import type { activities } from "@/db/schema/activities";
 import type { D365Email } from "../types";
 import {
   type AttachedActivity,
+  type ChildParentContext,
   type MapResult,
   type ValidationWarning,
   extractCustomFields,
@@ -20,6 +21,13 @@ export interface EmailMapContext {
   resolvedAccountId?: string | null;
   resolvedContactId?: string | null;
   resolvedOpportunityId?: string | null;
+  /**
+   * Explicit ROOT parent context (type + GUID of the root this email
+   * was stitched under). Drives the `_parentEntityType` /
+   * `_parentSourceId` virtuals so commit-batch links to the root's
+   * in-memory UUID rather than the unrequested lookuplogicalname.
+   */
+  parentContext?: ChildParentContext;
 }
 
 const NATIVE_EMAIL_FIELDS: ReadonlySet<string> = new Set([
@@ -77,16 +85,16 @@ export function mapD365Email(
     NATIVE_EMAIL_FIELDS,
   );
 
-  // Parent linkage — see annotation.ts for the contract.
-  const lookupLogicalName = (raw as Record<string, unknown>)[
-    "_regardingobjectid_value@Microsoft.Dynamics.CRM.lookuplogicalname"
-  ];
-  const parentEntityType =
-    typeof lookupLogicalName === "string" ? lookupLogicalName : null;
+  // Parent linkage — driven by the ROOT context (the root this email was
+  // stitched under during pull), NOT the polymorphic
+  // `_regardingobjectid_value@…lookuplogicalname` annotation. Falls back
+  // to the raw regarding GUID only when no ROOT context is supplied.
+  const parentEntityType = ctx.parentContext?.parentEntityType ?? null;
   const parentSourceId =
-    typeof raw._regardingobjectid_value === "string"
+    ctx.parentContext?.parentSourceId ??
+    (typeof raw._regardingobjectid_value === "string"
       ? raw._regardingobjectid_value
-      : null;
+      : null);
 
   const mapped: NewActivity & {
     _parentEntityType?: string | null;

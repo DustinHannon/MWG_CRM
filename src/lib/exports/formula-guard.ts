@@ -20,7 +20,24 @@
  */
 const FORMULA_LEAD = /^[=+\-@\t\r]/;
 
+/**
+ * Matches a string that is a plain signed/unsigned numeric literal
+ * (e.g. "-1000.00", "+3.5", "42"). postgres-js returns numeric/decimal
+ * columns (money amounts, revenue) as JS STRINGS with no `>= 0`
+ * constraint, so a legitimate negative value arrives as "-1000.00" and
+ * collides with the `-` formula-lead char. Such values are data, not
+ * formulas, and must NOT be apostrophe-prefixed or the exported cell
+ * becomes text and breaks downstream sums/parsing.
+ */
+const NUMERIC_LITERAL = /^[-+]?\d/;
+
 export function neutralizeSpreadsheetFormula<T>(value: T): T | string {
   if (typeof value !== "string" || value.length === 0) return value;
-  return FORMULA_LEAD.test(value) ? `'${value}` : value;
+  if (!FORMULA_LEAD.test(value)) return value;
+  // A genuine numeric value (e.g. "-1000.00") is not a formula — leaving
+  // it untouched preserves negative money amounts in CSV/XLSX exports.
+  if (NUMERIC_LITERAL.test(value) && Number.isFinite(Number(value))) {
+    return value;
+  }
+  return `'${value}`;
 }

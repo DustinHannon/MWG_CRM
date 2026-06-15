@@ -44,15 +44,6 @@ export const createRunSchema = z.object({
 
 export type CreateRunInput = z.infer<typeof createRunSchema>;
 
-/**
- * Quick-pull (one of nine entity buttons). Creates the run if none
- * exists for that entity at status='created'/'reviewing', and pulls
- * the first/next batch.
- */
-export const quickPullSchema = z.object({
-  entityType: entityTypeSchema,
-});
-
 /** Pull next batch on an existing run. */
 export const pullNextBatchSchema = z.object({
   runId: uuid,
@@ -107,6 +98,11 @@ const haltReasonSchema = z.enum([
   // — the operator could not resume a bad-lead-volume-halted run via
   // the UI. resume-run's ALLOWED_RESOLUTIONS already handles it.
   D365_HALT_REASONS.BAD_LEAD_VOLUME,
+  // Pull-time child-collection truncation halt. resumeRunAction maps it
+  // to a `retry` resolution (resume-run's ALLOWED_RESOLUTIONS allows
+  // only retry here); without this enum entry the operator could not
+  // resume a truncation-halted run via the UI.
+  D365_HALT_REASONS.CHILD_COLLECTION_TRUNCATED,
 ]);
 
 /**

@@ -24,7 +24,10 @@ import {
   requireSession,
 } from "@/lib/auth-helpers";
 import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
-import { ForbiddenError, ValidationError } from "@/lib/errors";
+import {
+  ForbiddenError,
+  ValidationError,
+} from "@/lib/errors";
 import { signUndoToken, verifyUndoToken } from "@/lib/actions/soft-delete";
 import { db } from "@/db";
 import { activities } from "@/db/schema/activities";
@@ -54,7 +57,6 @@ function parseOccurredAt(value: string | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-
 export async function addNoteAction(
   formData: FormData,
 ): Promise<ActionResult> {
@@ -64,6 +66,8 @@ export async function addNoteAction(
       emptyMode: "exact",
     });
     // Lead access gate — actor must own the lead OR have canViewAllRecords.
+    // requireLeadAccess rejects a missing OR soft-deleted lead with
+    // NotFoundError, so an archived parent is already blocked here.
     await requireLeadAccess(user, parsed.leadId);
     const { id } = await createNote({
       leadId: parsed.leadId,
@@ -89,6 +93,8 @@ export async function addCallAction(
     const parsed = parseFormOrThrow(callSchema, formData, {
       emptyMode: "exact",
     });
+    // requireLeadAccess rejects a missing OR soft-deleted lead with
+    // NotFoundError, so an archived parent is already blocked here.
     await requireLeadAccess(user, parsed.leadId);
     const { id } = await createCall({
       leadId: parsed.leadId,
@@ -334,6 +340,8 @@ export async function addTaskAction(
     const form = parseFormOrThrow(taskSchema, formData, {
       emptyMode: "exact",
     });
+    // requireLeadAccess rejects a missing OR soft-deleted lead with
+    // NotFoundError, so an archived parent is already blocked here.
     await requireLeadAccess(user, form.leadId);
 
     // The `Due date` field is `type="date"` → a bare `YYYY-MM-DD`.

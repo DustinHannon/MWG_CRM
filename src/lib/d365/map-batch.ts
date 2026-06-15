@@ -17,7 +17,6 @@ import {
 import { broadcastRunEvent } from "./realtime-broadcast";
 import {
   dedupAccount,
-  dedupActivity,
   dedupContact,
   dedupLead,
   dedupOpportunity,
@@ -25,8 +24,14 @@ import {
   type DedupResult,
 } from "./dedup";
 import {
-  getMapperForEntity,
+  mapD365Account,
+  mapD365Contact,
+  mapD365Lead,
+  mapD365Opportunity,
   MappingError,
+  isChildWarning,
+  type ChildOwnerResolver,
+  type D365Children,
   type MapResult,
   type ValidationWarning,
 } from "./mapping";
@@ -36,18 +41,14 @@ import {
   detectBatchHalt,
   type ImportRecordForDetect,
 } from "./halt-detection";
-import { NotFoundError } from "@/lib/errors";
+import { isD365RootType, type D365RootType } from "./queries";
+import { NotFoundError, ValidationError } from "@/lib/errors";
 import type {
   D365Account,
-  D365Annotation,
-  D365Appointment,
   D365Contact,
-  D365Email,
   D365EntityType,
   D365Lead,
   D365Opportunity,
-  D365PhoneCall,
-  D365Task,
 } from "./types";
 
 /**
@@ -72,9 +73,11 @@ export interface MapBatchResult {
 
 /**
  * Resolve a D365 owner GUID + cached email lookup → mwg-crm user id.
- * The pull-batch flow attaches the resolved owner email to the stored
- * raw payload (see the `_ownerid_value_email` synthetic key). If
- * absent, the resolver falls back to the default owner.
+ * The pull-batch flow attaches the resolved owner email to each stored
+ * raw record (root AND every child) under the `_ownerid_value_email`
+ * synthetic key. Pass the ROOT record (`rawPayload.root`) for the
+ * root's owner, or a child raw for a child's owner. If absent, the
+ * resolver falls back to the default owner.
  */
 function getOwnerEmailFromRaw(
   raw: Record<string, unknown>,
@@ -148,72 +151,145 @@ async function haltRun(args: {
 }
 
 /* -------------------------------------------------------------------------- *
+ * Root-aggregate unwrap *
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Per-root persisted shape under `import_records.rawPayload` — mirrors
+ * `RootAggregatePayload` written by `pull-batch`. `root` is the raw
+ * (owner-enriched) D365 root record; `children` holds the stitched
+ * raw child arrays (the five `D365Children` keys only). Originated
+ * opportunities are NOT grafted onto a lead — opportunity is a root type
+ * imported via its own run, so it is never mapped as a child of a lead.
+ */
+interface RootAggregateRaw {
+  root: Record<string, unknown>;
+  children?: D365Children;
+  _sourceOwnerId?: string | null;
+}
+
+/**
+ * Narrow the persisted `rawPayload` to the root-aggregate shape. The
+ * pull slice always persists `{ root, children, _sourceOwnerId }` for a
+ * ROOT record; if `root` is missing the record is malformed (e.g. a
+ * legacy pre-redesign row) — surface it as a typed validation failure
+ * so the per-record catch flips it to `status='failed'` instead of
+ * crashing the batch.
+ */
+function unwrapRootAggregate(
+  raw: Record<string, unknown>,
+): RootAggregateRaw {
+  const root = raw["root"];
+  if (root == null || typeof root !== "object") {
+    throw new MappingError(
+      "root",
+      "Import record is not a root-aggregate payload (missing `root`). Re-pull the run with the current pipeline.",
+    );
+  }
+  const childrenRaw = raw["children"];
+  const children =
+    childrenRaw != null && typeof childrenRaw === "object"
+      ? (childrenRaw as RootAggregateRaw["children"])
+      : undefined;
+  return {
+    root: root as Record<string, unknown>,
+    children,
+    _sourceOwnerId:
+      typeof raw["_sourceOwnerId"] === "string"
+        ? (raw["_sourceOwnerId"] as string)
+        : null,
+  };
+}
+
+/**
+ * Project the persisted children to the five `D365Children` keys the root
+ * mapper consumes. Destructured (not passed through) so a legacy row that
+ * still carries the removed lead→opportunity graft key never reaches the
+ * mapper — grafted opportunities import via their own opportunity root
+ * run, not as a child of a lead.
+ */
+function toD365Children(
+  children: RootAggregateRaw["children"],
+): D365Children | undefined {
+  if (!children) return undefined;
+  const { task, phonecall, appointment, email, annotation } =
+    children as D365Children & { opportunity?: unknown };
+  return { task, phonecall, appointment, email, annotation };
+}
+
+/* -------------------------------------------------------------------------- *
  * Dispatcher *
  * -------------------------------------------------------------------------- */
 
+/**
+ * Run the ROOT mapper for the record's root type over the unwrapped
+ * root record, passing the nested children + a child-owner resolver so
+ * the mapper populates `result.attached` (the child graph). Only the
+ * four root types are valid here — pull-batch already rejects child
+ * types as a unit of work, but we re-narrow defensively so a malformed
+ * `sourceEntityType` becomes a typed failure rather than an unmapped
+ * branch.
+ */
 async function dispatchMap(
-  entityType: D365EntityType,
-  raw: Record<string, unknown>,
-  ctx: { resolvedOwnerId: string; resolvedUserId: string | null },
+  rootType: D365RootType,
+  root: Record<string, unknown>,
+  ctx: {
+    resolvedOwnerId: string;
+    resolvedUserId: string | null;
+    children: D365Children | undefined;
+    resolveChildOwnerId?: ChildOwnerResolver;
+  },
 ): Promise<MapResult<unknown>> {
-  const mapper = getMapperForEntity(entityType);
-  switch (entityType) {
+  switch (rootType) {
     case "lead":
-      return mapper(raw as unknown as D365Lead, {
+      return mapD365Lead(root as unknown as D365Lead, {
         resolvedOwnerId: ctx.resolvedOwnerId,
+        children: ctx.children,
+        resolveChildOwnerId: ctx.resolveChildOwnerId,
       }) as MapResult<unknown>;
     case "contact":
-      return mapper(raw as unknown as D365Contact, {
+      return mapD365Contact(root as unknown as D365Contact, {
         resolvedOwnerId: ctx.resolvedOwnerId,
         resolvedCreatedById: ctx.resolvedUserId,
         resolvedUpdatedById: ctx.resolvedUserId,
+        children: ctx.children,
+        resolveChildOwnerId: ctx.resolveChildOwnerId,
       }) as MapResult<unknown>;
     case "account":
-      return mapper(raw as unknown as D365Account, {
+      return mapD365Account(root as unknown as D365Account, {
         resolvedOwnerId: ctx.resolvedOwnerId,
+        children: ctx.children,
+        resolveChildOwnerId: ctx.resolveChildOwnerId,
       }) as MapResult<unknown>;
     case "opportunity":
-      return mapper(raw as unknown as D365Opportunity, {
+      return mapD365Opportunity(root as unknown as D365Opportunity, {
         resolvedOwnerId: ctx.resolvedOwnerId,
-      }) as MapResult<unknown>;
-    case "annotation":
-      return mapper(raw as unknown as D365Annotation, {
-        resolvedUserId: ctx.resolvedUserId,
-      }) as MapResult<unknown>;
-    case "task":
-      return mapper(raw as unknown as D365Task, {
-        resolvedAssignedToId: ctx.resolvedUserId,
-        resolvedCreatedById: ctx.resolvedUserId,
-      }) as MapResult<unknown>;
-    case "phonecall":
-      return mapper(raw as unknown as D365PhoneCall, {
-        resolvedUserId: ctx.resolvedUserId,
-      }) as MapResult<unknown>;
-    case "appointment":
-      return mapper(raw as unknown as D365Appointment, {
-        resolvedUserId: ctx.resolvedUserId,
-      }) as MapResult<unknown>;
-    case "email":
-      return mapper(raw as unknown as D365Email, {
-        resolvedUserId: ctx.resolvedUserId,
+        children: ctx.children,
+        resolveChildOwnerId: ctx.resolveChildOwnerId,
       }) as MapResult<unknown>;
     default: {
-      const _exhaustive: never = entityType;
+      const _exhaustive: never = rootType;
       void _exhaustive;
       // invariant: TypeScript exhaustive-check above guarantees this
-      // branch is unreachable. If we ever land here, a new entity
-      // type was added without registering a mapper in this dispatch.
-      throw new Error(`Unknown entity type in dispatchMap: ${entityType}`);
+      // branch is unreachable. If we ever land here, a new root type
+      // was added without registering a mapper in this dispatch.
+      throw new Error(`Unknown root type in dispatchMap: ${rootType}`);
     }
   }
 }
 
+/**
+ * Dedup the ROOT against existing local rows. Only root types are
+ * persisted as records now (children dedup at commit time via
+ * external_ids inside the root's transaction), so this only ever sees
+ * the four root types.
+ */
 async function dispatchDedup(
-  entityType: D365EntityType,
+  rootType: D365RootType,
   mapped: unknown,
   externalId: string,
 ): Promise<DedupResult> {
-  switch (entityType) {
+  switch (rootType) {
     case "lead":
       return dedupLead(mapped as Parameters<typeof dedupLead>[0], externalId);
     case "contact":
@@ -231,21 +307,75 @@ async function dispatchDedup(
         mapped as Parameters<typeof dedupOpportunity>[0],
         externalId,
       );
-    case "annotation":
-    case "task":
-    case "phonecall":
-    case "appointment":
-    case "email":
-      return dedupActivity(entityType, externalId);
     default: {
-      const _exhaustive: never = entityType;
+      const _exhaustive: never = rootType;
       void _exhaustive;
       // invariant: TypeScript exhaustive-check above guarantees this
-      // branch is unreachable. If we ever land here, a new entity
-      // type was added without a dedup helper in this dispatch.
-      throw new Error(`Unknown entity type in dispatchDedup: ${entityType}`);
+      // branch is unreachable. If we ever land here, a new root type
+      // was added without a dedup helper in this dispatch.
+      throw new Error(`Unknown root type in dispatchDedup: ${rootType}`);
     }
   }
+}
+
+/* -------------------------------------------------------------------------- *
+ * Child-owner pre-resolution *
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Owner resolution (`resolveD365Owner`) is async (it may JIT-provision a
+ * user via Graph), but `mapAttachedChildren` needs a SYNC resolver. So
+ * we pre-resolve every distinct child-owner email in the root's child
+ * graph up front, cache it in a Map, and hand the mapper a sync closure
+ * that reads the Map. A child whose owner can't be resolved (or carries
+ * no enriched email) falls back to the root's resolved owner inside
+ * `mapAttachedChildren`.
+ */
+async function buildChildOwnerResolver(
+  children: D365Children | undefined,
+  actorId: string,
+): Promise<ChildOwnerResolver | undefined> {
+  if (!children) return undefined;
+
+  // Collect distinct enriched owner emails across every child array.
+  const emails = new Set<string>();
+  for (const arr of [
+    children.task,
+    children.phonecall,
+    children.appointment,
+    children.email,
+    children.annotation,
+  ]) {
+    for (const child of arr ?? []) {
+      const email = getOwnerEmailFromRaw(child as Record<string, unknown>);
+      if (typeof email === "string" && email.length > 0) {
+        emails.add(email);
+      }
+    }
+  }
+  if (emails.size === 0) return undefined;
+
+  // Resolve each distinct email once (resolveD365Owner is itself cached
+  // per lambda instance, so repeated runs share the lookups).
+  const emailToUserId = new Map<string, string | null>();
+  for (const email of emails) {
+    const resolved = await resolveD365Owner(email, actorId);
+    // A default-owner fallback means the child's true owner was
+    // unresolvable; record null so the sync closure returns null and
+    // mapAttachedChildren rides the child on the ROOT's owner instead
+    // of attributing it to the default owner (the root's owner is the
+    // better local proxy for an in-graph child).
+    emailToUserId.set(
+      email,
+      resolved.source === "default_owner" ? null : resolved.userId,
+    );
+  }
+
+  return (childRaw: Record<string, unknown>): string | null => {
+    const email = getOwnerEmailFromRaw(childRaw);
+    if (typeof email !== "string" || email.length === 0) return null;
+    return emailToUserId.get(email) ?? null;
+  };
 }
 
 /* -------------------------------------------------------------------------- *
@@ -323,16 +453,39 @@ export async function mapBatch(
     let errorText: string | null = null;
 
     try {
-      // Resolve owner. Activities ride on resolvedUserId; entity
-      // mappers consume resolvedOwnerId. Both come from the same
-      // mwg-crm user — passing different keys keeps the mapper
-      // signature intent clear.
-      const ownerEmail = getOwnerEmailFromRaw(raw);
+      // ROOT-AGGREGATE: every persisted record is one ROOT (lead /
+      // contact / account / opportunity) carrying its child graph under
+      // `rawPayload.children`. Children are NEVER persisted standalone,
+      // so a non-root sourceEntityType is a malformed record — reject it
+      // as a typed validation failure (the catch flips it to 'failed').
+      if (!isD365RootType(entityType)) {
+        throw new ValidationError(
+          `Import record has a non-root sourceEntityType '${entityType}'; only lead/contact/account/opportunity roots are mapped.`,
+        );
+      }
+      const rootType = entityType;
+      const { root, children: rawChildren } = unwrapRootAggregate(raw);
+      const children = toD365Children(rawChildren);
+
+      // Resolve the ROOT owner (off the enriched `rawPayload.root`). The
+      // root mapper consumes `resolvedOwnerId`; the same user backs
+      // `resolvedCreatedById`/`resolvedUpdatedById` on the contact path.
+      const ownerEmail = getOwnerEmailFromRaw(root);
       const owner = await resolveD365Owner(ownerEmail, actorId);
 
-      const result = await dispatchMap(entityType, raw, {
+      // Pre-resolve each distinct child owner (async) into a Map and
+      // hand the mapper a sync closure — `mapAttachedChildren` needs a
+      // sync resolver but owner resolution may JIT via Graph.
+      const resolveChildOwnerId = await buildChildOwnerResolver(
+        children,
+        actorId,
+      );
+
+      const result = await dispatchMap(rootType, root, {
         resolvedOwnerId: owner.userId,
         resolvedUserId: owner.userId,
+        children,
+        resolveChildOwnerId,
       });
       warnings = result.warnings;
       // Emit an aggregated, low-severity marker when the D365 owner
@@ -359,7 +512,7 @@ export async function mapBatch(
       };
 
       dedup = await dispatchDedup(
-        entityType,
+        rootType,
         result.mapped,
         rec.sourceId,
       );
@@ -382,15 +535,23 @@ export async function mapBatch(
       // Default-owner fallback is an expected, resolvable condition
       // (not a data problem), so it is excluded from the per-record
       // `review` escalation — it is handled at the batch level by the
-      // owner-JIT-failure halt instead. A record carrying ONLY that
-      // marker still maps cleanly and stays `mapped`.
+      // owner-JIT-failure halt instead. CHILD-origin warnings are also
+      // excluded: a bad child (unmapped picklist on a call, an
+      // "Untitled task" default) must never force its ROOT to manual
+      // review — children.ts's contract is "a bad child must not sink the
+      // root graph". Child warnings are still persisted (below) so the
+      // reviewer sees them non-fatally. A record carrying ONLY excluded
+      // markers still maps cleanly and stays `mapped`.
       const reviewWorthyWarnings = warnings.filter(
-        (w) => w.code !== "owner_default_owner_used",
+        (w) => w.code !== "owner_default_owner_used" && !isChildWarning(w.field),
       );
       if (reviewWorthyWarnings.length > 0) {
         nextStatus = "review";
       }
-      warningCount += warnings.length;
+      // Count ROOT-scoped warnings only (the returned tally feeds the
+      // run summary; child warnings are non-fatal and excluded so they
+      // don't inflate it).
+      warningCount += warnings.filter((w) => !isChildWarning(w.field)).length;
 
       // bad-lead quality auto-skip. The lead mapper writes
       // `_qualityVerdict` + `_qualityReasons` virtuals onto the mapped
@@ -434,10 +595,14 @@ export async function mapBatch(
       // Skip the gate for records that already auto-skipped on quality —
       // bad-quality records frequently carry weird picklist values that
       // shouldn't drive a system-wide halt. The picklist halt must only
-      // fire on records we'd otherwise commit.
+      // fire on records we'd otherwise commit. CHILD-origin unmapped
+      // picklists (e.g. an activity prioritycode/statecode) are excluded:
+      // a bad child must not halt the whole run (children.ts's contract).
+      const rootUnmappedPicklists = warnings.filter(
+        (w) => w.code === "unmapped_picklist" && !isChildWarning(w.field),
+      );
       const hasUnmappedPicklist =
-        nextStatus !== "skipped" &&
-        warnings.some((w) => w.code === "unmapped_picklist");
+        nextStatus !== "skipped" && rootUnmappedPicklists.length > 0;
       if (hasUnmappedPicklist) {
         await haltRun({
           runId,
@@ -446,9 +611,7 @@ export async function mapBatch(
           detail: {
             recordId: rec.id,
             entityType,
-            unmappedFields: warnings
-              .filter((w) => w.code === "unmapped_picklist")
-              .map((w) => w.field),
+            unmappedFields: rootUnmappedPicklists.map((w) => w.field),
           },
         });
         halted = true;

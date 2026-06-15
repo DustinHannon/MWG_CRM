@@ -5,7 +5,6 @@ import type { leads } from "@/db/schema/leads";
 import type { D365Lead } from "../types";
 import { assessLeadQuality } from "../quality";
 import {
-  type AttachedActivity,
   type MapResult,
   type ValidationWarning,
   extractCustomFields,
@@ -15,6 +14,11 @@ import {
   picklistMapper,
   softValidate,
 } from "./parsers";
+import {
+  mapAttachedChildren,
+  type ChildOwnerResolver,
+  type D365Children,
+} from "./children";
 
 /**
  * D365 `lead` → mwg-crm `leads` insert payload.
@@ -39,6 +43,19 @@ export interface LeadMapContext {
    * network.
    */
   resolvedOwnerId: string;
+  /**
+   * Nested raw child arrays (task / phonecall / appointment / email /
+   * annotation) grouped under `rawPayload.children` by `pull-batch`.
+   * The lead mapper runs each child mapper over these and returns them
+   * in `result.attached`. Absent for a childless root.
+   */
+  children?: D365Children;
+  /**
+   * Optional resolver mapping a child's enriched owner email to a local
+   * `users.id`. When omitted (or null) children ride on
+   * `resolvedOwnerId`.
+   */
+  resolveChildOwnerId?: ChildOwnerResolver;
 }
 
 /* -------------------------------------------------------------------------- *
@@ -464,12 +481,18 @@ export function mapD365Lead(
   (mapped as Record<string, unknown>)._qualityVerdict = quality.verdict;
   (mapped as Record<string, unknown>)._qualityReasons = quality.reasons;
 
-  // Attached activities are populated by the orchestrator from
-  // $expand'd children; the lead mapper itself returns an empty
-  // array — child mappers (annotation, task, phonecall, appointment,
-  // email) produce their own AttachedActivity entries that are
-  // stitched in later by `mapBatch`.
-  const attached: AttachedActivity[] = [];
+  // Aggregate the nested child graph (task / phonecall / appointment /
+  // email / annotation) into `attached`. The ROOT — this lead — drives
+  // each child's parent type/source via parentContext, so commit-batch
+  // links them to this lead's in-memory UUID. Child-level mapping
+  // failures degrade to warnings (mapAttachedChildren isolates them).
+  const { attached, warnings: childWarnings } = mapAttachedChildren({
+    children: ctx.children,
+    parentContext: { parentEntityType: "lead", parentSourceId: raw.leadid },
+    fallbackUserId: ctx.resolvedOwnerId,
+    resolveChildOwnerId: ctx.resolveChildOwnerId,
+  });
+  warnings.push(...childWarnings);
 
   return { mapped, attached, customFields, warnings };
 }

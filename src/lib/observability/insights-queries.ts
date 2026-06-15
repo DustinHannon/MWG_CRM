@@ -545,17 +545,28 @@ export async function getErrorRateIssues(): Promise<IssueEntry[]> {
       sum(total)  AS total,
       sum(errors) AS errors
     FROM (
+      -- Hot and cold tiers are made DISJOINT at the now-30m boundary
+      -- (hot owns >= now-30m, cold owns < now-30m), matching the other
+      -- panels' UNION convention. Previously the hot tier had no lower
+      -- bound (dt >= now-7d) while the cold tier emitted a CONSTANT
+      -- 'baseline_7d' bucket, so the overlap window [now-7d, now-30m] was
+      -- summed into baseline_7d TWICE (once from hot, once from cold) —
+      -- inflating baseTotal/baseErrors and skewing the baseRate*10/*3
+      -- alert thresholds. Bounding hot at now-30m and giving cold the
+      -- same now-1h if(...) split makes the tiers disjoint: each row is
+      -- classified once, last_hour = [now-1h, now] and baseline_7d =
+      -- [now-7d, now-1h] are each counted exactly once.
       SELECT
         if(dt >= now() - INTERVAL 1 HOUR, 'last_hour', 'baseline_7d') AS bucket,
         count(*) AS total,
         countIf(${STATUS} >= 500) AS errors
       FROM remote(${HOT})
-      WHERE dt >= now() - INTERVAL 7 DAY
+      WHERE dt >= now() - INTERVAL 30 MINUTE
         AND ${PROXY_ROWS}
       GROUP BY bucket
       UNION ALL
       SELECT
-        'baseline_7d' AS bucket,
+        if(dt >= now() - INTERVAL 1 HOUR, 'last_hour', 'baseline_7d') AS bucket,
         count(*) AS total,
         countIf(${STATUS} >= 500) AS errors
       FROM s3Cluster(primary, ${COLD})

@@ -251,9 +251,16 @@ export async function sendCampaign(
   }));
 
   const totalAttempted = candidateRows.length;
+  // Count actually filtered out by suppression / do-not-email /
+  // soft-delete at SEND time: the resolver's pre-filter member count
+  // minus the post-filter candidate set it returned. The prior form
+  // diffed the schedule-time `member_count` snapshot
+  // (`campaign.totalRecipients`) against the fresh post-suppression
+  // count, which under-reported whenever list membership changed between
+  // schedule and send.
   const totalFiltered = Math.max(
     0,
-    campaign.totalRecipients - totalAttempted,
+    resolved.totalBeforeFilter - totalAttempted,
   );
 
   // F-Ω-1 (continued): the SEND_STARTED audit + totalAttempted===0
@@ -1011,6 +1018,15 @@ function coerceSnapshotMergeData(
  * accepted the API call. Best-effort: log + continue on failure —
  * the webhook reconciliation still updates delivery state via
  * custom_args.recipient_id.
+ *
+ * Gated on `status = 'queued'`: only rows that haven't already been
+ * advanced are moved to `sent`. A `delivered`/`deferred` webhook can
+ * land between the API accept and this UPDATE (the same send-time race
+ * the webhook now tolerates via `IN ('sent','queued')`); without this
+ * guard, the unconditional set would clobber such a row's `delivered`
+ * status back to `sent` and let a later deduped retry double-count. The
+ * loop only ever passes ids it filtered to `queued` at batch start, so
+ * the guard never drops a legitimately-pending row.
  */
 async function markRecipientsSent(recipientIds: string[]): Promise<void> {
   if (recipientIds.length === 0) return;
@@ -1018,7 +1034,12 @@ async function markRecipientsSent(recipientIds: string[]): Promise<void> {
     await db
       .update(campaignRecipients)
       .set({ status: "sent", sentAt: new Date() })
-      .where(inArray(campaignRecipients.id, recipientIds));
+      .where(
+        and(
+          inArray(campaignRecipients.id, recipientIds),
+          eq(campaignRecipients.status, "queued"),
+        ),
+      );
   } catch (err) {
     logger.error("marketing.send.mark_sent_failed", {
       recipientCount: recipientIds.length,

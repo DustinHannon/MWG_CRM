@@ -929,7 +929,18 @@ export async function updateTask(
     const rows = await tx
       .update(tasks)
       .set(set)
-      .where(and(eq(tasks.id, id), eq(tasks.version, expectedVersion)))
+      // is_deleted=false guard: an edit against a row archived after the
+      // caller's access gate read affects 0 rows and surfaces a typed
+      // conflict/not-found via expectAffected, instead of silently
+      // mutating (and resurrecting on restore) the archived row. This
+      // is the invariant restoreOpportunitiesById/restoreTasksById rely on.
+      .where(
+        and(
+          eq(tasks.id, id),
+          eq(tasks.version, expectedVersion),
+          eq(tasks.isDeleted, false),
+        ),
+      )
       .returning({ id: tasks.id, version: tasks.version });
     return { beforeRows, rows };
   });
@@ -979,6 +990,11 @@ export async function archiveTasksById(
       // actor stamping for skip-self in Supabase Realtime.
       updatedById: actorId,
       updatedAt: sql`now()`,
+      // OCC bump on archive mirrors restore + update + bulkDeleteTasks;
+      // without it a client holding the pre-archive version still
+      // satisfies updateTask's version predicate and a stale-version
+      // edit could land on the archived row.
+      version: sql`${tasks.version} + 1`,
     })
     .where(inArray(tasks.id, ids));
 }

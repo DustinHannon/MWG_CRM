@@ -92,6 +92,15 @@ export const D365_HALT_REASONS = {
    * silent-skip locks in.
    */
   BAD_LEAD_VOLUME: "bad_lead_volume",
+  /**
+   * A root's child collection (task/phonecall/appointment/email/
+   * annotation, or the lead→opportunity graft) exceeded the per-batch
+   * hard cap and could not be fully drained during the pull. Detected
+   * at fetch-time in `pull-batch.ts` — refusing to persist a root graph
+   * missing call history. Resolves via `retry` (narrow the scope or
+   * raise the cap, then re-pull the page).
+   */
+  CHILD_COLLECTION_TRUNCATED: "child_collection_truncated",
 } as const;
 
 export type D365HaltReason =

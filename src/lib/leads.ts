@@ -534,6 +534,18 @@ export interface CascadeArchiveResult {
 }
 
 /**
+ * Single-lead archive result. `flipped` reports whether the parent row's
+ * `isDeleted` actually transitioned false→true on THIS call (the UPDATE
+ * filters `isDeleted=false`, so a concurrent double-submit only flips the
+ * row once). The interactive caller short-circuits its audit / notification
+ * / activity / undo side effects when `flipped` is false so a losing
+ * double-submit doesn't emit a duplicate forensic row.
+ */
+export interface LeadArchiveResult extends CascadeArchiveResult {
+  flipped: boolean;
+}
+
+/**
  * Cascade-archive a batch of leads and their dependent children.
  *
  * `string[]` signature: every caller archives by id without a client
@@ -560,10 +572,12 @@ export async function archiveLeadsById(
   ids: string[],
   actorId: string,
   reason?: string,
-): Promise<CascadeArchiveResult> {
-  if (ids.length === 0) return { cascadedTasks: 0, cascadedActivities: 0 };
+): Promise<LeadArchiveResult> {
+  if (ids.length === 0) {
+    return { flipped: false, cascadedTasks: 0, cascadedActivities: 0 };
+  }
   return db.transaction(async (tx) => {
-    await tx
+    const flippedRows = await tx
       .update(leads)
       .set({
         isDeleted: true,
@@ -574,8 +588,16 @@ export async function archiveLeadsById(
         updatedById: actorId,
         updatedAt: sql`now()`,
       })
-      .where(inArray(leads.id, ids));
-    return cascadeArchiveLeadChildren(tx, ids, actorId);
+      // Guard isDeleted=false so a re-archive is a no-op on the parent
+      // row rather than clobbering the original soft-delete attribution
+      // (parity with archiveContactsById and the accounts path).
+      // `.returning()` reports which rows actually transitioned so a
+      // concurrent double-submit (both reads pass, only one UPDATE flips)
+      // can short-circuit its duplicate audit / notification side effects.
+      .where(and(inArray(leads.id, ids), eq(leads.isDeleted, false)))
+      .returning({ id: leads.id });
+    const cascade = await cascadeArchiveLeadChildren(tx, ids, actorId);
+    return { flipped: flippedRows.length > 0, ...cascade };
   });
 }
 

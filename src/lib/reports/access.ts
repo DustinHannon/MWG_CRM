@@ -336,6 +336,22 @@ function buildFilterClauses(
     const isDate = kind === "date";
     const isNumber = isNumericKind(kind);
     const isTyped = isDate || isNumber;
+    // Range operators only have a meaningful ordering on typed (date /
+    // numeric) columns. On a string/text/enum/uuid column the comparison
+    // would be a lexicographic `col::text >= $N`, which the builder UI
+    // never offers (opsForField restricts gte/lte/gt/lt to number/date).
+    // Reject them on the API path too so a hand-crafted or duplicated
+    // report definition can't persist a silently-wrong filter like
+    // `{status: {gte: "m"}}`.
+    if (!isTyped) {
+      for (const rangeOp of ["gte", "lte", "gt", "lt"] as const) {
+        if (rangeOp in op && op[rangeOp] !== undefined) {
+          throw new ValidationError(
+            `Operator "${rangeOp}" is not supported on the "${field}" field; use it only on number or date fields.`,
+          );
+        }
+      }
+    }
     // LHS expression: bare column for typed comparisons, ::text cast for
     // text/enum so the param string lines up with the column.
     const colExpr = isTyped ? quote(field) : `${quote(field)}::text`;
@@ -534,7 +550,14 @@ async function runAggregateQuery(
       (c) => isValidField(entityType, c) && !isVirtualField(entityType, c),
     )
     .map(escapeIdent);
-  if (safeGroups.length === 0) {
+  // A definition with metrics but no group-by is a valid "overall
+  // aggregate" (e.g. total count / sum over the whole entity). Run it as
+  // a single-row aggregate rather than returning an empty grid. Only the
+  // case where the caller asked to group BUT every requested column was
+  // invalid/virtual (groupBy non-empty, safeGroups empty) stays an empty
+  // result — the user grouped on a column the report can't group on.
+  const noGroupAggregate = groupBy.length === 0 && metrics.length > 0;
+  if (safeGroups.length === 0 && !noGroupAggregate) {
     return { rows: [], totalCount: 0, columns: [] };
   }
   const meta = REPORT_ENTITIES[entityType];
@@ -591,8 +614,16 @@ async function runAggregateQuery(
     aliasOut.push("count");
   }
 
-  const select = `${groupCols}, ${metricSelects.join(", ")}`;
-  const sqlText = `SELECT ${select} FROM ${quote(meta.table)}${whereSql} GROUP BY ${groupCols} ORDER BY ${groupCols} LIMIT ${Number(limit) | 0}`;
+  // No group-by: emit a single overall-aggregate row (no GROUP BY /
+  // ORDER BY). With group-by: the grouped columns lead the SELECT and
+  // drive both GROUP BY and ORDER BY.
+  const select =
+    safeGroups.length > 0
+      ? `${groupCols}, ${metricSelects.join(", ")}`
+      : metricSelects.join(", ");
+  const groupOrderSql =
+    safeGroups.length > 0 ? ` GROUP BY ${groupCols} ORDER BY ${groupCols}` : "";
+  const sqlText = `SELECT ${select} FROM ${quote(meta.table)}${whereSql}${groupOrderSql} LIMIT ${Number(limit) | 0}`;
 
   const rows = (await sqlClient.unsafe(sqlText, params as never[])) as Record<
     string,

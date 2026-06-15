@@ -12,12 +12,28 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { requireAdmin } from "@/lib/auth-helpers";
 import {
   BatchReviewPane,
+  type BatchChildKind,
   type BatchChildView,
   type BatchRecordView,
   type ConflictResolution,
   type RecordStatus,
   type ValidationWarning,
 } from "@/components/admin/d365-import/batch-review-pane";
+
+const CHILD_KINDS: readonly BatchChildKind[] = [
+  "note",
+  "call",
+  "meeting",
+  "email",
+  "task",
+];
+
+function toChildKind(value: unknown): BatchChildKind | undefined {
+  return typeof value === "string" &&
+    (CHILD_KINDS as readonly string[]).includes(value)
+    ? (value as BatchChildKind)
+    : undefined;
+}
 import { BatchStatusPill, RunStatusPill } from "../../_components/run-status-pill";
 
 export const dynamic = "force-dynamic";
@@ -135,6 +151,7 @@ export default async function BatchReviewPage({ params }: PageProps) {
             ? (a.body as string).slice(0, 80)
             : "(no summary)",
       status: "mapped",
+      kind: toChildKind(a.kind),
     }));
 
     return {

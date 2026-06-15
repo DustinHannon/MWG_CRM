@@ -142,7 +142,7 @@ export async function GET(req: Request): Promise<Response> {
     //    recovery by one cron cadence (60s), it doesn't lose work.
     try {
       const swept = await sweepStaleClaims();
-      summary.staleClaimsSwept = typeof swept === "number" ? swept : 0;
+      summary.staleClaimsSwept = swept.resurfaced;
     } catch (err) {
       logger.error("jobs.worker.sweep_failed", {
         workerId,
@@ -321,8 +321,17 @@ async function dispatchWithTimeout(
     }, HANDLER_TIMEOUT_MS);
   });
 
+  // Soft timeout: the handler promise keeps running if the timer wins the
+  // race (see the HANDLER_TIMEOUT_MS comment above). Attach a no-op
+  // rejection handler so an abandoned handler that rejects *after* the
+  // timeout can't surface as an unhandled promise rejection (which under
+  // Node's default --unhandled-rejections=throw would crash the worker
+  // lambda mid-run and strand in-flight rows in `processing`).
+  const work = dispatchJob(job.kind, job.payload, context);
+  work.catch(() => {});
+
   try {
-    await Promise.race([dispatchJob(job.kind, job.payload, context), timeout]);
+    await Promise.race([work, timeout]);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }

@@ -7,7 +7,12 @@ import { db } from "@/db";
 import { opportunities } from "@/db/schema/crm-records";
 import { recentViews } from "@/db/schema/recent-views";
 import { requireSession } from "@/lib/auth-helpers";
-import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "@/lib/errors";
 import { writeAudit, writeAuditBatch } from "@/lib/audit";
 import {
   emitActivity,
@@ -68,6 +73,14 @@ export async function softDeleteOpportunityAction(input: {
       }
 
       const cascade = await archiveOpportunitiesById([id], user.id, reason);
+      // Concurrent double-submit (or a stale detail page): the lib UPDATE
+      // (filtered isDeleted=false) flips the parent row only once. When it
+      // flipped nothing this caller archived nothing — short-circuit before
+      // the audit / notification / activity / undo side effects so it doesn't
+      // emit a duplicate forensic row or clobber the original attribution.
+      if (!cascade.flipped) {
+        throw new ConflictError("This opportunity is already archived.");
+      }
       await writeAudit({
         actorId: user.id,
         action: "opportunity.archive",

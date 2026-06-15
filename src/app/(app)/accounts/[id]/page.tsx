@@ -9,7 +9,7 @@ import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
 import { RowRealtime } from "@/components/realtime/row-realtime";
 import { GlassCard } from "@/components/ui/glass-card";
-import { UserTime } from "@/components/ui/user-time";
+import { getCurrentUserTimePrefs, UserTime } from "@/components/ui/user-time";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
@@ -29,6 +29,7 @@ export default async function AccountDetailPage({
   const session = await requireSession();
   const perms = await getPermissions(session.id);
   const canViewAll = session.isAdmin || perms.canViewAllRecords;
+  const prefs = await getCurrentUserTimePrefs();
   const { id } = await params;
 
   const [account] = await db
@@ -288,6 +289,7 @@ export default async function AccountDetailPage({
                 entityId={account.id}
                 tasks={await listTasksForAccount(account.id)}
                 currentUserId={session.id}
+                timezone={prefs.timezone}
                 viewerCanEditOthers={
                   session.isAdmin || perms.canEditOthersTasks
                 }

@@ -179,11 +179,32 @@ export async function sendEmailAs(opts: SendOptions): Promise<SendResult> {
     saveToSentItems: true,
   };
 
-  const result = await graphAppRequest(
-    "POST",
-    `/users/${fromUser.entraOid}/sendMail`,
-    message,
-  );
+  // graphAppRequest returns a result envelope for HTTP/network/timeout
+  // failures, but re-throws a non-EmailNotConfiguredError token-acquisition
+  // error (e.g. an MSAL ClientAuthError from an invalid/expired client
+  // secret — graph-app-token.ts re-throws at the exhausted path). An
+  // uncaught throw here would leave the just-inserted `sending` rows
+  // orphaned forever (the UPDATE-to-failed + writeAudit below never run)
+  // and no cron recovers stuck email_send_log rows. Convert the throw into
+  // the same failed-result envelope so those rows are marked `failed`,
+  // audited, and logged like any other send failure.
+  let result: Awaited<ReturnType<typeof graphAppRequest>>;
+  try {
+    result = await graphAppRequest(
+      "POST",
+      `/users/${fromUser.entraOid}/sendMail`,
+      message,
+    );
+  } catch (err) {
+    result = {
+      ok: false,
+      status: 0,
+      error: {
+        code: "TOKEN_ACQUISITION_FAILED",
+        message: err instanceof Error ? err.message : String(err),
+      },
+    };
+  }
   const durationMs = Date.now() - start;
 
   const finalStatus = result.ok ? "sent" : "failed";

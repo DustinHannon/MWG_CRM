@@ -79,10 +79,13 @@ export interface ValidationWarning {
 }
 
 /**
- * Common return shape for every mapper. `attached` carries child
- * activities ($expand'd notes / tasks / phonecalls / appointments /
- * emails) for parent-entity mappers; sibling mappers (note, task,
- * etc.) leave `attached` empty.
+ * Common return shape for every mapper. `attached` carries the child
+ * activities (notes / tasks / phonecalls / appointments / emails)
+ * stitched to their root by `pull-batch` and grouped under
+ * `rawPayload.children`. ROOT mappers (lead / contact / account /
+ * opportunity) run each child mapper over those nested arrays and
+ * populate `attached`; the standalone CHILD mappers themselves return
+ * the single-element `attached` the ROOT mapper collects.
  */
 export interface MapResult<TMapped> {
   mapped: TMapped;
@@ -92,21 +95,77 @@ export interface MapResult<TMapped> {
 }
 
 /**
+ * mwg-crm activity-kind discriminator on an attached child. `task`
+ * routes the payload into the `tasks` table at commit; every other
+ * kind routes into `activities` with the matching `activities.kind`.
+ */
+export type AttachedActivityKind =
+  | "note"
+  | "call"
+  | "meeting"
+  | "email"
+  | "task";
+
+/**
+ * D365 source entity-type for an attached child — used for
+ * `external_ids` linkage (source='d365', sourceEntityType, sourceId)
+ * and dedup. Distinct from {@link AttachedActivityKind}: a D365
+ * `phonecall` becomes a `call` activity, an `annotation` becomes a
+ * `note`, a `task` stays a `task`.
+ */
+export type AttachedSourceEntityType =
+  | "task"
+  | "phonecall"
+  | "appointment"
+  | "email"
+  | "annotation";
+
+/**
  * Attached activity payload — pre-mapped by the relevant child
- * mapper. The orchestrator inserts them after the parent record
- * commits and back-fills the parent FK at insert time.
+ * mapper. The commit phase inserts each child inside the root's
+ * transaction with the parent FK (leadId / accountId / contactId /
+ * opportunityId) set to the root's freshly-inserted local UUID; no
+ * `external_ids` lookup, so the FK can never miss.
+ *
+ * `payload` carries two `_`-prefixed virtuals describing the ROOT the
+ * child travels with:
+ *  - `_parentEntityType` — the ROOT type (`lead`|`contact`|`account`|
+ *    `opportunity`), driven by the root the child was stitched under,
+ *    NOT by the polymorphic `lookuplogicalname` annotation.
+ *  - `_parentSourceId` — the ROOT's D365 GUID.
+ * commit-batch strips both virtuals before the Drizzle insert.
  */
 export interface AttachedActivity {
   /** Activity kind in mwg-crm (`note` | `call` | `meeting` | `email` | `task`). */
-  kind: "note" | "call" | "meeting" | "email" | "task" | "phonecall";
+  kind: AttachedActivityKind;
   /** D365 source primary key (for dedup + external_ids linkage). */
   sourceId: string;
   /** Source entity-type string (`annotation` | `task` | ...). */
-  sourceEntityType: string;
+  sourceEntityType: AttachedSourceEntityType;
   /** Mapped insert payload — shape depends on the child kind. */
   payload: Record<string, unknown>;
   warnings: ValidationWarning[];
   customFields: Record<string, unknown>;
+}
+
+/**
+ * ROOT entity types. CHILD types (task / phonecall / appointment /
+ * email / annotation) are NEVER imported standalone — they always
+ * travel with one of these roots.
+ */
+export type D365RootEntityType = "lead" | "contact" | "account" | "opportunity";
+
+/**
+ * Explicit parent context every CHILD mapper receives so the ROOT —
+ * not the polymorphic `_regardingobjectid_value@…lookuplogicalname`
+ * annotation — drives the parent-entity type. `pull-batch` stitched
+ * the child under a known root type, so this is authoritative.
+ */
+export interface ChildParentContext {
+  /** The ROOT entity type the child was stitched under. */
+  parentEntityType: D365RootEntityType;
+  /** The ROOT's D365 GUID (carried through as `_parentSourceId`). */
+  parentSourceId: string;
 }
 
 /* -------------------------------------------------------------------------- *

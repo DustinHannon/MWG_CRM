@@ -2,12 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { crmAccounts } from "@/db/schema/crm-records";
 import { recentViews } from "@/db/schema/recent-views";
 import { requireSession } from "@/lib/auth-helpers";
-import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "@/lib/errors";
 import {
   optionalCountField,
   optionalEmailField,
@@ -60,11 +65,24 @@ export async function softDeleteAccountAction(input: {
       }
 
       const [row] = await db
-        .select({ id: crmAccounts.id, ownerId: crmAccounts.ownerId, name: crmAccounts.name })
+        .select({
+          id: crmAccounts.id,
+          ownerId: crmAccounts.ownerId,
+          name: crmAccounts.name,
+          isDeleted: crmAccounts.isDeleted,
+        })
         .from(crmAccounts)
         .where(eq(crmAccounts.id, id))
         .limit(1);
       if (!row) throw new ForbiddenError("Account not found.");
+      // Reject re-archiving an already-archived account (double submit,
+      // stale detail page). The lib UPDATE filters isDeleted=false so a
+      // second call would otherwise overwrite the original soft-delete
+      // attribution (who/when/why) and emit a duplicate audit row + owner
+      // notification. Guard here, before any mutation or side effect.
+      if (row.isDeleted) {
+        throw new ConflictError("This account is already archived.");
+      }
       if (!canDeleteAccount(user, row)) {
         await writeAudit({
           actorId: user.id,
@@ -76,6 +94,16 @@ export async function softDeleteAccountAction(input: {
       }
 
       const cascade = await archiveAccountsById([id], user.id, reason);
+      // Concurrent double-submit: the read-check above passed for both
+      // callers, but the lib UPDATE (filtered isDeleted=false) flips the
+      // row only once. The loser flipped nothing — short-circuit before
+      // the audit / notification / activity / undo side effects so it
+      // doesn't emit a duplicate forensic row against a row it didn't
+      // change. Surface the same already-archived conflict the read-check
+      // raises so the UX is identical to losing the read race.
+      if (!cascade.flipped) {
+        throw new ConflictError("This account is already archived.");
+      }
       await writeAudit({
         actorId: user.id,
         action: "account.archive",
@@ -416,37 +444,60 @@ export async function updateAccountAction(
         );
       }
 
-      // Cycle prevention for parent_account_id. DB CHECK already
-      // blocks A→A self-parenting; this guards the multi-hop case.
-      if (parsed.parentAccountId) {
-        const { assertNoParentCycle } = await import("@/lib/accounts");
-        await assertNoParentCycle(parsed.id, parsed.parentAccountId);
-      }
+      const patch = {
+        name: parsed.name,
+        industry: parsed.industry ?? null,
+        website: parsed.website ?? null,
+        phone: parsed.phone ?? null,
+        email: parsed.email,
+        accountNumber: parsed.accountNumber ?? null,
+        numberOfEmployees: parsed.numberOfEmployees,
+        annualRevenue: parsed.annualRevenue,
+        street1: parsed.street1 ?? null,
+        street2: parsed.street2 ?? null,
+        city: parsed.city ?? null,
+        state: parsed.state ?? null,
+        postalCode: parsed.postalCode ?? null,
+        country: parsed.country ?? null,
+        description: parsed.description ?? null,
+        parentAccountId: parsed.parentAccountId,
+        primaryContactId: parsed.primaryContactId,
+      };
 
-      await updateAccountForApi(
-        parsed.id,
-        {
-          name: parsed.name,
-          industry: parsed.industry ?? null,
-          website: parsed.website ?? null,
-          phone: parsed.phone ?? null,
-          email: parsed.email,
-          accountNumber: parsed.accountNumber ?? null,
-          numberOfEmployees: parsed.numberOfEmployees,
-          annualRevenue: parsed.annualRevenue,
-          street1: parsed.street1 ?? null,
-          street2: parsed.street2 ?? null,
-          city: parsed.city ?? null,
-          state: parsed.state ?? null,
-          postalCode: parsed.postalCode ?? null,
-          country: parsed.country ?? null,
-          description: parsed.description ?? null,
-          parentAccountId: parsed.parentAccountId,
-          primaryContactId: parsed.primaryContactId,
-        },
-        parsed.version,
-        user.id,
-      );
+      // Capture the persisted post-update row directly from the UPDATE's
+      // `.returning()` so before/after are the same full-column snapshot
+      // (bumped version, updatedAt/updatedById, server-set columns) AND
+      // are atomic with the mutation — a separate post-commit re-SELECT
+      // could be clobbered by a concurrent writer before it ran, drifting
+      // the recorded `after`. Recording the raw parsed FormData as `after`
+      // produced an asymmetric diff missing derived/unchanged columns.
+      let updated: typeof crmAccounts.$inferSelect;
+      if (parsed.parentAccountId) {
+        // Cycle prevention for parent_account_id. The DB CHECK already
+        // blocks A→A self-parenting; this guards the multi-hop case.
+        // Run the cycle walk and the UPDATE in ONE transaction so the
+        // check and the write share a snapshot, and serialize concurrent
+        // re-parents with a txn-scoped advisory lock so two updates in
+        // the same hierarchy (A→B while B→A) can't each pass the check
+        // against pre-change state and then both commit a cycle. The
+        // lock is deadlock-free (single key) and auto-releases at commit
+        // (STANDARDS §9.2/§19.8.2 — Supavisor-safe xact-scoped lock).
+        const { assertNoParentCycle } = await import("@/lib/accounts");
+        updated = await db.transaction(async (tx) => {
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(hashtext(${"account-reparent"}))`,
+          );
+          await assertNoParentCycle(parsed.id, parsed.parentAccountId, tx);
+          return updateAccountForApi(parsed.id, patch, parsed.version, user.id, tx);
+        });
+      } else {
+        updated = await updateAccountForApi(
+          parsed.id,
+          patch,
+          parsed.version,
+          user.id,
+        );
+      }
 
       await writeAudit({
         actorId: user.id,
@@ -454,7 +505,7 @@ export async function updateAccountAction(
         targetType: "account",
         targetId: parsed.id,
         before: existing as object,
-        after: parsed as object,
+        after: updated as object,
       });
 
       await emitActivity({

@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
+import {
+  DEFAULT_TIME_PREFS,
+  formatUserTime,
+  type TimePrefs,
+} from "@/lib/format-time";
 
 /**
  * uniform dense mobile list for the five archived views
@@ -11,7 +16,7 @@ import { Avatar } from "@/components/ui/avatar";
  * • the entity's display name / title (with a deterministic-color
  * initials avatar so users can scan visually)
  * • a sub-line: optional secondary identifier (company / industry /
- * stage / account) · "Archived M/D" · "by <name>" · reason
+ * stage / account) · "Archived <date>" · "by <name>" · reason
  * • trailing actions injected by the caller — typically Restore +
  * Permanent-delete forms. The caller controls the action JSX so
  * each entity can keep its own inline server actions intact.
@@ -39,20 +44,33 @@ interface Props {
   renderActions: (row: ArchivedListMobileRow) => ReactNode;
   /** Empty-state message. */
   emptyMessage?: ReactNode;
+  /**
+   * Viewer's time preferences. Dates are rendered through the canonical
+   * `formatUserTime` formatter so mobile output matches the desktop row
+   * byte-for-byte; defaults to `DEFAULT_TIME_PREFS` exactly as the
+   * desktop row does until real viewer prefs are threaded in.
+   */
+  timePrefs?: TimePrefs;
 }
 
-function shortDate(d: Date | string | null | undefined): string | null {
+// Format the archived date through the canonical formatter so the mobile
+// card and the desktop row produce identical, timezone-correct output for
+// the same instant. Returns null for empty/unparseable values so the
+// "Archived …" meta segment is omitted rather than showing an em-dash.
+function archivedDate(
+  d: Date | string | null | undefined,
+  prefs: TimePrefs,
+): string | null {
   if (!d) return null;
-  const ts = new Date(d).getTime();
-  if (Number.isNaN(ts)) return null;
-  const date = new Date(ts);
-  return `${date.getMonth() + 1}/${date.getDate()}`;
+  const formatted = formatUserTime(d, prefs, "date");
+  return formatted === "—" ? null : formatted;
 }
 
 export function ArchivedListMobile({
   rows,
   renderActions,
   emptyMessage,
+  timePrefs = DEFAULT_TIME_PREFS,
 }: Props) {
   if (rows.length === 0) {
     return (
@@ -69,7 +87,7 @@ export function ArchivedListMobile({
       {rows.map((r) => {
         const meta: string[] = [];
         if (r.subtitle) meta.push(r.subtitle);
-        const archived = shortDate(r.deletedAt);
+        const archived = archivedDate(r.deletedAt, timePrefs);
         if (archived) meta.push(`Archived ${archived}`);
         const by = r.deletedByName ?? r.deletedByEmail;
         if (by) meta.push(`by ${by}`);

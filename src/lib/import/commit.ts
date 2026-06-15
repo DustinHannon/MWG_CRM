@@ -149,6 +149,42 @@ export async function commitImport({
     }
   }
 
+  // In-file External-ID dedup. `external_id` has only a NON-unique index
+  // (leads_external_id_idx) — there is no DB UNIQUE constraint to catch a
+  // collision at INSERT. Two rows in the same file carrying the same NEW
+  // External ID (one not already in the DB) would both take the INSERT
+  // branch and create two leads with the same external_id, breaking the
+  // re-import idempotency External ID exists to provide (a later re-import
+  // would update only one and orphan the rest). Dedup here, first
+  // occurrence wins: the first row with a given new External ID is left to
+  // INSERT/UPDATE normally; every later row with that same new External ID
+  // is reported as a failed row (skipped duplicate) and removed from the
+  // commit set. Rows that map to an already-existing External ID are NOT
+  // deduped here — they correctly route to the version-gated re-import
+  // UPDATE. (This closes the within-file/within-run case; the cross-import
+  // race where two concurrent runs both INSERT the same new External ID
+  // still requires a DB-level partial UNIQUE index.)
+  const seenNewExternalIds = new Set<string>();
+  const rowsToCommit: ParsedRow[] = [];
+  for (const r of rows) {
+    if (!r.ok) {
+      rowsToCommit.push(r);
+      continue;
+    }
+    const ext = r.leadPatch.externalId;
+    if (ext && !existingByExt.has(ext)) {
+      if (seenNewExternalIds.has(ext)) {
+        result.failedRows.push({
+          rowNumber: r.rowNumber,
+          reason: `Duplicate External ID "${ext}" in this file — kept the first occurrence, skipped this one.`,
+        });
+        continue;
+      }
+      seenNewExternalIds.add(ext);
+    }
+    rowsToCommit.push(r);
+  }
+
   // Process in chunks of CHUNK_SIZE rows. Each row commits in its own
   // transaction (see processChunk), so a poison row rolls back only
   // itself. The outer try/catch is a defense-in-depth net for a
@@ -156,8 +192,8 @@ export async function commitImport({
   // becoming unusable) — it marks only rows that processChunk has NOT
   // already reached a terminal state for, so committed/failed rows are
   // never double-counted.
-  for (let start = 0; start < rows.length; start += CHUNK_SIZE) {
-    const slice = rows.slice(start, start + CHUNK_SIZE);
+  for (let start = 0; start < rowsToCommit.length; start += CHUNK_SIZE) {
+    const slice = rowsToCommit.slice(start, start + CHUNK_SIZE);
     const processedRows = new Set<number>();
     try {
       await processChunk({

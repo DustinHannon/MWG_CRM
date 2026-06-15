@@ -302,6 +302,7 @@ export default async function LeadDetailPage({
             entityId={lead.id}
             tasks={await listTasksForLead(lead.id)}
             currentUserId={user.id}
+            timezone={prefs.timezone}
             viewerCanEditOthers={user.isAdmin || perms.canEditOthersTasks}
             showQuickAdd={false}
           />

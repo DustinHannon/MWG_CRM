@@ -169,36 +169,46 @@ export const PATCH = withApi<{ id: string }>(
       patch.primaryContactId = m.primary_contact_id ?? null;
     }
     if (m.owner_id !== undefined) patch.ownerId = m.owner_id ?? null;
-    // Cycle check before the update lands. The DB CHECK blocks A→A,
-    // this blocks A→B→A and longer.
-    if (m.parent_account_id) {
-      const { assertNoParentCycle } = await import("@/lib/accounts");
-      try {
-        await assertNoParentCycle(params.id, m.parent_account_id);
-      } catch (err) {
-        if (err instanceof ConflictError) {
-          return errorResponse(409, "CONFLICT", err.publicMessage);
-        }
-        throw err;
-      }
-    }
     try {
-      // `version` is schema-required (missing → 422 above), so it is
-      // always a number here — pass it straight through. No
-      // unconditional-UPDATE last-write-wins path remains.
-      await updateAccountForApi(
-        params.id,
-        patch,
-        parsed.data.version,
-        key.createdById,
-      );
+      if (m.parent_account_id) {
+        // Re-parent path. Run the cycle walk and the UPDATE in ONE
+        // transaction (passing `tx` as the executor to BOTH) so the check
+        // and the write share a snapshot and the cycle walk's FOR UPDATE
+        // row locks serialize concurrent re-parents — otherwise two API
+        // re-parents in the same hierarchy (A→B while B→A) could each pass
+        // the check against pre-change state and both commit a cycle.
+        // Mirrors the (app)/accounts updateAccountAction transaction +
+        // advisory-lock pattern (STANDARDS §9.2/§19.8.2).
+        const { assertNoParentCycle } = await import("@/lib/accounts");
+        const { db } = await import("@/db");
+        const { sql } = await import("drizzle-orm");
+        await db.transaction(async (tx) => {
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(hashtext(${"account-reparent"}))`,
+          );
+          await assertNoParentCycle(params.id, m.parent_account_id!, tx);
+          // `version` is schema-required (missing → 422 above), so it is
+          // always a number here — pass it straight through. No
+          // unconditional-UPDATE last-write-wins path remains.
+          await updateAccountForApi(
+            params.id,
+            patch,
+            parsed.data.version,
+            key.createdById,
+            tx,
+          );
+        });
+      } else {
+        await updateAccountForApi(
+          params.id,
+          patch,
+          parsed.data.version,
+          key.createdById,
+        );
+      }
     } catch (err) {
       if (err instanceof ConflictError) {
-        return errorResponse(
-          409,
-          "CONFLICT",
-          "Account was modified by someone else; refresh and retry.",
-        );
+        return errorResponse(409, "CONFLICT", err.publicMessage);
       }
       if (err instanceof NotFoundError) {
         return errorResponse(404, "NOT_FOUND", "Account not found");

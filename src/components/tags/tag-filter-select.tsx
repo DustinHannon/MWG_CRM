@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import { TagChip } from "./tag-chip";
 import { cn } from "@/lib/utils";
 
@@ -48,16 +49,9 @@ export function TagFilterSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const hiddenRef = useRef<HTMLInputElement>(null);
 
-  // Close on outside click.
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
+  // Close on outside click (canonical hook; listener only attached while
+  // open — same pattern as tag-input.tsx).
+  useClickOutside(containerRef, () => setOpen(false), open);
 
   // Auto-submit support — when the value changes and `autoSubmit` is
   // set, trigger the enclosing form. The mount ref skips the initial

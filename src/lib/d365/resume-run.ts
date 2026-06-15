@@ -83,6 +83,12 @@ const ALLOWED_RESOLUTIONS: Record<D365HaltReason, ResumeResolution["kind"][]> =
       "open_for_review",
     ],
     [D365_HALT_REASONS.VALIDATION_REGRESSION]: ["open_for_review"],
+    // Child-collection truncation is a fetch-time halt (the per-batch
+    // hard cap fired before a collection drained). The only resolution
+    // is to re-pull the page once the operator has narrowed the scope or
+    // raised the cap — so `retry`, which lands the run back in
+    // `fetching` for a fresh pull (same as D365_UNREACHABLE).
+    [D365_HALT_REASONS.CHILD_COLLECTION_TRUNCATED]: ["retry"],
   };
 
 /**

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   importBatches,
@@ -21,9 +21,14 @@ import { AUDIT_EVENTS } from "@/lib/audit/events";
 import { D365_AUDIT_EVENTS } from "@/lib/d365/audit-events";
 import { pullNextBatch } from "@/lib/d365/pull-batch";
 import { mapBatch } from "@/lib/d365/map-batch";
-import { commitBatch } from "@/lib/d365/commit-batch";
+import { commitBatch, reconcileRunFks } from "@/lib/d365/commit-batch";
 import { resumeRun, type ResumeResolution } from "@/lib/d365/resume-run";
-import { backfillOpportunityFks } from "@/lib/d365/backfill-opportunity-fks";
+import {
+  D365_ROOT_TYPES,
+  isD365RootType,
+  type D365RootType,
+} from "@/lib/d365/queries";
+import type { D365EntityType } from "@/lib/d365/types";
 import { parseFormOrThrow } from "@/lib/forms/form-data";
 import {
   abortRunSchema,
@@ -33,7 +38,6 @@ import {
   editRecordFieldsSchema,
   markCompleteSchema,
   pullNextBatchSchema,
-  quickPullSchema,
   rejectRecordSchema,
   resetStuckBatchSchema,
   resumeRunSchema,
@@ -59,28 +63,44 @@ import {
  * -------------------------------------------------------------------------- */
 
 /**
- * Build a default scope for a quick-pull. Per user instruction
- * (2026-05-10): NO filters — quick-pull walks the entire D365
- * history for that entity, ordered by modifiedon DESC. Includes
- * disqualified / lost / closed records (any statecode). The cursor
- * advances per click and the run terminates when D365 returns no
- * more pages.
- *
- * Use the "+ New import run" modal if you want to scope to a date
- * range or active-only.
- *
- * Note: `entityType` is intentionally unused at the moment — kept
- * in the signature so a future scope variant per entity (e.g. notes
- * vs leads needing different OData query shapes) drops in cleanly.
+ * Resolve the effective `modifiedSince` ISO string for a run scope.
+ * An explicit `yyyy-mm-dd` from the operator is widened to midnight UTC;
+ * absent input defaults to two years ago (the redesign's default window).
  */
-function defaultQuickPullScope(_entityType: string): Record<string, unknown> {
+function resolveModifiedSinceIso(modifiedSince: string | undefined): string {
+  if (modifiedSince) return `${modifiedSince}T00:00:00.000Z`;
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 2);
+  return d.toISOString();
+}
+
+/**
+ * Build the `import_runs.scope` JSONB for a ROOT-AGGREGATE run.
+ *
+ * Root-aggregate model: the unit of work is one ROOT entity (lead /
+ * contact / account / opportunity) WITH its full child graph (tasks /
+ * phonecalls / appointments / emails / notes). Children ALWAYS travel
+ * with their root — there is no per-run "include children" choice, so
+ * the legacy `includeChildren` scope key is gone (pull-batch always
+ * drains the child graph).
+ *
+ * Scope shape consumed by `scopeToFetchOpts` in pull-batch.ts:
+ *   { filter: { modifiedSince: ISO, statecode?: number[] } }
+ *
+ * `statecode` presence is authoritative in pull-batch/queries: an absent
+ * key applies the per-entity active-only default; `[0]` = active only;
+ * `[]` = all states. We always write the key explicitly so an
+ * "all states" run is not silently narrowed by the per-entity default.
+ */
+function buildRootRunScope(
+  modifiedSince: string | undefined,
+  activeOnly: boolean,
+): Record<string, unknown> {
   return {
-    // Explicit empty statecode = "all states". An ABSENT statecode key
-    // applies the per-entity active-only default in pull-batch/queries,
-    // which would silently exclude disqualified / lost / closed records
-    // and contradict quick-pull's documented "any statecode" intent.
-    filter: { statecode: [] },
-    includeChildren: false,
+    filter: {
+      modifiedSince: resolveModifiedSinceIso(modifiedSince),
+      statecode: activeOnly ? [0] : [],
+    },
   };
 }
 
@@ -96,6 +116,10 @@ function mapResumeFormToResolution(
 ): ResumeResolution {
   switch (reason) {
     case "d365_unreachable":
+      return { kind: "retry" };
+    case "child_collection_truncated":
+      // Truncation halt resolves by re-pulling the page (resume-run's
+      // ALLOWED_RESOLUTIONS permits only `retry` here).
       return { kind: "retry" };
     case "unmapped_picklist":
       return { kind: "fix_picklist" };
@@ -127,6 +151,21 @@ function mapResumeFormToResolution(
  * Run actions *
  * -------------------------------------------------------------------------- */
 
+/**
+ * Create one ROOT-AGGREGATE import run.
+ *
+ * The run roots on ONE of the four root types (lead / contact / account /
+ * opportunity); its child graph (tasks / phonecalls / appointments /
+ * emails / notes) is ALWAYS pulled with it. Child types
+ * (task/phonecall/appointment/email/annotation) cannot be rooted
+ * standalone — pull-batch's `reserveNextBatch` also rejects them, but we
+ * reject here too so an invalid run never persists. (Originated
+ * opportunities import via their own opportunity root run, not as a child
+ * of a lead.)
+ *
+ * For the "import all four roots in dependency order" wizard path, call
+ * {@link importAllRootsAction}.
+ */
 export async function createRunAction(
   formData: FormData,
 ): Promise<ActionResult<{ runId: string }>> {
@@ -136,41 +175,25 @@ export async function createRunAction(
       const user = await requireAdmin();
       const input = parseFormOrThrow(createRunSchema, formData);
 
-      const supportsActiveOnly =
-        input.entityType === "lead" ||
-        input.entityType === "contact" ||
-        input.entityType === "account" ||
-        input.entityType === "opportunity";
+      // Root-aggregate: only the four root types are valid units of work.
+      // createRunSchema's enum still spans all nine D365 entity types for
+      // back-compat (it lives in _schemas.ts, edited in the UI slice), so
+      // gate to root types here. `includeChildren` from the legacy form is
+      // ignored — children always come.
+      if (!isD365RootType(input.entityType as D365EntityType)) {
+        throw new ValidationError(
+          "Import runs must root on lead, contact, account, or opportunity. Child records (tasks, calls, appointments, emails, notes) are imported automatically with their root.",
+        );
+      }
+      const rootType = input.entityType as D365RootType;
 
-      const modifiedSinceIso = input.modifiedSince
-        ? `${input.modifiedSince}T00:00:00.000Z`
-        : (() => {
-            const d = new Date();
-            d.setFullYear(d.getFullYear() - 2);
-            return d.toISOString();
-          })();
-
-      const scope: Record<string, unknown> = {
-        filter: {
-          modifiedSince: modifiedSinceIso,
-          // statecode presence is authoritative in pull-batch/queries: an
-          // absent key applies the per-entity active-only default, so for
-          // toggle-supporting entities we must write the key explicitly in
-          // BOTH states — [0] (active only) when checked, [] (all states)
-          // when unchecked — otherwise an unchecked box would still drop
-          // inactive rows via the per-entity default.
-          ...(supportsActiveOnly
-            ? { statecode: input.activeOnly ? [0] : [] }
-            : {}),
-        },
-        includeChildren: !!input.includeChildren,
-      };
+      const scope = buildRootRunScope(input.modifiedSince, input.activeOnly);
 
       const [row] = await db
         .insert(importRuns)
         .values({
           source: "d365",
-          entityType: input.entityType,
+          entityType: rootType,
           status: "created",
           scope,
           createdById: user.id,
@@ -186,7 +209,7 @@ export async function createRunAction(
         action: D365_AUDIT_EVENTS.RUN_CREATED,
         targetType: "import_run",
         targetId: row.id,
-        after: { entityType: input.entityType, scope },
+        after: { entityType: rootType, scope },
       });
 
       revalidatePath("/admin/d365-import");
@@ -196,84 +219,76 @@ export async function createRunAction(
 }
 
 /**
- * Quick-pull: one of nine entity buttons. Reuses an existing open run
- * for that entity if present; otherwise creates one with default scope.
- * Then chains pullNextBatch + mapBatch.
+ * "Import everything": create one ROOT-AGGREGATE run per root type, seeded
+ * in cross-root dependency order (account → contact → lead → opportunity,
+ * from {@link D365_ROOT_TYPES}) so a dependent root's cross-root parents
+ * already exist in `external_ids` by the time it commits. Each run shares
+ * the same `modifiedSince` + `activeOnly` scope and pulls its full child
+ * graph automatically.
+ *
+ * Runs are created in `status='created'`; the wizard's commit/progress step
+ * pulls + commits each, in order. Cross-root FKs that still land null
+ * (a parent in a sibling run committed later) are swept by
+ * `reconcileRunFks` when each run is marked complete.
+ *
+ * Idempotency note: this always creates a fresh set of runs (no reuse of
+ * existing open runs) — the wizard is the single entry point and an
+ * operator re-clicking "import all" intends a new pass; duplicate entity
+ * writes are still prevented downstream by external_ids + the dedup
+ * arbiters, so a re-run reconciles rather than duplicates.
  */
-export async function quickPullAction(
+export async function importAllRootsAction(
   formData: FormData,
-): Promise<ActionResult<{ runId: string; batchId: string | null }>> {
+): Promise<ActionResult<{ runIds: string[] }>> {
   return withErrorBoundary(
-    { action: "d365.import.run.quick_pull" },
+    { action: "d365.import.run.import_all_roots" },
     async () => {
       const user = await requireAdmin();
-      const input = parseFormOrThrow(quickPullSchema, formData);
+      const input = parseFormOrThrow(createRunSchema, formData);
 
-      // Find a reusable run for this admin + entity type. Acceptable
-      // statuses: created, fetching, mapping, reviewing. paused_for_review
-      // requires explicit Resume; completed/aborted are terminal.
-      const existing = await db
-        .select({ id: importRuns.id, status: importRuns.status })
-        .from(importRuns)
-        .where(
-          and(
-            eq(importRuns.createdById, user.id),
-            eq(importRuns.entityType, input.entityType),
-            inArray(importRuns.status, [
-              "created",
-              "fetching",
-              "mapping",
-              "reviewing",
-            ]),
-          ),
-        )
-        .orderBy(desc(importRuns.createdAt))
-        .limit(1);
+      const scope = buildRootRunScope(input.modifiedSince, input.activeOnly);
 
-      let runId: string;
-      if (existing[0]) {
-        runId = existing[0].id;
-      } else {
-        const [row] = await db
-          .insert(importRuns)
-          .values({
-            source: "d365",
-            entityType: input.entityType,
-            status: "created",
-            scope: defaultQuickPullScope(input.entityType),
-            createdById: user.id,
-          })
-          .returning({ id: importRuns.id });
-        if (!row) throw new ConflictError("Could not create run.");
-        runId = row.id;
+      // Atomic: insert all four runs in ONE transaction (dependency order
+      // so persisted createdAt ordering matches the commit order the
+      // wizard walks). A mid-loop failure rolls back every insert rather
+      // than leaving orphan empty runs. Audits are emitted AFTER the tx
+      // commits (writeAudit is best-effort and uses the global connection;
+      // emitting post-commit avoids orphan audit rows on rollback).
+      const created = await db.transaction(async (tx) => {
+        const rows: Array<{ id: string; entityType: D365RootType }> = [];
+        for (const rootType of D365_ROOT_TYPES) {
+          const [row] = await tx
+            .insert(importRuns)
+            .values({
+              source: "d365",
+              entityType: rootType,
+              status: "created",
+              scope,
+              createdById: user.id,
+            })
+            .returning({ id: importRuns.id });
+          if (!row) {
+            throw new ConflictError(
+              `Could not create the ${rootType} import run.`,
+            );
+          }
+          rows.push({ id: row.id, entityType: rootType });
+        }
+        return rows;
+      });
+
+      for (const row of created) {
         await writeAudit({
           actorId: user.id,
           action: D365_AUDIT_EVENTS.RUN_CREATED,
           targetType: "import_run",
-          targetId: runId,
-          after: { entityType: input.entityType, viaQuickPull: true },
-        });
-      }
-
-      // Chain pull + map. Best-effort: a pull/map failure is logged
-      // and the user still lands on the run-detail page (which shows
-      // the failure via the run audit log) rather than getting an
-      // opaque action error on the overview.
-      let batchId: string | null = null;
-      try {
-        const out = await pullNextBatch(runId, user.id);
-        batchId = out.batchId;
-        await mapBatch(batchId, user.id);
-      } catch (err) {
-        logger.warn("d365.quick_pull.pull_or_map_failed", {
-          runId,
-          errorMessage: err instanceof Error ? err.message : String(err),
+          targetId: row.id,
+          after: { entityType: row.entityType, scope, viaImportAll: true },
         });
       }
 
       revalidatePath("/admin/d365-import");
-      revalidatePath(`/admin/d365-import/${runId}`);
-      return { runId, batchId };
+      return { runIds: created.map((r) => r.id) };
     },
   );
 }
@@ -404,6 +419,17 @@ export async function markRunCompleteAction(
       if (run.status === "aborted") {
         throw new ValidationError("Cannot complete an aborted run.");
       }
+      // A halted (paused_for_review) run has an unresolved halt condition
+      // (D365 unreachable, unmapped picklist, owner JIT failure, truncated
+      // child collection, etc.). Marking it complete would bury that halt
+      // and silently drop everything past the halt point. The operator
+      // must Resume (resolve + continue) or Abort it first. This is the
+      // run-detail completion-gate fix.
+      if (run.status === "paused_for_review") {
+        throw new ValidationError(
+          "Run is paused for review. Resume it to resolve the halt, or abort it — it cannot be marked complete while halted.",
+        );
+      }
 
       // Refuse if any batch is still in a non-terminal state. This
       // includes `committing` (a stuck or in-flight commit must not
@@ -433,6 +459,20 @@ export async function markRunCompleteAction(
         throw new ValidationError(
           "Cannot mark complete while batches are pending, in review, committing, or failed. Resolve failed or stuck batches first.",
         );
+      }
+
+      // Auto-reconcile cross-root FKs left null at commit time (a root's
+      // cross-root parent landed in a later batch). Replaces the manual
+      // opportunity-FK backfill button. Best-effort: a reconcile failure
+      // is logged but must not block marking the run complete — the
+      // sweep is idempotent and re-runnable.
+      try {
+        await reconcileRunFks(runId, user.id);
+      } catch (err) {
+        logger.warn("d365.run.reconcile_on_complete_failed", {
+          runId,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
       }
 
       await db
@@ -917,29 +957,28 @@ export async function commitBatchAction(
 }
 
 /* -------------------------------------------------------------------------- *
- * Opportunity FK backfill *
+ * Cross-root FK reconcile sweep *
  * -------------------------------------------------------------------------- */
 
 /**
- * One-shot, idempotent backfill of NULL parent FKs on already-
- * committed D365 opportunities.
+ * Re-resolve any cross-root FK left NULL at commit time for the records
+ * one run committed (a root's cross-root parent — account/contact/lead —
+ * landed in a later batch, so it couldn't resolve in the first pass).
  *
- * Opportunities imported before the commit-batch opportunity
- * FK-resolution branch landed were inserted with `account_id` /
- * `primary_contact_id` / `source_lead_id` permanently NULL even when
- * the parent rows existed in `external_ids`. The opportunity mapper
- * did not stash the source-id virtuals, so a re-import did not
- * self-heal them. This sweep re-derives the parent D365 GUIDs from
- * each opportunity's retained `import_records.rawPayload` and resolves
- * them via `external_ids`.
+ * Replaces the manual opportunity-FK backfill: the same
+ * quarantine-then-reconcile pattern, generalized to every cross-root
+ * edge (opportunity→account/contact/originatingLead; contact→account;
+ * account→parentAccount/primaryContact) and scoped to a single run.
+ * Children never need this — they are pinned to the root's in-memory
+ * UUID at commit time and cannot miss.
  *
  * Idempotent: only fills a column that is currently NULL, only when
- * resolution succeeds. Safe to re-run after a later parent import.
- * Audit (`d365.opportunity.fk_backfill` summary + per-field
- * `RECORD_FK_UNRESOLVED`) and structured logging are emitted inside
- * `backfillOpportunityFks`. The result count is returned to the UI.
+ * resolution succeeds. Runs automatically when a run is marked complete;
+ * this action lets an admin trigger it on demand.
  */
-export async function backfillOpportunityFksAction(): Promise<
+export async function reconcileRunFksAction(
+  formData: FormData,
+): Promise<
   ActionResult<{
     scanned: number;
     resolved: number;
@@ -948,11 +987,13 @@ export async function backfillOpportunityFksAction(): Promise<
   }>
 > {
   return withErrorBoundary(
-    { action: "d365.opportunity.fk_backfill" },
+    { action: "d365.import.run.reconcile_fks" },
     async () => {
       const user = await requireAdmin();
-      const result = await backfillOpportunityFks(user.id);
+      const { runId } = parseFormOrThrow(pullNextBatchSchema, formData);
+      const result = await reconcileRunFks(runId, user.id);
       revalidatePath("/admin/d365-import");
+      revalidatePath(`/admin/d365-import/${runId}`);
       return result;
     },
   );

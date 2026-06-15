@@ -109,7 +109,7 @@ export function ContactForm({
       </StandardFormSection>
 
       <StandardFormSection title="Notes" wide>
-        <StandardFormTextarea name="description" label="Description" rows={5} error={fe.description} />
+        <StandardFormTextarea name="description" label="Description" rows={5} defaultValue={dv("description")} error={fe.description} />
       </StandardFormSection>
 
       <StandardFormErrorBanner

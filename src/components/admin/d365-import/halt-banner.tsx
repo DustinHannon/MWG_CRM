@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { TriangleAlert } from "lucide-react";
+import { StandardConfirmDialog } from "@/components/standard";
 import { resumeRunAction, abortRunAction } from "@/app/admin/d365-import/actions";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +27,8 @@ export type HaltReason =
   | "high_volume_conflict"
   | "owner_jit_failure"
   | "validation_regression"
-  | "bad_lead_volume";
+  | "bad_lead_volume"
+  | "child_collection_truncated";
 
 export interface HaltBannerProps {
   runId: string;
@@ -49,6 +51,7 @@ const REASON_TITLE: Record<HaltReason, string> = {
   owner_jit_failure: "Owner could not be resolved",
   validation_regression: "Validation regression detected",
   bad_lead_volume: "High volume of bad-quality records",
+  child_collection_truncated: "Child records exceeded the batch limit",
 };
 
 export function HaltBanner(props: HaltBannerProps) {
@@ -85,6 +88,15 @@ function ReasonBody(props: HaltBannerProps) {
           reason={props.reason}
           resumeLabel="Retry"
           help="The pipeline retried 3 times before halting. Click Retry to attempt the next page again."
+        />
+      );
+    case "child_collection_truncated":
+      return (
+        <ResumeOrAbort
+          runId={props.runId}
+          reason={props.reason}
+          resumeLabel="Retry"
+          help="A record's linked activities or notes exceeded the per-batch limit. Narrow the date range or raise the limit, then click Retry to re-pull the page."
         />
       );
     case "unmapped_picklist":
@@ -312,37 +324,38 @@ function AbortButton({
   runId: string;
   disabled?: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function onAbort() {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        "Abort this import run? Records already committed will remain; nothing else will be imported.",
-      )
-    ) {
-      return;
-    }
+  async function onAbortConfirm() {
     setError(null);
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("runId", runId);
-      const res = await abortRunAction(fd);
-      if (!res.ok) setError(res.error);
-    });
+    const fd = new FormData();
+    fd.set("runId", runId);
+    const res = await abortRunAction(fd);
+    if (!res.ok) {
+      setError(res.error);
+      // Throw so StandardConfirmDialog stays open for retry.
+      throw new Error(res.error);
+    }
   }
 
   return (
     <>
-      <button
-        type="button"
-        onClick={onAbort}
-        disabled={disabled || pending}
-        className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/60 disabled:opacity-50"
-      >
-        {pending ? "Aborting…" : "Abort run"}
-      </button>
+      <StandardConfirmDialog
+        trigger={
+          <button
+            type="button"
+            disabled={disabled}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/60 disabled:opacity-50"
+          >
+            Abort run
+          </button>
+        }
+        title="Abort this import run?"
+        body="Records already committed stay in the CRM. Nothing further will be imported for this run."
+        confirmLabel="Abort run"
+        tone="destructive"
+        onConfirm={onAbortConfirm}
+      />
       {error ? (
         <span className="text-xs text-destructive">{error}</span>
       ) : null}

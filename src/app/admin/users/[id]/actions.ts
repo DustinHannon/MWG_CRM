@@ -100,6 +100,15 @@ export async function updateUserPermissions(
       }
 
       const filtered = filterToKnownKeys(parsed.data.permissions);
+      // A payload with no recognized permission keys (empty object, or
+      // only unknown keys) would render an empty `DO UPDATE SET` on the
+      // conflict branch — a SQL syntax error surfaced as an opaque 500.
+      // Reject it with a typed validation error instead. The shipped
+      // editor always serializes the full known map, so this only fires
+      // on a malformed direct POST.
+      if (Object.keys(filtered).length === 0) {
+        throw new ValidationError("No recognized permission keys submitted.");
+      }
 
       const before = await getPermissions(parsed.data.userId);
 

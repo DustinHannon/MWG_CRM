@@ -3,18 +3,34 @@ import type { InferInsertModel } from "drizzle-orm";
 import type { contacts } from "@/db/schema/crm-records";
 import type { D365Contact } from "../types";
 import {
-  type AttachedActivity,
   type MapResult,
   type ValidationWarning,
   extractCustomFields,
   parseODataDate,
   parseString,
 } from "./parsers";
+import {
+  mapAttachedChildren,
+  type ChildOwnerResolver,
+  type D365Children,
+} from "./children";
 
 export type NewContact = InferInsertModel<typeof contacts>;
 
 export interface ContactMapContext {
   resolvedOwnerId: string;
+  /**
+   * Nested raw child arrays grouped under `rawPayload.children` by
+   * `pull-batch`. The contact mapper runs each child mapper over these
+   * and returns them in `result.attached`.
+   */
+  children?: D365Children;
+  /**
+   * Optional resolver mapping a child's enriched owner email to a local
+   * `users.id`. When omitted (or null) children ride on
+   * `resolvedOwnerId`.
+   */
+  resolveChildOwnerId?: ChildOwnerResolver;
   /**
    * Optional — distinct resolved users for `_createdby_value` and
    * `_modifiedby_value`. When the orchestrator can't resolve them to a
@@ -167,7 +183,19 @@ export function mapD365Contact(
     (mapped as Record<string, unknown>)._accountSourceId = accountSourceId;
   }
 
-  const attached: AttachedActivity[] = [];
+  // Aggregate the nested child graph into `attached`, with this contact
+  // as the ROOT driving each child's parent linkage.
+  const { attached, warnings: childWarnings } = mapAttachedChildren({
+    children: ctx.children,
+    parentContext: {
+      parentEntityType: "contact",
+      parentSourceId: raw.contactid,
+    },
+    fallbackUserId: ctx.resolvedOwnerId,
+    resolveChildOwnerId: ctx.resolveChildOwnerId,
+  });
+  warnings.push(...childWarnings);
+
   return { mapped, attached, customFields, warnings };
 }
 

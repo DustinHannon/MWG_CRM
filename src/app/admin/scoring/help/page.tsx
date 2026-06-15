@@ -63,7 +63,6 @@ export default async function ScoringHelpPage() {
           <li><code>estimatedValue</code> — number (USD)</li>
           <li><code>estimatedCloseDate</code> — date string YYYY-MM-DD</li>
           <li><code>doNotContact, doNotEmail, doNotCall</code> — booleans</li>
-          <li><code>tags</code> — array of strings</li>
           <li><code>ownerId, createdById</code> — UUIDs</li>
           <li><code>createdAt, updatedAt, lastActivityAt</code> — timestamps</li>
           <li><code>createdVia</code> — manual/imported/api</li>

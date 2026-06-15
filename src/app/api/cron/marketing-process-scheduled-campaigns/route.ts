@@ -64,7 +64,13 @@ export async function GET(req: Request): Promise<Response> {
       // A racing worker that claims first wins; we skip silently.
       const claimed = await db
         .update(marketingCampaigns)
-        .set({ status: "sending", updatedAt: sql`now()` })
+        .set({
+          status: "sending",
+          updatedAt: sql`now()`,
+          // Advance the OCC token like every other campaign mutation so
+          // the concurrency contract stays uniform across the lifecycle.
+          version: sql`${marketingCampaigns.version} + 1`,
+        })
         .where(
           and(
             eq(marketingCampaigns.id, candidate.id),
