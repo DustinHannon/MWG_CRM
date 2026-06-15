@@ -128,14 +128,15 @@ export interface ChildFetchOpts {
 const DEFAULT_PAGE_SIZE = 100;
 
 /**
- * Maximum GUIDs to put in a single `or`-chain `$filter`. Dataverse
- * rejects filters longer than ~32k chars; each `_x_value eq <guid>` term
- * is ~60 chars including the ` or ` joiner, so 200 terms (~12k chars)
- * stays well under the limit with headroom for the rest of the clause.
- * Root batches are 100, so a single chunk covers a normal batch; the
- * chunking is defensive for callers that pass larger id sets.
+ * Maximum GUIDs per `or`-chain `$filter` request. The binding limit is NOT
+ * filter length (~32k chars) but Dataverse's query condition-complexity
+ * ceiling: an annotation fetch `(_objectid_value eq G1 or …) and
+ * objecttypecode eq '<root>'` fails with `0x80040216` ("An unexpected error
+ * occurred") at ~50 terms, while activity fetches survive 100 (verified
+ * live). 30 stays safely under the worst case (annotations) with margin; a
+ * 100-root batch fans out to a few small requests whose results are merged.
  */
-const OR_CHAIN_CHUNK_SIZE = 200;
+const OR_CHAIN_CHUNK_SIZE = 30;
 
 /**
  * Safety cap on total child records drained per helper call. The biggest

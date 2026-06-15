@@ -686,10 +686,11 @@ function groupChildrenByParent(
  * Owner-email enrichment *
  * -------------------------------------------------------------------------- */
 
-/** OData escaping for a GUID inside a `systemuserid in (...)` clause. */
-function odataQuoteGuid(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
+/**
+ * Owner GUIDs per systemuser lookup request. Same Dataverse condition-
+ * complexity constraint as the child or-chains — keep it small.
+ */
+const OWNER_LOOKUP_CHUNK = 30;
 
 /**
  * Stamp each raw record (root OR child) with its owner's Entra UPN under
@@ -702,11 +703,10 @@ function odataQuoteGuid(value: string): string {
  * GUIDs across the supplied records and resolve them to
  * `systemusers.domainname` (Entra UPN) in a single batched OData lookup.
  *
- * NOTE: the systemuser lookup uses an `in (...)` filter on
- * `systemuserid`. That is the metadata `in` over a STRING-keyed
- * collection — distinct from the lookup `_value` `in` Dataverse rejects
- * — and is the established working pattern (kept verbatim from the prior
- * pull-batch). It is NOT the unsupported activity-parent `in`.
+ * NOTE: the systemuser lookup uses chunked `or`-chains on `systemuserid`.
+ * Dataverse rejects the OData `in` operator on EVERY field (501 "The query
+ * node In is not supported"), including the systemuserid PK — verified
+ * live — so this resolves owners the same way the child fetches do.
  *
  * Mutates the record objects in place. Best-effort: a failed lookup logs
  * and leaves records un-enriched (the resolver then falls back to the
@@ -737,17 +737,25 @@ async function enrichOwnerEmails(
   // (the exact attribution loss this enrichment exists to prevent).
   const guidToUpn = new Map<string, string>();
   try {
-    const quoted = [...ownerIds].map(odataQuoteGuid).join(",");
-    const page = await client.fetchPage<D365SystemUser>("systemusers", {
-      select: ["systemuserid", "domainname"],
-      filter: `systemuserid in (${quoted})`,
-      top: ownerIds.size,
-      pageSize: ownerIds.size,
-    });
-    for (const u of page.value) {
-      const upn = u.domainname;
-      if (u.systemuserid && typeof upn === "string" && upn.trim().length > 0) {
-        guidToUpn.set(u.systemuserid.toLowerCase(), upn.trim());
+    const ownerList = [...ownerIds];
+    for (let i = 0; i < ownerList.length; i += OWNER_LOOKUP_CHUNK) {
+      const chunk = ownerList.slice(i, i + OWNER_LOOKUP_CHUNK);
+      const orChain = chunk.map((id) => `systemuserid eq ${id}`).join(" or ");
+      const page = await client.fetchPage<D365SystemUser>("systemusers", {
+        select: ["systemuserid", "domainname"],
+        filter: `(${orChain})`,
+        top: chunk.length,
+        pageSize: chunk.length,
+      });
+      for (const u of page.value) {
+        const upn = u.domainname;
+        if (
+          u.systemuserid &&
+          typeof upn === "string" &&
+          upn.trim().length > 0
+        ) {
+          guidToUpn.set(u.systemuserid.toLowerCase(), upn.trim());
+        }
       }
     }
   } catch (err) {
