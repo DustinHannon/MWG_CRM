@@ -263,25 +263,40 @@ export async function jitProvisionD365Owner(
       jitProvisioned: true,
       jitProvisionedAt: sql`now()`,
     })
-    .onConflictDoNothing({ target: users.email })
+    // No target: suppress ANY unique conflict (email, entra_oid, OR
+    // username). The `users` table is unique on all three; a concurrent JIT
+    // of the same owner — or an owner whose Entra OID already exists under a
+    // different email — conflicts on entra_oid/username, which a
+    // `{ target: email }` clause would NOT suppress (it raised 23505 and
+    // failed the record). Without a target, Postgres does nothing on any of
+    // them and we resolve the winning row below.
+    .onConflictDoNothing()
     .returning({ id: users.id });
 
-  // If the INSERT raced and lost, re-select to get the winning row.
+  // If the INSERT hit a unique conflict it returns no row. Re-select the
+  // winning row — by email first, then by entra_oid (the conflict may have
+  // been on the OID, not the email).
   let userId = inserted[0]?.id;
   if (!userId) {
-    const winner = await db
+    const byEmail = await db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.email, normalized))
       .limit(1);
-    if (!winner[0]) {
-      // unreachable per onConflictDoNothing semantics — surface as
-      // an explicit error so the import halt fires.
+    userId = byEmail[0]?.id;
+    if (!userId && graphUser.id) {
+      const byOid = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.entraOid, graphUser.id))
+        .limit(1);
+      userId = byOid[0]?.id;
+    }
+    if (!userId) {
       throw new Error(
-        `D365 owner JIT INSERT raced and no winner row was found for ${normalized}`,
+        `D365 owner JIT INSERT conflicted but no winner row was found for ${normalized}`,
       );
     }
-    userId = winner[0].id;
   }
 
   await writeAudit({
