@@ -488,9 +488,14 @@ async function fetchByQuery<T>(
   spec: FetchSpec,
   opts: BaseFetchOpts,
 ): Promise<FetchPageResult<T>> {
-  // Page 2+: trust the server-generated next link verbatim.
+  // Page 2+: trust the server-generated next link verbatim, but resend the
+  // page-size preference (Dataverse drops it across nextLink hops).
   if (opts.nextLink) {
-    const page = await client.followNextLink<T>(opts.nextLink, opts.signal);
+    const page = await client.followNextLink<T>(
+      opts.nextLink,
+      opts.signal,
+      opts.top ?? DEFAULT_PAGE_SIZE,
+    );
     return {
       records: page.value,
       nextLink: page.nextLink,
@@ -589,7 +594,7 @@ async function drainChildCollection<T>(
         }
       }
       if (!page.nextLink) break;
-      page = await client.followNextLink<T>(page.nextLink, opts.signal);
+      page = await client.followNextLink<T>(page.nextLink, opts.signal, pageSize);
     }
   }
 

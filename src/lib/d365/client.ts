@@ -124,11 +124,18 @@ export class D365Client {
   async followNextLink<T>(
     nextLink: string,
     signal?: AbortSignal,
+    pageSize?: number,
   ): Promise<D365ODataPage<T>> {
     this.assertSameOrigin(nextLink);
     return this.execWithAuth<D365ODataPage<T>>(nextLink, {
       includeAnnotations: false,
       signal,
+      // Dataverse does NOT carry the `odata.maxpagesize` preference across
+      // `@odata.nextLink` hops — the skiptoken encodes only the page
+      // boundary, not the size. Without resending the header, each follow
+      // page falls back to the SERVER default (5000 rows), which blew a
+      // 100-root page up to 5000 mid-run. Resend the same maxpagesize.
+      pageSize,
     });
   }
 
