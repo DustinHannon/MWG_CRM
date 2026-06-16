@@ -104,7 +104,12 @@ const NEXT_STATUS: Record<
   typeof importRuns.$inferSelect.status
 > = {
   retry: "fetching",
-  use_default_owner: "fetching",
+  // use_default_owner: the batch is ALREADY fully mapped (the mapper
+  // applied the default-owner fallback) — it just couldn't auto-advance
+  // past the halt. Land in `reviewing` so the operator can approve +
+  // commit the mapped batch, NOT `fetching` (which strands the mapped
+  // batch and re-pulls a fresh page instead).
+  use_default_owner: "reviewing",
   fix_picklist: "mapping",
   apply_dedup_default: "mapping",
   open_for_review: "reviewing",
@@ -221,6 +226,24 @@ export async function resumeRun(
       conflictResolution: resolutionValue,
       recordsUpdated: updated.length,
     });
+  }
+
+  // H-4 owner-JIT-failure → use_default_owner: advance the halted (but
+  // fully-mapped) batch out of 'fetched' into the reviewable state so it
+  // can be approved + committed. Without this the run lands in 'reviewing'
+  // but the batch stays 'fetched' (uncommittable), stranding the mapped
+  // records. Only the halted batch is in 'fetched' at this point (prior
+  // batches are terminal), so the status filter targets exactly it.
+  if (resolution.kind === "use_default_owner") {
+    await db
+      .update(importBatches)
+      .set({ status: "reviewing" })
+      .where(
+        and(
+          eq(importBatches.runId, runId),
+          eq(importBatches.status, "fetched"),
+        ),
+      );
   }
 
   const nextStatus = NEXT_STATUS[resolution.kind];
