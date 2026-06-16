@@ -183,7 +183,17 @@ export class D365Client {
     }
     if (opts.filter) url.searchParams.set("$filter", opts.filter);
     if (opts.expand) url.searchParams.set("$expand", opts.expand);
-    if (opts.top != null) url.searchParams.set("$top", String(opts.top));
+    // Dataverse: `$top` and the `odata.maxpagesize` paging header are
+    // mutually exclusive. When both are sent THIS tenant honors `$top`,
+    // which caps the result and SUPPRESSES `@odata.nextLink` — so paging
+    // silently stops after the first page. Verified live: a `modifiedSince`
+    // superset returned a DISJOINT first 100 with no nextLink, proving the
+    // fetch never advances past page 1. When the caller requests
+    // server-driven paging (pageSize → maxpagesize), omit `$top` so each
+    // page carries the nextLink that drives the cursor / child drain.
+    if (opts.top != null && opts.pageSize == null) {
+      url.searchParams.set("$top", String(opts.top));
+    }
     if (opts.orderby) url.searchParams.set("$orderby", opts.orderby);
     if (opts.count) url.searchParams.set("$count", "true");
     return url.toString();
