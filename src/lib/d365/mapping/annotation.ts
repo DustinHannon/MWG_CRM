@@ -7,6 +7,7 @@ import {
   type ChildParentContext,
   type MapResult,
   type ValidationWarning,
+  buildChildMetadata,
   extractCustomFields,
   parseODataDate,
   parseString,
@@ -121,6 +122,23 @@ export function mapD365Annotation(
     importDedupKey: `d365-annotation:${raw.annotationid}`,
     createdAt: occurredAt,
     updatedAt,
+    metadata: buildChildMetadata({
+      source: {
+        filename: parseString(raw.filename),
+        mimetype: parseString(raw.mimetype),
+        isdocument: raw.isdocument ?? null,
+        // Attachment blob (documentbody) is intentionally NOT stored — it
+        // can be multi-MB; only the descriptor is kept so a later pass can
+        // backfill the file into the `attachments` table by annotationid.
+        hasAttachmentBody:
+          typeof raw.documentbody === "string" && raw.documentbody.length > 0
+            ? true
+            : null,
+        statecode: raw.statecode ?? null,
+        statuscode: raw.statuscode ?? null,
+      },
+      custom: customFields,
+    }),
     _parentEntityType: parentEntityType,
     _parentSourceId: parentSourceId,
   };

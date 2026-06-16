@@ -7,6 +7,7 @@ import {
   type ChildParentContext,
   type MapResult,
   type ValidationWarning,
+  buildChildMetadata,
   extractCustomFields,
   parseBoolean,
   parseODataDate,
@@ -117,6 +118,15 @@ export function mapD365Phonecall(
     importDedupKey: `d365-phonecall:${raw.activityid}`,
     createdAt: parseODataDate(raw.createdon),
     updatedAt,
+    metadata: buildChildMetadata({
+      source: {
+        phonenumber: parseString(raw.phonenumber),
+        statecode: raw.statecode ?? null,
+        statuscode: raw.statuscode ?? null,
+        prioritycode: raw.prioritycode ?? null,
+      },
+      custom: customFields,
+    }),
     _parentEntityType: parentEntityType,
     _parentSourceId: parentSourceId,
   };

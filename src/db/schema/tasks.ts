@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -50,6 +51,12 @@ export const tasks = pgTable(
     }),
     title: text("title").notNull(),
     description: text("description"),
+    // D365 import metadata: native fields with no dedicated column
+    // (percentcomplete, category, statuscode) plus custom fields, shaped
+    // as `{ d365?: {<native>}, custom?: {<custom>} }` (same nested shape
+    // as activities.metadata; see that column's note). NULL for
+    // manually-created tasks.
+    metadata: jsonb("metadata"),
     status: taskStatusEnum("status").notNull().default("open"),
     priority: taskPriorityEnum("priority").notNull().default("normal"),
     // Stored as TIMESTAMPTZ for historical reasons. UI surfaces all

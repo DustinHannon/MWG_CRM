@@ -7,6 +7,7 @@ import {
   type ChildParentContext,
   type MapResult,
   type ValidationWarning,
+  buildChildMetadata,
   extractCustomFields,
   parseODataDate,
   parseOptionalDate,
@@ -129,6 +130,18 @@ export function mapD365Appointment(
     importDedupKey: `d365-appointment:${raw.activityid}`,
     createdAt: parseODataDate(raw.createdon),
     updatedAt,
+    metadata: buildChildMetadata({
+      source: {
+        isalldayevent: raw.isalldayevent ?? null,
+        // Kept even when actualdurationminutes drove the duration column,
+        // so the originally-scheduled length is not lost.
+        scheduleddurationminutes: scheduled ?? null,
+        statecode: raw.statecode ?? null,
+        statuscode: raw.statuscode ?? null,
+        prioritycode: raw.prioritycode ?? null,
+      },
+      custom: customFields,
+    }),
     _parentEntityType: parentEntityType,
     _parentSourceId: parentSourceId,
   };

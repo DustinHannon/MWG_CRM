@@ -7,6 +7,7 @@ import {
   type ChildParentContext,
   type MapResult,
   type ValidationWarning,
+  buildChildMetadata,
   extractCustomFields,
   parseODataDate,
   parseOptionalDate,
@@ -158,6 +159,16 @@ export function mapD365Task(
     updatedById: ctx.resolvedCreatedById ?? ctx.resolvedAssignedToId,
     createdAt,
     updatedAt,
+    metadata: buildChildMetadata({
+      source: {
+        // statecode already maps to the `status` enum above; keep the
+        // finer statuscode plus the otherwise-unmodelled fields.
+        percentcomplete: raw.percentcomplete ?? null,
+        category: parseString(raw.category),
+        statuscode: raw.statuscode ?? null,
+      },
+      custom: customFields,
+    }),
     _parentEntityType: parentEntityType,
     _parentSourceId: parentSourceId,
   };

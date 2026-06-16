@@ -59,6 +59,14 @@ export const activities = pgTable(
     // Set on import only; manually-created activities leave this NULL.
     // The activities_import_dedup_idx index makes re-imports idempotent.
     importDedupKey: text("import_dedup_key"),
+    // D365 import metadata: native D365 fields with no dedicated column
+    // (phonenumber, statecode/statuscode/prioritycode, attachment
+    // descriptor) plus custom (new_*/cr*_/mwg_*) fields, shaped as
+    // `{ d365?: {<native>}, custom?: {<custom>} }`. NULL for
+    // manually-created activities. Children namespace native-vs-custom
+    // because they carry dropped native fields; the root tables store
+    // only custom fields, flat — so the read path differs by table.
+    metadata: jsonb("metadata"),
     // soft-delete columns. listActivitiesFor* must filter
     // is_deleted=false; deleteActivity now archives instead of dropping.
     isDeleted: boolean("is_deleted").notNull().default(false),

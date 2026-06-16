@@ -318,6 +318,16 @@ export function picklistMapper<T extends string>(
 const CUSTOM_FIELD_PREFIXES = /^(new_|cr[0-9a-f]+_|mwg_)/i;
 
 /**
+ * Per-value cap on a passthrough custom-field string before it is
+ * replaced by a truncation descriptor. A pathological D365 custom memo /
+ * base64 attribute could otherwise bloat the `metadata` JSONB column
+ * (and the staging `mapped_payload`) without bound. 16 KiB comfortably
+ * holds any legitimate scalar custom field; oversized values keep a
+ * length + preview so the truncation is never silent.
+ */
+const MAX_CUSTOM_FIELD_CHARS = 16_384;
+
+/**
  * Extract custom fields from a D365 payload.
  *
  * Returns an object containing only keys matching the custom-field
@@ -335,10 +345,64 @@ export function extractCustomFields(
     if (key.includes("@OData.")) continue;
     if (excludeKeys.has(key)) continue;
     if (CUSTOM_FIELD_PREFIXES.test(key)) {
-      result[key] = value;
+      result[key] =
+        typeof value === "string" && value.length > MAX_CUSTOM_FIELD_CHARS
+          ? {
+              __truncated: true,
+              originalLength: value.length,
+              preview: value.slice(0, 200),
+            }
+          : value;
     }
   }
   return result;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Child import metadata *
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Drop null / undefined entries from a record; returns undefined when
+ * nothing survives so callers can omit the key entirely. Keeps `false`,
+ * `0`, and other falsy-but-meaningful values.
+ */
+function compactRecord(
+  obj: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!obj) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v == null) continue;
+    out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Build the `metadata` JSONB blob for a CHILD activity / task.
+ *
+ * `activities` and `tasks` model a fixed column set, so D365 fields with
+ * no dedicated column (a phonecall's `phonenumber`, a task's
+ * `percentcomplete`, an annotation's attachment descriptor, every
+ * `statecode` / `statuscode` / `prioritycode`) plus the custom
+ * (`new_*` / `cr*_` / `mwg_*`) fields {@link extractCustomFields} peels
+ * off would otherwise be silently dropped on import. This preserves them
+ * under `{ d365?: {<native>}, custom?: {<custom>} }`.
+ *
+ * Empty sub-objects are omitted; returns `null` when there is nothing to
+ * store so the column stays NULL rather than holding `{}`.
+ */
+export function buildChildMetadata(parts: {
+  source?: Record<string, unknown>;
+  custom?: Record<string, unknown>;
+}): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  const source = compactRecord(parts.source);
+  if (source) out.d365 = source;
+  const custom = compactRecord(parts.custom);
+  if (custom) out.custom = custom;
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /* -------------------------------------------------------------------------- *

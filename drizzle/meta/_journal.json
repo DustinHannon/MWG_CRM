@@ -162,6 +162,13 @@
       "when": 1781500718294,
       "tag": "0022_certain_lightspeed",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1781635724415,
+      "tag": "0023_illegal_mephisto",
+      "breakpoints": true
     }
   ]
 }
