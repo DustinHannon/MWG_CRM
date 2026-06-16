@@ -116,13 +116,24 @@ export function mapD365Email(
     meetingAttendees: null,
     graphMessageId: null,
     graphEventId: null,
-    graphInternetMessageId: messageId,
+    // NOT graph_internet_message_id — that column carries a global partial
+    // UNIQUE index for the Microsoft Graph email-sync dedup plane, but D365
+    // stores the same internet message id on multiple email activities
+    // (forwards, or one message regarding several records), so populating it
+    // collides on activities_graph_intl_msg_uniq and aborts the whole root
+    // commit. D365 emails dedup by import_dedup_key (activityid); the raw
+    // messageid is preserved in metadata below for traceability.
+    graphInternetMessageId: null,
     importedByName: parseString(raw.sender),
     importDedupKey: `d365-email:${raw.activityid}`,
     createdAt: parseODataDate(raw.createdon),
     updatedAt,
     metadata: buildChildMetadata({
       source: {
+        // Outlook/Exchange internet message id — kept here, NOT in the
+        // graph_internet_message_id column (see note above), so it survives
+        // for traceability without tripping the Graph-sync UNIQUE index.
+        messageid: messageId,
         statecode: raw.statecode ?? null,
         statuscode: raw.statuscode ?? null,
         prioritycode: raw.prioritycode ?? null,
