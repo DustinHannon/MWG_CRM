@@ -38,6 +38,7 @@ interface Card {
 
 const STATUSES = [
   { id: "new", label: "New" },
+  { id: "open", label: "Open" },
   { id: "attempting_contact", label: "Attempting contact" },
   { id: "contacted", label: "Contacted" },
   { id: "scheduled_follow_up", label: "Scheduled follow-up" },

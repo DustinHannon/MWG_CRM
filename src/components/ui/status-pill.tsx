@@ -13,6 +13,7 @@ import { Pill } from "./pill";
 
 export type LeadStatus =
   | "new"
+  | "open"
   | "contacted"
   | "qualified"
   | "unqualified"

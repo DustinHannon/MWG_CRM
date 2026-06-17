@@ -145,7 +145,8 @@ const SOURCE_MAP = picklistMapper<
  * | lost. The three D365-mirrored Open statuses map 1:1 so an imported lead
  * shows its real D365 working status rather than a collapsed approximation.
  * (`converted` is reserved for an actual mwg-crm conversion and is never
- * produced by the import; "Open" maps to `new` — the same concept.)
+ * produced by the import; D365 "Open" maps to the dedicated `open` status 1:1,
+ * NOT the CRM "new" default.)
  *
  * A KNOWN statuscode here is authoritative — e.g. "Attempting Contact" maps to
  * `attempting_contact` even though the lead's statecode is still Open. Only an
@@ -154,6 +155,7 @@ const SOURCE_MAP = picklistMapper<
  */
 const STATUS_MAP = picklistMapper<
   | "new"
+  | "open"
   | "attempting_contact"
   | "contacted"
   | "scheduled_follow_up"
@@ -165,7 +167,7 @@ const STATUS_MAP = picklistMapper<
 >(
   {
     // ---- statecode 0 (Open) ----
-    100000029: "new", // "Open"
+    100000029: "open", // "Open"
     100000016: "attempting_contact", // "Attempting Contact"
     100000035: "scheduled_follow_up", // "Scheduled Follow-Up"
     100000043: "recapture_termed", // "Recapture Termed"

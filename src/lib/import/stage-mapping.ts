@@ -18,7 +18,7 @@ export type LeadStatusEnum = (typeof LEAD_STATUSES)[number];
 // working reasons map 1:1 to the dedicated lead statuses, not a collapsed
 // approximation.
 export const D365_STATUS_TO_LEAD_STATUS: Record<string, LeadStatusEnum> = {
-  "Open": "new",
+  "Open": "open",
   "Attempting Contact": "attempting_contact",
   "Scheduled Follow-Up": "scheduled_follow_up",
   "Recapture Termed": "recapture_termed",

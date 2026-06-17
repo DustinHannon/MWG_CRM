@@ -18,6 +18,9 @@ export const leadStatusEnum = pgEnum("lead_status", [
   "attempting_contact",
   "scheduled_follow_up",
   "recapture_termed",
+  // D365 "Open" status reason (statuscode 100000029) maps here 1:1 so imported
+  // leads show their literal D365 status rather than the CRM "new" default.
+  "open",
 ]);
 
 export const leadRatingEnum = pgEnum("lead_rating", ["hot", "warm", "cold"]);

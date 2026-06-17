@@ -5,6 +5,7 @@
 // custom Open-state Status Reasons (see leadStatusEnum in db/schema/enums.ts).
 export const LEAD_STATUSES = [
   "new",
+  "open",
   "attempting_contact",
   "contacted",
   "scheduled_follow_up",
@@ -61,6 +62,7 @@ export const OPEN_LEAD_STATUSES: LeadStatus[] = LEAD_STATUSES.filter(
  */
 export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   new: "New",
+  open: "Open",
   attempting_contact: "Attempting contact",
   contacted: "Contacted",
   scheduled_follow_up: "Scheduled follow-up",
