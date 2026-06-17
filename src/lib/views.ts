@@ -11,6 +11,7 @@ import {
   LEAD_RATINGS,
   LEAD_SOURCES,
   LEAD_STATUSES,
+  OPEN_LEAD_STATUSES,
 } from "@/lib/lead-constants";
 import { encodeCursor, parseCursor } from "@/lib/leads";
 import {
@@ -82,7 +83,9 @@ export interface ViewFilters {
 
 /**
  * implicit status exclusions for default views.
- * `my-open` is unchanged because it already pins status explicitly.
+ * `my-open` pins the full open set explicitly (OPEN_LEAD_STATUSES) so it shows
+ * every active-pipeline status — including the D365 working statuses — not just
+ * a hand-picked subset.
  * `all-incl-converted` is the explicit escape hatch when admins / power
  * users need to see the entire history.
  */
@@ -95,7 +98,7 @@ export const BUILTIN_VIEWS: ViewDefinition[] = [
     id: "builtin:my-open",
     name: "My Open Leads",
     scope: "mine",
-    filters: { status: ["new", "contacted", "qualified"] },
+    filters: { status: [...OPEN_LEAD_STATUSES] },
     columns: DEFAULT_COLUMNS,
     sort: { field: "lastActivityAt", direction: "desc" },
   },

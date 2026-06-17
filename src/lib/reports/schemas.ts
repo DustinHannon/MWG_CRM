@@ -2,6 +2,7 @@ import type {
   ReportEntityType,
   ReportMetric,
 } from "@/db/schema/saved-reports";
+import { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES } from "@/lib/lead-constants";
 
 /**
  * report builder field metadata.
@@ -101,25 +102,13 @@ export interface EntityMeta {
   fields: readonly FieldMeta[];
 }
 
-const LEAD_STATUS_VALUES = [
-  "new",
-  "contacted",
-  "qualified",
-  "unqualified",
-  "converted",
-  "lost",
-] as const;
-const LEAD_RATING_VALUES = ["hot", "warm", "cold"] as const;
-const LEAD_SOURCE_VALUES = [
-  "web",
-  "referral",
-  "event",
-  "cold_call",
-  "partner",
-  "marketing",
-  "import",
-  "other",
-] as const;
+// Sourced from the canonical client-safe lead enums so the report builder's
+// enum filter dropdowns track the live enums — no hand-maintained copy to drift
+// on the next enum change (the 3 new D365 statuses were missed exactly because
+// this was a duplicate).
+const LEAD_STATUS_VALUES = LEAD_STATUSES;
+const LEAD_RATING_VALUES = LEAD_RATINGS;
+const LEAD_SOURCE_VALUES = LEAD_SOURCES;
 const OPP_STAGE_VALUES = [
   "prospecting",
   "qualification",

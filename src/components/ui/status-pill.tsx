@@ -1,3 +1,4 @@
+import { LEAD_STATUS_LABELS } from "@/lib/lead-constants";
 import { Pill } from "./pill";
 
 /**
@@ -68,15 +69,9 @@ const VARIANTS: Record<string, string> = {
 };
 
 const LABELS: Record<string, string> = {
-  new: "New",
-  contacted: "Contacted",
-  qualified: "Qualified",
-  unqualified: "Unqualified",
-  converted: "Converted",
-  lost: "Lost",
-  attempting_contact: "Attempting contact",
-  scheduled_follow_up: "Scheduled follow-up",
-  recapture_termed: "Recapture termed",
+  // Lead status labels are single-sourced from lead-constants so the pill and
+  // any plain-text status render never disagree.
+  ...LEAD_STATUS_LABELS,
   prospecting: "Prospecting",
   qualification: "Qualification",
   proposal: "Proposal",

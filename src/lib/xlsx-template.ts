@@ -3,6 +3,10 @@ import ExcelJS from "exceljs";
 import { LEAD_RATINGS, LEAD_SOURCES, LEAD_STATUSES } from "@/lib/lead-constants";
 import { OPPORTUNITY_STAGES } from "@/lib/opportunity-constants";
 import { TEMPLATE_HEADERS } from "@/lib/import/headers";
+import {
+  D365_STATUS_TO_LEAD_STATUS,
+  D365_STATUS_TO_OPP_STAGE,
+} from "@/lib/import/stage-mapping";
 
 /**
  * three-sheet template generated for the new 39-column
@@ -160,26 +164,16 @@ export async function buildLeadImportTemplate(): Promise<Buffer> {
   instr.addRow([]);
   instr.addRow(["Lead status mapping (when 'Status' is a D365 value)"]);
   instr.getRow(instr.rowCount).font = { bold: true };
-  for (const [from, to] of [
-    ["Open", "new"],
-    ["Attempting Contact", "contacted"],
-    ["Qualified", "qualified"],
-    ["Not Interested", "unqualified"],
-    ["No Response", "unqualified"],
-    ["Lost", "lost"],
-  ] as const) {
+  // Derived from the importer's canonical map so the template instructions can
+  // never drift from real import behavior (the 3 new D365 statuses landed here
+  // automatically).
+  for (const [from, to] of Object.entries(D365_STATUS_TO_LEAD_STATUS)) {
     instr.addRow([from, "→", to]);
   }
   instr.addRow([]);
   instr.addRow(["Opportunity stage mapping (Linked Opportunity Stage)"]);
   instr.getRow(instr.rowCount).font = { bold: true };
-  for (const [from, to] of [
-    ["In Progress", "prospecting"],
-    ["Won", "closed_won"],
-    ["Lost", "closed_lost"],
-    ["On Hold", "qualification"],
-    ["Cancelled", "closed_lost"],
-  ] as const) {
+  for (const [from, to] of Object.entries(D365_STATUS_TO_OPP_STAGE)) {
     instr.addRow([from, "→", to]);
   }
   instr.addRow([]);

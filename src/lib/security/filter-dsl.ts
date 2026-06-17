@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LEAD_STATUSES } from "@/lib/lead-constants";
 
 /**
  * Filter DSL allowlists and Zod schema for the
@@ -65,14 +66,9 @@ export const ALLOWED_LEAD_FILTER_FIELDS: Record<string, FilterFieldDescriptor> =
       type: "enum",
       columnKey: "status",
       label: "Lead status",
-      enumValues: [
-        "new",
-        "contacted",
-        "qualified",
-        "unqualified",
-        "converted",
-        "lost",
-      ],
+      // Canonical source so the segment-builder status dropdown tracks the live
+      // enum (the 3 new D365 statuses must be selectable here too).
+      enumValues: [...LEAD_STATUSES],
     },
     rating: {
       type: "enum",

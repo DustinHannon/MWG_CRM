@@ -2,6 +2,11 @@ import Link from "next/link";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { requireAdmin } from "@/lib/auth-helpers";
+import {
+  LEAD_RATINGS,
+  LEAD_SOURCES,
+  LEAD_STATUSES,
+} from "@/lib/lead-constants";
 
 export const dynamic = "force-dynamic";
 
@@ -57,9 +62,9 @@ export default async function ScoringHelpPage() {
           <li><code>jobTitle, companyName, industry</code> — strings</li>
           <li><code>website, linkedinUrl</code> — strings</li>
           <li><code>city, state, country</code> — strings</li>
-          <li><code>status</code> — new/contacted/qualified/unqualified/converted/lost</li>
-          <li><code>rating</code> — hot/warm/cold</li>
-          <li><code>source</code> — web/referral/event/cold_call/partner/marketing/import/other</li>
+          <li><code>status</code> — {LEAD_STATUSES.join("/")}</li>
+          <li><code>rating</code> — {LEAD_RATINGS.join("/")}</li>
+          <li><code>source</code> — {LEAD_SOURCES.join("/")}</li>
           <li><code>estimatedValue</code> — number (USD)</li>
           <li><code>estimatedCloseDate</code> — date string YYYY-MM-DD</li>
           <li><code>doNotContact, doNotEmail, doNotCall</code> — booleans</li>

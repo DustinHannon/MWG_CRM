@@ -313,8 +313,8 @@ export function mapD365Lead(
 
   // Lead status: the org's `statuscode` (Status Reason) option set was
   // enumerated live (see STATUS_MAP above), so a KNOWN code is authoritative
-  // and maps directly — e.g. "Attempting Contact" → contacted even though the
-  // lead's statecode is still Open. Only an UNRECOGNIZED or null statuscode
+  // and maps directly — e.g. "Attempting Contact" → attempting_contact even
+  // though the lead's statecode is still Open. Only an UNRECOGNIZED or null statuscode
   // falls back to the coarse `statecode` (1 = qualified, 2 = disqualified) so a
   // terminal lead still lands qualified/lost instead of the "new" default.
   // An unmapped statuscode does NOT emit the unmapped_picklist review flag

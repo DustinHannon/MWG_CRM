@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/user-time";
 import { formatUserTime } from "@/lib/format-time";
 import { htmlToDisplayText } from "@/lib/html-text";
+import { LEAD_STATUS_LABELS } from "@/lib/lead-constants";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
 import { formatPersonName } from "@/lib/format/person-name";
@@ -105,7 +106,8 @@ export default async function LeadPrintPage({
       </h1>
       <div className="meta">
         {lead.companyName ? `${lead.companyName} · ` : ""}
-        Status: {lead.status} · Score: {lead.score} ({lead.scoreBand})
+        Status: {LEAD_STATUS_LABELS[lead.status] ?? lead.status} · Score:{" "}
+        {lead.score} ({lead.scoreBand})
       </div>
 
       <section>

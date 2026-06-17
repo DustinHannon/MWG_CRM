@@ -440,7 +440,7 @@ test.describe("§7.3 D365 import — halt conditions", () => {
   });
 
   // H-2
-  test("14. unmapped picklist (statuscode=999) → halt; resume after fix", async ({
+  test("14. unmapped root picklist (industrycode=999) → record routed to review, run does not halt", async ({
     request,
   }) => {
     skipIfNoLiveD365();
@@ -457,7 +457,11 @@ test.describe("§7.3 D365 import — halt conditions", () => {
     await injectImportRecord({
       batchId,
       sourceEntityType: "lead",
-      rawPayload: createMockD365Lead({ statuscode: 999 }),
+      // industrycode still emits an `unmapped_picklist` warning; statuscode does
+      // NOT (the org's custom Status Reason option-set is enumerated in the
+      // lead mapper and unknown codes fall back silently), so drive the policy
+      // via industrycode.
+      rawPayload: createMockD365Lead({ industrycode: 999 }),
       status: "pending",
     });
 
@@ -469,8 +473,10 @@ test.describe("§7.3 D365 import — halt conditions", () => {
 
     const runStatus = await request.get(`${BASE}/api/v1/d365/runs/${runId}`);
     const body = await runStatus.json();
-    expect(body.status).toBe("paused_for_review");
-    expect(JSON.stringify(body.notes ?? "")).toContain("unmapped_picklist");
+    // Per the unmapped-picklist policy (7af14cb): an unmapped ROOT picklist
+    // routes the offending record to record-level "review" — it no longer
+    // halts the entire run.
+    expect(body.status).not.toBe("paused_for_review");
   });
 
   // H-3
@@ -854,18 +860,25 @@ test.describe("§7.6 D365 import — audit coverage", () => {
     );
     const batchId = (await fetchRes.json()).id;
 
-    // inject a mid-batch halt + resume to fire RUN_HALTED + RUN_RESUMED
-    await injectImportRecord({
-      batchId,
-      sourceEntityType: "lead",
-      rawPayload: createMockD365Lead({ statuscode: 999 }),
-      status: "pending",
-    });
+    // inject a mid-batch halt + resume to fire RUN_HALTED + RUN_RESUMED.
+    // Use the owner-JIT-failure halt (≥5 unresolvable owners): an unmapped
+    // picklist no longer halts the run (it routes the record to review), so it
+    // can't drive RUN_HALTED — owner_jit_failure is the canonical map-stage halt.
+    for (let i = 0; i < 5; i++) {
+      await injectImportRecord({
+        batchId,
+        sourceEntityType: "lead",
+        rawPayload: createMockD365Lead({
+          _ownerid_value: "00000000-0000-0000-0000-00000000000" + i,
+        }),
+        status: "pending",
+      });
+    }
     await request.post(`${BASE}/api/v1/d365/batches/${batchId}/map`, {
       data: {},
     });
     await request.post(`${BASE}/api/v1/d365/runs/${runId}/resume`, {
-      data: { decision: "skip" },
+      data: { decision: "use_default_owner" },
     });
 
     // approve + reject one record + commit
