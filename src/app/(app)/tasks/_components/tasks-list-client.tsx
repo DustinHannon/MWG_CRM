@@ -42,6 +42,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import { cn } from "@/lib/utils";
+import { htmlToDisplayText } from "@/lib/html-text";
 import type { TaskRow } from "@/lib/tasks";
 import {
   AVAILABLE_TASK_COLUMNS,
@@ -1300,19 +1301,21 @@ function renderTaskCell(
   ctx: { viewerId: string; prefs: TimePrefs; overdue: boolean },
 ) {
   switch (key) {
-    case "title":
+    case "title": {
+      // Imported task descriptions may be HTML; show readable plain text in
+      // the list cell, never raw tags.
+      const desc = task.description ? htmlToDisplayText(task.description) : "";
       return (
         <>
           <span className="font-medium text-sm">{task.title}</span>
-          {task.description ? (
+          {desc ? (
             <span className="ml-2 text-xs text-muted-foreground">
-              {task.description.length > 80
-                ? task.description.slice(0, 80) + "…"
-                : task.description}
+              {desc.length > 80 ? desc.slice(0, 80) + "…" : desc}
             </span>
           ) : null}
         </>
       );
+    }
     case "related":
       return <RelatedTo task={task} />;
     case "dueAt":

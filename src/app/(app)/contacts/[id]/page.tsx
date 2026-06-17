@@ -13,6 +13,7 @@ import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
+import { htmlToDisplayText } from "@/lib/html-text";
 import { canDeleteContact } from "@/lib/access/can-delete";
 import { listTasksForContact } from "@/lib/tasks";
 import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
@@ -168,7 +169,10 @@ export default async function ContactDetailPage({
               .join(", ") || null}
           />
           {contact.description ? (
-            <Row label="Description" value={contact.description} />
+            <Row
+              label="Description"
+              value={htmlToDisplayText(contact.description)}
+            />
           ) : null}
         </dl>
       </GlassCard>

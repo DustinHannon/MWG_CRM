@@ -10,6 +10,7 @@ import {
   UserTime,
 } from "@/components/ui/user-time";
 import { formatUserTime } from "@/lib/format-time";
+import { htmlToDisplayText } from "@/lib/html-text";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { getLeadById } from "@/lib/leads";
 import { formatPersonName } from "@/lib/format/person-name";
@@ -180,7 +181,9 @@ export default async function LeadPrintPage({
               {a.actorName ? ` · ${a.actorName}` : ""}
             </div>
             {a.subject && <div className="activity-subject">{a.subject}</div>}
-            {a.body && <div className="activity-body">{a.body}</div>}
+            {a.body && (
+              <div className="activity-body">{htmlToDisplayText(a.body)}</div>
+            )}
           </div>
         ))}
       </section>

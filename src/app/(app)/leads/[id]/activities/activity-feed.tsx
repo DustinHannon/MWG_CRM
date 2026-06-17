@@ -3,6 +3,7 @@ import { formatUserTime } from "@/lib/format-time";
 import { listActivitiesForLead } from "@/lib/activities";
 import type { SessionUser } from "@/lib/auth-helpers";
 import { UserChip } from "@/components/user-display";
+import { RichBody } from "@/components/activity/rich-body";
 import { ActivityDeleteButton } from "./activity-delete-button";
 import { ActivityEditButton } from "./activity-edit-button";
 
@@ -117,11 +118,12 @@ export async function ActivityFeed({
               </p>
             ) : null}
 
-            {r.body ? (
-              <p className="mt-3 whitespace-pre-wrap text-sm text-foreground/90">
-                {r.body}
-              </p>
-            ) : null}
+            <RichBody
+              body={r.body}
+              className="mt-3 whitespace-pre-wrap text-sm text-foreground/90"
+              containerClassName="mt-3"
+              expandLabel={r.kind === "email" ? "Show full email" : "Show formatted content"}
+            />
 
             {r.attachments.length > 0 ? (
               <ul className="mt-3 flex flex-wrap gap-2">

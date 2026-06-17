@@ -14,6 +14,7 @@ import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 import { formatCurrency } from "@/lib/format/currency";
+import { htmlToDisplayText } from "@/lib/html-text";
 import { canDeleteAccount } from "@/lib/access/can-delete";
 import { listTasksForAccount } from "@/lib/tasks";
 import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
@@ -221,7 +222,14 @@ export default async function AccountDetailPage({
               value={formatAddress(account)}
               multiline
             />
-            <Row label="Description" value={account.description} />
+            <Row
+              label="Description"
+              value={
+                account.description
+                  ? htmlToDisplayText(account.description)
+                  : null
+              }
+            />
           </dl>
         </GlassCard>
 

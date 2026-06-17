@@ -15,6 +15,7 @@ import { UserChip, UserHoverCard } from "@/components/user-display";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { canDeleteOpportunity } from "@/lib/access/can-delete";
 import { formatCurrency } from "@/lib/format/currency";
+import { htmlToDisplayText } from "@/lib/html-text";
 import { listTasksForOpportunity } from "@/lib/tasks";
 import { EntityTasksSection } from "@/components/tasks/entity-tasks-section";
 import { OpportunityDetailDelete } from "../_components/opportunity-detail-delete";
@@ -157,7 +158,10 @@ export default async function OpportunityDetailPage({
             </dd>
           </div>
           <Row label="Probability" value={opp.probability ? `${opp.probability}%` : null} />
-          <Row label="Description" value={opp.description ?? null} />
+          <Row
+            label="Description"
+            value={opp.description ? htmlToDisplayText(opp.description) : null}
+          />
           {opp.sourceLeadId ? (
             <Row
               label="Originated from"

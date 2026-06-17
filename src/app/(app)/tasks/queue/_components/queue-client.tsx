@@ -16,6 +16,7 @@ import {
   StandardErrorBoundary,
 } from "@/components/standard";
 import { TaskCompleteToggle } from "@/components/tasks/task-complete-toggle";
+import { RichBody } from "@/components/activity/rich-body";
 import { StatusPill } from "@/components/ui/status-pill";
 import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserTimeClient } from "@/components/ui/user-time-client";
@@ -648,11 +649,11 @@ function QueueClientInner({
               <h2 className="text-xl font-semibold text-foreground">
                 {currentTask.title}
               </h2>
-              {currentTask.description ? (
-                <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/80">
-                  {currentTask.description}
-                </p>
-              ) : null}
+              <RichBody
+                body={currentTask.description}
+                className="mt-2 whitespace-pre-wrap text-sm text-foreground/80"
+                containerClassName="mt-2"
+              />
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">

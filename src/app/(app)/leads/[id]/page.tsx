@@ -28,6 +28,7 @@ import { formatPersonName as _fpn } from "@/lib/format/person-name";
 void _fpn;
 import { ConvertModal } from "./convert/_components/convert-modal";
 import { ActivityFeed } from "./activities/activity-feed";
+import { RichBody } from "@/components/activity/rich-body";
 import { LeadActionsPanel } from "./lead-actions-panel";
 import { UserChip, UserHoverCard } from "@/components/user-display";
 import { EmailActivityTimeline } from "@/components/leads/email-activity-timeline";
@@ -255,9 +256,18 @@ export default async function LeadDetailPage({
         </Card>
 
         <Card title="Description" wide>
-          <p className="whitespace-pre-wrap text-sm text-foreground/90">
-            {lead.description ?? <span className="text-muted-foreground/80">No notes yet.</span>}
-          </p>
+          {lead.description ? (
+            <RichBody
+              body={lead.description}
+              className="whitespace-pre-wrap text-sm text-foreground/90"
+              containerClassName=""
+              expandLabel="Show formatted content"
+            />
+          ) : (
+            <p className="whitespace-pre-wrap text-sm text-foreground/90">
+              <span className="text-muted-foreground/80">No notes yet.</span>
+            </p>
+          )}
         </Card>
 
         <div className="lg:col-span-3">
