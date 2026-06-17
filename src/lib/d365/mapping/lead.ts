@@ -131,30 +131,57 @@ const SOURCE_MAP = picklistMapper<
 );
 
 /**
- * D365 `statuscode` (lead lifecycle) → mwg-crm `lead_status` enum.
+ * D365 lead `statuscode` (Status Reason) → mwg-crm `lead_status` enum.
  *
- * Per brief — legacy D365 default option-set values:
- * 1=New, 2=Contacted, 3=Qualified, 4=Lost, 5=Cant_Contact,
- * 6=No_Longer_Interested, 7=Cancelled.
+ * The MWG-MWGCRM org replaced the stock Open status reasons with a CUSTOM
+ * option set, so the values are org-specific (100000xxx), not the stock
+ * 1=New / 2=Contacted. The mapping below is the org's ACTUAL Status Reason
+ * option set, read live from D365 EntityDefinitions metadata on 2026-06-16
+ * (`statuscode` StatusAttributeMetadata, value | parent-state | label). Each
+ * entry is annotated with its D365 label and parent statecode.
  *
- * mwg-crm `lead_status` enum values: new | contacted | qualified |
- * unqualified | converted | lost.
+ * mwg-crm `lead_status` enum values: new | attempting_contact | contacted |
+ * scheduled_follow_up | recapture_termed | qualified | unqualified | converted
+ * | lost. The three D365-mirrored Open statuses map 1:1 so an imported lead
+ * shows its real D365 working status rather than a collapsed approximation.
+ * (`converted` is reserved for an actual mwg-crm conversion and is never
+ * produced by the import; "Open" maps to `new` — the same concept.)
  *
- * NOTE: D365 `statecode` (state) drives `lost` vs `qualified` more
- * cleanly than `statuscode` alone. We layer that in below — this
- * map is for the inactive/disqualified status detail.
+ * A KNOWN statuscode here is authoritative — e.g. "Attempting Contact" maps to
+ * `attempting_contact` even though the lead's statecode is still Open. Only an
+ * unrecognized / null statuscode falls back to the coarse statecode in the
+ * mapper below.
  */
 const STATUS_MAP = picklistMapper<
-  "new" | "contacted" | "qualified" | "unqualified" | "converted" | "lost"
+  | "new"
+  | "attempting_contact"
+  | "contacted"
+  | "scheduled_follow_up"
+  | "recapture_termed"
+  | "qualified"
+  | "unqualified"
+  | "converted"
+  | "lost"
 >(
   {
-    1: "new",
-    2: "contacted",
-    3: "qualified",
-    4: "lost",
-    5: "unqualified",
-    6: "unqualified",
-    7: "lost",
+    // ---- statecode 0 (Open) ----
+    100000029: "new", // "Open"
+    100000016: "attempting_contact", // "Attempting Contact"
+    100000035: "scheduled_follow_up", // "Scheduled Follow-Up"
+    100000043: "recapture_termed", // "Recapture Termed"
+    // ---- statecode 1 (Qualified) ----
+    3: "qualified", // "Qualified"
+    // ---- statecode 2 (Disqualified) ----
+    100000015: "lost", // "No Response"
+    100000013: "lost", // "Not Interested"
+    100000000: "lost", // "Already Has Coverage"
+    100000017: "lost", // "Looking For Dental"
+    100000011: "unqualified", // "Bogus Information"
+    100000006: "lost", // "Working with Another Agent"
+    100000009: "unqualified", // "Ineligible"
+    100000030: "lost", // "Deceased"
+    100000002: "lost", // "Other"
+    100000037: "unqualified", // "Disqualified By Admin"
   },
   "status",
   "new",
@@ -284,22 +311,22 @@ export function mapD365Lead(
   const sourceResult = SOURCE_MAP(raw.leadsourcecode ?? null);
   if (sourceResult.warning) warnings.push(sourceResult.warning);
 
-  // Lead status: `statecode` is the authoritative coarse lifecycle signal
-  // (0 = open, 1 = qualified, 2 = disqualified). `statuscode` is org-specific
-  // detail that is frequently a CUSTOM option-set value (100000xxx) we cannot
-  // enumerate, so an unrecognized statuscode does NOT emit the
-  // unmapped_picklist review flag — it defaults to "new" and the statecode
-  // override below resolves qualified/lost. The raw statuscode is preserved
-  // in raw_payload for reviewers.
+  // Lead status: the org's `statuscode` (Status Reason) option set was
+  // enumerated live (see STATUS_MAP above), so a KNOWN code is authoritative
+  // and maps directly — e.g. "Attempting Contact" → contacted even though the
+  // lead's statecode is still Open. Only an UNRECOGNIZED or null statuscode
+  // falls back to the coarse `statecode` (1 = qualified, 2 = disqualified) so a
+  // terminal lead still lands qualified/lost instead of the "new" default.
+  // An unmapped statuscode does NOT emit the unmapped_picklist review flag
+  // (it would route every such lead to manual review); the fallback resolves
+  // it. The raw statuscode is preserved in `d365_status_code` / raw_payload.
   const statusResult = STATUS_MAP(raw.statuscode ?? null);
-
-  // statecode override: 1 = qualified, 2 = disqualified per default
-  // metadata. Layer on top so we don't lose terminal-state semantics.
   let status = statusResult.value;
-  if (raw.statecode === 1) {
-    status = status === "lost" ? status : "qualified";
-  } else if (raw.statecode === 2) {
-    status = status === "qualified" || status === "converted" ? status : "lost";
+  const statuscodeUnknown =
+    raw.statuscode == null || statusResult.warning != null;
+  if (statuscodeUnknown) {
+    if (raw.statecode === 1) status = "qualified";
+    else if (raw.statecode === 2) status = "lost";
   }
 
   // Industry.

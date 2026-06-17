@@ -16,7 +16,10 @@ import { withErrorBoundary, type ActionResult } from "@/lib/server-action";
 
 const PIPELINE_STATUSES = z.enum([
   "new",
+  "attempting_contact",
   "contacted",
+  "scheduled_follow_up",
+  "recapture_termed",
   "qualified",
   "unqualified",
   "lost",

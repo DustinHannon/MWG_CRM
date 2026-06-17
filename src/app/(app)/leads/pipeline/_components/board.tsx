@@ -38,7 +38,10 @@ interface Card {
 
 const STATUSES = [
   { id: "new", label: "New" },
+  { id: "attempting_contact", label: "Attempting contact" },
   { id: "contacted", label: "Contacted" },
+  { id: "scheduled_follow_up", label: "Scheduled follow-up" },
+  { id: "recapture_termed", label: "Recapture termed" },
   { id: "qualified", label: "Qualified" },
   { id: "unqualified", label: "Unqualified" },
   { id: "lost", label: "Lost" },

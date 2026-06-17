@@ -16,7 +16,10 @@ export type LeadStatus =
   | "qualified"
   | "unqualified"
   | "converted"
-  | "lost";
+  | "lost"
+  | "attempting_contact"
+  | "scheduled_follow_up"
+  | "recapture_termed";
 
 export type OpportunityStage =
   | "prospecting"
@@ -39,6 +42,12 @@ const VARIANTS: Record<string, string> = {
   unqualified: "bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]",
   converted: "bg-[var(--status-won-bg)] text-[var(--status-won-fg)]",
   lost: "bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]",
+  attempting_contact:
+    "bg-[var(--status-attempting-bg)] text-[var(--status-attempting-fg)]",
+  scheduled_follow_up:
+    "bg-[var(--status-followup-bg)] text-[var(--status-followup-fg)]",
+  recapture_termed:
+    "bg-[var(--status-recapture-bg)] text-[var(--status-recapture-fg)]",
 
   // Opportunity stage
   prospecting: "bg-[var(--status-new-bg)] text-[var(--status-new-fg)]",
@@ -65,6 +74,9 @@ const LABELS: Record<string, string> = {
   unqualified: "Unqualified",
   converted: "Converted",
   lost: "Lost",
+  attempting_contact: "Attempting contact",
+  scheduled_follow_up: "Scheduled follow-up",
+  recapture_termed: "Recapture termed",
   prospecting: "Prospecting",
   qualification: "Qualification",
   proposal: "Proposal",

@@ -1,7 +1,14 @@
 // Plain constants — safe to import from client components.
+// Order here drives status dropdown / filter ordering (logical pipeline order),
+// independent of the underlying Postgres enum's insertion order. The three
+// `*_contact` / `*_follow_up` / `recapture_*` values mirror the MWG D365 org's
+// custom Open-state Status Reasons (see leadStatusEnum in db/schema/enums.ts).
 export const LEAD_STATUSES = [
   "new",
+  "attempting_contact",
   "contacted",
+  "scheduled_follow_up",
+  "recapture_termed",
   "qualified",
   "unqualified",
   "converted",

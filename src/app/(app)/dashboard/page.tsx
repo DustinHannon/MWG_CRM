@@ -97,7 +97,7 @@ export default async function DashboardPage() {
           SELECT
             (SELECT count(*)::int FROM leads
              WHERE is_deleted = false
-               AND status IN ('new','contacted','qualified')
+               AND status IN ('new','attempting_contact','contacted','scheduled_follow_up','recapture_termed','qualified')
                AND ${ownerScope}) AS open_leads,
             (SELECT count(*)::int FROM leads
              WHERE is_deleted = false
@@ -165,7 +165,7 @@ export default async function DashboardPage() {
               FROM leads l
               INNER JOIN users u ON u.id = l.owner_id
               WHERE l.is_deleted = false
-                AND l.status IN ('new','contacted','qualified')
+                AND l.status IN ('new','attempting_contact','contacted','scheduled_follow_up','recapture_termed','qualified')
               GROUP BY u.display_name
               ORDER BY open_count DESC
               LIMIT 5

@@ -2,6 +2,12 @@ import { pgEnum } from "drizzle-orm/pg-core";
 
 // Lead lifecycle. `converted` is the v1 terminal "won" state — we don't have
 // separate Account/Contact/Opportunity tables yet (v2).
+//
+// `attempting_contact` / `scheduled_follow_up` / `recapture_termed` mirror the
+// MWG D365 org's custom Open-state Status Reasons 1:1 so an imported lead shows
+// its real D365 working status instead of being collapsed into `contacted`
+// (added 2026-06-16). New values are APPENDED (Postgres ALTER TYPE ADD VALUE
+// appends) — this array's order must match the live enum's insertion order.
 export const leadStatusEnum = pgEnum("lead_status", [
   "new",
   "contacted",
@@ -9,6 +15,9 @@ export const leadStatusEnum = pgEnum("lead_status", [
   "unqualified",
   "converted",
   "lost",
+  "attempting_contact",
+  "scheduled_follow_up",
+  "recapture_termed",
 ]);
 
 export const leadRatingEnum = pgEnum("lead_rating", ["hot", "warm", "cold"]);

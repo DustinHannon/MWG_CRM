@@ -14,7 +14,10 @@ export const dynamic = "force-dynamic";
 
 const PIPELINE_STATUSES = [
   "new",
+  "attempting_contact",
   "contacted",
+  "scheduled_follow_up",
+  "recapture_termed",
   "qualified",
   "unqualified",
   "lost",

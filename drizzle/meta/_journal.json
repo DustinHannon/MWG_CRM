@@ -169,6 +169,13 @@
       "when": 1781635724415,
       "tag": "0023_illegal_mephisto",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781661900381,
+      "tag": "0024_talented_living_lightning",
+      "breakpoints": true
     }
   ]
 }
