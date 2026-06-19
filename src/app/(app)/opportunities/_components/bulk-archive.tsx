@@ -169,7 +169,7 @@ export function BulkArchiveBar() {
           <button
             type="button"
             disabled={ctx.pending}
-            className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-2 py-1 text-[var(--status-lost-fg)] transition hover:bg-[var(--status-lost-bg)]/70 disabled:opacity-60"
+            className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-2 py-1 text-[var(--status-lost-fg)] transition hover:bg-destructive/30 disabled:opacity-60"
           >
             {ctx.pending ? "Archiving…" : "Archive selected"}
           </button>

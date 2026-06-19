@@ -112,7 +112,7 @@ export function LockedTemplateBanner({
                         type="button"
                         onClick={handleConfirm}
                         disabled={pending}
-                        className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/40 disabled:opacity-50"
+                        className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/30 disabled:opacity-50"
                       >
                         {pending ? "Unlocking…" : "Force unlock"}
                       </button>

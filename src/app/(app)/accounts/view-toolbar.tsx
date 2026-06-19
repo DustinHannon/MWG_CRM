@@ -282,7 +282,7 @@ export function AccountViewToolbar({
           trigger={
             <button
               type="button"
-              className="hidden rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] transition hover:bg-[var(--status-lost-bg)]/70 md:inline-flex"
+              className="hidden rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] transition hover:bg-destructive/30 md:inline-flex"
             >
               Delete view
             </button>
