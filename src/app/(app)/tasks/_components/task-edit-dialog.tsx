@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { formatInTimeZone } from "date-fns-tz";
 import { toast } from "sonner";
+import { StandardDialog } from "@/components/standard";
 import { TagSectionClient } from "@/components/tags/tag-section-client";
 import { useShowPicker } from "@/hooks/use-show-picker";
 import { parseDueDateInUserTz } from "@/lib/dates";
@@ -90,17 +91,6 @@ export function TaskEditDialog({
   const [pending, startTransition] = useTransition();
   const datePicker = useShowPicker();
 
-  // Escape closes the dialog — WCAG 2.1.2. Pending writes block
-  // dismissal so the user doesn't think they cancelled when the
-  // server is mid-update.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !pending) onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, pending]);
-
   function submit() {
     const trimmed = title.trim();
     if (!trimmed) {
@@ -134,41 +124,45 @@ export function TaskEditDialog({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Edit task ${task.title}`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-      onClick={() => {
-        // Backdrop click dismisses, but not during an in-flight save —
-        // matches the BulkTagButton pattern so users don't lose their
-        // edits to an accidental click while pending.
-        if (!pending) onClose();
+    <StandardDialog
+      open
+      onOpenChange={(next) => {
+        // Pending writes block dismissal so the user doesn't think they
+        // cancelled when the server is mid-update.
+        if (!next && !pending) onClose();
       }}
-    >
-      <div
-        className="w-full max-w-xl rounded-lg border border-border bg-[var(--popover)] p-5 text-[var(--popover-foreground)] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="text-base font-semibold">Edit task</h3>
+      title="Edit task"
+      contentClassName="sm:max-w-xl"
+      disableOutsideClose={pending}
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            aria-label="Close"
+            disabled={pending}
+            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            Close
+            Cancel
           </button>
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-          className="mt-4 space-y-4"
-        >
+          <button
+            type="submit"
+            form="task-edit-form"
+            disabled={pending || !title.trim()}
+            className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {pending ? "Saving…" : "Save changes"}
+          </button>
+        </>
+      }
+    >
+      <form
+        id="task-edit-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+        className="space-y-4"
+      >
           <label className="block text-xs uppercase tracking-wide text-muted-foreground">
             Title
             <input
@@ -279,27 +273,8 @@ export function TaskEditDialog({
               canManage={canManageTagDefinitions}
             />
           </section>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={pending || !title.trim()}
-              className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {pending ? "Saving…" : "Save changes"}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </StandardDialog>
   );
 }
 

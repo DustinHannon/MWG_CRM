@@ -181,10 +181,7 @@ function TaskRowItem({
             task.status === "completed" ? "line-through" : ""
           }`}
         >
-          <Link
-            href={`/tasks?assignee=me&status=open#task-${task.id}`}
-            className="hover:underline"
-          >
+          <Link href="/tasks" className="hover:underline">
             {task.title}
           </Link>
         </p>

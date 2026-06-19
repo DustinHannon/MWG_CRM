@@ -20,8 +20,10 @@ import {
   useTransition,
 } from "react";
 import { toast } from "sonner";
+import { ChevronDown, ChevronsUpDown, ChevronUp, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  StandardDialog,
   StandardEmptyState,
   StandardListPage,
   type StandardListPagePage,
@@ -40,7 +42,11 @@ import { UserChip } from "@/components/user-display/user-chip";
 import { PriorityPill } from "@/components/ui/priority-pill";
 import { StatusPill } from "@/components/ui/status-pill";
 import { formatUserTime, type TimePrefs } from "@/lib/format-time";
-import { useClickOutside } from "@/hooks/use-click-outside";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { htmlToDisplayText } from "@/lib/html-text";
 import type { TaskRow } from "@/lib/tasks";
@@ -737,7 +743,7 @@ function TasksListInner({
               type="button"
               onClick={bulkComplete}
               disabled={pending}
-              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs hover:bg-muted"
+              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Complete
             </button>
@@ -754,7 +760,7 @@ function TasksListInner({
                 <button
                   type="button"
                   disabled={pending}
-                  className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20"
+                  className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Delete
                 </button>
@@ -765,7 +771,7 @@ function TasksListInner({
                 type="button"
                 onClick={openReassign}
                 disabled={pending}
-                className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs hover:bg-muted"
+                className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Reassign…
               </button>
@@ -774,7 +780,7 @@ function TasksListInner({
               type="button"
               onClick={clearSelection}
               disabled={pending}
-              className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+              className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Clear
             </button>
@@ -863,7 +869,7 @@ function TasksListInner({
             description={
               filtersAreModified
                 ? "Adjust or clear the filters to see records here."
-                : undefined
+                : "Switch views above, or add tasks from a lead, contact, or account."
             }
           />
         }
@@ -910,50 +916,25 @@ function TasksListInner({
         />
       ) : null}
 
-      {/* bulk-reassign modal — inline dialog
-          (no Radix). Backed by bulkReassignTasksAction; the server
-          gate-checks canReassignTasks before the UPDATE fires. */}
+      {/* bulk-reassign modal. Backed by bulkReassignTasksAction; the
+          server gate-checks canReassignTasks before the UPDATE fires. */}
       {reassignOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Reassign selected tasks"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-        >
-          <div
-            className="w-full max-w-md rounded-lg border border-border bg-[var(--popover)] p-5 text-[var(--popover-foreground)] shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-base font-semibold">
-              Reassign {selected.size} task{selected.size === 1 ? "" : "s"}
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              The new assignee will receive the task; this emits a
-              `task.reassigned` audit per task. Notifications follow
-              the recipient&apos;s preferences.
-            </p>
-            <label className="mt-4 block text-xs uppercase tracking-wide text-muted-foreground">
-              Assign to
-            </label>
-            <select
-              value={reassignTo}
-              onChange={(e) => setReassignTo(e.target.value)}
-              disabled={pending}
-              className="mt-1 h-9 w-full rounded-md border border-border bg-input/60 px-2 text-sm"
-            >
-              <option value="">— select user —</option>
-              {assignableUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.displayName} ({u.email})
-                </option>
-              ))}
-            </select>
-            <div className="mt-5 flex justify-end gap-2">
+        <StandardDialog
+          open
+          onOpenChange={(next) => {
+            if (!next && !pending) setReassignOpen(false);
+          }}
+          title={`Reassign ${selected.size} task${selected.size === 1 ? "" : "s"}`}
+          description="The new assignee is notified based on their preferences. Each reassignment is recorded in the activity log."
+          contentClassName="sm:max-w-md"
+          disableOutsideClose={pending}
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => setReassignOpen(false)}
                 disabled={pending}
-                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Cancel
               </button>
@@ -961,13 +942,30 @@ function TasksListInner({
                 type="button"
                 onClick={confirmReassign}
                 disabled={pending || !reassignTo}
-                className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {pending ? "Reassigning…" : "Confirm"}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <label className="block text-xs uppercase tracking-wide text-muted-foreground">
+            Assign to
+          </label>
+          <select
+            value={reassignTo}
+            onChange={(e) => setReassignTo(e.target.value)}
+            disabled={pending}
+            className="mt-1 h-9 w-full rounded-md border border-border bg-input/60 px-2 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+          >
+            <option value="">— select user —</option>
+            {assignableUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.displayName} ({u.email})
+              </option>
+            ))}
+          </select>
+        </StandardDialog>
       ) : null}
     </>
   );
@@ -1286,8 +1284,18 @@ function SortIndicator({
   active: boolean;
   direction: "asc" | "desc";
 }) {
-  if (!active) return <span className="opacity-30">↕</span>;
-  return <span>{direction === "asc" ? "↑" : "↓"}</span>;
+  if (!active)
+    return (
+      <ChevronsUpDown
+        className="h-3.5 w-3.5 text-muted-foreground"
+        aria-hidden
+      />
+    );
+  return direction === "asc" ? (
+    <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+  ) : (
+    <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+  );
 }
 
 /**
@@ -1306,14 +1314,19 @@ function renderTaskCell(
       // the list cell, never raw tags.
       const desc = task.description ? htmlToDisplayText(task.description) : "";
       return (
-        <>
-          <span className="font-medium text-sm">{task.title}</span>
+        <div className="flex min-w-0 items-baseline">
+          <span className="truncate font-medium text-sm" title={task.title}>
+            {task.title}
+          </span>
           {desc ? (
-            <span className="ml-2 text-xs text-muted-foreground">
+            <span
+              className="ml-2 truncate text-xs text-muted-foreground"
+              title={desc}
+            >
               {desc.length > 80 ? desc.slice(0, 80) + "…" : desc}
             </span>
           ) : null}
-        </>
+        </div>
       );
     }
     case "related":
@@ -1696,8 +1709,6 @@ function ControlledMultiSelect({
   placeholder: string;
 }) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  useClickOutside(containerRef, () => setOpen(false), open);
   const selected = useMemo(
     () => value.split(",").map((s) => s.trim()).filter(Boolean),
     [value],
@@ -1718,40 +1729,35 @@ function ControlledMultiSelect({
         : `${placeholder}: ${selected.length}`;
 
   return (
-    <div className="relative" ref={containerRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 hover:bg-muted"
-      >
-        {buttonLabel}
-      </button>
-      {open ? (
-        <>
-          <div
-            role="listbox"
-            className="absolute right-0 z-50 mt-1 w-44 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-xl"
-          >
-            {options.map((o) => (
-              <label
-                key={o.value}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/40"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(o.value)}
-                  onChange={() => toggle(o.value)}
-                  className="h-4 w-4"
-                />
-                <span>{o.label}</span>
-              </label>
-            ))}
-          </div>
-        </>
-      ) : null}
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground/90 transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {buttonLabel}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={4} className="w-44 p-2">
+        <div role="listbox">
+          {options.map((o) => (
+            <label
+              key={o.value}
+              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/40"
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(o.value)}
+                onChange={() => toggle(o.value)}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-ring"
+              />
+              <span>{o.label}</span>
+            </label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1770,8 +1776,6 @@ function ControlledTagFilter({
   onChange: (next: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  useClickOutside(containerRef, () => setOpen(false), open);
 
   const selected = useMemo(
     () =>
@@ -1799,42 +1803,28 @@ function ControlledTagFilter({
         : `Tags: ${selected.length}`;
 
   return (
-    <div className="relative" ref={containerRef}>
-      <div
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm transition hover:bg-muted",
-          selected.length > 0 ? "text-foreground" : "text-foreground/80",
-        )}
-      >
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-haspopup="listbox"
-          className="inline-flex items-center gap-1 bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span>{buttonLabel}</span>
-        </button>
-        {selected.length > 0 ? (
+    <div
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm transition hover:bg-muted",
+        selected.length > 0 ? "text-foreground" : "text-foreground/80",
+      )}
+    >
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              clearAll();
-            }}
-            aria-label="Clear tag filter"
-            className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-haspopup="listbox"
+            className="inline-flex items-center gap-1 bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            ×
+            <span>{buttonLabel}</span>
           </button>
-        ) : null}
-      </div>
-      {open ? (
-        <>
-          <div
-            role="listbox"
-            className="absolute right-0 z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-xl"
-          >
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          sideOffset={6}
+          className="max-h-64 w-64 overflow-y-auto p-2"
+        >
+          <div role="listbox">
             {options.length === 0 ? (
               <p className="px-2 py-3 text-center text-xs text-muted-foreground">
                 No tags yet.
@@ -1863,7 +1853,20 @@ function ControlledTagFilter({
               </div>
             )}
           </div>
-        </>
+        </PopoverContent>
+      </Popover>
+      {selected.length > 0 ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            clearAll();
+          }}
+          aria-label="Clear tag filter"
+          className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <X className="h-3 w-3" aria-hidden />
+        </button>
       ) : null}
     </div>
   );

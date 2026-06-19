@@ -651,7 +651,7 @@ function QueueClientInner({
               </h2>
               <RichBody
                 body={currentTask.description}
-                className="mt-2 whitespace-pre-wrap text-sm text-foreground/80"
+                className="mt-2 max-h-60 overflow-y-auto whitespace-pre-wrap text-sm text-foreground/80"
                 containerClassName="mt-2"
               />
             </div>
