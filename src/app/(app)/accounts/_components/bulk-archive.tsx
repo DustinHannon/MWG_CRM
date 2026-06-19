@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { StandardConfirmDialog } from "@/components/standard";
 import { bulkArchiveAccountsAction } from "../actions";
 
 /**
@@ -80,13 +81,6 @@ export function BulkArchiveProvider({ children }: { children: React.ReactNode })
 
   const archive = useCallback(() => {
     if (selected.size === 0) return;
-    if (
-      !confirm(
-        `Archive ${selected.size} ${selected.size === 1 ? "account" : "accounts"}? Linked contacts and opportunities are archived with the account and restored together.`,
-      )
-    ) {
-      return;
-    }
     const items = Array.from(selected)
       .map((id) => {
         const version = versionById.current.get(id);
@@ -158,14 +152,22 @@ export function BulkArchiveBar() {
   return (
     <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs text-foreground">
       <span className="font-medium">{ctx.selected.size} selected</span>
-      <button
-        type="button"
-        onClick={ctx.archive}
-        disabled={ctx.pending}
-        className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-2 py-1 text-[var(--status-lost-fg)] transition hover:bg-destructive/20 disabled:opacity-60"
-      >
-        {ctx.pending ? "Archiving…" : "Archive selected"}
-      </button>
+      <StandardConfirmDialog
+        trigger={
+          <button
+            type="button"
+            disabled={ctx.pending}
+            className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-2 py-1 text-[var(--status-lost-fg)] transition hover:bg-[var(--status-lost-bg)]/70 disabled:opacity-60"
+          >
+            {ctx.pending ? "Archiving…" : "Archive selected"}
+          </button>
+        }
+        title={`Archive ${ctx.selected.size} ${ctx.selected.size === 1 ? "account" : "accounts"}?`}
+        body="Linked contacts and opportunities are archived with the account and restored together."
+        confirmLabel="Archive selected"
+        tone="destructive"
+        onConfirm={ctx.archive}
+      />
       <button
         type="button"
         onClick={ctx.clear}

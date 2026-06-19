@@ -6,9 +6,11 @@ import type { ActionResult } from "@/lib/server-action";
 import {
   StandardFormField,
   StandardFormTextarea,
+  StandardFormSelect,
   StandardFormSection,
   StandardFormRow,
   StandardFormErrorBanner,
+  StandardFormCheckbox,
 } from "@/components/standard";
 
 interface AccountOption {
@@ -70,38 +72,21 @@ export function ContactForm({
       </StandardFormSection>
 
       <StandardFormSection title="Preferences" wide>
-        <div className="flex flex-wrap gap-3 text-sm">
-          <label className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5">
-            <input type="checkbox" name="doNotEmail" className="h-4 w-4" />
-            Do not email
-          </label>
-          <label className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5">
-            <input type="checkbox" name="doNotCall" className="h-4 w-4" />
-            Do not call
-          </label>
-          <label className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5">
-            <input type="checkbox" name="doNotMail" className="h-4 w-4" />
-            Do not postal mail
-          </label>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <StandardFormCheckbox name="doNotEmail" label="Do not email" />
+          <StandardFormCheckbox name="doNotCall" label="Do not call" />
+          <StandardFormCheckbox name="doNotMail" label="Do not postal mail" />
         </div>
       </StandardFormSection>
 
       <StandardFormSection title="Account" wide>
-        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-          Account
-          <select
-            name="accountId"
-            defaultValue={sv.accountId ?? defaultAccountId ?? ""}
-            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          >
-            <option value="">— No account —</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <StandardFormSelect
+          name="accountId"
+          label="Account"
+          defaultValue={sv.accountId ?? defaultAccountId ?? ""}
+          placeholderOption="— No account —"
+          options={accounts.map((a) => ({ value: a.id, label: a.name }))}
+        />
         <p className="text-xs text-muted-foreground">
           Up to 500 accounts shown. Edit the account from the contact
           detail page if the right one isn&apos;t listed.

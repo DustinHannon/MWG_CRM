@@ -27,12 +27,7 @@ export default async function NewAccountPage() {
         <StandardPageHeader
           kicker="New"
           title="Add account"
-          description={
-            <>
-              Create an account directly. Lead conversion is the usual path —
-              use this when you&apos;re starting from a known customer.
-            </>
-          }
+          description="Create an account directly; lead conversion is the usual path."
         />
       </div>
 

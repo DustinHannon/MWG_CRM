@@ -22,6 +22,17 @@ import { AccountDetailDelete } from "../_components/account-detail-delete";
 
 export const dynamic = "force-dynamic";
 
+// Human-readable opportunity stage labels — matches the labels shown on
+// the opportunities list surface so the same enum reads identically here.
+const STAGE_LABELS: Record<string, string> = {
+  prospecting: "Prospecting",
+  qualification: "Qualification",
+  proposal: "Proposal",
+  negotiation: "Negotiation",
+  closed_won: "Closed-won",
+  closed_lost: "Closed-lost",
+};
+
 export default async function AccountDetailPage({
   params,
 }: {
@@ -255,7 +266,9 @@ export default async function AccountDetailPage({
                 </li>
               ))}
               {accountContacts.length === 0 ? (
-                <li className="text-xs text-muted-foreground">No contacts.</li>
+                <li className="text-xs text-muted-foreground">
+                  No contacts yet — use New contact to add one.
+                </li>
               ) : null}
             </ul>
           </GlassCard>
@@ -274,12 +287,15 @@ export default async function AccountDetailPage({
                     {o.name}
                   </Link>
                   <span className="text-xs text-muted-foreground">
-                    {o.stage} · {formatCurrency(o.amount ?? 0)}
+                    {STAGE_LABELS[o.stage] ?? o.stage} ·{" "}
+                    {formatCurrency(o.amount ?? 0)}
                   </span>
                 </li>
               ))}
               {accountOpps.length === 0 ? (
-                <li className="text-xs text-muted-foreground">No opportunities.</li>
+                <li className="text-xs text-muted-foreground">
+                  No opportunities yet — use New opportunity to add one.
+                </li>
               ) : null}
             </ul>
           </GlassCard>

@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import {
   SortableColumnHeaders,
   StandardEmptyState,
@@ -532,10 +532,12 @@ function ContactDesktopRow({
       {columns.map((c) => {
         const colLabel =
           AVAILABLE_CONTACT_COLUMNS.find((col) => col.key === c)?.label ?? c;
+        const cellTitle = cellTitleText(contact, c);
         return (
           <div
             key={c}
             data-label={colLabel}
+            title={cellTitle}
             className="min-w-0 flex-1 truncate px-5 py-3"
             style={{ flexBasis: "140px" }}
           >
@@ -592,17 +594,10 @@ function ContactFiltersBar({
       {/* ROW 1 — search on mobile. */}
       <div className="md:hidden">
         <label className="relative block">
-          <svg
+          <Search
             aria-hidden
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
             className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-          >
-            <circle cx={9} cy={9} r={6} />
-            <path d="m17 17-3.5-3.5" strokeLinecap="round" />
-          </svg>
+          />
           <input
             type="search"
             value={draft.q}
@@ -1003,6 +998,28 @@ function ControlledTagFilter({
       ) : null}
     </div>
   );
+}
+
+// Full-value text for a truncating cell, surfaced as the wrapper's
+// `title` so values clipped on one line remain readable on hover.
+function cellTitleText(
+  row: ContactRow,
+  col: ContactColumnKey,
+): string | undefined {
+  switch (col) {
+    case "firstName":
+      return row.firstName || undefined;
+    case "lastName":
+      return row.lastName ?? undefined;
+    case "account":
+      return row.accountName ?? undefined;
+    case "jobTitle":
+      return row.jobTitle ?? undefined;
+    case "email":
+      return row.email ?? undefined;
+    default:
+      return undefined;
+  }
 }
 
 function renderCell(
