@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { sql } from "drizzle-orm";
+import { Plus } from "lucide-react";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
-import { StandardPageHeader } from "@/components/standard";
+import { StandardEmptyState, StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -184,22 +185,19 @@ export default async function DashboardPage() {
         <PageRealtime entities={["leads", "tasks"]} />
         <PagePoll entities={["leads", "tasks"]} />
         <StandardPageHeader kicker="Dashboard" title={user.displayName} />
-        <section className="mt-10 rounded-2xl border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)]/40 p-10 text-center">
-          <h2 className="text-lg font-semibold text-[var(--status-lost-fg)]">
-            Dashboard temporarily unavailable
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Metrics did not load. Refresh, or go to leads.
-          </p>
-          <div className="mt-5 flex justify-center gap-2">
+        <StandardEmptyState
+          className="mt-10"
+          title="Dashboard temporarily unavailable"
+          description="Metrics did not load. Refresh, or go to leads."
+          action={
             <Link
               href="/leads"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
               Go to leads
             </Link>
-          </div>
-        </section>
+          }
+        />
       </div>
     );
   }
@@ -224,9 +222,10 @@ export default async function DashboardPage() {
             {perms.canCreateLeads || user.isAdmin ? (
               <Link
                 href="/leads/new"
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
               >
-                + Add lead
+                <Plus className="h-4 w-4" aria-hidden />
+                Add lead
               </Link>
             ) : null}
             {perms.canImport || user.isAdmin ? (

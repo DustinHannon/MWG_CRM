@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Building2, MailIcon, MapPin, UserRound } from "lucide-react";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardEmptyState } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
+import { PriorityPill } from "@/components/ui/priority-pill";
+import { StatusPill } from "@/components/ui/status-pill";
 import { UserTime } from "@/components/ui/user-time";
 import { UserAvatar } from "@/components/user-display";
 import { requireSession } from "@/lib/auth-helpers";
@@ -208,9 +211,10 @@ function ActivityList({
 }) {
   if (activity.length === 0) {
     return (
-      <p className="rounded-lg border border-glass-border bg-glass-1 p-6 text-sm text-muted-foreground">
-        No activities authored yet.
-      </p>
+      <StandardEmptyState
+        title="No activities yet"
+        description="Activities this user authors will appear here."
+      />
     );
   }
   return (
@@ -261,13 +265,15 @@ function LeadsList({
 }) {
   if (rows.length === 0) {
     return (
-      <p className="rounded-lg border border-glass-border bg-glass-1 p-6 text-sm text-muted-foreground">
-        No active leads owned.
-      </p>
+      <StandardEmptyState
+        title="No active leads"
+        description="Leads owned by this user will appear here."
+      />
     );
   }
   return (
     <GlassCard className="overflow-hidden p-0">
+      <div className="overflow-x-auto">
       <table className="data-table w-full text-sm">
         <thead className="bg-input/30 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
           <tr>
@@ -292,11 +298,11 @@ function LeadsList({
               <td className="px-4 py-2.5 text-muted-foreground">
                 {r.companyName ?? "—"}
               </td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                {r.status}
+              <td className="px-4 py-2.5">
+                <StatusPill status={r.status} />
               </td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                {r.rating}
+              <td className="px-4 py-2.5">
+                <PriorityPill priority={r.rating} />
               </td>
               <td className="px-4 py-2.5 text-muted-foreground">
                 <UserTime value={r.updatedAt} mode="date" />
@@ -305,6 +311,7 @@ function LeadsList({
           ))}
         </tbody>
       </table>
+      </div>
     </GlassCard>
   );
 }
@@ -316,13 +323,15 @@ function OpportunitiesList({
 }) {
   if (rows.length === 0) {
     return (
-      <p className="rounded-lg border border-glass-border bg-glass-1 p-6 text-sm text-muted-foreground">
-        No opportunities owned.
-      </p>
+      <StandardEmptyState
+        title="No opportunities"
+        description="Opportunities owned by this user will appear here."
+      />
     );
   }
   return (
     <GlassCard className="overflow-hidden p-0">
+      <div className="overflow-x-auto">
       <table className="data-table w-full text-sm">
         <thead className="bg-input/30 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
           <tr>
@@ -356,8 +365,8 @@ function OpportunitiesList({
                   <span className="text-muted-foreground">—</span>
                 )}
               </td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                {r.stage}
+              <td className="px-4 py-2.5">
+                <StatusPill status={r.stage} />
               </td>
               <td className="px-4 py-2.5 tabular-nums text-foreground/80">
                 {formatCurrency(r.amount)}
@@ -369,6 +378,7 @@ function OpportunitiesList({
           ))}
         </tbody>
       </table>
+      </div>
     </GlassCard>
   );
 }

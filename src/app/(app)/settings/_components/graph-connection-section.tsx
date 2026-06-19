@@ -1,9 +1,11 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/ui/glass-card";
+import { Pill } from "@/components/ui/pill";
 import { disconnectGraphAction } from "../actions";
 
 interface GraphConnectionSectionProps {
@@ -52,13 +54,12 @@ export function GraphConnectionSection({
         <h2 className="text-lg font-semibold">Microsoft 365 connection</h2>
         <p className="mt-2 text-sm">
           {isConnected ? (
-            <span className="inline-block rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
-              ✓ Connected
-            </span>
+            <Pill variant="bg-primary/15 text-primary" className="gap-1">
+              <Check className="h-3.5 w-3.5" aria-hidden />
+              Connected
+            </Pill>
           ) : (
-            <span className="inline-block rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-              Not connected
-            </span>
+            <Pill variant="bg-muted text-muted-foreground">Not connected</Pill>
           )}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">

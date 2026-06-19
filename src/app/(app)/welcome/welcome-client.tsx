@@ -27,7 +27,7 @@ export function WelcomeClient({ firstName }: WelcomeClientProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">
           First sign-in
         </p>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+        <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
           Welcome to MWG CRM, {firstName}
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">

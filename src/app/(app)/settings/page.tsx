@@ -6,6 +6,7 @@ import { accounts, users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
+import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
 import { ProfileSection } from "./_components/profile-section";
 import { PreferencesSection } from "./_components/preferences-section";
@@ -110,6 +111,11 @@ export default async function SettingsPage() {
     .limit(1);
   const isGraphConnected = Boolean(graphAccount);
 
+  // The user's date/time prefs, so timestamps in the notifications
+  // section render in their configured timezone/format like every
+  // other timestamp in the app.
+  const timePrefs = await getCurrentUserTimePrefs();
+
   if (!profile) {
     return (
       <div className="px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
@@ -120,7 +126,7 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-7xl gap-8 px-10 py-10">
+    <div className="mx-auto flex max-w-7xl gap-8 px-4 py-6 sm:px-6 sm:py-8 xl:px-10 xl:py-10">
       <BreadcrumbsSetter crumbs={[{ label: "Settings" }]} />
       {/* Left rail */}
       <aside className="sticky top-[calc(3.5rem+1rem)] hidden h-[calc(100vh-5rem)] w-48 shrink-0 lg:block">
@@ -169,6 +175,7 @@ export default async function SettingsPage() {
         <NotificationsSection
           prefs={prefs ?? null}
           subscriptions={activeSubscriptions}
+          timePrefs={timePrefs}
         />
         <GraphConnectionSection
           isConnected={isGraphConnected}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/glass-card";
+import { PriorityPill } from "@/components/ui/priority-pill";
 import { UserTime } from "@/components/ui/user-time";
 import type { TaskRow } from "@/lib/tasks";
 
@@ -83,9 +84,7 @@ function WidgetRow({ task }: { task: TaskRow }) {
           <RelatedTo task={task} />
         </p>
       </div>
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground capitalize">
-        {task.priority}
-      </span>
+      <PriorityPill priority={task.priority} className="shrink-0" />
     </li>
   );
 }

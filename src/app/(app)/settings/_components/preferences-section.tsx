@@ -55,7 +55,11 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
       if (res.ok) {
         toast.success("Saved");
       } else {
-        toast.error(res.error, { duration: Infinity, dismissible: true });
+        toast.error(res.error, {
+          id: "prefs-save-error",
+          duration: Infinity,
+          dismissible: true,
+        });
       }
     });
   }
@@ -98,7 +102,7 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
               onChange={(e) =>
                 save({ defaultLandingPage: e.target.value as PreferencesPatch["defaultLandingPage"] })
               }
-              className="h-9 w-full rounded-md border border-glass-border bg-input/60 px-3 text-sm"
+              className="h-9 w-full rounded-md border border-border bg-input/60 px-3 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
             >
               {LANDING_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -115,7 +119,7 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
                 onBlur={(e) =>
                   save({ customLandingPath: e.target.value || null })
                 }
-                className="mt-2 h-9 w-full rounded-md border border-glass-border bg-input/60 px-3 text-sm"
+                className="mt-2 h-9 w-full rounded-md border border-border bg-input/60 px-3 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
               />
             ) : null}
           </Field>
@@ -129,7 +133,7 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
                   defaultLeadsViewId: e.target.value === "" ? null : e.target.value,
                 })
               }
-              className="h-9 w-full rounded-md border border-glass-border bg-input/60 px-3 text-sm"
+              className="h-9 w-full rounded-md border border-border bg-input/60 px-3 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
             >
               <option value="">— None (use built-in default) —</option>
               {savedViews.map((v) => (
@@ -145,7 +149,7 @@ export function PreferencesSection({ prefs, savedViews }: PreferencesSectionProp
               defaultValue={tz}
               disabled={pending}
               onChange={(e) => save({ timezone: e.target.value })}
-              className="h-9 w-full rounded-md border border-glass-border bg-input/60 px-3 text-sm"
+              className="h-9 w-full rounded-md border border-border bg-input/60 px-3 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
             >
               {TIMEZONES.map((o) => (
                 <option key={o.value} value={o.value}>

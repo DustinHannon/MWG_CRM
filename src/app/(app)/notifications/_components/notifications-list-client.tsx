@@ -231,7 +231,7 @@ function RestoreNotificationButton({
       type="button"
       onClick={handleRestore}
       disabled={pending}
-      className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-foreground transition hover:bg-primary/20 disabled:opacity-50"
+      className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-foreground transition hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
     >
       {pending ? "Restoring…" : "Restore"}
     </button>

@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/ui/glass-card";
+import { UserTimeClient } from "@/components/ui/user-time-client";
+import { type TimePrefs } from "@/lib/format-time";
 import { updatePreferencesAction, type PreferencesPatch } from "../actions";
 import {
   unsubscribeFromViewAction,
@@ -30,9 +32,11 @@ interface SubscriptionRow {
 export function NotificationsSection({
   prefs,
   subscriptions,
+  timePrefs,
 }: {
   prefs: PrefsRow | null;
   subscriptions: SubscriptionRow[];
+  timePrefs: TimePrefs;
 }) {
   const [pending, startTransition] = useTransition();
   // local optimistic copy of the subscriptions list
@@ -47,7 +51,11 @@ export function NotificationsSection({
       if (res.ok) {
         toast.success("Saved");
       } else {
-        toast.error(res.error, { duration: Infinity, dismissible: true });
+        toast.error(res.error, {
+          id: "notifications-save-error",
+          duration: Infinity,
+          dismissible: true,
+        });
       }
     });
   }
@@ -69,7 +77,11 @@ export function NotificationsSection({
         );
         toast.success("Frequency updated");
       } else {
-        toast.error(res.error, { duration: Infinity, dismissible: true });
+        toast.error(res.error, {
+          id: "subscription-frequency-error",
+          duration: Infinity,
+          dismissible: true,
+        });
       }
     });
   }
@@ -92,7 +104,11 @@ export function NotificationsSection({
         );
         toast.success(`Unsubscribed from "${sub.viewName}"`);
       } else {
-        toast.error(res.error, { duration: Infinity, dismissible: true });
+        toast.error(res.error, {
+          id: "unsubscribe-error",
+          duration: Infinity,
+          dismissible: true,
+        });
       }
     });
   }
@@ -155,7 +171,7 @@ export function NotificationsSection({
                   | "weekly",
               })
             }
-            className="mt-2 h-9 w-48 rounded-md border border-glass-border bg-input/60 px-3 text-sm"
+            className="mt-2 h-9 w-48 rounded-md border border-border bg-input/60 px-3 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           >
             <option value="off">Off</option>
             <option value="daily">Daily</option>
@@ -199,9 +215,17 @@ export function NotificationsSection({
                       {sub.viewName}
                     </p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {sub.lastRunAt
-                        ? `Last digest sent ${new Date(sub.lastRunAt).toLocaleString()}`
-                        : "Never sent yet"}
+                      {sub.lastRunAt ? (
+                        <>
+                          Last digest sent{" "}
+                          <UserTimeClient
+                            value={sub.lastRunAt}
+                            prefs={timePrefs}
+                          />
+                        </>
+                      ) : (
+                        "Never sent yet"
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -211,7 +235,7 @@ export function NotificationsSection({
                       onChange={(e) =>
                         changeSubFrequency(sub, e.target.value)
                       }
-                      className="h-8 rounded-md border border-glass-border bg-input/60 px-2 text-xs"
+                      className="h-8 rounded-md border border-border bg-input/60 px-2 text-xs focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
                       aria-label={`Frequency for ${sub.viewName}`}
                     >
                       <option value="daily">Daily</option>
@@ -245,7 +269,7 @@ interface ToggleProps {
 
 function Toggle({ label, defaultChecked, disabled, onChange }: ToggleProps) {
   return (
-    <label className="flex items-center justify-between gap-3 text-sm">
+    <label className="flex items-center justify-between gap-3 py-2 text-sm">
       <span>{label}</span>
       <input
         type="checkbox"
