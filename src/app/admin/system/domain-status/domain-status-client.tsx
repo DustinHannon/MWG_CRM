@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { CheckCircle2, RefreshCw, AlertTriangle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StandardPageHeader } from "@/components/standard";
+import { UserTimeClient } from "@/components/ui/user-time-client";
+import type { TimePrefs } from "@/lib/format-time";
 import {
   markServiceConfirmedAction,
   runAllVerificationChecksAction,
@@ -23,6 +27,7 @@ interface DomainStatusRow {
 
 interface Props {
   rows: DomainStatusRow[];
+  timePrefs: TimePrefs;
 }
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -38,7 +43,7 @@ const SERVICE_LABELS: Record<string, string> = {
   deskpro_sync_config: "DeskPro — sync configuration",
 };
 
-export function DomainStatusClient({ rows }: Props) {
+export function DomainStatusClient({ rows, timePrefs }: Props) {
   const [pending, startTransition] = useTransition();
   const [busyRow, setBusyRow] = useState<string | null>(null);
 
@@ -50,7 +55,12 @@ export function DomainStatusClient({ rows }: Props) {
     const fd = new FormData();
     fd.set("serviceName", serviceName);
     startTransition(async () => {
-      await runVerificationCheckAction(fd);
+      const result = await runVerificationCheckAction(fd);
+      if (!result.ok) {
+        toast.error(result.error);
+      } else {
+        toast.success("Check complete");
+      }
       setBusyRow(null);
     });
   };
@@ -58,7 +68,12 @@ export function DomainStatusClient({ rows }: Props) {
   const runAll = () => {
     setBusyRow("__all__");
     startTransition(async () => {
-      await runAllVerificationChecksAction();
+      const result = await runAllVerificationChecksAction();
+      if (!result.ok) {
+        toast.error(result.error);
+      } else {
+        toast.success("All checks complete");
+      }
       setBusyRow(null);
     });
   };
@@ -68,41 +83,54 @@ export function DomainStatusClient({ rows }: Props) {
     const fd = new FormData();
     fd.set("serviceName", serviceName);
     startTransition(async () => {
-      await markServiceConfirmedAction(fd);
+      const result = await markServiceConfirmedAction(fd);
+      if (!result.ok) {
+        toast.error(result.error);
+      } else {
+        toast.success("Marked confirmed");
+      }
       setBusyRow(null);
     });
   };
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Domain status</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <StandardPageHeader
+        kicker="Admin"
+        title="Domain status"
+        description={
+          <span>
             External service URL configuration tracker for the
             <code className="mx-1 rounded bg-muted px-1.5 py-0.5 text-xs">
               crm.morganwhite.com
             </code>
             migration.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            {verifiedCount} / {total} verified
           </span>
-          <button
-            type="button"
-            onClick={runAll}
-            disabled={pending}
-            className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
-          >
-            <RefreshCw className={cn("h-4 w-4", pending && busyRow === "__all__" && "animate-spin")} />
-            Run all checks
-          </button>
-        </div>
-      </header>
+        }
+        actions={
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              {verifiedCount} / {total} verified
+            </span>
+            <button
+              type="button"
+              onClick={runAll}
+              disabled={pending}
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+            >
+              <RefreshCw
+                className={cn(
+                  "h-4 w-4",
+                  pending && busyRow === "__all__" && "animate-spin",
+                )}
+              />
+              Run all checks
+            </button>
+          </div>
+        }
+      />
 
-      <div className="overflow-hidden rounded-md border border-border">
+      <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-sm">
           <thead className="bg-muted text-muted-foreground">
             <tr className="text-left">
@@ -118,9 +146,6 @@ export function DomainStatusClient({ rows }: Props) {
             {rows.map((row) => {
               const label = SERVICE_LABELS[row.serviceName] ?? row.serviceName;
               const rowBusy = pending && busyRow === row.serviceName;
-              const lastChecked = row.lastCheckedAtIso
-                ? new Date(row.lastCheckedAtIso).toLocaleString()
-                : "—";
               return (
                 <tr key={row.id} className="bg-background">
                   <td className="px-3 py-2">
@@ -136,7 +161,16 @@ export function DomainStatusClient({ rows }: Props) {
                   <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                     {row.configuredUrl ?? "—"}
                   </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{lastChecked}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {row.lastCheckedAtIso ? (
+                      <UserTimeClient
+                        value={row.lastCheckedAtIso}
+                        prefs={timePrefs}
+                      />
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <button
@@ -179,7 +213,7 @@ function StatusPill({ status }: { status: "pending" | "verified" | "failed" }) {
   if (status === "verified") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-[var(--status-won-bg)] px-2 py-0.5 text-xs font-medium text-[var(--status-won-fg)]">
-        <CheckCircle2 className="h-3 w-3" />
+        <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
         Verified
       </span>
     );
@@ -187,14 +221,14 @@ function StatusPill({ status }: { status: "pending" | "verified" | "failed" }) {
   if (status === "failed") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-[var(--status-lost-bg)] px-2 py-0.5 text-xs font-medium text-[var(--status-lost-fg)]">
-        <AlertTriangle className="h-3 w-3" />
+        <AlertTriangle aria-hidden="true" className="h-4 w-4" />
         Failed
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-      <Clock className="h-3 w-3" />
+      <Clock aria-hidden="true" className="h-4 w-4" />
       Pending
     </span>
   );

@@ -47,7 +47,10 @@ export async function TopReferrersTable() {
           <tbody className="divide-y divide-border">
             {rows.map((r) => (
               <tr key={r.referer}>
-                <td className="truncate px-4 py-2 text-xs text-foreground">
+                <td
+                  className="max-w-[24rem] truncate px-4 py-2 text-xs text-foreground"
+                  title={r.referer}
+                >
                   {r.referer}
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums text-foreground">

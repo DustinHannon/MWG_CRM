@@ -80,7 +80,7 @@ export async function RecentDeployments() {
 
   return (
     <Section>
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -127,7 +127,9 @@ function DeploymentRow({ d, nowMs }: { d: VercelDeployment; nowMs: number }) {
   const href = `https://vercel.com/one-man/mwg-crm/deployments/${d.uid}`;
   return (
     <tr>
-      <td className="truncate px-4 py-2 text-foreground">{commit}</td>
+      <td className="max-w-[20rem] truncate px-4 py-2 text-foreground" title={commit}>
+        {commit}
+      </td>
       <td className="truncate px-4 py-2 font-mono text-xs text-muted-foreground">
         {branch}
       </td>
@@ -162,11 +164,11 @@ function DeploymentRow({ d, nowMs }: { d: VercelDeployment; nowMs: number }) {
 function DeploymentStatePill({ state }: { state: VercelDeployment["state"] }) {
   const cls =
     state === "READY"
-      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+      ? "bg-success/10 text-success"
       : state === "ERROR"
         ? "bg-destructive/10 text-destructive"
         : state === "BUILDING" || state === "QUEUED" || state === "INITIALIZING"
-          ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+          ? "bg-warning/10 text-warning"
           : "bg-muted text-muted-foreground";
   return (
     <span

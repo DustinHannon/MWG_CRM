@@ -12,7 +12,7 @@ const TOPOJSON_URL = "/topojson/world-110m.json";
  * TopoJSON uses M49 numeric codes as `geo.id`, so we convert
  * alpha-2 → M49 via the lookup below. Color intensity scales with
  * the country's share of the global maximum, layered over
- * `hsl(var(--primary))`.
+ * the `--primary` token via `oklch(from …)`.
  *
  * The lookup covers the geo-block allowlist (US/JM/PR) plus the
  * most-likely spillover countries from Vercel internal probes and
@@ -71,7 +71,7 @@ export function WorldMapChart({
               const intensity = max > 0 ? count / max : 0;
               const fill =
                 count > 0
-                  ? `hsl(var(--primary) / ${0.1 + intensity * 0.9})`
+                  ? `oklch(from var(--primary) l c h / ${0.1 + intensity * 0.9})`
                   : "var(--muted)";
               return (
                 <Geography
@@ -84,7 +84,7 @@ export function WorldMapChart({
                     default: { outline: "none" },
                     hover: {
                       outline: "none",
-                      fill: "hsl(var(--primary) / 0.6)",
+                      fill: "oklch(from var(--primary) l c h / 0.6)",
                     },
                     pressed: { outline: "none" },
                   }}

@@ -78,14 +78,14 @@ export async function RequestVolumePanel({ range }: RequestVolumePanelProps) {
 
   return (
     <PanelShell>
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="data-table-cards overflow-hidden rounded-lg border border-border bg-card">
         <table className="data-table min-w-full divide-y divide-border/60 text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-2.5 font-medium">Path</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">Requests</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">5xx</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">Error rate</th>
+              <th className="px-4 py-2.5 text-right font-medium tabular-nums">Requests</th>
+              <th className="px-4 py-2.5 text-right font-medium tabular-nums">5xx</th>
+              <th className="px-4 py-2.5 text-right font-medium tabular-nums">Error rate</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
@@ -96,22 +96,29 @@ export async function RequestVolumePanel({ range }: RequestVolumePanelProps) {
               const highError = rate >= 0.01;
               return (
                 <tr key={`${row.path ?? "null"}-${i}`}>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" data-label="Path">
                     <div className="max-w-xl truncate font-mono text-[11px] text-foreground/90">
                       {row.path ?? "(null)"}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs tabular-nums text-foreground/90">
+                  <td
+                    className="px-4 py-3 text-right text-xs tabular-nums text-foreground/90"
+                    data-label="Requests"
+                  >
                     {requests.toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
+                  <td
+                    className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground"
+                    data-label="5xx"
+                  >
                     {errors.toLocaleString()}
                   </td>
                   <td
                     className={[
-                      "px-4 py-3 text-xs tabular-nums",
+                      "px-4 py-3 text-right text-xs tabular-nums",
                       highError ? "text-destructive" : "text-muted-foreground",
                     ].join(" ")}
+                    data-label="Error rate"
                   >
                     {(rate * 100).toFixed(2)}%
                   </td>

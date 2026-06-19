@@ -16,10 +16,10 @@ import {
  * Panel 4: top 10 endpoints by p95 response time.
  *
  * Duration is parsed from each Lambda REPORT line's `message` text
- * via ClickHouse regex (see `getSlowEndpoints`). Rows are tinted
- * destructive at p95 ≥ 1s and warning at p95 ≥ 500ms, mirroring the
- * semantic-token pattern in request-volume.tsx (error-rate column)
- * and the email-failures admin page.
+ * via ClickHouse regex (see `getSlowEndpoints`). The p95 cell is
+ * tinted via the destructive token at ≥1s and the warning token at
+ * ≥500ms, matching the semantic-token pattern in request-volume.tsx
+ * (error-rate column).
  */
 
 const WARN_MS = 500;
@@ -81,15 +81,15 @@ export async function SlowEndpointsPanel({ range }: SlowEndpointsPanelProps) {
 
   return (
     <PanelShell>
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="data-table-cards overflow-hidden rounded-lg border border-border bg-card">
         <table className="data-table min-w-full divide-y divide-border/60 text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-2.5 font-medium">Path</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">Samples</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">p50</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">p95</th>
-              <th className="px-4 py-2.5 font-medium tabular-nums">Max</th>
+              <th className="px-4 py-2.5 text-right font-medium tabular-nums">Samples</th>
+              <th className="px-4 py-2.5 text-right font-medium tabular-nums">p50</th>
+              <th className="px-4 py-2.5 text-right font-medium tabular-nums">p95</th>
+              <th className="px-4 py-2.5 text-right font-medium tabular-nums">Max</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
@@ -102,30 +102,40 @@ export async function SlowEndpointsPanel({ range }: SlowEndpointsPanelProps) {
                 p95 >= CRIT_MS
                   ? "text-destructive"
                   : p95 >= WARN_MS
-                    ? "text-amber-600 dark:text-amber-400"
+                    ? "text-warning"
                     : "text-foreground/90";
               return (
                 <tr key={`${row.path ?? "null"}-${i}`}>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" data-label="Path">
                     <div className="max-w-xl truncate font-mono text-[11px] text-foreground/90">
                       {row.path ?? "(null)"}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
+                  <td
+                    className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground"
+                    data-label="Samples"
+                  >
                     {samples.toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 text-xs tabular-nums text-foreground/90">
+                  <td
+                    className="px-4 py-3 text-right text-xs tabular-nums text-foreground/90"
+                    data-label="p50"
+                  >
                     {p50.toLocaleString()} ms
                   </td>
                   <td
                     className={[
-                      "px-4 py-3 text-xs tabular-nums font-medium",
+                      "px-4 py-3 text-right text-xs tabular-nums font-medium",
                       p95Tone,
                     ].join(" ")}
+                    data-label="p95"
                   >
                     {p95.toLocaleString()} ms
                   </td>
-                  <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
+                  <td
+                    className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground"
+                    data-label="Max"
+                  >
                     {max.toLocaleString()} ms
                   </td>
                 </tr>

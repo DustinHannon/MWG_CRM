@@ -564,13 +564,13 @@ function DetailBody({
         </span>
       </Field>
       <Field label="Error message">
-        <pre className="whitespace-pre-wrap rounded bg-black/30 p-2 font-mono text-[11px] text-foreground/90">
+        <pre className="whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[11px] text-foreground/90">
           {row.errorMessage ?? "—"}
         </pre>
       </Field>
       {row.metadata ? (
         <Field label="Metadata">
-          <pre className="overflow-x-auto rounded bg-black/30 p-2 font-mono text-[11px] text-foreground/90">
+          <pre className="overflow-x-auto rounded bg-muted/40 p-2 font-mono text-[11px] text-foreground/90">
             {JSON.stringify(row.metadata, null, 2)}
           </pre>
         </Field>

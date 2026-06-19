@@ -470,7 +470,7 @@ function DetailCell({ row }: { row: ApiUsageRow }) {
       <summary className="cursor-pointer text-foreground/80 underline-offset-4 hover:underline">
         view
       </summary>
-      <pre className="mt-2 max-h-64 w-[280px] max-w-[280px] overflow-y-auto whitespace-pre-wrap break-all rounded bg-black/30 p-2 font-mono text-[10px] text-foreground/90">
+      <pre className="mt-2 max-h-64 w-[280px] max-w-[280px] overflow-y-auto whitespace-pre-wrap break-all rounded bg-muted/40 p-2 font-mono text-[10px] text-foreground/90">
         {JSON.stringify(
           {
             request_query: row.requestQuery,

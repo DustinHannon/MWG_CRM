@@ -32,13 +32,23 @@ export function QuickRow({ current, isLoading }: QuickRowProps) {
   if (!current) {
     if (isLoading) {
       return (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-[120px] animate-pulse rounded-lg bg-muted"
-            />
-          ))}
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-[120px] animate-pulse rounded-lg bg-muted"
+              />
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-[88px] animate-pulse rounded-lg bg-muted"
+              />
+            ))}
+          </div>
         </div>
       );
     }

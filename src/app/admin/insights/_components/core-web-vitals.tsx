@@ -45,15 +45,14 @@ function band(metric: WebVitalMetric, p75: number): Band {
 }
 
 const BAND_TONE: Record<Band, string> = {
-  good: "text-emerald-700 dark:text-emerald-400",
-  "needs-improvement": "text-amber-600 dark:text-amber-400",
+  good: "text-success",
+  "needs-improvement": "text-warning",
   poor: "text-destructive",
 };
 
 const BAND_PILL: Record<Band, string> = {
-  good: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  "needs-improvement":
-    "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  good: "bg-success/10 text-success",
+  "needs-improvement": "bg-warning/10 text-warning",
   poor: "bg-destructive/10 text-destructive",
 };
 

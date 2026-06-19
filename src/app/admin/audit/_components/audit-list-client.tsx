@@ -389,7 +389,7 @@ function DiffCell({ before, after }: { before: unknown; after: unknown }) {
       <summary className="cursor-pointer text-xs text-foreground/80 underline-offset-4 hover:underline">
         view
       </summary>
-      <pre className="mt-2 max-w-md overflow-x-auto rounded bg-black/30 p-2 font-mono text-[10px] text-foreground/90">
+      <pre className="mt-2 max-w-md overflow-x-auto rounded bg-muted/40 p-2 font-mono text-[10px] text-foreground/90">
         {JSON.stringify({ before, after }, null, 2)}
       </pre>
     </details>

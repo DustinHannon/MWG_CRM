@@ -104,12 +104,12 @@ function IssueRow({ issue }: { issue: IssueEntry }) {
     issue.severity === "critical"
       ? "border-destructive/30 bg-destructive/10 text-destructive"
       : issue.severity === "warning"
-        ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+        ? "border-warning/30 bg-warning/10 text-warning"
         : "border-border bg-muted text-muted-foreground";
   return (
     <div className={`rounded-md border px-4 py-3 ${classes}`}>
       <p className="text-sm font-semibold">{issue.title}</p>
-      <p className="mt-1 text-xs opacity-90">{issue.description}</p>
+      <p className="mt-1 text-xs">{issue.description}</p>
     </div>
   );
 }
