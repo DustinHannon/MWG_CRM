@@ -10,8 +10,12 @@ import {
   useState,
   useTransition,
 } from "react";
+import Link from "next/link";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { StandardEmptyState } from "@/components/standard";
+import { UserTimeClient } from "@/components/ui/user-time-client";
+import type { TimePrefs } from "@/lib/format-time";
 import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 import {
   bulkUpdateStaticListMembersAction,
@@ -49,6 +53,7 @@ interface Props {
   search: string;
   sortKey: "name" | "email" | "added";
   sortDir: "asc" | "desc";
+  timePrefs: TimePrefs;
 }
 
 const INLINE_EDIT_DEBOUNCE_MS = 600;
@@ -79,6 +84,7 @@ function StaticListMembersPanelInner(props: Props) {
     search,
     sortKey,
     sortDir,
+    timePrefs,
   } = props;
   const router = useRouter();
 
@@ -281,7 +287,9 @@ function StaticListMembersPanelInner(props: Props) {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="flex flex-col gap-3 pb-24">
+    <div
+      className={`flex flex-col gap-3 ${effectiveSelectedCount > 0 ? "pb-24" : ""}`}
+    >
       {/* Search bar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <input
@@ -298,11 +306,17 @@ function StaticListMembersPanelInner(props: Props) {
 
       {/* Member table */}
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
-          {search.length > 0
-            ? "No recipients match this search. Clear search."
-            : "No recipients yet. Import an Excel file or add rows from the edit modal."}
-        </div>
+        search.length > 0 ? (
+          <StandardEmptyState
+            title="No recipients match this search"
+            description="Clear the search to see all recipients."
+          />
+        ) : (
+          <StandardEmptyState
+            title="No recipients yet"
+            description="Import an Excel file or add rows from the edit modal."
+          />
+        )
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="overflow-x-auto">
@@ -385,7 +399,11 @@ function StaticListMembersPanelInner(props: Props) {
                         />
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(r.createdAt).toLocaleString()}
+                        <UserTimeClient
+                          value={new Date(r.createdAt)}
+                          prefs={timePrefs}
+                          mode="date"
+                        />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <RowMenu
@@ -635,12 +653,12 @@ function PageLink({
   const qs = sp.toString();
   const href = `/marketing/lists/${listId}${qs ? "?" + qs : ""}`;
   return (
-    <a
+    <Link
       href={href}
       className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
     >
       {label}
-    </a>
+    </Link>
   );
 }
 

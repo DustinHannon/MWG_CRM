@@ -446,7 +446,7 @@ function MetadataCell({ before, after }: { before: unknown; after: unknown }) {
   }
   return (
     <details className="text-xs">
-      <summary className="cursor-pointer text-muted-foreground transition hover:text-foreground">
+      <summary className="cursor-pointer rounded text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
         Inspect
       </summary>
       <div className="mt-2 flex flex-col gap-1 text-[11px]">

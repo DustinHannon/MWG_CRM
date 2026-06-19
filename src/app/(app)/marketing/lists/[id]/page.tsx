@@ -10,7 +10,8 @@ import {
   marketingLists,
 } from "@/db/schema/marketing-lists";
 import { users } from "@/db/schema/users";
-import { UserTime } from "@/components/ui/user-time";
+import { UserTime, getCurrentUserTimePrefs } from "@/components/ui/user-time";
+import { StatusPill } from "@/components/ui/status-pill";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
 import { StandardEmptyState } from "@/components/standard";
 import type { FilterDsl } from "@/lib/security/filter-dsl";
@@ -287,13 +288,18 @@ async function DynamicListDetailBody({
                           </Link>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
-                          {m.memberEmail}
+                          <span
+                            className="block max-w-[260px] truncate"
+                            title={m.memberEmail}
+                          >
+                            {m.memberEmail}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {m.companyName ?? "—"}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
-                          {m.status ?? "—"}
+                          {m.status ? <StatusPill status={m.status} /> : "—"}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           <UserTime value={m.addedAt} />
@@ -356,13 +362,16 @@ async function StaticListDetailBody({
       : "added";
   const sortDir = dir === "asc" ? "asc" : "desc";
 
-  const result = await listStaticListMembersForList(listId, {
-    page,
-    pageSize: PAGE_SIZE_STATIC,
-    search,
-    sortKey,
-    sortDir,
-  });
+  const [result, timePrefs] = await Promise.all([
+    listStaticListMembersForList(listId, {
+      page,
+      pageSize: PAGE_SIZE_STATIC,
+      search,
+      sortKey,
+      sortDir,
+    }),
+    getCurrentUserTimePrefs(),
+  ]);
 
   return (
     <StaticListMembersPanel
@@ -380,6 +389,7 @@ async function StaticListDetailBody({
       search={search}
       sortKey={sortKey}
       sortDir={sortDir}
+      timePrefs={timePrefs}
     />
   );
 }

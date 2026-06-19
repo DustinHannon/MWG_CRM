@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
@@ -20,11 +21,7 @@ export default async function MarketingAuditPage() {
   const user = await requireSession();
   const perms = await getPermissions(user.id);
   if (!user.isAdmin && !perms.canMarketingAuditView) {
-    return (
-      <div className="px-4 py-6 text-sm text-muted-foreground sm:px-6 sm:py-8 xl:px-10 xl:py-10">
-        You don&apos;t have access to the marketing audit log.
-      </div>
-    );
+    redirect("/marketing");
   }
 
   const timePrefs = await getCurrentUserTimePrefs();

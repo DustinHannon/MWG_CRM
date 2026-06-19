@@ -4,12 +4,15 @@ import { useState, useTransition } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { UserTimeClient } from "@/components/ui/user-time-client";
+import { type TimePrefs } from "@/lib/format-time";
 import { removeSuppressionAction } from "../actions";
 
 interface RemoveSuppressionButtonProps {
   email: string;
   source: string;
   suppressedAt: string;
+  timePrefs: TimePrefs;
   onRemoved?: () => void;
 }
 
@@ -23,6 +26,7 @@ export function RemoveSuppressionButton({
   email,
   source,
   suppressedAt,
+  timePrefs,
   onRemoved,
 }: RemoveSuppressionButtonProps) {
   const [open, setOpen] = useState(false);
@@ -63,8 +67,6 @@ export function RemoveSuppressionButton({
     });
   }
 
-  const dateLabel = new Date(suppressedAt).toLocaleDateString();
-
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Trigger asChild>
@@ -85,9 +87,14 @@ export function RemoveSuppressionButton({
           <Dialog.Description className="mt-2 text-xs text-muted-foreground">
             This effectively re-subscribes{" "}
             <span className="font-mono text-foreground">{email}</span>. They
-            previously hit {source} on {dateLabel}. Confirm they have
-            requested to opt back in or that this is a correction of an
-            error.
+            previously hit {source} on{" "}
+            <UserTimeClient
+              value={new Date(suppressedAt)}
+              prefs={timePrefs}
+              mode="date"
+            />
+            . Confirm they have requested to opt back in or that this is a
+            correction of an error.
           </Dialog.Description>
 
           <div className="mt-4 flex flex-col gap-1">

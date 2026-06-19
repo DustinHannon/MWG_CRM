@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   StandardEmptyState,
   StandardListPage,
@@ -46,6 +47,15 @@ const SOURCE_OPTIONS: ReadonlyArray<{
   { value: "invalid", label: "Invalid" },
   { value: "manual", label: "Manual" },
 ];
+
+/**
+ * Human label for a suppression type, single-sourced from the same
+ * SOURCE_OPTIONS table the filter dropdown uses so the displayed value
+ * and the filter label never disagree.
+ */
+function labelForSuppressionType(type: string): string {
+  return SOURCE_OPTIONS.find((opt) => opt.value === type)?.label ?? type;
+}
 
 export function SuppressionsListClient({
   timePrefs,
@@ -187,28 +197,34 @@ export function SuppressionsListClient({
         {/* Source select auto-applies on change (preserved from prior
             behavior — the page treats source as a primary scope, not a
             staged filter). */}
-        <select
-          value={draft.source}
-          onChange={(e) => {
-            const next = {
-              ...draft,
-              source: e.target.value as SuppressionsFilters["source"],
-            };
-            setDraft(next);
-            setFilters(next);
-          }}
-          className={
-            draft.source !== "all"
-              ? "h-11 min-w-0 shrink-0 appearance-none rounded-full border border-primary/30 bg-primary/15 px-4 pr-8 text-sm font-medium text-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3 md:pr-7"
-              : "h-11 min-w-0 shrink-0 appearance-none rounded-full border border-border bg-muted/40 px-4 pr-8 text-sm font-medium text-muted-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3 md:pr-7"
-          }
-        >
-          {SOURCE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <div className="relative min-w-0 shrink-0">
+          <select
+            value={draft.source}
+            onChange={(e) => {
+              const next = {
+                ...draft,
+                source: e.target.value as SuppressionsFilters["source"],
+              };
+              setDraft(next);
+              setFilters(next);
+            }}
+            className={
+              draft.source !== "all"
+                ? "h-11 w-full appearance-none rounded-full border border-primary/30 bg-primary/15 px-4 pr-8 text-sm font-medium text-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3 md:pr-7"
+                : "h-11 w-full appearance-none rounded-full border border-border bg-muted/40 px-4 pr-8 text-sm font-medium text-muted-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/40 md:rounded-md md:px-3 md:pr-7"
+            }
+          >
+            {SOURCE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground md:right-2.5"
+            aria-hidden
+          />
+        </div>
         <button
           type="submit"
           className="hidden h-11 shrink-0 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 md:inline-flex md:items-center"
@@ -340,7 +356,7 @@ function SuppressionsDesktopRow({
         className="min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground"
         style={{ flexBasis: "140px" }}
       >
-        {row.suppressionType}
+        {labelForSuppressionType(row.suppressionType)}
       </div>
       <div
         className="hidden min-w-0 flex-1 truncate px-5 py-3 text-muted-foreground lg:block"
@@ -370,8 +386,9 @@ function SuppressionsDesktopRow({
         >
           <RemoveSuppressionButton
             email={row.email}
-            source={row.suppressionType}
+            source={labelForSuppressionType(row.suppressionType)}
             suppressedAt={row.suppressedAt.toISOString()}
+            timePrefs={timePrefs}
             onRemoved={onRemoved}
           />
         </div>
@@ -401,7 +418,7 @@ function SuppressionsMobileCard({
           {row.email}
         </span>
         <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-          {row.suppressionType}
+          {labelForSuppressionType(row.suppressionType)}
         </span>
       </div>
       {row.reason ? (
@@ -419,8 +436,9 @@ function SuppressionsMobileCard({
         <div className="mt-1">
           <RemoveSuppressionButton
             email={row.email}
-            source={row.suppressionType}
+            source={labelForSuppressionType(row.suppressionType)}
             suppressedAt={row.suppressedAt.toISOString()}
+            timePrefs={timePrefs}
             onRemoved={onRemoved}
           />
         </div>

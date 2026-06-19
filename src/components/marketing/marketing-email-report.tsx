@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
+import { StandardEmptyState } from "@/components/standard";
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import type { TimePrefs } from "@/lib/format-time";
 import { useShowPicker } from "@/hooks/use-show-picker";
@@ -162,9 +163,10 @@ export function MarketingEmailReport({
           Campaign breakdown
         </h2>
         {filtered.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-muted/40 p-8 text-center text-sm text-muted-foreground">
-            No campaigns sent in this window.
-          </div>
+          <StandardEmptyState
+            title="No campaigns sent in this window"
+            description="Widen the date range to include earlier campaigns."
+          />
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <div className="overflow-x-auto">

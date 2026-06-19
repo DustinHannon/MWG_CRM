@@ -357,7 +357,9 @@ function CollapsibleList({
         : "border-[var(--status-won-fg)]/30 bg-[var(--status-won-bg)] text-[var(--status-won-fg)]";
   return (
     <details className={`rounded-2xl border ${ring} p-4 backdrop-blur-xl`}>
-      <summary className="cursor-pointer text-sm font-medium">{title}</summary>
+      <summary className="cursor-pointer rounded text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+        {title}
+      </summary>
       <ul className="mt-3 max-h-72 overflow-y-auto divide-y divide-border/60 text-xs">
         {items.map((it, i) => (
           <li key={i} className="py-2">
