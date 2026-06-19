@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import { StandardEmptyState } from "@/components/standard";
 import type { ReportVisualization } from "@/db/schema/saved-reports";
 import { neutralizeSpreadsheetFormula } from "@/lib/exports/formula-guard";
 import { formatCurrency } from "@/lib/format/currency";
-import type { FieldKind } from "@/lib/reports/schemas";
+import { isNumericKind, type FieldKind } from "@/lib/reports/schemas";
+import { cn } from "@/lib/utils";
 import { ReportChart, type ChartDatum } from "./report-charts";
 
 /**
@@ -119,9 +121,10 @@ function DataTable({
 }) {
   if (rows.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-border/60 bg-muted/10 p-8 text-center text-sm text-muted-foreground">
-        No rows match this report.
-      </p>
+      <StandardEmptyState
+        title="No rows match this report"
+        description="Adjust the report's filters or date range, then re-run."
+      />
     );
   }
   return (
@@ -129,27 +132,41 @@ function DataTable({
       <table className="w-full text-sm">
         <thead className="bg-muted/40">
           <tr>
-            {columns.map((c) => (
-              <th
-                key={c}
-                className="px-3 py-2 text-left font-medium text-foreground"
-              >
-                {humanize(c)}
-              </th>
-            ))}
+            {columns.map((c) => {
+              const kind = columnKinds?.[c];
+              const numeric = kind ? isNumericKind(kind) : false;
+              return (
+                <th
+                  key={c}
+                  className={cn(
+                    "px-3 py-2 text-left font-medium text-foreground",
+                    numeric && "text-right tabular-nums",
+                  )}
+                >
+                  {humanize(c)}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody className="divide-y divide-border/60">
           {rows.map((r, i) => (
             <tr key={i} className="hover:bg-muted/20">
-              {columns.map((c) => (
-                <td
-                  key={c}
-                  className="px-3 py-2 align-top text-foreground/90"
-                >
-                  {formatCell(r[c], columnKinds?.[c])}
-                </td>
-              ))}
+              {columns.map((c) => {
+                const kind = columnKinds?.[c];
+                const numeric = kind ? isNumericKind(kind) : false;
+                return (
+                  <td
+                    key={c}
+                    className={cn(
+                      "px-3 py-2 align-top text-foreground/90",
+                      numeric && "text-right tabular-nums",
+                    )}
+                  >
+                    {formatCell(r[c], kind)}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>

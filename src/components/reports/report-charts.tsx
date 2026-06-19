@@ -191,7 +191,7 @@ export function ReportChart({
               <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
                 {data[0].name}
               </p>
-              <p className="mt-3 text-5xl font-semibold tabular-nums">
+              <p className="mt-3 text-3xl font-semibold tabular-nums">
                 {formatNumber(data[0].value)}
               </p>
             </div>

@@ -64,7 +64,10 @@ function ReportCard({
 }) {
   const Icon = VIS_ICON[report.visualization] ?? TableIcon;
   return (
-    <Link href={`/reports/${report.id}`} className="block focus:outline-none">
+    <Link
+      href={`/reports/${report.id}`}
+      className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
       <GlassCard
         interactive
         weight="2"

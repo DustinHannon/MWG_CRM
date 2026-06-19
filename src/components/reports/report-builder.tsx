@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Loader2, Plus, X } from "lucide-react";
+import { useShowPicker } from "@/hooks/use-show-picker";
 import {
   buildReportColumnKinds,
   isNumericKind,
@@ -82,6 +83,10 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
   const [filterRows, setFilterRows] = useState<FilterRow[]>(
     () => filtersToRows(initial?.filters ?? {}),
   );
+
+  // Set when a save is attempted with an empty name, so the inline
+  // required error renders next to the field (in addition to the toast).
+  const [nameError, setNameError] = useState(false);
 
   const meta = REPORT_ENTITIES[entityType];
 
@@ -203,9 +208,11 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
 
   async function save() {
     if (!name.trim()) {
+      setNameError(true);
       toast.error("Name is required.");
       return;
     }
+    setNameError(false);
     const url =
       mode === "edit" && initial
         ? `/api/reports/${initial.id}`
@@ -313,6 +320,13 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
                 </option>
               ))}
           </select>
+          <p
+            className="mt-2 text-[11px] text-muted-foreground/80"
+            aria-live="polite"
+          >
+            {groupBy.length} of 2 selected
+            {groupBy.length >= 2 ? " — at the limit; clear one to change." : ""}
+          </p>
         </Section>
 
         {showMetrics ? (
@@ -357,13 +371,39 @@ export function ReportBuilder({ initial, mode }: ReportBuilderProps) {
 
         <Section title="Save">
           <div className="space-y-3">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Report name (required)"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            />
+            <div className="space-y-1">
+              <label
+                htmlFor="report-name"
+                className="block text-xs font-medium text-foreground"
+              >
+                Report name{" "}
+                <span className="text-destructive" aria-hidden="true">
+                  *
+                </span>
+              </label>
+              <input
+                id="report-name"
+                type="text"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameError && e.target.value.trim()) setNameError(false);
+                }}
+                placeholder="Report name"
+                required
+                aria-invalid={nameError}
+                aria-describedby={nameError ? "report-name-error" : undefined}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+              />
+              {nameError ? (
+                <p
+                  id="report-name-error"
+                  className="text-xs text-destructive"
+                >
+                  Enter a name to save the report.
+                </p>
+              ) : null}
+            </div>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -452,6 +492,8 @@ function FilterBuilder({
   rows: FilterRow[];
   onChange: (rows: FilterRow[]) => void;
 }) {
+  const openDatePicker = useShowPicker();
+
   function addRow() {
     const first = meta.fields[0];
     onChange([
@@ -546,6 +588,7 @@ function FilterBuilder({
                 }
                 value={r.value}
                 onChange={(e) => patchRow(r.id, { value: e.target.value })}
+                onClick={f?.kind === "date" ? openDatePicker : undefined}
                 placeholder={r.op === "in" ? "comma,separated" : "value"}
                 className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs"
               />

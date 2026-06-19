@@ -16,7 +16,6 @@ import {
   Filter,
   GitBranch,
   PieChart,
-  Plus,
   Table as TableIcon,
   TrendingUp,
 } from "lucide-react";
@@ -28,7 +27,7 @@ import {
 } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTimeClient } from "@/components/ui/user-time-client";
-import { type TimePrefs } from "@/lib/format-time";
+import { DEFAULT_TIME_PREFS } from "@/lib/format-time";
 
 export interface ReportRow {
   id: string;
@@ -122,14 +121,12 @@ export function ReportsListClient() {
       />
       <select
         value={draft.scope}
-        onChange={(e) => {
-          const next: ReportsFilters = {
+        onChange={(e) =>
+          setDraft({
             ...draft,
             scope: e.target.value as ReportsFilters["scope"],
-          };
-          setDraft(next);
-          setFilters(next);
-        }}
+          })
+        }
         className="rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
       >
         <option value="all">All reports</option>
@@ -152,15 +149,6 @@ export function ReportsListClient() {
         </button>
       ) : null}
     </form>
-  );
-
-  const headerActions = (
-    <Link
-      href="/reports/builder"
-      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90"
-    >
-      <Plus className="h-4 w-4" /> New report
-    </Link>
   );
 
   return (
@@ -191,31 +179,18 @@ export function ReportsListClient() {
       filtersSlot={filtersSlot}
     />
   );
-
-  // headerActions intentionally not wired into header — the actions
-  // slot collides with the page-level "+ New report" link; rendered
-  // from the server shell instead.
-  void headerActions;
 }
 
 function ReportCardRow({ row }: { row: ReportRow }) {
-  return (
-    <ReportCard row={row} timePrefs={null} />
-  );
+  return <ReportCard row={row} />;
 }
 
-function ReportCard({
-  row,
-  timePrefs,
-}: {
-  row: ReportRow;
-  timePrefs: TimePrefs | null;
-}) {
+function ReportCard({ row }: { row: ReportRow }) {
   const Icon = VIS_ICON[row.visualization] ?? TableIcon;
   return (
     <Link
       href={`/reports/${row.id}`}
-      className="block p-2 focus:outline-none"
+      className="block rounded-2xl p-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       data-row-flash="new"
     >
       <GlassCard
@@ -251,15 +226,11 @@ function ReportCard({
         <div className="mt-auto flex items-center justify-between text-[11px] text-muted-foreground/80">
           <span>
             Updated{" "}
-            {timePrefs ? (
-              <UserTimeClient
-                value={row.updatedAt}
-                prefs={timePrefs}
-                mode="date"
-              />
-            ) : (
-              new Date(row.updatedAt).toLocaleDateString()
-            )}
+            <UserTimeClient
+              value={row.updatedAt}
+              prefs={DEFAULT_TIME_PREFS}
+              mode="date"
+            />
           </span>
           {row.ownerName ? (
             <span className="truncate">By {row.ownerName}</span>

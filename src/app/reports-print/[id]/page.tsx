@@ -56,13 +56,9 @@ export default async function ReportPrintPage({
 
   return (
     <div className="print-root">
-      <button
-        type="button"
-        data-print-hide
-        className="print-hide-btn"
-      >
+      <div data-print-hide className="print-hide-btn" role="note">
         Use your browser&apos;s Save as PDF in the print dialog
-      </button>
+      </div>
 
       <h1>{report.name}</h1>
       <div className="meta">

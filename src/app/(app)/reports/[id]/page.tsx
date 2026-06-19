@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { PagePoll } from "@/components/realtime/page-poll";
 import { PageRealtime } from "@/components/realtime/page-realtime";
+import { StandardPageHeader } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
 import { ReportActionMenu } from "@/components/reports/report-action-menu";
@@ -77,43 +78,35 @@ export default async function ReportRunPage({
         </>
       ) : null}
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            {meta.label} report
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold font-display">
-            {report.name}
-          </h1>
-          {report.description ? (
-            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              {report.description}
-            </p>
-          ) : null}
-          <p className="mt-2 text-[11px] text-muted-foreground/80">
-            Generated for {viewer.displayName} at{" "}
-            <UserTime value={new Date()} />
-          </p>
-        </div>
-        <ReportActionMenu
-          reportId={report.id}
-          reportName={report.name}
-          isShared={report.isShared}
-          isBuiltin={report.isBuiltin}
-          canEdit={canEdit}
-          canDelete={canDelete}
-          definition={{
-            name: report.name,
-            description: report.description,
-            entityType: report.entityType,
-            fields: report.fields as string[],
-            filters: report.filters as Record<string, unknown>,
-            groupBy: report.groupBy as string[],
-            metrics: report.metrics as unknown[],
-            visualization: report.visualization,
-          }}
-        />
-      </div>
+      <StandardPageHeader
+        kicker={`${meta.label} report`}
+        title={report.name}
+        fontFamily="display"
+        description={report.description ?? undefined}
+        actions={
+          <ReportActionMenu
+            reportId={report.id}
+            reportName={report.name}
+            isShared={report.isShared}
+            isBuiltin={report.isBuiltin}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            definition={{
+              name: report.name,
+              description: report.description,
+              entityType: report.entityType,
+              fields: report.fields as string[],
+              filters: report.filters as Record<string, unknown>,
+              groupBy: report.groupBy as string[],
+              metrics: report.metrics as unknown[],
+              visualization: report.visualization,
+            }}
+          />
+        }
+      />
+      <p className="text-[11px] text-muted-foreground/80">
+        Generated for {viewer.displayName} at <UserTime value={new Date()} />
+      </p>
 
       <GlassCard className="mt-8 p-6">
         <ReportRunner
