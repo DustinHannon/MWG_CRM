@@ -29,6 +29,11 @@ export {
   StandardConfirmDialog,
   type StandardConfirmDialogProps,
 } from "./standard-confirm-dialog";
+export {
+  StandardDialog,
+  StandardDialogClose,
+  type StandardDialogProps,
+} from "./standard-dialog";
 export { StandardCollapsibleSection } from "./standard-collapsible-section";
 export {
   SortableColumnHeaders,
