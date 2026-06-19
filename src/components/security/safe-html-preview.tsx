@@ -1,3 +1,4 @@
+// consistency-exempt: theme: email/template HTML is authored against a white canvas
 "use client";
 
 import { useMemo } from "react";
