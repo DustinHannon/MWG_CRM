@@ -29,8 +29,8 @@ export function SearchTrigger() {
     <button
       type="button"
       onClick={handleClick}
-      aria-label="Open search (Ctrl+K)"
-      title="Search · Ctrl+K"
+      aria-label={`Open search (${modifier}+K)`}
+      title={`Search · ${modifier}+K`}
       className="inline-flex h-9 items-center gap-2 rounded-md border border-glass-border bg-card/40 px-2.5 text-sm text-muted-foreground transition hover:bg-accent/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3"
     >
       <Search size={16} aria-hidden />

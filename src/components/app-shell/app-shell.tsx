@@ -121,7 +121,7 @@ export async function AppShell({
           </div>
         </div>
         <CommandPalette recent={recentViews} />
-        <Toaster theme="dark" position="bottom-right" />
+        <Toaster theme={theme} position="bottom-right" />
       </BreadcrumbsProvider>
     </TooltipProvider>
   );

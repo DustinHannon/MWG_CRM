@@ -2,9 +2,18 @@
 
 import { Command } from "cmdk";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Building2, FileText, Folder, Search, Tag, Trophy, User } from "lucide-react";
+import {
+  Building2,
+  CheckSquare,
+  FileText,
+  Folder,
+  Search,
+  Settings,
+  Tag,
+  Trophy,
+  User,
+} from "lucide-react";
 
 interface RecentItem {
   entityType: string;
@@ -25,8 +34,8 @@ interface SearchHit {
 const QUICK_ACTIONS = [
   { id: "new-lead", label: "Add lead", link: "/leads/new", icon: User },
   { id: "import", label: "Import leads", link: "/leads/import", icon: FileText },
-  { id: "tasks", label: "Open tasks", link: "/tasks", icon: Folder },
-  { id: "settings", label: "Settings", link: "/settings", icon: Folder },
+  { id: "tasks", label: "Open tasks", link: "/tasks", icon: CheckSquare },
+  { id: "settings", label: "Settings", link: "/settings", icon: Settings },
 ];
 
 const TYPE_ICONS = {
@@ -47,31 +56,14 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
+  const [searchError, setSearchError] = useState(false);
+  const [searching, setSearching] = useState(false);
   const router = useRouter();
   const debounceRef = useRef<number | null>(null);
 
-  // Lock body scroll while open so the page beneath can't shift.
-  useEffect(() => {
-    if (!open) return;
-    const original = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = original;
-    };
-  }, [open]);
-
-  // Esc to close.
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setOpen(false);
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  // Radix Dialog (via cmdk's Command.Dialog) owns focus trap, focus
+  // restoration, Escape-to-close, body scroll lock, and outside-click —
+  // no manual key/scroll effects needed here.
 
   // Global shortcut.
   useEffect(() => {
@@ -101,26 +93,48 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     if (query.trim().length === 0) {
-      debounceRef.current = window.setTimeout(() => setHits([]), 0);
+      debounceRef.current = window.setTimeout(() => {
+        setHits([]);
+        setSearching(false);
+        setSearchError(false);
+      }, 0);
       return;
     }
     const controller = new AbortController();
     debounceRef.current = window.setTimeout(async () => {
+      // Flip to the searching state when the debounced request actually
+      // starts — not synchronously in the effect body, which trips the
+      // set-state-in-effect cascade lint (and would flash the spinner
+      // during the debounce window).
+      setSearching(true);
+      setSearchError(false);
       try {
         const res = await fetch(
           `/api/search?q=${encodeURIComponent(query)}`,
           { cache: "no-store", signal: controller.signal },
         );
         if (!res.ok) {
-          if (!controller.signal.aborted) setHits([]);
+          if (!controller.signal.aborted) {
+            setHits([]);
+            setSearchError(true);
+            setSearching(false);
+          }
           return;
         }
         const data = (await res.json()) as { hits: SearchHit[] };
-        if (!controller.signal.aborted) setHits(data.hits);
+        if (!controller.signal.aborted) {
+          setHits(data.hits);
+          setSearchError(false);
+          setSearching(false);
+        }
       } catch {
-        // AbortError from a superseded run is expected; only surface
-        // empties for a genuine failure of the still-current request.
-        if (!controller.signal.aborted) setHits([]);
+        // AbortError from a superseded run is expected; only surface a
+        // failure for a genuine error of the still-current request.
+        if (!controller.signal.aborted) {
+          setHits([]);
+          setSearchError(true);
+          setSearching(false);
+        }
       }
     }, 200);
     return () => {
@@ -145,39 +159,22 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
   };
   for (const h of hits) grouped[h.type].push(h);
 
-  // `open` is false on first render (SSR + initial hydration), so the
-  // early return guarantees we never call createPortal until the user
-  // opens the palette — by which point `document` is guaranteed to
-  // exist.
-  if (!open) return null;
-
-  // The portal mounts on document.body, but globals.css has
-  //
-  // body > * { position: relative; z-index: 1; }
-  //
-  // (a sibling rule for the `body::before` noise overlay). That
-  // selector overrides our `position: fixed`, which is why the
-  // palette flowed to the bottom of the document. Wrap the modal in
-  // a passthrough div: the wrapper absorbs the `body > *` rule
-  // (position: relative; z-index: 1 — harmless), and the inner
-  // backdrop is no longer a body child so its `position: fixed`
-  // wins. `position: relative` on a parent does NOT create a
-  // containing block for fixed descendants, so the inner element
-  // stays anchored to the viewport as intended.
-  return createPortal(
-    <div data-command-palette-root>
-      <div
-        className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 p-4 pt-[12vh]"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Command palette"
-        onClick={() => setOpen(false)}
-      >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="glass-surface glass-surface--3 w-full max-w-xl overflow-hidden rounded-xl shadow-2xl"
-      >
-        <Command label="Command palette" shouldFilter={false}>
+  // cmdk's Command.Dialog renders the command tree inside a Radix
+  // Dialog, which provides the focus trap, focus restoration,
+  // Escape-to-close, body scroll lock, outside-click, and portal —
+  // replacing the former hand-rolled scrim + manual key/scroll
+  // effects. Radix portals the overlay/content as direct body
+  // children; body uses `isolation: isolate` (globals.css) so a
+  // fixed-position overlay anchors to the viewport without a wrapper.
+  return (
+    <Command.Dialog
+      open={open}
+      onOpenChange={setOpen}
+      label="Command palette"
+      shouldFilter={false}
+      overlayClassName="fixed inset-0 z-[60] bg-black/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+      contentClassName="glass-surface glass-surface--3 fixed left-1/2 top-[12vh] z-[60] w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+    >
           <div className="flex items-center gap-3 border-b border-glass-border px-4">
             <Search size={16} className="text-muted-foreground" aria-hidden />
             <Command.Input
@@ -246,9 +243,19 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
             ) : (
               <>
                 {hits.length === 0 ? (
-                  <p className="p-6 text-center text-xs text-muted-foreground">
-                    No matches.
-                  </p>
+                  searching ? (
+                    <p className="p-6 text-center text-xs text-muted-foreground">
+                      Searching…
+                    </p>
+                  ) : searchError ? (
+                    <p className="p-6 text-center text-xs text-muted-foreground">
+                      Search is unavailable. Try again.
+                    </p>
+                  ) : (
+                    <p className="p-6 text-center text-xs text-muted-foreground">
+                      No matches.
+                    </p>
+                  )
                 ) : null}
                 {(["lead", "contact", "account", "opportunity", "task", "tag"] as const).map(
                   (type) =>
@@ -289,10 +296,6 @@ export function CommandPalette({ recent }: { recent: RecentItem[] }) {
             <kbd className="rounded bg-input/60 px-1.5 py-0.5">⌘K</kbd> to open ·{" "}
             <kbd className="rounded bg-input/60 px-1.5 py-0.5">Enter</kbd> to go
           </div>
-        </Command>
-      </div>
-      </div>
-    </div>,
-    document.body,
+    </Command.Dialog>
   );
 }

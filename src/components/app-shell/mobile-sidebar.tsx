@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { UserPanel } from "@/components/user-panel/user-panel";
 import type { SessionUser } from "@/lib/auth-helpers";
+import { cn } from "@/lib/utils";
 import { Brand } from "./brand";
 import {
   ICON_MAP,
@@ -94,11 +95,18 @@ export function MobileSidebar({ brand, nav, user }: MobileSidebarProps) {
                 );
               }
               const Icon = item.iconKey ? ICON_MAP[item.iconKey] : null;
+              const active = isActive(pathname, item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex items-center gap-3 rounded-md px-3 py-2.5 text-base text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-base transition hover:bg-accent/40 hover:text-foreground",
+                    active
+                      ? "bg-accent/40 text-foreground"
+                      : "text-muted-foreground",
+                  )}
                 >
                   {Icon ? <Icon size={18} aria-hidden /> : null}
                   <span className="truncate">{item.label}</span>
@@ -135,7 +143,13 @@ function MobileGroup({
     <div className="flex flex-col">
       <Link
         href={group.href}
-        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-base text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
+        aria-current={groupActive ? "page" : undefined}
+        className={cn(
+          "flex items-center gap-3 rounded-md px-3 py-2.5 text-base transition hover:bg-accent/40 hover:text-foreground",
+          groupActive
+            ? "bg-accent/40 text-foreground"
+            : "text-muted-foreground",
+        )}
       >
         {Icon ? <Icon size={18} aria-hidden /> : null}
         <span className="truncate">{group.label}</span>
@@ -144,11 +158,21 @@ function MobileGroup({
         <ul className="mt-0.5 flex flex-col gap-0.5 pl-4">
           {group.children.map((child) => {
             const ChildIcon = child.iconKey ? ICON_MAP[child.iconKey] : null;
+            const childActive =
+              currentPath === child.href ||
+              (child.href !== group.href &&
+                currentPath.startsWith(`${child.href}/`));
             return (
               <li key={child.href}>
                 <Link
                   href={child.href}
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
+                  aria-current={childActive ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition hover:bg-accent/40 hover:text-foreground",
+                    childActive
+                      ? "bg-accent/40 text-foreground"
+                      : "text-muted-foreground",
+                  )}
                 >
                   {ChildIcon ? (
                     <ChildIcon size={14} aria-hidden />
@@ -162,4 +186,17 @@ function MobileGroup({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Active-route matching for the drawer links. Mirrors the desktop
+ * sidebar so the mobile drawer highlights the current page identically:
+ * exact match for `/`-rooted home pages, prefix match for nested routes,
+ * and the `/admin` / `/dashboard` index links active only on their own
+ * page (each sub-page carries its own nav entry).
+ */
+function isActive(pathname: string, href: string): boolean {
+  if (pathname === href) return true;
+  if (href === "/admin" || href === "/dashboard") return false;
+  return pathname.startsWith(`${href}/`);
 }

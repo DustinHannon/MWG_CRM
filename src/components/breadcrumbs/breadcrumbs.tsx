@@ -58,7 +58,7 @@ export function Breadcrumbs() {
       {/* Mobile leaf — current segment only. */}
       {last ? (
         <span
-          className="truncate font-medium text-foreground sm:hidden"
+          className="min-w-0 flex-1 truncate font-medium text-foreground sm:hidden"
           title={last.label}
         >
           {last.loading ? (
@@ -126,6 +126,7 @@ function RefreshButton() {
     <button
       type="button"
       aria-label="Refresh"
+      disabled={spinning}
       onClick={() => {
         setMinSpinning(true);
         // Minimum spin so the click registers visually even on a fast
@@ -138,7 +139,7 @@ function RefreshButton() {
         }
       }}
       className={cn(
-        "ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-glass-2/40 hover:text-foreground",
+        "ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-glass-2/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
         spinning && "text-foreground",
       )}
     >
