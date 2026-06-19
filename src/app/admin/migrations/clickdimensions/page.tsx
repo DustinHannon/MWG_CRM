@@ -9,7 +9,7 @@ import { auditLog } from "@/db/schema/audit";
 import { permissions } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
-import { UserTime } from "@/components/ui/user-time";
+import { UserTime, getCurrentUserTimePrefs } from "@/components/ui/user-time";
 import { adminCrumbs } from "@/lib/navigation/breadcrumbs";
 import { requireSession } from "@/lib/auth-helpers";
 import {
@@ -59,6 +59,7 @@ function parseLatestRunSummary(
 
 export default async function ClickDimensionsMigrationsPage() {
   const user = await requireSession();
+  const timePrefs = await getCurrentUserTimePrefs();
   if (!user.isAdmin) {
     const perm = await db
       .select({
@@ -161,7 +162,7 @@ export default async function ClickDimensionsMigrationsPage() {
             }
           />
         ) : (
-          <ClickDimensionsWorklistClient rows={safeRows} />
+          <ClickDimensionsWorklistClient rows={safeRows} timePrefs={timePrefs} />
         )}
       </div>
     </div>

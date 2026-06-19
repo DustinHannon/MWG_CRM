@@ -122,7 +122,7 @@ function EmailActivityCard({
       <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
         <StatusBadge status={row.status} />
         {row.delivered ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--status-qualified-fg)]/30 bg-[var(--status-qualified-bg)] px-2 py-0.5 text-[var(--status-qualified-fg)]">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--status-qualification-fg)]/30 bg-[var(--status-qualification-bg)] px-2 py-0.5 text-[var(--status-qualification-fg)]">
             <CheckCircle2 className="h-3 w-3" aria-hidden />
             Delivered
           </span>
@@ -216,7 +216,7 @@ function recipientStatusTone(status: string): string {
   switch (status) {
     case "delivered":
     case "sent":
-      return "border-[var(--status-qualified-fg)]/30 bg-[var(--status-qualified-bg)] text-[var(--status-qualified-fg)]";
+      return "border-[var(--status-qualification-fg)]/30 bg-[var(--status-qualification-bg)] text-[var(--status-qualification-fg)]";
     case "queued":
     case "deferred":
       return "border-[var(--status-new-fg)]/30 bg-[var(--status-new-bg)] text-[var(--status-new-fg)]";

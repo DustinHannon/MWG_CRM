@@ -3,7 +3,9 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { ChevronDown } from "lucide-react";
 import { ModifiedBadge } from "@/components/saved-views";
+import { StandardConfirmDialog } from "@/components/standard";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import type {
   TaskViewDefinition,
@@ -108,9 +110,6 @@ export function TaskViewSelector({
 
   function deleteActive() {
     if (!activeViewId.startsWith("saved:")) return;
-    if (!confirm(`Delete the saved view "${active?.name ?? "Untitled"}"?`)) {
-      return;
-    }
     const id = activeViewId.slice("saved:".length);
     startSaving(async () => {
       const res = await deleteTaskViewAction(id);
@@ -133,7 +132,7 @@ export function TaskViewSelector({
           className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm hover:bg-muted"
         >
           <span className="font-medium">{active?.name ?? "Pick a view"}</span>
-          <span className="text-muted-foreground/80">▾</span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground/80" aria-hidden />
         </button>
         {open ? (
           <>
@@ -219,14 +218,22 @@ export function TaskViewSelector({
       </button>
 
       {activeViewId.startsWith("saved:") ? (
-        <button
-          type="button"
-          onClick={deleteActive}
-          disabled={saving}
-          className="hidden rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20 md:inline-flex"
-        >
-          Delete view
-        </button>
+        <StandardConfirmDialog
+          trigger={
+            <button
+              type="button"
+              disabled={saving}
+              className="hidden rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20 md:inline-flex"
+            >
+              Delete view
+            </button>
+          }
+          title="Delete this saved view?"
+          body={`"${active?.name ?? "Untitled"}" will be permanently removed. This cannot be undone.`}
+          confirmLabel="Delete view"
+          tone="destructive"
+          onConfirm={deleteActive}
+        />
       ) : null}
     </div>
   );
