@@ -22,6 +22,8 @@ import { marketingTemplates } from "@/db/schema/marketing-templates";
 import { marketingLists } from "@/db/schema/marketing-lists";
 import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
+import { StandardEmptyState } from "@/components/standard";
+import { Pill } from "@/components/ui/pill";
 import { UserTime } from "@/components/ui/user-time";
 import { requireSession } from "@/lib/auth-helpers";
 import { marketingCrumbs } from "@/lib/navigation/marketing-breadcrumbs";
@@ -262,11 +264,17 @@ export default async function CampaignDetailPage({
           />
         </div>
         {recipientRows.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-muted/40 p-8 text-center text-sm text-muted-foreground">
-            {row.status === "draft" || row.status === "scheduled"
-              ? "Recipients will appear here once the campaign starts sending."
-              : "No recipients match this filter."}
-          </div>
+          row.status === "draft" || row.status === "scheduled" ? (
+            <StandardEmptyState
+              title="No recipients yet"
+              description="Recipients will appear here once the campaign starts sending."
+            />
+          ) : (
+            <StandardEmptyState
+              title="No recipients match this filter"
+              description="Clear the filter to see all recipients."
+            />
+          )
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <div className="overflow-x-auto">
@@ -377,7 +385,7 @@ function campaignStatusTone(status: string): string {
     case "sending":
       return "border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] text-[var(--priority-medium-fg)]";
     case "sent":
-      return "border-[var(--status-qualified-fg)]/30 bg-[var(--status-qualified-bg)] text-[var(--status-qualified-fg)]";
+      return "border-[var(--status-qualification-fg)]/30 bg-[var(--status-qualification-bg)] text-[var(--status-qualification-fg)]";
     case "failed":
       return "border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]";
     case "cancelled":
@@ -420,9 +428,9 @@ function Counter({
 
 function RecipientStatusBadge({ status }: { status: string }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] uppercase tracking-[0.05em] text-muted-foreground">
+    <Pill variant="bg-muted text-muted-foreground" className="uppercase">
       {status}
-    </span>
+    </Pill>
   );
 }
 

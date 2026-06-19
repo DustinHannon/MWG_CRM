@@ -12,6 +12,7 @@ import {
   Send,
   Users,
 } from "lucide-react";
+import { StandardEmptyState } from "@/components/standard";
 import { SafeHtmlPreview } from "@/components/security/safe-html-preview";
 import {
   createCampaignDraftAction,
@@ -438,12 +439,13 @@ function Stepper({ current }: { current: Step }) {
         return (
           <li key={item.step} className="flex items-center gap-2">
             <span
+              aria-current={active ? "step" : undefined}
               className={
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 transition " +
                 (active
                   ? "border-foreground bg-foreground text-background"
                   : done
-                    ? "border-[var(--status-qualified-fg)]/30 bg-[var(--status-qualified-bg)] text-[var(--status-qualified-fg)]"
+                    ? "border-[var(--status-qualification-fg)]/30 bg-[var(--status-qualification-bg)] text-[var(--status-qualification-fg)]"
                     : "border-border bg-muted text-muted-foreground")
               }
             >
@@ -492,10 +494,10 @@ function StepTemplate({
         />
       </div>
       {templates.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-muted/40 p-8 text-center text-sm text-muted-foreground">
-          No ready templates yet. Build one in the Templates tab and mark it
-          ready.
-        </div>
+        <StandardEmptyState
+          title="No ready templates yet"
+          description="Build a template in the Templates tab and mark it ready."
+        />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {templates.map((t) => {
@@ -552,9 +554,10 @@ function StepList({
         2. Pick the audience
       </h2>
       {lists.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-muted/40 p-8 text-center text-sm text-muted-foreground">
-          No marketing lists yet. Build one in the Lists tab.
-        </div>
+        <StandardEmptyState
+          title="No marketing lists yet"
+          description="Build a list in the Lists tab."
+        />
       ) : (
         <ul className="grid gap-2 md:grid-cols-2">
           {lists.map((l) => {

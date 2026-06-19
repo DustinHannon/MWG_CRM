@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Send, Trash2 } from "lucide-react";
+import { StandardConfirmDialog } from "@/components/standard";
 import {
   cancelCampaignAction,
   deleteCampaignAction,
@@ -47,52 +48,52 @@ export function CampaignActions({
   // the detail UI imply an admin-only rule the action never enforced.
   void isAdmin;
 
-  function callCancel() {
-    if (!confirm("Cancel this campaign? Recipients will not receive it.")) {
-      return;
-    }
+  // Each confirm runs inside StandardConfirmDialog's onConfirm. The action
+  // result is surfaced inline (matching the existing error <p>); the dialog
+  // closes once the promise resolves. The startTransition wrapper keeps the
+  // buttons in their pending state while the mutation is in flight.
+  async function callCancel() {
     setError(null);
-    startTransition(async () => {
-      const res = await cancelCampaignAction(campaignId);
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      router.refresh();
+    await new Promise<void>((resolve) => {
+      startTransition(async () => {
+        const res = await cancelCampaignAction(campaignId);
+        if (!res.ok) {
+          setError(res.error);
+        } else {
+          router.refresh();
+        }
+        resolve();
+      });
     });
   }
 
-  function callSendNow() {
-    if (
-      !confirm(
-        "Send this campaign now? This cannot be undone once recipients start receiving emails.",
-      )
-    ) {
-      return;
-    }
+  async function callSendNow() {
     setError(null);
-    startTransition(async () => {
-      const res = await sendCampaignNowAction(campaignId);
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      router.refresh();
+    await new Promise<void>((resolve) => {
+      startTransition(async () => {
+        const res = await sendCampaignNowAction(campaignId);
+        if (!res.ok) {
+          setError(res.error);
+        } else {
+          router.refresh();
+        }
+        resolve();
+      });
     });
   }
 
-  function callDelete() {
-    if (!confirm("Delete this campaign? This cannot be undone.")) {
-      return;
-    }
+  async function callDelete() {
     setError(null);
-    startTransition(async () => {
-      const res = await deleteCampaignAction(campaignId);
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      router.push("/marketing/campaigns");
+    await new Promise<void>((resolve) => {
+      startTransition(async () => {
+        const res = await deleteCampaignAction(campaignId);
+        if (!res.ok) {
+          setError(res.error);
+        } else {
+          router.push("/marketing/campaigns");
+        }
+        resolve();
+      });
     });
   }
 
@@ -108,40 +109,66 @@ export function CampaignActions({
           </Link>
         ) : null}
         {canCancel ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={callCancel}
-            className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted disabled:opacity-50"
-          >
-            Cancel
-          </button>
+          <StandardConfirmDialog
+            trigger={
+              <button
+                type="button"
+                disabled={pending}
+                className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            }
+            title="Cancel this campaign?"
+            body="Recipients will not receive it."
+            confirmLabel="Cancel campaign"
+            cancelLabel="Keep campaign"
+            tone="destructive"
+            onConfirm={callCancel}
+          />
         ) : null}
         {canSendNow ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={callSendNow}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
-          >
-            <Send className="h-4 w-4" aria-hidden />
-            Send now
-          </button>
+          <StandardConfirmDialog
+            trigger={
+              <button
+                type="button"
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground whitespace-nowrap transition hover:bg-primary/90 disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" aria-hidden />
+                Send now
+              </button>
+            }
+            title="Send this campaign now?"
+            body="This cannot be undone once recipients start receiving emails."
+            confirmLabel="Send now"
+            onConfirm={callSendNow}
+          />
         ) : null}
         {canDelete ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={callDelete}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/30 disabled:opacity-50"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden />
-            Delete
-          </button>
+          <StandardConfirmDialog
+            trigger={
+              <button
+                type="button"
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/30 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+                Delete
+              </button>
+            }
+            title="Delete this campaign?"
+            body="This cannot be undone."
+            confirmLabel="Delete campaign"
+            tone="destructive"
+            onConfirm={callDelete}
+          />
         ) : null}
       </div>
       {error ? (
-        <p className="text-xs text-[var(--status-lost-fg)]">{error}</p>
+        <p role="alert" className="text-xs text-[var(--status-lost-fg)]">
+          {error}
+        </p>
       ) : null}
     </div>
   );

@@ -7,6 +7,7 @@ import {
   StandardListPage,
   type StandardListPagePage,
 } from "@/components/standard";
+import { Pill } from "@/components/ui/pill";
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import { type TimePrefs } from "@/lib/format-time";
 import type {
@@ -416,13 +417,17 @@ function CampaignsMobileCard({
   );
 }
 
+// Per-status tint, mirroring campaignStatusTone() on the detail page so the
+// list and detail show the same color semantics via the canonical Pill base.
+const STATUS_VARIANTS: Record<MarketingCampaignStatus, string> = {
+  draft: "bg-[var(--status-default-bg)] text-[var(--status-default-fg)]",
+  scheduled: "bg-[var(--status-contacted-bg)] text-[var(--status-contacted-fg)]",
+  sending: "bg-[var(--priority-medium-bg)] text-[var(--priority-medium-fg)]",
+  sent: "bg-[var(--status-qualification-bg)] text-[var(--status-qualification-fg)]",
+  failed: "bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]",
+  cancelled: "bg-[var(--status-default-bg)] text-muted-foreground/70",
+};
+
 function StatusPill({ status }: { status: MarketingCampaignStatus }) {
-  return (
-    <span
-      className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-      data-status={status}
-    >
-      {STATUS_LABELS[status]}
-    </span>
-  );
+  return <Pill variant={STATUS_VARIANTS[status]}>{STATUS_LABELS[status]}</Pill>;
 }

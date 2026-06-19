@@ -7,6 +7,8 @@ import {
   StandardListPage,
   type StandardListPagePage,
 } from "@/components/standard";
+import { Pill } from "@/components/ui/pill";
+import { TemplateStatusPill } from "@/components/ui/template-status-pill";
 import { UserTimeClient } from "@/components/ui/user-time-client";
 import { type TimePrefs } from "@/lib/format-time";
 import type { MarketingTemplateRow } from "@/lib/marketing/templates";
@@ -345,7 +347,7 @@ function TemplateDesktopRow({
         className="min-w-0 flex-1 truncate px-5 py-3"
         style={{ flexBasis: "140px" }}
       >
-        <StatusBadge status={template.status} />
+        <TemplateStatusPill status={template.status} />
       </div>
       <div
         className="hidden min-w-0 flex-1 truncate px-5 py-3 lg:block"
@@ -386,7 +388,7 @@ function TemplateMobileCard({
         <span className="truncate font-medium text-foreground">
           {template.name}
         </span>
-        <StatusBadge status={template.status} />
+        <TemplateStatusPill status={template.status} />
       </div>
       <div className="mt-1 truncate text-xs text-muted-foreground">
         {template.subject}
@@ -399,27 +401,7 @@ function TemplateMobileCard({
   );
 }
 
-function StatusBadge({ status }: { status: "draft" | "ready" | "archived" }) {
-  const label =
-    status === "draft" ? "Draft" : status === "ready" ? "Ready" : "Archived";
-  return (
-    <span
-      className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-      data-status={status}
-    >
-      {label}
-    </span>
-  );
-}
-
 function ScopeBadge({ scope }: { scope: "global" | "personal" }) {
   const label = scope === "global" ? "Global" : "Personal";
-  return (
-    <span
-      className="inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground"
-      data-scope={scope}
-    >
-      {label}
-    </span>
-  );
+  return <Pill variant="bg-muted/60 text-muted-foreground">{label}</Pill>;
 }

@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { SafeHtmlPreview } from "@/components/security/safe-html-preview";
+import { Pill } from "@/components/ui/pill";
 import { UserTime } from "@/components/ui/user-time";
 import { TemplateStatusPill } from "@/components/ui/template-status-pill";
 import { marketingTemplates } from "@/db/schema/marketing-templates";
@@ -250,12 +251,5 @@ function SidebarBlock({
 
 function ScopePillLocal({ scope }: { scope: "global" | "personal" }) {
   const label = scope === "global" ? "Global" : "Personal";
-  return (
-    <span
-      className="inline-flex items-center rounded-md border border-border bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground"
-      data-scope={scope}
-    >
-      {label}
-    </span>
-  );
+  return <Pill variant="bg-muted/60 text-muted-foreground">{label}</Pill>;
 }

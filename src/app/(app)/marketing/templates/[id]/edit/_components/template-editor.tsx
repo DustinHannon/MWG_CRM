@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 import { Loader2, Send } from "lucide-react";
+import { StandardConfirmDialog, StandardDialog } from "@/components/standard";
 import { LockedTemplateBanner } from "@/components/marketing/locked-template-banner";
 import { UnlayerEditor } from "@/components/marketing/unlayer-editor";
 import { TemplateStatusPill } from "@/components/ui/template-status-pill";
@@ -164,17 +165,19 @@ export function TemplateEditor(props: TemplateEditorProps) {
     ],
   );
 
-  function handleArchive() {
+  // Runs inside StandardConfirmDialog's onConfirm. Errors surface in the
+  // inline banner below; the dialog closes once the promise resolves.
+  async function handleArchive() {
     setError(null);
     setInfo(null);
-    if (!confirm("Archive this template? Campaigns already sent will keep working; new sends are blocked.")) {
-      return;
-    }
-    startArchiveTransition(async () => {
-      const result = await archiveTemplateAction(props.templateId);
-      if (!result.ok) {
-        setError(result.error);
-      }
+    await new Promise<void>((resolve) => {
+      startArchiveTransition(async () => {
+        const result = await archiveTemplateAction(props.templateId);
+        if (!result.ok) {
+          setError(result.error);
+        }
+        resolve();
+      });
     });
   }
 
@@ -274,6 +277,9 @@ export function TemplateEditor(props: TemplateEditorProps) {
         status={status}
         archivePending={archivePending}
         savePending={savePending}
+        // Lock the metadata inputs while any mutation is in flight so an
+        // edit made mid-archive isn't discarded by the subsequent refresh.
+        mutating={savePending || archivePending || testPending || scopePending}
         onArchive={handleArchive}
         onOpenTest={() => setTestOpen(true)}
       />
@@ -314,35 +320,20 @@ export function TemplateEditor(props: TemplateEditorProps) {
         saveLabel={status === "draft" ? "Save draft" : "Save"}
       />
 
-      <div className="flex justify-end">
-        {status === "draft" ? (
-          <button
-            type="button"
-            disabled={savePending}
-            onClick={async () => {
-              // Promote-to-ready piggy-backs the same export → save flow.
-              // We can't trigger Unlayer's exportHtml from outside the
-              // editor without a ref-bridge; the simplest path is a
-              // hint that the user hits Save first. Surface that with
-              // an inline note.
-              setInfo("Save the design first, then mark ready below.");
-            }}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            (Use Save above; mark-ready in the next pass)
-          </button>
-        ) : null}
-      </div>
-
-      {testOpen ? (
-        <TestSendModal
-          recipient={testRecipient}
-          setRecipient={setTestRecipient}
-          pending={testPending}
-          onClose={() => setTestOpen(false)}
-          onSend={handleSendTest}
-        />
+      {status === "draft" ? (
+        <p className="text-right text-xs text-muted-foreground">
+          Use Save in the editor to keep working on this draft.
+        </p>
       ) : null}
+
+      <TestSendModal
+        open={testOpen}
+        onOpenChange={setTestOpen}
+        recipient={testRecipient}
+        setRecipient={setTestRecipient}
+        pending={testPending}
+        onSend={handleSendTest}
+      />
     </div>
   );
 }
@@ -359,7 +350,9 @@ interface ToolbarProps {
   status: MarketingTemplateStatus;
   savePending: boolean;
   archivePending: boolean;
-  onArchive: () => void;
+  /** True while any mutation (save/archive/test/scope) is in flight. */
+  mutating: boolean;
+  onArchive: () => Promise<void> | void;
   onOpenTest: () => void;
 }
 
@@ -372,7 +365,7 @@ function Toolbar(props: ToolbarProps) {
             type="text"
             value={props.name}
             onChange={(e) => props.setName(e.target.value)}
-            disabled={props.savePending}
+            disabled={props.mutating}
             maxLength={200}
             className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
@@ -382,7 +375,7 @@ function Toolbar(props: ToolbarProps) {
             type="text"
             value={props.subject}
             onChange={(e) => props.setSubject(e.target.value)}
-            disabled={props.savePending}
+            disabled={props.mutating}
             maxLength={998}
             className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
@@ -392,7 +385,7 @@ function Toolbar(props: ToolbarProps) {
             type="text"
             value={props.preheader}
             onChange={(e) => props.setPreheader(e.target.value)}
-            disabled={props.savePending}
+            disabled={props.mutating}
             maxLength={255}
             className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
@@ -402,7 +395,7 @@ function Toolbar(props: ToolbarProps) {
             type="text"
             value={props.description}
             onChange={(e) => props.setDescription(e.target.value)}
-            disabled={props.savePending}
+            disabled={props.mutating}
             maxLength={2000}
             className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
@@ -419,14 +412,22 @@ function Toolbar(props: ToolbarProps) {
           >
             <Send className="h-3.5 w-3.5" aria-hidden /> Send test
           </button>
-          <button
-            type="button"
-            onClick={props.onArchive}
-            disabled={props.archivePending || props.status === "archived"}
-            className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/30 disabled:opacity-50"
-          >
-            {props.archivePending ? "Archiving…" : "Archive"}
-          </button>
+          <StandardConfirmDialog
+            trigger={
+              <button
+                type="button"
+                disabled={props.archivePending || props.status === "archived"}
+                className="rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-sm text-[var(--status-lost-fg)] transition hover:bg-destructive/30 disabled:opacity-50"
+              >
+                {props.archivePending ? "Archiving…" : "Archive"}
+              </button>
+            }
+            title="Archive this template?"
+            body="Campaigns already sent will keep working; new sends are blocked."
+            confirmLabel="Archive template"
+            tone="destructive"
+            onConfirm={props.onArchive}
+          />
         </div>
       </div>
     </div>
@@ -451,51 +452,40 @@ function Field({
 }
 
 interface TestSendModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   recipient: string;
   setRecipient: (v: string) => void;
   pending: boolean;
-  onClose: () => void;
   onSend: () => void;
 }
 
 function TestSendModal({
+  open,
+  onOpenChange,
   recipient,
   setRecipient,
   pending,
-  onClose,
   onSend,
 }: TestSendModalProps) {
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <StandardDialog
+      open={open}
+      // Don't let Escape / outside-click dismiss while the test send is in
+      // flight (the footer buttons are disabled for the same reason).
+      onOpenChange={(next) => {
+        if (!next && pending) return;
+        onOpenChange(next);
       }}
-    >
-      <div className="w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-xl">
-        <h2 className="text-base font-semibold text-foreground">
-          Send a test
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          A single rendered copy goes to the address below. Suppression
-          and quiet-hours rules are bypassed for tests.
-        </p>
-        <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Recipient email
-          <input
-            type="email"
-            value={recipient}
-            onChange={(e) => setRecipient(e.target.value)}
-            disabled={pending}
-            className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </label>
-        <div className="mt-5 flex justify-end gap-2">
+      disableOutsideClose={pending}
+      title="Send a test"
+      description="A single rendered copy goes to the address below. Suppression and quiet-hours rules are bypassed for tests."
+      contentClassName="sm:max-w-md"
+      footer={
+        <>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => onOpenChange(false)}
             disabled={pending}
             className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground/90 transition hover:bg-muted disabled:opacity-50"
           >
@@ -512,9 +502,20 @@ function TestSendModal({
             ) : null}
             {pending ? "Sending…" : "Send test"}
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <label className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Recipient email
+        <input
+          type="email"
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
+          disabled={pending}
+          className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
+        />
+      </label>
+    </StandardDialog>
   );
 }
 
