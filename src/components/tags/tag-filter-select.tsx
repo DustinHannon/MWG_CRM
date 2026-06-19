@@ -109,7 +109,7 @@ export function TagFilterSelect({
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          aria-haspopup="listbox"
+          aria-haspopup="true"
           className="inline-flex items-center gap-1 bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span>{buttonLabel}</span>
@@ -134,7 +134,6 @@ export function TagFilterSelect({
 
       {open ? (
         <div
-          role="listbox"
           className="absolute right-0 z-40 mt-1 max-h-64 w-64 overflow-y-auto rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-xl"
         >
           {options.length === 0 ? (

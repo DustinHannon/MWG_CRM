@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import { TagChip } from "./tag-chip";
@@ -70,6 +70,8 @@ export function TagInput(props: TagInputProps) {
   const [, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const baseId = useId();
+  const listboxId = `${baseId}-listbox`;
 
   const value = props.value;
 
@@ -275,6 +277,13 @@ export function TagInput(props: TagInputProps) {
           type="text"
           value={query}
           disabled={disabled}
+          role="combobox"
+          aria-expanded={open && items.length > 0}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            open && items.length > 0 ? `${baseId}-opt-${active}` : undefined
+          }
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);
@@ -284,7 +293,7 @@ export function TagInput(props: TagInputProps) {
           onKeyDown={handleKey}
           placeholder={
             disabled
-              ? "You don't have permission to apply tags."
+              ? ""
               : value.length === 0
                 ? "Add tags…"
                 : ""
@@ -292,6 +301,11 @@ export function TagInput(props: TagInputProps) {
           className="min-w-[120px] flex-1 bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed"
         />
       </div>
+      {disabled ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          You don&apos;t have permission to apply tags.
+        </p>
+      ) : null}
 
       {mode === "form-hidden" && (props as FormHiddenProps).hiddenInputName ? (
         <input
@@ -302,7 +316,11 @@ export function TagInput(props: TagInputProps) {
       ) : null}
 
       {open && !disabled && items.length > 0 ? (
-        <div className="glass-surface glass-surface--3 absolute z-20 mt-1 w-full overflow-hidden rounded-md p-1 shadow-lg">
+        <div
+          role="listbox"
+          id={listboxId}
+          className="glass-surface glass-surface--3 absolute z-20 mt-1 w-full overflow-hidden rounded-md p-1 shadow-lg"
+        >
           {items.map((item, i) => {
             if ("kind" in item) {
               if (item.kind === "create") {
@@ -310,6 +328,9 @@ export function TagInput(props: TagInputProps) {
                   <button
                     key="__create"
                     type="button"
+                    role="option"
+                    id={`${baseId}-opt-${i}`}
+                    aria-selected={active === i}
                     onMouseDown={(e) => {
                       e.preventDefault();
                       handleCreate(item.name);
@@ -336,6 +357,10 @@ export function TagInput(props: TagInputProps) {
               return (
                 <div
                   key="__already-applied"
+                  role="option"
+                  id={`${baseId}-opt-${i}`}
+                  aria-selected={active === i}
+                  aria-disabled
                   className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm text-muted-foreground"
                 >
                   <span>
@@ -352,6 +377,9 @@ export function TagInput(props: TagInputProps) {
               <button
                 key={tag.id}
                 type="button"
+                role="option"
+                id={`${baseId}-opt-${i}`}
+                aria-selected={active === i}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   handleSelect(tag);

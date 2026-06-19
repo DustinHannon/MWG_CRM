@@ -1,3 +1,4 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TagChip } from "./tag-chip";
 
 /**
@@ -39,15 +40,22 @@ export function TagsCell({
         />
       ))}
       {overflow > 0 ? (
-        <span
-          className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
-          title={tags
-            .slice(max)
-            .map((t) => t.name)
-            .join(", ")}
-        >
-          +{overflow}
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              +{overflow}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {tags
+              .slice(max)
+              .map((t) => t.name)
+              .join(", ")}
+          </TooltipContent>
+        </Tooltip>
       ) : null}
     </div>
   );

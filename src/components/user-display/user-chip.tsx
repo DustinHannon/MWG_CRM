@@ -56,6 +56,13 @@ export function UserChip({
       onMouseLeave={hoverCard ? () => setOpen(false) : undefined}
       onFocus={hoverCard ? () => setOpen(true) : undefined}
       onBlur={hoverCard ? () => setOpen(false) : undefined}
+      onKeyDown={
+        hoverCard
+          ? (e) => {
+              if (e.key === "Escape") setOpen(false);
+            }
+          : undefined
+      }
       className={cn(
         "inline-flex max-w-full items-center gap-2 rounded-md hover:underline",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

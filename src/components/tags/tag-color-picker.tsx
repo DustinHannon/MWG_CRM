@@ -52,7 +52,7 @@ export function TagColorPicker({ value, onChange }: TagColorPickerProps) {
               aria-label={`Use ${name} colour`}
               aria-pressed={selected}
               className={cn(
-                "relative h-7 w-7 rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "relative h-7 w-7 rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ring before:absolute before:inset-[-8px] before:content-['']",
                 classes,
                 selected
                   ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
@@ -100,7 +100,8 @@ export function TagColorPicker({ value, onChange }: TagColorPickerProps) {
             <button
               type="button"
               onClick={applyHex}
-              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium hover:bg-muted"
+              disabled={!hexDraft || hexDraft === "#" || hexDraft === value}
+              className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               Apply
             </button>
