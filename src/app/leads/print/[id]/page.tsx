@@ -91,15 +91,13 @@ export default async function LeadPrintPage({
 
   return (
     <div className="print-root">
-      <button
-        type="button"
-        data-print-hide
-        className="print-hide-btn"
-        // Server component can't have onClick; rely on auto-print or
-        // browser keyboard shortcut. Auto-print fires from the script tag below.
-      >
+      {/* Non-interactive instruction note. Auto-print fires from
+       * AutoPrint below; the user picks Save as PDF in the dialog.
+       * Rendered as a note (not a button) so it isn't a focusable
+       * no-op control. Hidden in print via [data-print-hide]. */}
+      <p data-print-hide className="print-hide-btn" role="note">
         Use your browser&apos;s Save as PDF in the print dialog
-      </button>
+      </p>
 
       <h1>
         {formatPersonName(lead)}

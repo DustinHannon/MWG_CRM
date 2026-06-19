@@ -119,7 +119,7 @@ export default function ApiHelpPage() {
           </div>
         </header>
 
-        <p className="text-base leading-relaxed text-foreground/90">
+        <p className="text-sm leading-relaxed text-foreground/90">
           The MWG CRM API lets external applications read and modify CRM
           data. Generate an API key from{" "}
           <Link

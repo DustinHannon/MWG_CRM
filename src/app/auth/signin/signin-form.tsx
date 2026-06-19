@@ -46,7 +46,7 @@ export function SigninForm({
         </button>
       )}
 
-      <div className="flex items-center gap-3 text-xs text-white/40">
+      <div className="flex items-center gap-3 text-xs text-white/55">
         <div className="h-px flex-1 bg-white/10" />
         <span>or</span>
         <div className="h-px flex-1 bg-white/10" />
@@ -101,7 +101,7 @@ export function SigninForm({
             {pending ? "Signing in…" : "Sign in"}
           </button>
 
-          <p className="text-xs text-white/40">
+          <p className="text-xs text-white/55">
             Breakglass is only for emergencies. Use Microsoft SSO when available.
           </p>
         </form>

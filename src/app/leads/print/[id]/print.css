@@ -1,4 +1,4 @@
-/* Phase 4F — print stylesheet for /leads/print/[id]. */
+/* Print stylesheet for /leads/print/[id]. */
 
 .print-root {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -43,6 +43,7 @@
 
 .print-root dd {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .print-root .activity {
