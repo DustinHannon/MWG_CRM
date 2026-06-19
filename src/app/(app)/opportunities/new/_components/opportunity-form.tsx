@@ -13,6 +13,25 @@ import {
   StandardFormErrorBanner,
 } from "@/components/standard";
 
+// Display labels for the opportunity_stage enum. Title-case to match
+// the pipeline board's stage headings so the create form, filter bar,
+// and board read the same way. Derived from OPPORTUNITY_STAGES so a new
+// enum member surfaces here even before a label is added.
+const STAGE_LABELS: Record<string, string> = {
+  prospecting: "Prospecting",
+  qualification: "Qualification",
+  proposal: "Proposal",
+  negotiation: "Negotiation",
+  closed_won: "Closed Won",
+  closed_lost: "Closed Lost",
+};
+
+const STAGE_OPTIONS: ReadonlyArray<{ value: string; label: string }> =
+  OPPORTUNITY_STAGES.map((s) => ({
+    value: s,
+    label: STAGE_LABELS[s] ?? s.replaceAll("_", " "),
+  }));
+
 interface AccountOption {
   id: string;
   name: string;
@@ -51,53 +70,42 @@ export function OpportunityForm({
     <form action={formAction} className="mt-8 grid gap-6 lg:grid-cols-2">
       <StandardFormSection title="Identity">
         <StandardFormField name="name" label="Opportunity name *" required defaultValue={dv("name")} error={fe.name} />
-        <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-          Account *
-          <select
-            name="accountId"
-            required
-            defaultValue={sv.accountId ?? defaultAccountId ?? ""}
-            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          >
-            <option value="" disabled>
-              — Select an account —
-            </option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          {fe.accountId ? (
-            <p role="alert" className="mt-1 text-xs text-[var(--status-lost-fg)]">
-              {fe.accountId}
-            </p>
-          ) : null}
-        </label>
+        <StandardFormSelect
+          name="accountId"
+          label="Account *"
+          required
+          placeholderOption="— Select an account —"
+          options={accounts.map((a) => ({ value: a.id, label: a.name }))}
+          defaultValue={sv.accountId ?? defaultAccountId ?? ""}
+          error={fe.accountId}
+        />
         {contacts.length > 0 ? (
-          <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-            Primary contact
-            <select
-              name="primaryContactId"
-              defaultValue={sv.primaryContactId ?? ""}
-              className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-            >
-              <option value="">— No primary contact —</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {[c.firstName, c.lastName].filter(Boolean).join(" ")}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+          <StandardFormSelect
+            name="primaryContactId"
+            label="Primary contact"
+            placeholderOption="— No primary contact —"
+            options={contacts.map((c) => ({
+              value: c.id,
+              label: [c.firstName, c.lastName].filter(Boolean).join(" "),
+            }))}
+            defaultValue={sv.primaryContactId ?? ""}
+          />
+        ) : (
+          <StandardFormSelect
+            name="primaryContactId"
+            label="Primary contact"
+            placeholderOption="Select an account to choose a contact"
+            options={[]}
+            defaultValue=""
+          />
+        )}
       </StandardFormSection>
 
       <StandardFormSection title="Pipeline">
         <StandardFormSelect
           name="stage"
           label="Stage"
-          options={OPPORTUNITY_STAGES}
+          options={STAGE_OPTIONS}
           defaultValue={sv.stage ?? "prospecting"}
           error={fe.stage}
         />

@@ -433,7 +433,10 @@ function OpportunitiesListInner({
   // pill stays inert/active here; Pipeline links to the kanban view.
   const headerControls = (
     <div className="hidden gap-1 rounded-lg border border-glass-border bg-glass-1 p-1 md:flex">
-      <span className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground">
+      <span
+        aria-current="page"
+        className="rounded bg-primary/20 px-3 py-1.5 text-xs font-medium text-foreground"
+      >
         Table
       </span>
       <Link
@@ -461,7 +464,17 @@ function OpportunitiesListInner({
           description={
             filtersAreModified
               ? "Adjust or clear the filters to see records here."
-              : undefined
+              : "Create an opportunity or switch to another view."
+          }
+          action={
+            filtersAreModified ? undefined : (
+              <Link
+                href="/opportunities/new"
+                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              >
+                New opportunity
+              </Link>
+            )
           }
         />
       }
@@ -656,6 +669,7 @@ function OpportunityFiltersBar({
                 onApply();
               }
             }}
+            aria-label="Search opportunities"
             placeholder="Search name or description…"
             className="block h-11 w-full rounded-full border border-border bg-muted/40 pl-10 pr-4 text-base text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
@@ -674,6 +688,7 @@ function OpportunityFiltersBar({
               onApply();
             }
           }}
+          aria-label="Search opportunities"
           placeholder="Search name or description…"
           className="hidden flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40 md:block md:min-w-[240px]"
         />
@@ -816,6 +831,7 @@ function ControlledFilterSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      aria-label={placeholder}
       className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
     >
       <option value="">All {placeholder}</option>
@@ -844,6 +860,7 @@ function ControlledMobileSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      aria-label={placeholder}
       className={cn(
         "h-11 min-w-0 shrink-0 appearance-none rounded-full border px-4 pr-8 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-ring/40",
         isSet

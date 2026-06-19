@@ -3,11 +3,13 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { Check, ChevronDown, Star } from "lucide-react";
 import {
   AVAILABLE_OPPORTUNITY_COLUMNS,
   type OpportunityColumnKey,
 } from "@/lib/opportunity-view-constants";
 import { ModifiedBadge, SaveViewDialog } from "@/components/saved-views";
+import { StandardConfirmDialog } from "@/components/standard";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import {
   subscribeToViewAction,
@@ -281,11 +283,20 @@ export function OpportunityViewToolbar({
       ) : null}
 
       {activeViewId.startsWith("saved:") ? (
-        <button
-          type="button"
-          onClick={() => {
-            if (!confirm("Delete this saved view? This cannot be undone."))
-              return;
+        <StandardConfirmDialog
+          trigger={
+            <button
+              type="button"
+              className="hidden rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] transition hover:bg-[var(--status-lost-bg)]/70 md:inline-flex"
+            >
+              Delete view
+            </button>
+          }
+          title="Delete this saved view?"
+          body="This cannot be undone."
+          confirmLabel="Delete view"
+          tone="destructive"
+          onConfirm={() => {
             const id = activeViewId.slice("saved:".length);
             const fd = new FormData();
             fd.set("id", id);
@@ -294,10 +305,7 @@ export function OpportunityViewToolbar({
               router.push("/opportunities?view=builtin:my-open");
             });
           }}
-          className="hidden rounded-md border border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] px-3 py-1.5 text-xs text-[var(--status-lost-fg)] transition hover:bg-destructive/20 md:inline-flex"
-        >
-          Delete view
-        </button>
+        />
       ) : null}
 
       {saveOpen ? (
@@ -391,7 +399,10 @@ function ViewSelectMenu({
         className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground transition hover:bg-muted"
       >
         <span className="font-medium">{active?.name ?? "Pick a view"}</span>
-        <span className="text-muted-foreground/80">▾</span>
+        <ChevronDown
+          aria-hidden
+          className="h-4 w-4 text-muted-foreground/80"
+        />
       </button>
       {open ? (
         <>
@@ -451,10 +462,12 @@ function ViewMenuItem({
       className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-muted/40 ${active ? "bg-muted font-medium" : ""}`}
     >
       <span className="flex items-center gap-2">
-        {view.isPinned ? <span aria-hidden>⭐</span> : null}
+        {view.isPinned ? (
+          <Star aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
+        ) : null}
         {view.name}
       </span>
-      {active ? <span aria-hidden>✓</span> : null}
+      {active ? <Check aria-hidden className="h-4 w-4" /> : null}
     </button>
   );
 }

@@ -142,7 +142,7 @@ export default async function OpportunityDetailPage({
             <dt className="w-40 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
               Owner
             </dt>
-            <dd>
+            <dd className="min-w-0 break-words">
               {opp.ownerId ? (
                 <UserChip
                   user={{
@@ -211,7 +211,7 @@ function Row({
       <dt className="w-40 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
-      <dd>
+      <dd className="min-w-0 break-words">
         {value && href ? (
           <Link href={href} className="hover:underline">
             {value}
