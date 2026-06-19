@@ -5,9 +5,20 @@ import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 import { scheduleMeetingAction, sendEmailAction } from "./actions";
 import type { ActionResult } from "@/lib/server-action";
-import { useShowPicker } from "@/hooks/use-show-picker";
+import { StandardFormField, StandardFormTextarea } from "@/components/standard";
 
 const initial: ActionResult = { ok: true };
+
+function fieldErrors(state: ActionResult): Record<string, string> {
+  return !state.ok ? state.fieldErrors ?? {} : {};
+}
+
+// React 19 resets the uncontrolled form once the action settles (even
+// on error); echo the submitted values back as defaultValue so the
+// reset restores them instead of blanking the form.
+function submitted(state: ActionResult): Record<string, string> {
+  return !state.ok ? state.values ?? {} : {};
+}
 
 export function EmailForm({
   leadId,
@@ -33,20 +44,35 @@ export function EmailForm({
     }
   }, [state]);
 
+  const fe = fieldErrors(state);
+  const sv = submitted(state);
+
   return (
     <form action={action} className="flex flex-col gap-3" encType="multipart/form-data">
       <input type="hidden" name="leadId" value={leadId} />
-      <Field name="to" label="To" type="email" defaultValue={defaultEmail ?? ""} required />
-      <Field name="subject" label="Subject" required />
-      <label className="text-xs uppercase tracking-wide text-muted-foreground">
-        Body
-        <textarea
-          name="body"
-          rows={6}
-          required
-          className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-        />
-      </label>
+      <StandardFormField
+        name="to"
+        label="To"
+        type="email"
+        defaultValue={sv.to ?? defaultEmail ?? ""}
+        required
+        error={fe.to}
+      />
+      <StandardFormField
+        name="subject"
+        label="Subject"
+        required
+        defaultValue={sv.subject ?? ""}
+        error={fe.subject}
+      />
+      <StandardFormTextarea
+        name="body"
+        label="Body"
+        rows={6}
+        required
+        defaultValue={sv.body ?? ""}
+        error={fe.body}
+      />
       <label className="text-xs uppercase tracking-wide text-muted-foreground">
         Attachments
         <input
@@ -94,39 +120,68 @@ export function MeetingForm({
     }
   }, [state]);
 
+  const fe = fieldErrors(state);
+  const sv = submitted(state);
+
   return (
     <form action={action} className="grid gap-3 md:grid-cols-2">
       <input type="hidden" name="leadId" value={leadId} />
       <input type="hidden" name="timeZone" value={defaultTimeZone} />
-      <Field
+      <StandardFormField
         name="attendeeEmail"
         label="Attendee email"
         type="email"
-        defaultValue={defaultEmail ?? ""}
+        defaultValue={sv.attendeeEmail ?? defaultEmail ?? ""}
         required
+        error={fe.attendeeEmail}
       />
-      <Field
+      <StandardFormField
         name="attendeeName"
         label="Attendee name"
-        defaultValue={defaultName ?? ""}
+        defaultValue={sv.attendeeName ?? defaultName ?? ""}
+        error={fe.attendeeName}
       />
       <div className="md:col-span-2">
-        <Field name="subject" label="Subject" required />
+        <StandardFormField
+          name="subject"
+          label="Subject"
+          required
+          defaultValue={sv.subject ?? ""}
+          error={fe.subject}
+        />
       </div>
-      <Field name="startIso" label="Start" type="datetime-local" required />
-      <Field name="endIso" label="End" type="datetime-local" required />
+      <StandardFormField
+        name="startIso"
+        label="Start"
+        type="datetime-local"
+        required
+        defaultValue={sv.startIso ?? ""}
+        error={fe.startIso}
+      />
+      <StandardFormField
+        name="endIso"
+        label="End"
+        type="datetime-local"
+        required
+        defaultValue={sv.endIso ?? ""}
+        error={fe.endIso}
+      />
       <div className="md:col-span-2">
-        <Field name="location" label="Location (optional)" />
+        <StandardFormField
+          name="location"
+          label="Location (optional)"
+          defaultValue={sv.location ?? ""}
+          error={fe.location}
+        />
       </div>
       <div className="md:col-span-2">
-        <label className="text-xs uppercase tracking-wide text-muted-foreground">
-          Agenda / notes
-          <textarea
-            name="body"
-            rows={3}
-            className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </label>
+        <StandardFormTextarea
+          name="body"
+          label="Agenda / notes"
+          rows={3}
+          defaultValue={sv.body ?? ""}
+          error={fe.body}
+        />
       </div>
 
       {!state.ok ? (
@@ -136,36 +191,6 @@ export function MeetingForm({
         <Submit pending={pending} label="Schedule meeting" />
       </div>
     </form>
-  );
-}
-
-function Field({
-  name,
-  label,
-  type = "text",
-  required,
-  defaultValue,
-}: {
-  name: string;
-  label: string;
-  type?: string;
-  required?: boolean;
-  defaultValue?: string;
-}) {
-  const datePicker = useShowPicker();
-  const isDateLike = type === "date" || type === "datetime-local";
-  return (
-    <label className="block text-xs uppercase tracking-wide text-muted-foreground">
-      {label}
-      <input
-        name={name}
-        type={type}
-        required={required}
-        defaultValue={defaultValue}
-        onClick={isDateLike ? datePicker : undefined}
-        className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
-      />
-    </label>
   );
 }
 

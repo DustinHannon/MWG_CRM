@@ -1028,27 +1028,10 @@ function Pill({
   kind,
   value,
 }: {
-  kind: "status" | "rating" | "source" | "provenance";
+  kind: "source" | "provenance";
   value: string;
 }) {
   const palette: Record<string, Record<string, string>> = {
-    status: {
-      new: "border-[var(--status-new-fg)]/30 bg-[var(--status-new-bg)] text-[var(--status-new-fg)]",
-      contacted:
-        "border-[var(--status-contacted-fg)]/30 bg-[var(--status-contacted-bg)] text-[var(--status-contacted-fg)]",
-      qualified:
-        "border-[var(--status-won-fg)]/30 bg-[var(--status-won-bg)] text-[var(--status-won-fg)]",
-      unqualified:
-        "border-[var(--status-lost-fg)]/30 bg-[var(--status-lost-bg)] text-[var(--status-lost-fg)]",
-      converted:
-        "border-[var(--status-proposal-fg)]/30 bg-[var(--status-proposal-bg)] text-[var(--status-proposal-fg)]",
-      lost: "border-border bg-muted/40 text-muted-foreground/80",
-    },
-    rating: {
-      hot: "border-[var(--priority-very-high-fg)]/30 bg-[var(--priority-very-high-bg)] text-[var(--priority-very-high-fg)]",
-      warm: "border-[var(--priority-medium-fg)]/30 bg-[var(--priority-medium-bg)] text-[var(--priority-medium-fg)]",
-      cold: "border-[var(--priority-very-low-fg)]/30 bg-[var(--priority-very-low-bg)] text-[var(--priority-very-low-fg)]",
-    },
     source: {
       web: "border-[var(--status-won-fg)]/30 bg-[var(--status-won-bg)] text-[var(--status-won-fg)]",
       referral:

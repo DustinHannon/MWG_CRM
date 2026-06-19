@@ -284,7 +284,7 @@ export default async function LeadDetailPage({
         </div>
 
         <div className="lg:col-span-3">
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Activity timeline
           </h2>
           <ActivityFeed leadId={lead.id} user={user} />
@@ -304,7 +304,7 @@ export default async function LeadDetailPage({
             removed (STANDARDS §17.1). CHECK `tasks_at_most_one_parent`
             is the single-parent guard. */}
         <div className="lg:col-span-3">
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Tasks
           </h2>
           <EntityTasksSection
@@ -321,7 +321,7 @@ export default async function LeadDetailPage({
         {/* Marketing email rollup. Server-fetched and passed
             to the timeline so the client component doesn't waterfall. */}
         <div className="lg:col-span-3">
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Marketing emails
           </h2>
           <EmailActivityTimeline

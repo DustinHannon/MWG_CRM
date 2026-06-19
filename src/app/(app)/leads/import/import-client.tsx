@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Check } from "lucide-react";
 import { ImportWizard } from "@/components/import/import-wizard";
 import type { ImportWizardConfig } from "@/components/import/types";
 import {
@@ -81,8 +82,9 @@ function LeadPreviewView({
           <span className="text-muted-foreground">({preview.totalRows} rows)</span>
         </h2>
         {smartDetect ? (
-          <p className="mt-2 text-xs text-[var(--status-qualification-fg)]">
-            ☑ Legacy D365 Description column detection is enabled.
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--status-qualification-fg)]">
+            <Check className="h-4 w-4 shrink-0" aria-hidden />
+            Legacy D365 Description column detection is enabled.
           </p>
         ) : null}
       </div>
