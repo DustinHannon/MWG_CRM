@@ -9,9 +9,10 @@
 // MODIFIED badge, no bulk selection.
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  StandardConfirmDialog,
   StandardEmptyState,
   StandardListPage,
   type StandardListPagePage,
@@ -237,47 +238,40 @@ function ApplyButton({
   name: string;
   pickId: string;
 }) {
-  const [busy, startTransition] = useTransition();
-
-  function apply() {
-    if (!pickId) {
-      toast.error("Pick a user first.");
-      return;
-    }
-    if (
-      !confirm(
-        `Map every activity with By="${name}" to the selected user? This sets user_id and clears imported_by_name on every matching row.`,
-      )
-    ) {
-      return;
-    }
-    startTransition(async () => {
-      const res = await remapImportedByNameAction({
-        importedByName: name === "(empty)" ? "" : name,
-        newUserId: pickId,
-      });
-      if (res.ok) {
-        toast.success(`Remapped ${res.data.updated} activit(ies)`);
-        // The TanStack Query infinite scroll list does NOT auto-refetch
-        // after a server action. The page's RowRealtime/PageRealtime
-        // realtime layer doesn't trip on a single server action either.
-        // A full reload is the simplest correctness guarantee — list is
-        // tiny so the cost is negligible.
-        window.location.reload();
-      } else {
-        toast.error(res.error, { duration: Infinity, dismissible: true });
-      }
+  async function apply() {
+    const res = await remapImportedByNameAction({
+      importedByName: name === "(empty)" ? "" : name,
+      newUserId: pickId,
     });
+    if (res.ok) {
+      toast.success(`Remapped ${res.data.updated} activit(ies)`);
+      // The TanStack Query infinite scroll list does NOT auto-refetch
+      // after a server action. The page's RowRealtime/PageRealtime
+      // realtime layer doesn't trip on a single server action either.
+      // A full reload is the simplest correctness guarantee — list is
+      // tiny so the cost is negligible.
+      window.location.reload();
+    } else {
+      toast.error(res.error, { duration: Infinity, dismissible: true });
+    }
   }
 
   return (
-    <button
-      type="button"
-      onClick={apply}
-      disabled={busy || !pickId}
-      className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      {busy ? "Mapping…" : "Apply"}
-    </button>
+    <StandardConfirmDialog
+      trigger={
+        <button
+          type="button"
+          disabled={!pickId}
+          className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Apply
+        </button>
+      }
+      title="Remap imported-by name"
+      body={`Map every activity with By="${name}" to the selected user? This sets user_id and clears imported_by_name on every matching row.`}
+      confirmLabel="Remap activities"
+      tone="destructive"
+      onConfirm={apply}
+    />
   );
 }

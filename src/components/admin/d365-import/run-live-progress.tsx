@@ -236,6 +236,12 @@ function LogList({ logs }: { logs: RunLogEntry[] }) {
   );
 }
 
+// Live-feed wall-clock, intentionally browser-local at second precision.
+// The canonical formatUserTime helper has no seconds-granularity mode and
+// the log stream is an ephemeral "what's happening right now" tail (not a
+// persisted timestamp column), so a local HH:MM:SS clock is the right read
+// here — the user-timezone formatter is used for the run's persisted
+// reviewedAt / audit timestamps on the surrounding page.
 function formatTime(iso: string): string {
   try {
     const d = new Date(iso);

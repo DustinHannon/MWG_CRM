@@ -53,10 +53,10 @@ export function ViewHtmlDialog({
           message: err instanceof Error ? err.message : String(err),
         });
       });
-    // We can't call setState synchronously inside the effect body, so
-    // we let the resolution above flip status from `idle` to `loading`
-    // by using the queueMicrotask sequence below: the fetch promise
-    // has already begun; we mark loading on the next microtask.
+    // Flip idle→loading on the next microtask rather than synchronously in
+    // the effect body (avoids the set-state-in-effect cascade lint). The
+    // fetch resolves on a later task, so loading always lands first; the
+    // abort guard prevents a stale write after unmount/re-key.
     queueMicrotask(() => {
       if (!ac.signal.aborted) setState({ status: "loading" });
     });
@@ -95,7 +95,7 @@ export function ViewHtmlDialog({
                 type="button"
                 onClick={() => setView("raw")}
                 className={[
-                  "rounded-md border px-2 py-1 text-xs font-medium",
+                  "rounded-md border px-2 py-1 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   view === "raw"
                     ? "border-foreground bg-foreground text-background"
                     : "border-border bg-background text-foreground hover:bg-muted",
@@ -107,7 +107,7 @@ export function ViewHtmlDialog({
                 type="button"
                 onClick={() => setView("preview")}
                 className={[
-                  "rounded-md border px-2 py-1 text-xs font-medium",
+                  "rounded-md border px-2 py-1 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   view === "preview"
                     ? "border-foreground bg-foreground text-background"
                     : "border-border bg-background text-foreground hover:bg-muted",
@@ -118,7 +118,7 @@ export function ViewHtmlDialog({
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                  className="rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Close
                 </button>

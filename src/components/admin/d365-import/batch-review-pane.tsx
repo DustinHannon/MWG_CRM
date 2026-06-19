@@ -1,3 +1,10 @@
+// consistency-exempt: scroll-behavior: batch-review-master-detail —
+// the left record-list column is a contained vertical scroller
+// (max-h + overflow-y-auto) so the right detail pane stays in view
+// while the operator scans/scrolls a 100-record batch. This is an
+// intentional split-pane master/detail surface, not a window-scoped
+// list page; an uncapped list would push the detail pane arbitrarily
+// far down and defeat the side-by-side review the screen exists for.
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
@@ -219,6 +226,24 @@ export function BatchReviewPane({
   );
 }
 
+/**
+ * Build a dismissible bulk-failure message that names the first few records
+ * that could not be processed, so the operator can find them in the list
+ * (failed rows keep their prior status icon after the action revalidates)
+ * instead of only seeing an opaque count.
+ */
+function describeBulkFailure(
+  failedSummaries: string[],
+  verb: "approved" | "rejected",
+): string {
+  const n = failedSummaries.length;
+  const head = `${n} record${n === 1 ? "" : "s"} could not be ${verb}.`;
+  const sample = failedSummaries.slice(0, 3).join(", ");
+  if (!sample) return head;
+  const more = n > 3 ? `, and ${n - 3} more` : "";
+  return `${head} Could not ${verb === "approved" ? "approve" : "reject"}: ${sample}${more}.`;
+}
+
 /* -------------------------------------------------------------------------- *
  * Left pane *
  * -------------------------------------------------------------------------- */
@@ -238,36 +263,38 @@ function RecordList({
 
   function bulkApprove(filter: (r: BatchRecordView) => boolean) {
     startTransition(async () => {
-      let failed = 0;
+      const failedSummaries: string[] = [];
       for (const r of records.filter(filter)) {
         if (r.status === "approved") continue;
         const fd = new FormData();
         fd.set("recordId", r.id);
         const res = await approveRecordAction(fd);
-        if (!res.ok) failed += 1;
+        if (!res.ok) failedSummaries.push(r.summary.primary);
       }
-      if (failed > 0) {
-        toast.error(
-          `${failed} record${failed === 1 ? "" : "s"} could not be approved.`,
-        );
+      if (failedSummaries.length > 0) {
+        toast.error(describeBulkFailure(failedSummaries, "approved"), {
+          duration: Infinity,
+          dismissible: true,
+        });
       }
     });
   }
 
   function bulkReject() {
     startTransition(async () => {
-      let failed = 0;
+      const failedSummaries: string[] = [];
       for (const r of records) {
         if (r.status === "rejected") continue;
         const fd = new FormData();
         fd.set("recordId", r.id);
         const res = await rejectRecordAction(fd);
-        if (!res.ok) failed += 1;
+        if (!res.ok) failedSummaries.push(r.summary.primary);
       }
-      if (failed > 0) {
-        toast.error(
-          `${failed} record${failed === 1 ? "" : "s"} could not be rejected.`,
-        );
+      if (failedSummaries.length > 0) {
+        toast.error(describeBulkFailure(failedSummaries, "rejected"), {
+          duration: Infinity,
+          dismissible: true,
+        });
       }
     });
   }
@@ -1016,7 +1043,8 @@ function DecisionButtons({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Reason (optional)"
-            className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+            autoFocus
+            className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
             maxLength={500}
           />
           <button

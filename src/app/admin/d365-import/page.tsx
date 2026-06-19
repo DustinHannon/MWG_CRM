@@ -4,6 +4,7 @@ import { auditLog } from "@/db/schema/audit";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime, getCurrentUserTimePrefs } from "@/components/ui/user-time";
+import { StandardCollapsibleSection } from "@/components/standard";
 import { adminCrumbs } from "@/lib/navigation/breadcrumbs";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { isD365Configured } from "@/lib/d365";
@@ -94,11 +95,14 @@ export default async function D365ImportPage({
       />
 
       <section>
-        <details className="group">
-          <summary className="cursor-pointer text-sm font-medium text-foreground">
-            Recent activity (your D365 import audit log)
-          </summary>
-          <ul className="mt-3 divide-y divide-border rounded-md border border-border bg-muted/20">
+        <StandardCollapsibleSection
+          sectionKey="recent-activity"
+          label="Recent activity (your D365 import audit log)"
+          defaultExpanded={false}
+          storagePrefix="mwgcrm.d365-import.list."
+          domIdPrefix="d365-import-list-"
+        >
+          <ul className="divide-y divide-border rounded-md border border-border bg-muted/20">
             {recentAudit.length === 0 ? (
               <li className="p-3 text-xs text-muted-foreground">
                 No D365 import activity yet.
@@ -117,7 +121,7 @@ export default async function D365ImportPage({
               ))
             )}
           </ul>
-        </details>
+        </StandardCollapsibleSection>
       </section>
     </div>
   );

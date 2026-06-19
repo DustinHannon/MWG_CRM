@@ -209,7 +209,7 @@ function UploadForm({
       </div>
 
       {uploadError ? (
-        <p className="text-sm text-[var(--status-lost-fg)]">{uploadError}</p>
+        <p className="text-sm text-destructive">{uploadError}</p>
       ) : null}
     </form>
   );

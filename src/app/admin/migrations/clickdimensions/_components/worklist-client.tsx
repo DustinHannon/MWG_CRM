@@ -1,7 +1,18 @@
+// consistency-exempt: list-page-pattern: admin-utility-table —
+// raw 8-column worklist table inside overflow-x-auto, no StandardListPage
+// renderCard mobile branch. Rows arrive pre-serialized from the server as
+// a bounded, non-paginated prop (not a fetchPage cursor source), and the
+// per-row controls (View HTML / Re-extract / Skip + selection checkbox)
+// are an operational action grid, not a browsable record list. Admin-only
+// internal migration tool — no saved views, no realtime, no infinite
+// scroll. Matches the remap-list-client admin-utility-table carveout.
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { Pill } from "@/components/ui/pill";
+import { UserTimeClient } from "@/components/ui/user-time-client";
+import { DEFAULT_TIME_PREFS, type TimePrefs } from "@/lib/format-time";
 import {
   bulkFlagForReextractionAction,
   bulkSkipAction,
@@ -67,16 +78,12 @@ const EDITOR_LABEL: Record<WorklistRow["editorType"], string> = {
   unknown: "Unknown",
 };
 
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString();
-}
-
 export function ClickDimensionsWorklistClient({
   rows,
+  timePrefs = DEFAULT_TIME_PREFS,
 }: {
   rows: WorklistRow[];
+  timePrefs?: TimePrefs;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewing, setViewing] = useState<WorklistRow | null>(null);
@@ -276,14 +283,9 @@ export function ClickDimensionsWorklistClient({
                   {EDITOR_LABEL[r.editorType]}
                 </td>
                 <td className="px-3 py-2">
-                  <span
-                    className={[
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                      STATUS_CLASS[r.status],
-                    ].join(" ")}
-                  >
+                  <Pill variant={STATUS_CLASS[r.status]}>
                     {STATUS_LABEL[r.status]}
-                  </span>
+                  </Pill>
                 </td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">
                   {r.attempts}
@@ -301,7 +303,11 @@ export function ClickDimensionsWorklistClient({
                   )}
                 </td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">
-                  {formatTime(r.extractedAt)}
+                  {r.extractedAt ? (
+                    <UserTimeClient value={r.extractedAt} prefs={timePrefs} />
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex items-center justify-end gap-1.5">
@@ -309,7 +315,7 @@ export function ClickDimensionsWorklistClient({
                       type="button"
                       disabled={!r.hasHtml}
                       onClick={() => setViewing(r)}
-                      className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       View HTML
                     </button>
@@ -319,7 +325,7 @@ export function ClickDimensionsWorklistClient({
                       onClick={() =>
                         runRowAction(flagForReextractionAction, r.id)
                       }
-                      className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Re-extract
                     </button>
@@ -327,7 +333,7 @@ export function ClickDimensionsWorklistClient({
                       type="button"
                       disabled={isPending}
                       onClick={() => runRowAction(skipMigrationAction, r.id)}
-                      className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Skip
                     </button>

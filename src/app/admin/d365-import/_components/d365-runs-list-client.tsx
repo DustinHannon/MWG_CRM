@@ -1,11 +1,11 @@
 // consistency-exempt: list-page-pattern: admin-utility-table —
-// fixed-width row cells (w-40 timestamp, w-32 actor, w-32 entity,
-// w-40 status, w-40 batches, flex-1 records) preserved because columns
-// have intrinsically non-uniform widths; no columnHeaderSlot. The
-// server shell embeds the runs list alongside a separate "start run"
-// chrome section above the list, so this client renders only the runs
-// catalog. Admin operational page — no saved views, no MODIFIED badge,
-// no bulk selection.
+// fixed-width row cells (w-40 timestamp, w-32 actor, w-40 status,
+// w-40 batches, flex-1 records; entity flexes below lg then w-32 at lg+)
+// preserved because columns have intrinsically non-uniform widths; no
+// columnHeaderSlot. The server shell embeds the runs list alongside a
+// separate "start run" chrome section above the list, so this client
+// renders only the runs catalog. Admin operational page — no saved
+// views, no MODIFIED badge, no bulk selection.
 "use client";
 
 import Link from "next/link";
@@ -180,7 +180,7 @@ export function D365RunsListClient({
           description={
             filtersAreModified
               ? "Try a different filter."
-              : "Pick an entity above to start a run."
+              : "Use Start an import to create the first run."
           }
         />
       }
@@ -213,7 +213,7 @@ function RunDesktopRow({
       <div className="w-32 shrink-0 truncate text-foreground/90">
         {row.createdByName ?? "—"}
       </div>
-      <div className="w-32 shrink-0 truncate font-mono text-xs text-foreground/90">
+      <div className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/90 lg:w-32 lg:flex-none">
         {row.entityType}
       </div>
       <div className="w-40 shrink-0">

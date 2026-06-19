@@ -12,6 +12,7 @@ import { users } from "@/db/schema/users";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserTime } from "@/components/ui/user-time";
+import { StandardCollapsibleSection } from "@/components/standard";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { RunLiveProgress } from "@/components/admin/d365-import/run-live-progress";
 import {
@@ -244,7 +245,13 @@ export default async function RunDetailPage({ params }: PageProps) {
                   <tr>
                     <Th>#</Th>
                     <Th>Status</Th>
-                    <Th>Records (fetched/approved/rejected/committed/conflicts/failed)</Th>
+                    <Th className="text-right">
+                      Records
+                      <span className="block text-[10px] font-normal normal-case text-muted-foreground/70">
+                        fetched / approved / rejected / committed / conflicts /
+                        failed
+                      </span>
+                    </Th>
                     <Th>Reviewed by</Th>
                     <Th>Reviewed at</Th>
                     <Th className="text-right">Actions</Th>
@@ -260,7 +267,7 @@ export default async function RunDetailPage({ params }: PageProps) {
                       <Td>
                         <BatchStatusPill status={b.status} />
                       </Td>
-                      <Td className="font-mono">
+                      <Td className="text-right font-mono tabular-nums">
                         {b.recordCountFetched}/{b.recordCountApproved}/
                         {b.recordCountRejected}/{b.recordCountCommitted}/
                         {b.recordCountConflicts}/{b.recordCountFailed}
@@ -318,11 +325,15 @@ export default async function RunDetailPage({ params }: PageProps) {
       </section>
 
       <section className="mt-8">
-        <details className="group">
-          <summary className="cursor-pointer text-sm font-medium text-foreground">
-            Audit log ({recentAudit.length})
-          </summary>
-          <ul className="mt-3 divide-y divide-border rounded-md border border-border bg-muted/20">
+        <StandardCollapsibleSection
+          sectionKey="run-audit-log"
+          label="Audit log"
+          badge={recentAudit.length}
+          defaultExpanded={false}
+          storagePrefix="mwgcrm.d365-import.run-detail."
+          domIdPrefix="d365-import-run-detail-"
+        >
+          <ul className="divide-y divide-border rounded-md border border-border bg-muted/20">
             {recentAudit.length === 0 ? (
               <li className="p-3 text-xs text-muted-foreground">
                 No audit events yet.
@@ -341,7 +352,7 @@ export default async function RunDetailPage({ params }: PageProps) {
               ))
             )}
           </ul>
-        </details>
+        </StandardCollapsibleSection>
       </section>
     </div>
   );
