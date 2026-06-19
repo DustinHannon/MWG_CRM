@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { StandardDialog } from "@/components/standard/standard-dialog";
+
 /**
  * Side-by-side OCC conflict resolution dialog.
  *
@@ -67,89 +69,38 @@ export function OccConflictDialog({
   const [overwriteArmed, setOverwriteArmed] = useState(false);
 
   // Re-arm the two-click safety every time the dialog closes. The
-  // consumer keeps this component mounted (renders null via the early
-  // return below) and reuses the same instance across conflicts, so
-  // without this reset a previously-armed Overwrite would let the next
-  // conflict be force-overwritten with a single click. Reset during
-  // render on the open->closed transition (React's adjust-state-on-
-  // change pattern) rather than in an effect, to avoid a cascading render.
+  // consumer keeps this component mounted (StandardDialog/Radix unmounts
+  // only the portal content while open is false) and reuses the same
+  // instance across conflicts, so without this reset a previously-armed
+  // Overwrite would let the next conflict be force-overwritten with a
+  // single click. Reset during render on the open->closed transition
+  // (React's adjust-state-on-change pattern) rather than in an effect, to
+  // avoid a cascading render.
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
     setPrevOpen(open);
     if (!open) setOverwriteArmed(false);
   }
 
-  if (!open) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Concurrent edit conflict for this ${entityLabel}`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-    >
-      <div
-        className="w-full max-w-3xl rounded-lg border border-border bg-[var(--popover)] p-5 text-[var(--popover-foreground)] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold">
-              Someone else updated this {entityLabel}
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Your changes weren&apos;t saved because another writer
-              updated this {entityLabel} first. Compare side-by-side, then
-              choose how to resolve.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onDismiss}
-            disabled={pending}
-            aria-label="Dismiss conflict dialog"
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            ✕
-          </button>
-        </div>
-
-        {fields.length === 0 ? (
-          <p className="mt-4 rounded-md border border-dashed border-border bg-muted/20 p-4 text-xs text-muted-foreground">
-            The server&apos;s state matches your draft on every field —
-            only the version number drifted. Click <strong>Refresh</strong>
-            to sync and try again.
-          </p>
-        ) : (
-          <div className="mt-4 overflow-hidden rounded-md border border-border">
-            <table className="w-full divide-y divide-border/60 text-sm">
-              <thead className="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left">Field</th>
-                  <th className="px-3 py-2 text-left">Your edit</th>
-                  <th className="px-3 py-2 text-left">Server&apos;s value</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {fields.map((f) => (
-                  <tr key={f.label} className="align-top">
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {f.label}
-                    </td>
-                    <td className="px-3 py-2 text-xs">
-                      <DiffValue value={f.draftValue} highlight="local" />
-                    </td>
-                    <td className="px-3 py-2 text-xs">
-                      <DiffValue value={f.serverValue} highlight="server" />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+    <StandardDialog
+      open={open}
+      // Escape and the corner close button map to the close-without-resolve
+      // path (Cancel-equivalent), but only when no resolution is in flight:
+      // the footer buttons are disabled while `pending`, and dismissing
+      // mid-resolve would tear down the only surface that can report failure.
+      // Outside-click is disabled outright — this is a decision dialog, not a
+      // dismissible popover. Radix still gives focus trap / restore / scroll
+      // lock / aria.
+      onOpenChange={(next) => {
+        if (!next && !pending) onDismiss();
+      }}
+      disableOutsideClose
+      title={`Someone else updated this ${entityLabel}`}
+      description={`Your changes weren't saved because another writer updated this ${entityLabel} first. Compare side-by-side, then choose how to resolve.`}
+      contentClassName="sm:max-w-3xl"
+      footer={
+        <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
             onClick={onDismiss}
@@ -188,8 +139,43 @@ export function OccConflictDialog({
             </button>
           )}
         </div>
-      </div>
-    </div>
+      }
+    >
+      {fields.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-xs text-muted-foreground">
+          The server&apos;s state matches your draft on every field —
+          only the version number drifted. Click <strong>Refresh</strong>
+          to sync and try again.
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-md border border-border">
+          <table className="w-full divide-y divide-border/60 text-sm">
+            <thead className="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left">Field</th>
+                <th className="px-3 py-2 text-left">Your edit</th>
+                <th className="px-3 py-2 text-left">Server&apos;s value</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {fields.map((f) => (
+                <tr key={f.label} className="align-top">
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {f.label}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    <DiffValue value={f.draftValue} highlight="local" />
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    <DiffValue value={f.serverValue} highlight="server" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </StandardDialog>
   );
 }
 
