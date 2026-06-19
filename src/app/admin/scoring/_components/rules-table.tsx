@@ -120,7 +120,7 @@ export function ScoringRulesTable({ rows }: { rows: RuleRow[] }) {
           No rules yet. Add one below.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-glass-border">
+        <div className="overflow-x-auto rounded-lg border border-glass-border">
           <table className="data-table w-full text-sm">
             <thead className="bg-input/30 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
               <tr>
@@ -138,6 +138,7 @@ export function ScoringRulesTable({ rows }: { rows: RuleRow[] }) {
                     <td className="px-3 py-2 align-top">
                       <input
                         type="checkbox"
+                        aria-label="Active"
                         checked={draft.isActive}
                         onChange={(e) =>
                           setDraft({ ...draft, isActive: e.target.checked })
@@ -225,6 +226,7 @@ export function ScoringRulesTable({ rows }: { rows: RuleRow[] }) {
                     <td className="px-3 py-2">
                       <input
                         type="checkbox"
+                        aria-label={`Active — ${r.name}`}
                         checked={r.isActive}
                         disabled={pending}
                         onChange={() => toggleActive(r)}

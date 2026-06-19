@@ -9,7 +9,10 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
 import {
+  StandardConfirmDialog,
+  StandardDialog,
   StandardEmptyState,
   StandardListPage,
   type StandardListPagePage,
@@ -319,7 +322,7 @@ function ApiKeyDesktopRow({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-destructive/20 hover:text-destructive-foreground"
+            className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-destructive/10 hover:text-destructive"
           >
             Delete
           </button>
@@ -415,30 +418,30 @@ function RevokeButton({
   keyName: string;
   onRevoked: () => void;
 }) {
-  const [pending, startTransition] = useTransition();
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() => {
-        if (
-          !confirm(`Revoke "${keyName}"? It will stop authenticating immediately.`)
-        ) {
-          return;
+    <StandardConfirmDialog
+      tone="destructive"
+      title={`Revoke "${keyName}"?`}
+      body="It will stop authenticating immediately."
+      confirmLabel="Revoke"
+      trigger={
+        <button
+          type="button"
+          className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-accent/40 disabled:opacity-50"
+        >
+          Revoke
+        </button>
+      }
+      onConfirm={async () => {
+        const res = await revokeApiKeyAction(keyId);
+        if (!res.ok) {
+          toast.error(res.error);
+          // Reject so the dialog stays open for retry.
+          throw new Error(res.error);
         }
-        startTransition(async () => {
-          const res = await revokeApiKeyAction(keyId);
-          if (!res.ok) {
-            alert(res.error);
-            return;
-          }
-          onRevoked();
-        });
+        onRevoked();
       }}
-      className="rounded-md border border-border/80 bg-input/40 px-2 py-1 text-[11px] uppercase tracking-wide text-foreground/80 hover:bg-accent/40 disabled:opacity-50"
-    >
-      {pending ? "Revoking…" : "Revoke"}
-    </button>
+    />
   );
 }
 
@@ -607,8 +610,15 @@ function GenerateModal({ onClose, onGenerated }: GenerateModalProps) {
             min={10}
             max={1000}
             value={rateLimit}
-            onChange={(e) => setRateLimit(Number(e.target.value))}
-            className="rounded-md border border-border bg-input px-3 py-2 text-sm"
+            onChange={(e) => {
+              // Clamp into [10,1000]; blank/NaN falls back to the 60/min default
+              // so the field never submits NaN to the server action.
+              const n = Number(e.target.value);
+              setRateLimit(
+                Number.isNaN(n) ? 60 : Math.min(1000, Math.max(10, n)),
+              );
+            }}
+            className="rounded-md border border-border bg-input px-3 py-2 text-sm focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
         </label>
 
@@ -805,27 +815,18 @@ function ModalShell({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  // Mounted only while open, so `open` is always true here; any dismiss
+  // (Escape, outside click, close button) routes through onOpenChange → onClose.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur"
-      onClick={onClose}
+    <StandardDialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title={title}
+      contentClassName="sm:max-w-2xl"
     >
-      <div
-        className="w-full max-w-2xl rounded-xl border border-border bg-card p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold font-display">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-border bg-input/40 px-2 py-0.5 text-xs uppercase tracking-wide hover:bg-accent/40"
-          >
-            Close
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+      {children}
+    </StandardDialog>
   );
 }

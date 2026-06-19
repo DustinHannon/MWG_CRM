@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { BreadcrumbsSetter } from "@/components/breadcrumbs";
 import { StandardCollapsibleSection } from "@/components/standard";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -48,13 +47,6 @@ export default async function UsersHelpPage() {
           { label: "Help" },
         ]}
       />
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <Link href="/admin/users" className="hover:underline">
-          Users
-        </Link>
-        <span aria-hidden>›</span>
-        <span>Permission help</span>
-      </div>
       <h1 className="text-2xl font-semibold">Permission help</h1>
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
         What every permission on the user permissions card does. Admins

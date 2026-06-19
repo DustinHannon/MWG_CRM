@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { StandardDialog, StandardLoadingState } from "@/components/standard";
 import {
   deleteUserAction,
   getDeleteUserPreflight,
@@ -64,7 +65,7 @@ export function DeleteUserButton({
       {open ? (
         <Modal onClose={() => !submitting && setOpen(false)}>
           {preflight === null ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <StandardLoadingState variant="card" label="Loading delete details" />
           ) : !preflight.ok ? (
             <div>
               <h2 className="text-lg font-semibold">Cannot delete</h2>
@@ -241,9 +242,11 @@ function DeleteForm({
         </span>
         <input
           autoFocus
+          autoComplete="off"
+          spellCheck={false}
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
-          className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-destructive/50 focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground focus:border-destructive/50 focus:outline-none focus:ring-2 focus:ring-destructive/40"
         />
       </label>
 
@@ -285,19 +288,21 @@ function Modal({
   children: React.ReactNode;
   onClose: () => void;
 }) {
+  // Mounted only while open; any dismiss (Escape, outside click, close button)
+  // routes through onOpenChange → onClose, which itself no-ops while submitting.
+  // The visible heading lives in the children, so the dialog title is hidden
+  // but kept for screen readers.
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+    <StandardDialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title="Delete user"
+      hideTitle
+      contentClassName="sm:max-w-lg"
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-border bg-[var(--popover)] text-[var(--popover-foreground)] p-6 shadow-2xl"
-      >
-        {children}
-      </div>
-    </div>
+      {children}
+    </StandardDialog>
   );
 }

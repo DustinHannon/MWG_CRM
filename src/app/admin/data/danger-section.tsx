@@ -47,7 +47,7 @@ export function DangerSection({
       <form action={action} className="mt-4 flex flex-wrap items-end gap-3">
         <label className="text-xs uppercase tracking-wide text-muted-foreground">
           Type{" "}
-          <code className="rounded bg-black/30 px-1 py-0.5 text-[var(--status-lost-fg)]">
+          <code className="rounded bg-muted px-1 py-0.5 text-[var(--status-lost-fg)]">
             {phrase}
           </code>{" "}
           to confirm

@@ -151,7 +151,7 @@ export function UserActions({
           <p className="font-medium text-[var(--priority-medium-fg)]">
             New breakglass password (shown once):
           </p>
-          <code className="mt-2 block break-all rounded bg-black/30 px-3 py-2 font-mono text-xs text-foreground">
+          <code className="mt-2 block break-all rounded bg-muted px-3 py-2 font-mono text-xs text-foreground">
             {rotated}
           </code>
           <p className="mt-2 text-xs text-[var(--priority-medium-fg)]/80">
@@ -183,12 +183,12 @@ function Toggle({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!value)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 ${
         value ? "bg-[var(--status-won-fg)]" : "bg-muted"
       }`}
     >
       <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+        className={`inline-block h-5 w-5 transform rounded-full bg-background shadow transition ${
           value ? "translate-x-5" : "translate-x-0.5"
         }`}
       />
