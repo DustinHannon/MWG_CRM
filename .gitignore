@@ -96,3 +96,8 @@ src/scripts/phase23/
 # Local-only tooling artifacts
 .semgrep/
 tools/clickdimensions-migration/
+
+# Sales-rep role-play agent — playbook + run artifacts are LOCAL ONLY.
+# Runs hit production; run folders hold screenshots of real CRM data, journals,
+# and reports. Never commit them to this (public) repo.
+agents/
