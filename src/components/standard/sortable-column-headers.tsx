@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
+  KeyboardSensor,
   PointerSensor,
   closestCenter,
   useSensor,
@@ -13,10 +14,12 @@ import {
 import {
   SortableContext,
   horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
   useSortable,
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import type { ActionResult } from "@/lib/server-action";
 
@@ -70,6 +73,14 @@ export function SortableColumnHeaders<K extends string>({
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
+    }),
+    // Keyboard reorder: Tab to a header, Space to lift, ←/→ to move, Space to
+    // drop. Makes column reorder keyboard-accessible (a11y) AND the only
+    // programmatically drivable path — the pointer sensor's 5px activation
+    // can't be triggered by a synthetic single-shot drag (e.g. Playwright
+    // `browser_drag`), so pointer-only reorder reads as "broken" to automation.
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
 
@@ -175,11 +186,18 @@ function SortableHeader({
     <th
       ref={setNodeRef}
       style={style}
-      className="px-5 py-3 font-medium whitespace-nowrap select-none"
+      className="group px-5 py-3 font-medium whitespace-nowrap select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      title="Drag — or focus and press Space, then ←/→ — to reorder this column"
       {...attributes}
       {...listeners}
     >
-      {label}
+      <span className="inline-flex items-center gap-1.5">
+        <GripVertical
+          className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100"
+          aria-hidden
+        />
+        {label}
+      </span>
     </th>
   );
 }
