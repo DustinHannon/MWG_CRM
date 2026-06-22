@@ -407,11 +407,36 @@ export async function createOrUpdateUserFromEntraProfile(
 
   if (byEmail[0]) {
     const existing = byEmail[0];
+
+    // Security: refuse to silently rebind a DIFFERENT Entra identity onto a
+    // row that already has an oid. The byOid lookup above already returned
+    // for a matching oid, so reaching here with a non-null existing.entraOid
+    // means a NEW directory identity is trying to inherit this row's
+    // privileges (including is_admin) purely by matching its email. The
+    // email fallback is only meant for legacy/pre-SSO rows (entra_oid IS
+    // NULL). Audit the attempt and fail the sign-in; an admin must reconcile
+    // the identity explicitly.
+    if (existing.entraOid !== null && existing.entraOid !== profile.entraOid) {
+      await writeAudit({
+        actorId: existing.id,
+        actorEmailSnapshot: profile.email,
+        action: "auth.entra_oid_conflict",
+        targetType: "user",
+        targetId: existing.id,
+        before: { entraOid: existing.entraOid },
+        after: { attemptedEntraOid: profile.entraOid, email: profile.email },
+      });
+      throw new EntraOidConflictError(existing.id);
+    }
+
     const needsFirstLoginBackfill =
       bumpLogin && existing.firstLoginAt === null;
     await db
       .update(users)
       .set({
+        // Only the legacy null->oid bind reaches here (the conflict case
+        // threw above). This first-time bind is audited below so it is never
+        // forensically silent.
         entraOid: profile.entraOid,
         firstName: profile.firstName,
         lastName: profile.lastName,
@@ -422,6 +447,18 @@ export async function createOrUpdateUserFromEntraProfile(
         updatedAt: sql`now()`,
       })
       .where(eq(users.id, existing.id));
+
+    // Forensic record of a pre-SSO row gaining its Entra oid — the
+    // email-fallback equivalent of the user.create.jit audit on insert.
+    await writeAudit({
+      actorId: existing.id,
+      actorEmailSnapshot: profile.email,
+      action: "auth.entra_oid_bound",
+      targetType: "user",
+      targetId: existing.id,
+      after: { entraOid: profile.entraOid, email: profile.email },
+    });
+
     return {
       id: existing.id,
       email: profile.email,
@@ -594,6 +631,21 @@ export class EntraDomainNotAllowedError extends Error {
   constructor(public domain: string) {
     super(`Email domain not allowed: ${domain}`);
     this.name = "EntraDomainNotAllowedError";
+  }
+}
+
+/**
+ * Thrown when an Entra sign-in resolves (by email) to an existing user row
+ * that already carries a DIFFERENT entra_oid. We refuse to rebind so a new
+ * directory identity can't inherit an existing (possibly privileged) row by
+ * matching its email; the sign-in is denied and the attempt is audited.
+ */
+export class EntraOidConflictError extends Error {
+  constructor(public userId: string) {
+    super(
+      `Entra oid conflict: a different directory identity attempted to bind to user ${userId}`,
+    );
+    this.name = "EntraOidConflictError";
   }
 }
 

@@ -1,2 +1,26 @@
+# Security advisory remediations for transitive deps. Version-scoped
+# selectors so only the vulnerable ranges are replaced; each bump stays
+# within the same major (no breaking changes).
+#
+# Deliberately NOT overridden:
+#  - esbuild: advisories only affect `esbuild serve` / dev file-read (a dev
+#    server neither this app nor drizzle-kit/tsx run in prod); the 0.19->0.25
+#    bump has breaking API changes that would risk drizzle-kit's db:generate.
+#    esbuild is a devDependency and never ships in the Vercel bundle.
+#  - uuid (via exceljs): the advisory is a buffer bounds check in v3/v5/v6,
+#    but exceljs only calls uuid.v4 (unreachable). uuid 8 -> 11 is a breaking
+#    major (ESM-only, API changes) that would risk the xlsx export/import
+#    feature, so the unreachable advisory is not worth the regression risk.
 overrides:
   "postcss@<8.5.10": "^8.5.14"
+  # Runtime-reachable (or near-reachable) transitive deps:
+  "dompurify@<3.3.2": ">=3.3.2"
+  "undici@<6.27.0": "^6.27.0"
+  "form-data@>=4.0.0 <4.0.6": "^4.0.6"
+  "tmp@<0.2.6": "^0.2.6"
+  "d3-color@<3.1.0": "^3.1.0"
+  # Dev-only toolchain (eslint/depcheck) — safe same-major patch bumps:
+  "shell-quote@<1.8.4": "^1.8.4"
+  "brace-expansion@>=5.0.0 <5.0.6": "^5.0.6"
+  "js-yaml@<4.2.0": "^4.2.0"
+  "@babel/core@<7.29.6": "^7.29.6"

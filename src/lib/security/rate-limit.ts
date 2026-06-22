@@ -86,7 +86,23 @@ export type RateLimitKey =
   // Replaces the per-process in-memory Map (defeatable across Vercel
   // instances / cold starts) with the durable cross-instance Postgres
   // counter, matching the breakglass posture.
-  | { kind: "realtime_token"; principal: string };
+  | { kind: "realtime_token"; principal: string }
+  // Cmd+K cross-entity search (/api/search). Principal is the user id.
+  // Each request runs ~6 FTS + pg_trgm/ILIKE scans against the shared
+  // session pooler, so an unthrottled caller can saturate the single
+  // production DB. Dedicated bucket so heavy search does not share budget
+  // with cursor scrolling (internal_list).
+  | { kind: "search"; principal: string }
+  // Lead duplicate-check (/api/leads/check-duplicate). Principal is the
+  // user id. The phone branch runs non-sargable regexp_replace scans over
+  // the leads table on every keystroke-debounced call; this bounds a
+  // scripted caller. Dedicated bucket to avoid coupling typeahead dedup
+  // budget to the report builder's filter_preview budget.
+  | { kind: "lead_dup_check"; principal: string }
+  // Lead XLSX export (/api/leads/export). Principal is the user id. Each
+  // call runs a filtered scan and builds an in-memory workbook; the limit
+  // bounds a canExport holder from looping the expensive query+serialize.
+  | { kind: "leads_export"; principal: string };
 
 export interface RateLimitResult {
   allowed: boolean;

@@ -2,6 +2,7 @@ import "server-only";
 
 import ExcelJS from "exceljs";
 import { z } from "zod";
+import { assertXlsxWithinDecompressionBudget } from "@/lib/import/zip-guard";
 
 /**
  * Static-list Excel import parser.
@@ -111,9 +112,14 @@ export async function parseStaticListWorkbook({
   existingEmails,
 }: ParseArgs): Promise<ParseStaticListWorkbookResult> {
   const wb = new ExcelJS.Workbook();
+  const bytes = new Uint8Array(buffer);
+  // Bound decompressed size before the eager ExcelJS/JSZip inflate so a
+  // zip-bomb upload can't OOM the function (the compressed-size gate at the
+  // upload boundary can't see the inflated size).
+  assertXlsxWithinDecompressionBudget(bytes);
   // exceljs's load() typing wants Uint8Array on Node 24.
   // @ts-expect-error -- ExcelJS Buffer typing mismatch with Node 24
-  await wb.xlsx.load(new Uint8Array(buffer));
+  await wb.xlsx.load(bytes);
 
   const sheet = wb.worksheets[0];
   if (!sheet) {

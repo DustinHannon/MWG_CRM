@@ -9,6 +9,7 @@ import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { MarketingNotConfiguredError } from "@/lib/marketing/errors";
 import { sendTestEmail } from "@/lib/marketing/sendgrid/send";
 import { rateLimit } from "@/lib/security/rate-limit";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,6 +38,9 @@ const REQUEST_BODY_SCHEMA = z.object({
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const user = await requireSession();
   // Admin bypasses; otherwise the template send-test permission gates
   // this preview endpoint.

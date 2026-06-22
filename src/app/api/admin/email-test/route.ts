@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { sendEmailAs } from "@/lib/email";
 import { escapeHtml } from "@/lib/security/escape-html";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ const bodySchema = z.object({
  * Subject the standard E2E sentinel `[E2E-…]` to skip actual delivery.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const admin = await requireAdmin();
   const json = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(json);

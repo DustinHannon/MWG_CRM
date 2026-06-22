@@ -572,6 +572,20 @@ export async function sendTestTemplateAction(input: {
         );
       }
 
+      // Non-admins can only test-send to their own address. Without this a
+      // marketing_creator (who can author arbitrary template HTML) could
+      // relay attacker-controlled content to any recipient from the
+      // verified company domain — phishing/spam. Mirrors the sibling inline
+      // sendgrid/test-send endpoint. Admins keep the override for QA aliases.
+      if (
+        !user.isAdmin &&
+        parsed.data.recipientEmail.toLowerCase() !== user.email.toLowerCase()
+      ) {
+        throw new ForbiddenError(
+          "Test emails can only be sent to your own address.",
+        );
+      }
+
       const limit = await rateLimit(
         { kind: "test_send", principal: user.id },
         env.RATE_LIMIT_TEST_SEND_PER_USER_PER_HOUR,

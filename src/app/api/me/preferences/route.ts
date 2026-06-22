@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { updatePreferencesAction } from "@/app/(app)/settings/actions";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,6 +19,9 @@ const SidebarPatchSchema = z.object({
 });
 
 export async function PATCH(req: Request) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   let body: unknown;
   try {
     body = await req.json();

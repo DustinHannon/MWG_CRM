@@ -18,6 +18,7 @@ import { marketingLists } from "@/db/schema/marketing-lists";
 import { eq } from "drizzle-orm";
 import { writeAudit } from "@/lib/audit";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 import { withErrorBoundary } from "@/lib/server-action";
 
 export const dynamic = "force-dynamic";
@@ -133,6 +134,9 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const result = await withErrorBoundary(
     { action: "marketing.lists.members.static.create" },
     async () => {

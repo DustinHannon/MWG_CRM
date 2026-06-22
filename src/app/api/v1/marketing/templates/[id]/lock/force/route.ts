@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { forceUnlockTemplateAction } from "@/app/(app)/marketing/templates/actions";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,9 +15,12 @@ export const runtime = "nodejs";
 const idSchema = z.string().uuid();
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const { id } = await params;
   const idCheck = idSchema.safeParse(id);
   if (!idCheck.success) {

@@ -9,6 +9,7 @@ import {
   ValidationError,
 } from "@/lib/errors";
 import { refreshList } from "@/lib/marketing/lists/refresh";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 import { withErrorBoundary } from "@/lib/server-action";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,12 @@ const idSchema = z.string().uuid();
  * acting user.
  */
 export async function POST(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const result = await withErrorBoundary(
     { action: "marketing.lists.refresh" },
     async () => {

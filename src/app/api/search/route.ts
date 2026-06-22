@@ -4,6 +4,15 @@ import { db } from "@/db";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { logger } from "@/lib/logger";
 import { formatPersonNameRow } from "@/lib/format/person-name";
+import { rateLimit } from "@/lib/security/rate-limit";
+
+/**
+ * Per-user throttle for the cross-entity search. Each call fans out to ~6
+ * FTS + pg_trgm/ILIKE scans on the single (max:1-pooled) production DB, so
+ * an unthrottled caller could degrade the CRM for everyone. 60/min is well
+ * above the debounced typeahead's real rate.
+ */
+const SEARCH_RATE_LIMIT_PER_MINUTE = 60;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +37,19 @@ interface SearchHit {
  */
 export async function GET(req: Request) {
   const session = await requireSession();
+
+  const rl = await rateLimit(
+    { kind: "search", principal: session.id },
+    SEARCH_RATE_LIMIT_PER_MINUTE,
+    60,
+  );
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { hits: [], error: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter ?? 60) } },
+    );
+  }
+
   const url = new URL(req.url);
   const q = url.searchParams.get("q")?.trim() ?? "";
   if (q.length === 0) return NextResponse.json({ hits: [] });

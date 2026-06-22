@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
 import { writeAudit } from "@/lib/audit";
 import { checkMailboxKind } from "@/lib/email";
 import { logger } from "@/lib/logger";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +21,12 @@ export const dynamic = "force-dynamic";
  * `kind` + `mailboxCheckedAt` without a follow-up GET.
  */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const admin = await requireAdmin();
   const { id } = await ctx.params;
 

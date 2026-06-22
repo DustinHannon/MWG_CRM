@@ -150,42 +150,47 @@ export const POST = withApi(
       });
     }
     const user = await sessionFromKey(key);
-    const created = await createLead(user, {
-      // The lib createLead path takes the camelCase shape; map the
-      // snake_case API contract over.
-      firstName: parsed.data.first_name,
-      lastName: parsed.data.last_name ?? null,
-      companyName: parsed.data.company_name ?? null,
-      email: parsed.data.email ?? null,
-      phone: parsed.data.phone ?? null,
-      jobTitle: parsed.data.job_title ?? null,
-      industry: parsed.data.industry ?? null,
-      website: parsed.data.website ?? null,
-      linkedinUrl: parsed.data.linkedin_url ?? null,
-      street1: parsed.data.street1 ?? null,
-      street2: parsed.data.street2 ?? null,
-      city: parsed.data.city ?? null,
-      state: parsed.data.state ?? null,
-      postalCode: parsed.data.postal_code ?? null,
-      country: parsed.data.country ?? null,
-      description: parsed.data.description ?? null,
-      subject: parsed.data.subject ?? null,
-      status: parsed.data.status ?? "new",
-      rating: parsed.data.rating ?? "warm",
-      source: parsed.data.source ?? "other",
-      doNotContact: parsed.data.do_not_contact ?? false,
-      doNotEmail: parsed.data.do_not_email ?? false,
-      doNotCall: parsed.data.do_not_call ?? false,
-      ownerId: parsed.data.owner_id ?? null,
-      estimatedValue:
-        parsed.data.estimated_value === undefined ||
-        parsed.data.estimated_value === null
-          ? null
-          : parsed.data.estimated_value.toFixed(2),
-      estimatedCloseDate: parsed.data.estimated_close_date ?? null,
-      salutation: parsed.data.salutation ?? null,
-      mobilePhone: parsed.data.mobile_phone ?? null,
-    });
+    const created = await createLead(
+      user,
+      {
+        // The lib createLead path takes the camelCase shape; map the
+        // snake_case API contract over.
+        firstName: parsed.data.first_name,
+        lastName: parsed.data.last_name ?? null,
+        companyName: parsed.data.company_name ?? null,
+        email: parsed.data.email ?? null,
+        phone: parsed.data.phone ?? null,
+        jobTitle: parsed.data.job_title ?? null,
+        industry: parsed.data.industry ?? null,
+        website: parsed.data.website ?? null,
+        linkedinUrl: parsed.data.linkedin_url ?? null,
+        street1: parsed.data.street1 ?? null,
+        street2: parsed.data.street2 ?? null,
+        city: parsed.data.city ?? null,
+        state: parsed.data.state ?? null,
+        postalCode: parsed.data.postal_code ?? null,
+        country: parsed.data.country ?? null,
+        description: parsed.data.description ?? null,
+        subject: parsed.data.subject ?? null,
+        status: parsed.data.status ?? "new",
+        rating: parsed.data.rating ?? "warm",
+        source: parsed.data.source ?? "other",
+        doNotContact: parsed.data.do_not_contact ?? false,
+        doNotEmail: parsed.data.do_not_email ?? false,
+        doNotCall: parsed.data.do_not_call ?? false,
+        estimatedValue:
+          parsed.data.estimated_value === undefined ||
+          parsed.data.estimated_value === null
+            ? null
+            : parsed.data.estimated_value.toFixed(2),
+        estimatedCloseDate: parsed.data.estimated_close_date ?? null,
+        salutation: parsed.data.salutation ?? null,
+        mobilePhone: parsed.data.mobile_phone ?? null,
+      },
+      // owner_id is a documented, admin-issued-key REST feature; it flows
+      // through the privileged opts channel, never the validated input.
+      { ownerId: parsed.data.owner_id ?? null },
+    );
 
     await writeAudit({
       actorId: user.id,
@@ -195,6 +200,9 @@ export const POST = withApi(
       after: {
         firstName: parsed.data.first_name,
         lastName: parsed.data.last_name ?? null,
+        // Record the assigned owner so an API-key create that targets a
+        // specific owner has the same forensic surface as the PATCH path.
+        ownerId: parsed.data.owner_id ?? null,
         source: "api_v1",
       },
     });

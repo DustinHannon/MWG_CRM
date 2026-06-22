@@ -9,6 +9,7 @@ import {
   heartbeat,
   releaseLock,
 } from "@/lib/marketing/template-lock";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -111,6 +112,9 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const { id } = await params;
   const auth = await authorize(id);
   if (!auth.ok) return auth.response;
@@ -144,6 +148,9 @@ export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const { id } = await params;
   const auth = await authorize(id);
   if (!auth.ok) return auth.response;
@@ -163,6 +170,9 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const { id } = await params;
   const auth = await authorize(id);
   if (!auth.ok) return auth.response;

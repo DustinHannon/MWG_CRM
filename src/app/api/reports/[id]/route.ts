@@ -11,6 +11,7 @@ import {
 import { getReportByIdOrThrow } from "@/lib/reports/repository";
 import { reportUpdateSchema } from "@/lib/reports/request-schemas";
 import { isValidField } from "@/lib/reports/schemas";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 import { withErrorBoundary } from "@/lib/server-action";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 
@@ -50,6 +51,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const viewer = await requireSession();
   const { id } = await params;
 
@@ -164,6 +168,9 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const viewer = await requireSession();
   const { id } = await params;
 

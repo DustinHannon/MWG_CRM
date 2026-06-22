@@ -13,6 +13,7 @@ import {
 import { previewFilterDsl } from "@/lib/marketing/lists/refresh";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { filterDslSchema } from "@/lib/security/filter-dsl";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 import { withErrorBoundary } from "@/lib/server-action";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,9 @@ const bodySchema = z.object({
  * and a malicious caller could otherwise hammer the leads index.
  */
 export async function POST(req: Request) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const result = await withErrorBoundary(
     { action: "marketing.lists.preview" },
     async () => {

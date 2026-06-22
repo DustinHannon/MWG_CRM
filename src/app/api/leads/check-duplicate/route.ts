@@ -7,6 +7,14 @@ import { eq } from "drizzle-orm";
 import { getPermissions, requireSession } from "@/lib/auth-helpers";
 import { formatPersonName } from "@/lib/format/person-name";
 import { withActive } from "@/lib/db/query-helpers";
+import { rateLimit } from "@/lib/security/rate-limit";
+
+/**
+ * Per-user throttle. The phone branch runs non-sargable regexp_replace
+ * scans over the leads table; bound a scripted caller. 60/min is generous
+ * for the client's debounced (≥3-char) duplicate-warning lookups.
+ */
+const DUP_CHECK_RATE_LIMIT_PER_MINUTE = 60;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +34,19 @@ export const runtime = "nodejs";
  */
 export async function GET(req: Request) {
   const session = await requireSession();
+
+  const rl = await rateLimit(
+    { kind: "lead_dup_check", principal: session.id },
+    DUP_CHECK_RATE_LIMIT_PER_MINUTE,
+    60,
+  );
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { matches: [], error: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter ?? 60) } },
+    );
+  }
+
   const url = new URL(req.url);
   const email = url.searchParams.get("email")?.trim() ?? "";
   const phone = url.searchParams.get("phone")?.trim() ?? "";

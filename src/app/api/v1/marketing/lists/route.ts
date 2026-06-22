@@ -16,6 +16,7 @@ import { writeAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { refreshList } from "@/lib/marketing/lists/refresh";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 import { withErrorBoundary } from "@/lib/server-action";
 
 export const dynamic = "force-dynamic";
@@ -119,6 +120,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const result = await withErrorBoundary(
     { action: "marketing.lists.create" },
     async () => {

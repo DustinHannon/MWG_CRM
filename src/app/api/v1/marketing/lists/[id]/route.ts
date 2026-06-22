@@ -18,6 +18,7 @@ import { logger } from "@/lib/logger";
 import { MARKETING_AUDIT_EVENTS } from "@/lib/marketing/audit-events";
 import { refreshList } from "@/lib/marketing/lists/refresh";
 import { filterDslSchema } from "@/lib/security/filter-dsl";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 import { withErrorBoundary } from "@/lib/server-action";
 
 export const dynamic = "force-dynamic";
@@ -86,6 +87,9 @@ export async function PUT(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const result = await withErrorBoundary(
     { action: "marketing.lists.update" },
     async () => {
@@ -177,9 +181,12 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const result = await withErrorBoundary(
     { action: "marketing.lists.delete" },
     async () => {

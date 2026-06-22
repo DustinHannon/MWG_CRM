@@ -183,7 +183,9 @@ export const PATCH = withApi<{ id: string }>(
     if (m.do_not_contact !== undefined) patch.doNotContact = m.do_not_contact;
     if (m.do_not_email !== undefined) patch.doNotEmail = m.do_not_email;
     if (m.do_not_call !== undefined) patch.doNotCall = m.do_not_call;
-    if (m.owner_id !== undefined) patch.ownerId = m.owner_id ?? null;
+    // owner_id is intentionally NOT placed in `patch` (the generic spread
+    // updateLead skips ownership). It travels through updateLead's
+    // privileged opts channel instead — see below.
     if (m.estimated_value !== undefined) {
       patch.estimatedValue =
         m.estimated_value === null ? null : m.estimated_value.toFixed(2);
@@ -193,7 +195,15 @@ export const PATCH = withApi<{ id: string }>(
     }
 
     try {
-      await updateLead(user, params.id, expectedVersion, patch);
+      await updateLead(
+        user,
+        params.id,
+        expectedVersion,
+        patch,
+        // owner_id is a documented, admin-issued-key REST feature; set it
+        // through the privileged opts channel only when the caller sent it.
+        m.owner_id !== undefined ? { ownerId: m.owner_id ?? null } : undefined,
+      );
     } catch (err) {
       if (err instanceof ConflictError) {
         return errorResponse(
@@ -216,7 +226,11 @@ export const PATCH = withApi<{ id: string }>(
       action: "lead.update",
       targetType: "lead",
       targetId: params.id,
-      after: { ...patch, source: "api" },
+      after: {
+        ...patch,
+        ...(m.owner_id !== undefined ? { ownerId: m.owner_id ?? null } : {}),
+        source: "api",
+      },
     });
 
     const fresh = await getLeadById(user, params.id, true);

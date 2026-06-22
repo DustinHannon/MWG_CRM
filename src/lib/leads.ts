@@ -154,7 +154,14 @@ const leadCreateSchemaBase = z.object({
   // managed via the relational lead_tags table; the lead-form's free-text
   // tags input is silently ignored (will be replaced with a tag picker
   // in a follow-up). Schema is permissive — extra keys are stripped.
-  ownerId: z.string().uuid().optional().nullable(),
+  //
+  // `ownerId` is intentionally NOT a field here. Ownership is a privileged
+  // attribution column and drives the entire non-admin visibility / edit /
+  // delete model. Letting the user-facing create/update forms carry it was
+  // a mass-assignment vector (a non-admin could steal or hide leads by
+  // forging an `ownerId` form field). Trusted server-side callers — the
+  // API-key REST path and imports — set the owner explicitly via the
+  // `ownerId` option on createLead / updateLead, never through `input`.
 });
 
 const dncRefinement = (data: {
@@ -427,8 +434,12 @@ export async function getLeadById(
 export async function createLead(
   user: SessionUser,
   input: LeadCreateInput,
+  // Owner assignment is a privileged, server-side-only channel — it is NOT
+  // part of the validated `input` (the user-facing form schema cannot carry
+  // it). Only trusted callers (the API-key REST path, imports) pass it.
+  opts?: { ownerId?: string | null },
 ): Promise<{ id: string }> {
-  const ownerId = input.ownerId ?? user.id;
+  const ownerId = opts?.ownerId ?? user.id;
   const inserted = await db
     .insert(leads)
     .values({
@@ -481,11 +492,36 @@ export async function createLead(
  * caller's read and this update; throws NotFoundError when the id is
  * gone. Both carry user-facing public messages.
  */
+/**
+ * Columns that must never be set via the generic `input` spread in
+ * updateLead. Identity, ownership, OCC, audit, and soft-delete columns all
+ * have dedicated, gated write paths; ownership in particular is the
+ * privileged channel (see `opts.ownerId` below). This is the structural
+ * guard against mass-assignment: even if one of these keys ever leaks into
+ * a validated input object, the spread skips it.
+ */
+const PROTECTED_LEAD_UPDATE_KEYS = new Set<string>([
+  "id",
+  "ownerId",
+  "createdById",
+  "updatedById",
+  "createdAt",
+  "updatedAt",
+  "version",
+  "isDeleted",
+  "deletedAt",
+  "deletedById",
+]);
+
 export async function updateLead(
   user: SessionUser,
   id: string,
   expectedVersion: number,
   input: Partial<LeadCreateInput>,
+  // Owner reassignment is a privileged, server-side-only channel (see
+  // createLead). The generic `input` spread below CANNOT set ownership —
+  // ownerId is only written when a trusted caller passes it here.
+  opts?: { ownerId?: string | null },
 ): Promise<{ id: string; version: number }> {
   const update: Record<string, unknown> = {
     updatedById: user.id,
@@ -493,7 +529,13 @@ export async function updateLead(
     version: sql`${leads.version} + 1`,
   };
   for (const key of Object.keys(input) as Array<keyof LeadCreateInput>) {
+    // Never mass-assign identity / ownership / OCC / soft-delete columns
+    // from a generic input object — they have dedicated, gated write paths.
+    if (PROTECTED_LEAD_UPDATE_KEYS.has(key as string)) continue;
     update[key] = input[key];
+  }
+  if (opts && "ownerId" in opts) {
+    update.ownerId = opts.ownerId ?? null;
   }
   // 046 — `is_deleted = false` clause prevents a stale
   // edit form from silently overwriting a row that was archived between

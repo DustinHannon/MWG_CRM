@@ -11,6 +11,7 @@ import { users } from "@/db/schema/users";
 import { ensureBreakglass } from "@/lib/breakglass";
 import {
   EntraDomainNotAllowedError,
+  EntraOidConflictError,
   provisionEntraUser,
   upsertAccount,
 } from "@/lib/entra-provisioning";
@@ -380,6 +381,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             logger.warn("auth.entra_domain_not_allowed", {
               domain: err.domain,
             });
+            return null;
+          }
+          if (err instanceof EntraOidConflictError) {
+            // A different directory identity tried to bind to an existing
+            // (possibly privileged) row by email. Deny the sign-in; the
+            // attempt was audited in provisionEntraUser. Admin reconciliation
+            // required.
+            logger.warn("auth.entra_oid_conflict", { userId: err.userId });
             return null;
           }
           logger.error("auth.entra_provisioning_failed", {

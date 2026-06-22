@@ -10,6 +10,7 @@ import { env } from "@/lib/env";
 import { reportDefinitionSchema } from "@/lib/reports/request-schemas";
 import { isValidField } from "@/lib/reports/schemas";
 import { rateLimit } from "@/lib/security/rate-limit";
+import { requireSameOrigin } from "@/lib/security/same-origin";
 import { withErrorBoundary } from "@/lib/server-action";
 import { ForbiddenError, RateLimitError, ValidationError } from "@/lib/errors";
 
@@ -50,6 +51,9 @@ async function readReportBody(req: Request): Promise<unknown> {
  * Returns the created report id on success.
  */
 export async function POST(req: Request) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
+
   const viewer = await requireSession();
   const result = await withErrorBoundary(
     {
