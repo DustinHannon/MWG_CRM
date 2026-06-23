@@ -390,17 +390,24 @@ function buildFilterClauses(
       out.push(`${colExpr} < $${params.length}${paramCast}`);
     }
     if ("in" in op && Array.isArray(op.in) && op.in.length > 0) {
-      if (isDate) {
-        const values = op.in.map((v) => coerceTyped(v));
-        params.push(values);
-        out.push(`${colExpr} = ANY($${params.length}::timestamptz[])`);
-      } else if (isNumber) {
-        params.push(op.in.map((v) => String(v)));
-        out.push(`${colExpr} = ANY($${params.length}::numeric[])`);
-      } else {
-        params.push(op.in.map((v) => String(v)));
-        out.push(`${colExpr} = ANY($${params.length}::text[])`);
+      // Build an inline ARRAY[...] of per-element scalar placeholders rather
+      // than binding a single JS array param. The app's postgres-js client
+      // runs with `fetch_types: false` (required for Supavisor transaction-
+      // pool compatibility), which leaves the text[]/numeric[]/timestamptz[]
+      // array serializers unregistered — so a JS array bound to `$N::type[]`
+      // is encoded wrong and Postgres rejects it with "malformed array
+      // literal". Per-element scalar placeholders avoid array-param encoding
+      // entirely (mirrors the ARRAY[...]-of-scalars idiom in
+      // saved-search-runner).
+      const elemType = isDate ? "timestamptz" : isNumber ? "numeric" : "text";
+      const placeholders: string[] = [];
+      for (const v of op.in) {
+        params.push(isDate ? coerceTyped(v) : String(v));
+        placeholders.push(`$${params.length}`);
       }
+      out.push(
+        `${colExpr} = ANY(ARRAY[${placeholders.join(", ")}]::${elemType}[])`,
+      );
     }
   }
   return out;
@@ -464,13 +471,18 @@ function buildVirtualTagFilterClauses(
   }
 
   if ("in" in op && Array.isArray(op.in) && op.in.length > 0) {
-    const lowered = op.in.map((v) => String(v).toLowerCase());
-    params.push(lowered);
+    // Per-element scalar placeholders, not a single array param — see the
+    // note in buildFilterClauses (fetch_types:false breaks `$N::text[]`).
+    const placeholders: string[] = [];
+    for (const v of op.in) {
+      params.push(String(v).toLowerCase());
+      placeholders.push(`$${params.length}`);
+    }
     out.push(
       `EXISTS (SELECT 1 FROM ${quote(junctionTable)} jtf ` +
         `JOIN "tags" tf ON tf.id = jtf.${quote("tag_id")} ` +
         `WHERE jtf.${quote(entityIdColumn)} = ${quote(meta.table)}.${quote("id")} ` +
-        `AND lower(tf.name) = ANY($${params.length}::text[]))`,
+        `AND lower(tf.name) = ANY(ARRAY[${placeholders.join(", ")}]::text[]))`,
     );
   }
 
