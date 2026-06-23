@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { DeleteIconButton } from "@/components/delete";
 import {
   softDeleteOpportunityAction,
@@ -20,6 +21,15 @@ export function OpportunityRowActions({
   isAdmin: boolean;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  // The list rows come from StandardListPage's TanStack infinite query;
+  // router.refresh() only re-runs the server shell and does NOT refetch
+  // that client cache, so the archived row would linger. Invalidate so the
+  // list refetches and drops (archive) / restores (undo) the row.
+  const refreshList = () => {
+    void queryClient.invalidateQueries({ queryKey: ["opportunities"] });
+    router.refresh();
+  };
   return (
     <DeleteIconButton
       entityKind="opportunity"
@@ -37,11 +47,11 @@ export function OpportunityRowActions({
         }
         return { ok: false, error: res.error };
       }}
-      onNavigate={() => router.refresh()}
+      onNavigate={refreshList}
       onUndo={async (undoToken) => {
         const res = await undoArchiveOpportunityAction({ undoToken });
         if (res.ok) {
-          router.refresh();
+          refreshList();
           return { ok: true };
         }
         return { ok: false, error: res.error };

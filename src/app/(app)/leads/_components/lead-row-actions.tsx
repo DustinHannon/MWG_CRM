@@ -6,6 +6,7 @@ import {
 } from "../actions";
 import { DeleteIconButton } from "@/components/delete";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 
 /**
  * list-row delete trigger. Wraps the canonical
@@ -29,6 +30,16 @@ export function LeadRowActions({
   isAdmin: boolean;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  // The list rows come from StandardListPage's TanStack infinite query
+  // (queryKey ["leads", …]); router.refresh() only re-runs the server
+  // shell and does NOT refetch that client cache, so the archived row
+  // would linger until a view/filter change. Invalidate the query so the
+  // list refetches and drops (archive) / restores (undo) the row.
+  const refreshList = () => {
+    void queryClient.invalidateQueries({ queryKey: ["leads"] });
+    router.refresh();
+  };
   return (
     <DeleteIconButton
       entityKind="lead"
@@ -43,11 +54,11 @@ export function LeadRowActions({
         }
         return { ok: false, error: res.error };
       }}
-      onNavigate={() => router.refresh()}
+      onNavigate={refreshList}
       onUndo={async (undoToken) => {
         const res = await undoArchiveLeadAction({ undoToken });
         if (res.ok) {
-          router.refresh();
+          refreshList();
           return { ok: true };
         }
         return { ok: false, error: res.error };
